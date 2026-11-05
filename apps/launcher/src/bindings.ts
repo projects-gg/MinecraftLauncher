@@ -1755,6 +1755,41 @@ export const commands = {
 	 */
 	socialRequestFromBadge: (team: string, via: string) => typedError<BadgeRequestResult, CmdError>(__TAURI_INVOKE("social_request_from_badge", { team, via })),
 	/**
+	 *  The listing, or None while the copy `etag` names is still current. The interface keeps the copy
+	 *  until its `next` and asks again with its `etag` after a quarter of an hour.
+	 */
+	socialDiscoverList: (etag: string | null) => typedError<{
+	listing: DiscoverListing,
+	etag: string | null,
+} | null, CmdError>(__TAURI_INVOKE("social_discover_list", { etag })),
+	/**  "Katıl" / "Katılma isteği gönder" on a card: `joined`, `requested`, or `gone` (the card goes). */
+	socialDiscoverJoin: (team: string) => typedError<DiscoverJoin, CmdError>(__TAURI_INVOKE("social_discover_join", { team })),
+	/**  The leader's "Keşif" block of one of their crews. */
+	socialDiscoverStatus: (team: string) => typedError<DiscoverStatus, CmdError>(__TAURI_INVOKE("social_discover_status", { team })),
+	/**
+	 *  Asks the next wave to list the crew with this text and these tags; answers the block as it is
+	 *  now (a refusal shows in it).
+	 */
+	socialDiscoverSet: (team: string, text: string, tags: string[]) => typedError<DiscoverStatus, CmdError>(__TAURI_INVOKE("social_discover_set", { team, text, tags })),
+	/**  Takes the crew out of discovery at once; None while the service's switch is off. */
+	socialDiscoverOff: (team: string) => typedError<{
+	state: DiscoverState,
+	/**  In discovery now (listed, or hidden by reports). */
+	listed?: DiscoverText | null,
+	/**  What the editor starts from: the latest text the leader sent. */
+	draft?: DiscoverText | null,
+	/**  A change of a listed crew waits for the wave. */
+	changeWaits?: boolean,
+	/**  The next wave (Unix seconds). */
+	waveAt: number,
+	/**  Refused: when the leader may ask again (Unix seconds). */
+	retryAt?: number | null,
+	checks: DiscoverChecks,
+	/**  Changes left this week, and when the count starts again (Unix seconds). */
+	editsLeft: number,
+	editsReset: number,
+} | null, CmdError>(__TAURI_INVOKE("social_discover_off", { team })),
+	/**
 	 *  "Selam ver" on the line of `id`, who came into crew `crew`: the "Selam" sticker (where
 	 *  stickers go, else "Hoş geldin! 👋") goes to the crew's chat as any message. Once, within 10
 	 *  minutes of their coming; returns the message's key, as `social_chat_send`.
@@ -4760,6 +4795,107 @@ export type Destination = {
 	count: number,
 };
 
+/**  A requirement: what it takes and what the crew has. */
+export type DiscoverCheck = {
+	need: number,
+	have: number,
+};
+
+/**  The requirements the launcher shows before the leader asks. */
+export type DiscoverChecks = {
+	members: DiscoverCheck,
+	/**  Days since the crew was founded. */
+	crewDays: DiscoverCheck,
+	/**  Days the leader's account has been around. */
+	leaderDays: DiscoverCheck,
+	/**  Not a secret crew. */
+	visible: boolean,
+};
+
+/**
+ *  One listed crew: its card, the leader's text and tags, how to join, its size, whether it was
+ *  active this week. Never its members, leader, code or link.
+ */
+export type DiscoverCrew = {
+	id: string,
+	name: string,
+	tag: string,
+	emblem: string,
+	color: string,
+	frame: string,
+	motto?: string,
+	text: string,
+	/**  Names from [`DISCOVER_TAGS`] (unknown ones dropped). */
+	tags?: string[],
+	join?: JoinMode,
+	members: number,
+	/**  At least 3 members (all of a smaller crew) were on in the last 7 days. */
+	active?: boolean,
+};
+
+/**  What joining from a card led to. */
+export type DiscoverJoin = 
+/**  In the crew now. */
+"joined" | 
+/**  The crew approves newcomers: the request waits for its leaders. */
+"requested" | 
+/**  No longer in discovery (or not for this player): the card goes. */
+"gone";
+
+/**  The listing (`GET /v1/discover`, format 1), in the day's order. */
+export type DiscoverListing = {
+	ver: number,
+	/**  When the wave built it (Unix seconds; 0 before the first). */
+	at?: number,
+	/**  The next wave (Unix seconds): the copy is good until then. */
+	next: number,
+	crews: DiscoverCrew[],
+};
+
+/**  The listing with the `ETag` to ask again with. */
+export type DiscoverPage = {
+	listing: DiscoverListing,
+	etag: string | null,
+};
+
+/**  Where a crew stands in discovery, as its leader sees it. */
+export type DiscoverState = 
+/**  Not in discovery (also a refusal whose wait ran out). */
+"off" | 
+/**  Asked; the next wave decides. */
+"waiting" | "listed" | 
+/**  The wave (or Projects) did not approve it: it may ask again at `retryAt`. */
+"refused" | 
+/**  Projects closed it for good: the switch shows off and cannot be used. */
+"closed" | 
+/**  Reports hid it until Projects decide. */
+"held";
+
+/**  The leader's "Keşif" block (`GET`, `PUT`, `DELETE /v1/teams/:id/discover`). */
+export type DiscoverStatus = {
+	state: DiscoverState,
+	/**  In discovery now (listed, or hidden by reports). */
+	listed?: DiscoverText | null,
+	/**  What the editor starts from: the latest text the leader sent. */
+	draft?: DiscoverText | null,
+	/**  A change of a listed crew waits for the wave. */
+	changeWaits?: boolean,
+	/**  The next wave (Unix seconds). */
+	waveAt: number,
+	/**  Refused: when the leader may ask again (Unix seconds). */
+	retryAt?: number | null,
+	checks: DiscoverChecks,
+	/**  Changes left this week, and when the count starts again (Unix seconds). */
+	editsLeft: number,
+	editsReset: number,
+};
+
+/**  A text and its tags. */
+export type DiscoverText = {
+	text: string,
+	tags?: string[],
+};
+
 /**  What happened to the files of a drop. */
 export type DropResultView = {
 	/**  Copied into the instance. */
@@ -7269,6 +7405,10 @@ export type NotifyPrefs = {
 	onlineAlerts?: { [key in string]: boolean },
 	/**  OVL-UX2: "Favorilerim çevrimiçi olunca" (on unless turned off). */
 	favoritesOnline?: boolean,
+	/**  OVL-SOC2: "Favori arkadaşların: Projects'e girince" (on unless turned off). */
+	favoritesProjects?: boolean,
+	/**  OVL-SOC2: "Katılma istekleri" (on unless turned off). */
+	joinRequests?: boolean,
 };
 
 export type OfficialPackView = {
@@ -7385,6 +7525,8 @@ export type OverlayStateView = {
 	config: OverlayConfig,
 	/**  The mod in the running game is connected now. */
 	connected: boolean,
+	/**  OVL-SOC2: the notice kinds connected games show as their own cards (`OverlayStatus::kinds`). */
+	kinds: string[],
 	/**
 	 *  The Minecraft versions the launcher has the mod for (`26.1.2`, `26.2`, …): the ones this
 	 *  build ships, then those the signed content adds (OVL-AUTO). A Fabric instance on one of
@@ -7399,6 +7541,13 @@ export type OverlayStateView = {
  */
 export type OverlayStatus = {
 	connected: boolean,
+	/**
+	 *  OVL-SOC2: the friends feature's notice kinds (`chatMessage`, `teamInvite`, …) a connected
+	 *  game shows as its own cards: the page shows no system notification of them. An older mod
+	 *  shows `chatMessage`, `crewCall`, `invite` and `afkNotice`; a newer one more, less the
+	 *  kinds the player turned off in it.
+	 */
+	kinds: string[],
 };
 
 /**  One file an update adds, changes, removes or leaves alone. */
@@ -7576,7 +7725,13 @@ export type PeopleChange =
  *  `invisible` only): one of the crew mute's durations (`hour`, `eightHours`, `morning`,
  *  `forever`), for its timer.
  */
-{ kind: "status"; status: string; preset: string | null };
+{ kind: "status"; status: string; preset: string | null } | 
+/**
+ *  OVL-SOC2: one of the friends notification switches changed in the overlay's settings
+ *  (`favoritesOnline`, `favoritesProjects`, `crewCalls`, `crewChat`, `joinRequests`): the page
+ *  keeps it as its own switch would.
+ */
+{ kind: "notify"; key: string; on: boolean };
 
 /**
  *  Who may do something in a crew: the lowest role that may (every role above it may too).
@@ -9750,7 +9905,12 @@ voice?: string | null } |
  *  A crew; `code` when it was looked up by code, `via` (TEAM6) when it is reported from the
  *  card of the tag that friend or crewmate wears ("Ekibi rapor et").
  */
-{ kind: "crew"; id: string; code: string | null; via?: string | null } | { kind: "message"; conv: string; id: number };
+{ kind: "crew"; id: string; code: string | null; via?: string | null; 
+/**
+ *  CREW-DISCOVER: reported from a card of "Ekip bul" (the service keeps its listed text as
+ *  the moderators' evidence).
+ */
+discover?: boolean } | { kind: "message"; conv: string; id: number };
 
 export type RequestView = {
 	id: string,

@@ -548,7 +548,13 @@ impl AppPlatform {
             }
             SystemNotice::RingGone { room } => crate::notify::voice_clear(&room),
             SystemNotice::Missed { room, from } => {
-                if self.window_in_sight() {
+                // OVL-SOC2: a game whose overlay shows missed calls says it as its card.
+                if self.window_in_sight()
+                    || self
+                        .overlay
+                        .get()
+                        .is_some_and(pl_overlay::Overlay::shows_missed)
+                {
                     return;
                 }
                 let name = self.name_of(&from);

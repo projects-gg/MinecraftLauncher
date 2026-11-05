@@ -1,0 +1,67 @@
+[package]
+name = "pl-share"
+description = "Screen share publisher on Windows: capture (Windows.Graphics.Capture), GPU conversion, Media Foundation H.264, process audio (WASAPI loopback) to Opus, and the SFU transport (str0m)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+# The picker's and the controller's types are exported to TypeScript by the launcher (tauri-specta).
+specta = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+base64 = { workspace = true }
+# WebRTC transport (sans-IO): ICE, DTLS, SRTP, simulcast send, TWCC send-side BWE, NACK/RTX, pacer.
+# The aws-lc-rs backend is the one rustls already builds for the launcher, so nothing new is compiled
+# for crypto. MIT OR Apache-2.0.
+str0m = { version = "0.25", default-features = false, features = ["aws-lc-rs"] }
+# libopus 1.3 transpiled to Rust (c2rust): no CMake, no C toolchain step, nothing to download at
+# build time. BSD-3-Clause.
+unsafe-libopus = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+# Process loopback capture (AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK); built on the same
+# `windows` 0.62 as the rest of the workspace. MIT.
+wasapi = "0.26"
+windows-core = "0.62"
+windows = { version = "0.62", features = [
+  "Foundation",
+  "Foundation_Metadata",
+  "Graphics",
+  "Graphics_Capture",
+  "Graphics_DirectX",
+  "Graphics_DirectX_Direct3D11",
+  "Win32_Foundation",
+  "Win32_Graphics_Direct3D",
+  "Win32_Graphics_Direct3D11",
+  "Win32_Graphics_Dwm",
+  "Win32_Graphics_Dxgi",
+  "Win32_Graphics_Dxgi_Common",
+  "Win32_Graphics_Gdi",
+  "Win32_Graphics_Imaging",
+  "Win32_Media_MediaFoundation",
+  "Win32_Storage_Xps",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Ole",
+  "Win32_System_Registry",
+  "Win32_System_Threading",
+  "Win32_System_Variant",
+  "Win32_System_WinRT",
+  "Win32_System_WinRT_Direct3D11",
+  "Win32_System_WinRT_Graphics_Capture",
+  "Win32_UI_HiDpi",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
+tracing-subscriber = { workspace = true }
+# Spikes only (examples): the SFU's HTTPS API.
+reqwest = { workspace = true }

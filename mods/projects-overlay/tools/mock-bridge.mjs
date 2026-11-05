@@ -79,6 +79,17 @@
 // <dir>/<id>.png (a picture as the launcher prepares them: 64 px square on the face colour, the player head's corners),
 // its version the file's hash, else the letter ("v": "-"); "@me" is the player (<dir>/@me.png). Message toasts name
 // their sender ("by").
+// --soc2 (with --people --people2; docs/tasks/ovl2-protocol.md, OVL-SOC2) plays the management in game to a mod whose
+// hello lists "people5", "crews2", "plans", "chat3" or "cards2" (the welcome says back the ones it listed): the lists' "outgoing"
+// (BlokUstasi), "blocked" (KotuOyuncu_), "code", "invites" (NetherKral to Akıncılar), "asks" (YeniGelen_ to Gece
+// Kuşları), "call" and "callers", "plans" (today 21:00 by PixelAvci, tomorrow 20:30 by the player), "planners" and
+// "notes"; crew conversations carry their crew ("gece", "akinci"); "prefs" after the greeting and after a "notify-set";
+// with --next only GeceKartali_ asks to be friends. "find" is answered with "found" (PRJ-0000-0000: not found; PRJ-…:
+// YeniArkadas; EKP-… or a 12-symbol invite link: Yildiz Takimi, 7, [YLD], approval; anything else: invalid); the presses
+// with "done" and the lists again (an answered invite, ask, sent request or block goes; "add-code" and "crew-join" wait,
+// "queued"; the second "crew-call" is refused with "wait" 240; "edit" and "delete" come back as the message); "cards" is
+// only logged. Dev command "card" (with "kind": request, friend, online, projects, crew-invite, crew-ask, crew-in, plan,
+// missed; or "kinds", a few one after another) sends that card as the launcher would.
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
@@ -543,6 +554,91 @@ if (args.people2) {
   }
 }
 
+// OVL-SOC2 (--soc2): the management lists, the launcher's notification switches, and which of the five the mod said.
+const SOC2_FEATURES = ["people5", "crews2", "plans", "chat3", "cards2"];
+const HOUR = 3600000;
+
+/** Unix ms of a local time {@code days} from today. */
+function localTime(days, hours, mins) {
+  const at = new Date();
+  at.setDate(at.getDate() + days);
+  at.setHours(hours, mins, 0, 0);
+  return at.getTime();
+}
+
+/** OVL-SOC2: a plan at {@code at} (Unix ms): it starts then and is over two hours later. */
+function planAt(at) {
+  return { at, start: at, end: at + 2 * HOUR };
+}
+
+/** OVL-SOC2: today 21:00 while 10 minutes ahead, else the next whole hour today, else tomorrow 21:00. */
+function firstPlanTime() {
+  const nine = localTime(0, 21, 0);
+  if (nine >= now() + 10 * 60000) {
+    return nine;
+  }
+  const hour = new Date(now() + 30 * 60000);
+  hour.setMinutes(0, 0, 0);
+  hour.setHours(hour.getHours() + 1);
+  return hour.getDate() === new Date().getDate() ? hour.getTime() : localTime(1, 21, 0);
+}
+
+const soc2 = {
+  /** The features of the five the connected mod's hello listed. */
+  said: new Set(),
+  outgoing: [{ id: "u-blok", name: "BlokUstasi" }],
+  blocked: [{ id: "u-kotu", name: "KotuOyuncu_" }],
+  code: "PRJ-7KQ2-M9XA",
+  invites: [{ crew: "akinci2", name: "Akıncılar", from: "NetherKral", by: "f-mert", members: 30 }],
+  asks: [{ crew: "gece", crewName: "Gece Kuşları", id: "u-yeni", name: "YeniGelen_" }],
+  callers: ["gece"],
+  plans: [
+    {
+      id: "p-gece1",
+      crew: "gece",
+      ...planAt(firstPlanTime()),
+      by: "PixelAvci",
+      note: "Bedwars, sesli gelin",
+      yes: 2,
+      maybe: 1,
+      no: 0,
+    },
+    {
+      id: "p-gece2",
+      crew: "gece",
+      ...planAt(localTime(1, 20, 30)),
+      by: state.me.name,
+      mine: true,
+      my: "yes",
+      yes: 1,
+      maybe: 0,
+      no: 0,
+    },
+  ].sort((a, b) => a.at - b.at),
+  planners: ["gece"],
+  prefs: {
+    favoritesOnline: true,
+    favoritesProjects: true,
+    crewCalls: true,
+    crewChat: false,
+    joinRequests: true,
+  },
+  /** "Ekibi çağır" presses this connection (the second one waits). */
+  calls: 0,
+  /** The player's join request to Yildiz Takimi waits ("requested"). */
+  asked: false,
+};
+if (args.soc2) {
+  // Crew conversations carry their crew (crew chat's own line); with --next one friend request, the other is sent.
+  for (const [id, crew] of [
+    ["crew:gece", "gece"],
+    ["crew:akinci", "akinci"],
+  ]) {
+    state.convs.find((c) => c.id === id).crew = crew;
+  }
+  next.requests = next.requests.filter((r) => r.id !== "r-blok");
+}
+
 let tagsOn = Boolean(args.team6);
 const wornBy = (name) => (tagsOn ? WEARS[NAMES[name]] : undefined);
 if (args.team6) {
@@ -589,13 +685,47 @@ function historyOf(convId) {
   });
 }
 
-/** OVL-SOC 2: the lists with the friend requests (to a mod that said "people4"). */
+/** OVL-SOC 2: the lists with the friend requests (to a mod that said "people4"); OVL-SOC2's parts. */
 function listsFrame() {
   return {
     t: "lists",
     ...LISTS,
     ...(next.on && next.requests.length ? { requests: next.requests } : {}),
+    ...soc2Lists(),
   };
+}
+
+/** OVL-SOC2 (--soc2): what "lists" adds for each part the mod said it has (empty parts left out). */
+function soc2Lists() {
+  const out = {};
+  if (!args.soc2) {
+    return out;
+  }
+  const put = (key, value) => {
+    if (Array.isArray(value) ? value.length > 0 : value) {
+      out[key] = value;
+    }
+  };
+  if (soc2.said.has("people5")) {
+    put("outgoing", soc2.outgoing);
+    put("blocked", soc2.blocked);
+    put("code", soc2.code);
+  }
+  if (soc2.said.has("crews2")) {
+    put("invites", soc2.invites);
+    put("asks", soc2.asks);
+    put("call", "ok");
+    put("callers", soc2.callers);
+  }
+  if (soc2.said.has("plans")) {
+    put(
+      "plans",
+      soc2.plans.filter((p) => p.end > now()),
+    );
+    put("planners", soc2.planners);
+    put("notes", true);
+  }
+  return out;
 }
 
 /** OVL-SOC 2: the status as "welcome" and "dnd" carry it (none while "Çevrimiçi"). */
@@ -1024,6 +1154,12 @@ function onConnection(socket) {
         voiceMock.hears = Array.isArray(frame.features) && frame.features.includes("voice");
         voiceMock.rooms = voiceMock.hears && frame.features.includes("voice-rooms");
         next.on = Boolean(args.next && args.people2) && frame.features.includes("people4");
+        soc2.said = new Set(
+          args.soc2 && Array.isArray(frame.features)
+            ? SOC2_FEATURES.filter((f) => frame.features.includes(f))
+            : [],
+        );
+        soc2.calls = 0;
         avatarsMock.hears = typeof args.avatars === "string" && frame.features.includes("avatars");
         avatarsMock.n = 0;
         voiceMock.view = voiceFriendRoom();
@@ -1089,6 +1225,7 @@ function welcome(socket) {
           ...(args.link ? ["link"] : []),
           ...(args.host ? ["host"] : []),
           ...(next.on ? ["people4", "next", ...(next.streamer ? ["streamer"] : [])] : []),
+          ...SOC2_FEATURES.filter((f) => soc2.said.has(f)),
         ],
   });
   if (args.team6) {
@@ -1106,6 +1243,10 @@ function welcome(socket) {
   });
   for (const note of NOTES) {
     send(socket, { t: "note", ...note });
+  }
+  if (soc2.said.has("cards2") && !args.signedOut) {
+    // OVL-SOC2: the launcher's notification switches as they stand.
+    send(socket, { t: "prefs", ...soc2.prefs });
   }
   sendEmojis(socket);
   sendVoice(socket);
@@ -1281,6 +1422,267 @@ function onNext(socket, frame) {
   later(120, () => send(socket, { t: "dnd", on: next.status === "dnd", ...statusFields() }));
 }
 
+// ---- OVL-SOC2: the management presses and the new cards, as the launcher's would be (--soc2) ---------------------------
+
+/** The features an OVL-SOC2 frame needs the mod to have said (any of them). */
+const SOC2_NEEDS = {
+  find: ["people5", "crews2"],
+  "cancel-request": ["people5"],
+  unblock: ["people5"],
+  "add-code": ["people5"],
+  "crew-answer": ["crews2"],
+  "crew-ask": ["crews2"],
+  "crew-join": ["crews2"],
+  "crew-call": ["crews2"],
+  "plan-answer": ["plans"],
+  "plan-make": ["plans"],
+  edit: ["chat3"],
+  delete: ["chat3"],
+  cards: ["cards2"],
+  "notify-set": ["cards2"],
+};
+
+/** What a code typed in "Ekle" leads to: the mock's own few (a link counts by its last part). */
+function soc2Found(code) {
+  const typed = String(code ?? "").trim();
+  const last = typed.replace(/\/+$/, "").split("/").pop() ?? "";
+  const head = last.toUpperCase();
+  const lower = typed.toLowerCase();
+  const linkPage =
+    lower.includes("/e/") || lower.startsWith("projects://crew/") || !typed.includes("/");
+  if (head === "PRJ-0000-0000") {
+    return { kind: "none", reason: "not-found" };
+  }
+  if (head.startsWith("PRJ")) {
+    const sent = soc2.outgoing.some((r) => r.id === "u-yeniarkadas");
+    return {
+      kind: "friend",
+      id: "u-yeniarkadas",
+      name: "YeniArkadas",
+      relation: sent ? "outgoing" : "none",
+    };
+  }
+  if (head.startsWith("EKP") || (linkPage && /^[A-Za-z0-9]{12}$/.test(last))) {
+    return {
+      kind: "crew",
+      id: "t-yildiz",
+      name: "Yildiz Takimi",
+      relation: "none",
+      members: 7,
+      tag: "YLD",
+      approval: true,
+      ...(soc2.asked ? { requested: true } : {}),
+    };
+  }
+  return { kind: "none", reason: "invalid" };
+}
+
+/** OVL-SOC2: a management press answered ("done") and the lists as they stand after it. */
+function onSoc2(socket, frame) {
+  if (!(SOC2_NEEDS[frame.t] ?? []).some((f) => soc2.said.has(f))) {
+    return;
+  }
+  const done = (id, fields = {}) =>
+    later(150, () =>
+      send(socket, {
+        t: "done",
+        act: frame.t,
+        id: String(id ?? ""),
+        ok: !fields.reason,
+        ...fields,
+      }),
+    );
+  const lists = () => later(200, () => send(socket, listsFrame()));
+  switch (frame.t) {
+    case "find": {
+      // What the code leads to now (a press after it does not change this answer).
+      const found = { t: "found", code: frame.code ?? "", ...soc2Found(frame.code) };
+      later(250, () => send(socket, found));
+      break;
+    }
+    case "cancel-request":
+    case "unblock": {
+      const list = frame.t === "unblock" ? "blocked" : "outgoing";
+      const before = soc2[list].length;
+      soc2[list] = soc2[list].filter((r) => r.id !== frame.id);
+      done(frame.id, soc2[list].length < before ? {} : { reason: "gone" });
+      lists();
+      break;
+    }
+    case "add-code": {
+      const found = soc2Found(frame.code);
+      if (found.kind !== "friend") {
+        done(frame.code, { reason: "not-found" });
+        break;
+      }
+      if (found.relation === "none") {
+        soc2.outgoing.unshift({ id: found.id, name: found.name });
+      }
+      // The request waits for them ("Gönderilenler").
+      done(frame.code, { queued: true });
+      lists();
+      break;
+    }
+    case "crew-answer": {
+      const known = soc2.invites.some((i) => i.crew === frame.crew);
+      soc2.invites = soc2.invites.filter((i) => i.crew !== frame.crew);
+      done(frame.crew, known ? {} : { reason: "gone" });
+      lists();
+      break;
+    }
+    case "crew-ask": {
+      const known = soc2.asks.some((a) => a.crew === frame.crew && a.id === frame.id);
+      soc2.asks = soc2.asks.filter((a) => !(a.crew === frame.crew && a.id === frame.id));
+      done(frame.id, known ? {} : { reason: "gone" });
+      lists();
+      break;
+    }
+    case "crew-join":
+      if (soc2Found(frame.code).kind !== "crew") {
+        done(frame.code, { reason: "not-found" });
+        break;
+      }
+      // Yildiz Takimi approves newcomers: the request waits.
+      soc2.asked = true;
+      done(frame.code, { queued: true });
+      break;
+    case "crew-call":
+      if (!soc2.callers.includes(frame.crew)) {
+        done(frame.crew, { reason: "failed" });
+        break;
+      }
+      // The service's five minutes: the second call waits.
+      soc2.calls += 1;
+      done(frame.crew, soc2.calls > 1 ? { reason: "wait", wait: 240 } : {});
+      break;
+    case "plan-answer": {
+      const plan = soc2.plans.find((p) => p.id === frame.plan);
+      if (!plan || !["yes", "maybe", "no"].includes(frame.answer)) {
+        done(frame.plan, { reason: "gone" });
+        break;
+      }
+      if (plan.my) {
+        plan[plan.my] -= 1;
+      }
+      plan.my = frame.answer;
+      plan[frame.answer] += 1;
+      done(frame.plan);
+      lists();
+      break;
+    }
+    case "plan-make": {
+      const at = Number(frame.at);
+      const seconds = Math.floor(now() / 1000);
+      const ahead = soc2.plans.filter((p) => p.crew === frame.crew && p.start > now()).length;
+      if (!soc2.planners.includes(frame.crew)) {
+        done(frame.crew, { reason: "failed" });
+      } else if (
+        !Number.isInteger(at) ||
+        at % 900 !== 0 ||
+        at < seconds + 300 ||
+        at > seconds + 7 * 86400 - 300
+      ) {
+        done(frame.crew, { reason: "time" });
+      } else if (ahead >= 3) {
+        done(frame.crew, { reason: "full" });
+      } else {
+        const note = typeof frame.note === "string" ? frame.note.trim().slice(0, 80) : "";
+        soc2.plans.push({
+          id: `p${nextId++}`,
+          crew: frame.crew,
+          ...planAt(at * 1000),
+          by: state.me.name,
+          mine: true,
+          ...(note ? { note } : {}),
+          my: "yes",
+          yes: 1,
+          maybe: 0,
+          no: 0,
+        });
+        soc2.plans.sort((a, b) => a.at - b.at);
+        done(frame.crew);
+        lists();
+      }
+      break;
+    }
+    case "edit":
+    case "delete": {
+      // The new words, or the tombstone, come as the message itself.
+      const msg = (state.history[frame.conv] ?? []).find((m) => m.mine && m.sid === frame.sid);
+      const text = typeof frame.text === "string" ? frame.text.trim() : "";
+      if (!msg || (frame.t === "edit" && !text)) {
+        done(frame.sid, { reason: "gone" });
+        break;
+      }
+      if (frame.t === "edit") {
+        msg.text = text;
+        msg.edited = true;
+      } else {
+        msg.text = "";
+        msg.deleted = true;
+      }
+      done(frame.sid);
+      later(200, () => send(socket, { t: "msg", conv: frame.conv, ...msg }));
+      break;
+    }
+    case "notify-set":
+      // The launcher's page keeps it, as its own switch would; "prefs" says how they stand.
+      if (typeof frame.on === "boolean" && Object.hasOwn(soc2.prefs, frame.key)) {
+        soc2.prefs[frame.key] = frame.on;
+        later(120, () => send(socket, { t: "prefs", ...soc2.prefs }));
+      }
+      break;
+    default:
+      // "cards": the kinds the player turned off in game (the launcher keeps its own notifications for them); logged.
+      break;
+  }
+}
+
+/** OVL-SOC2: a new card as the launcher sends it (feed.rs moment_toast, session.rs on_voice_notice). */
+function soc2Card(socket, kind) {
+  if (!soc2.said.has("cards2")) {
+    return;
+  }
+  // A friend by the name the lists show them (PixelAvci is "Kanka" with --next).
+  const shown = (id) =>
+    (next.on && NICKNAMES[id]) || state.friends.find((f) => f.id === id)?.name || "";
+  const plan = soc2.plans.find((p) => !p.mine) ?? soc2.plans[0];
+  const cards = {
+    request: { key: "request:r-gece", title: "GeceKartali_", by: "r-gece" },
+    friend: { key: "friend:u-blok", title: "BlokUstasi", by: "u-blok" },
+    online: { key: "online:f-mert", title: shown("f-mert"), by: "f-mert" },
+    // The same key as "online": "Projects'e girdi" takes its place.
+    projects: { key: "online:f-ayse", title: shown("f-ayse"), by: "f-ayse" },
+    "crew-invite": {
+      key: "crew-invite:akinci2",
+      title: shown("f-mert"),
+      by: "f-mert",
+      crew: "Akıncılar",
+    },
+    "crew-ask": {
+      key: "crew-ask:gece:u-yeni",
+      title: "YeniGelen_",
+      by: "u-yeni",
+      crew: "Gece Kuşları",
+    },
+    "crew-in": { key: "crew-in:t-yildiz", title: "", crew: "Yildiz Takimi" },
+    plan: plan && {
+      key: `plan:${plan.id}`,
+      title: shown("f-ayse"),
+      by: "f-ayse",
+      // Streamer mode keeps the note (the player's words) off.
+      body: next.streamer ? "" : (plan.note ?? ""),
+      crew: "Gece Kuşları",
+      conv: "crew:gece",
+      at: plan.at,
+    },
+    missed: { key: "missed:f0123456789abcdef", title: shown("f-elif"), by: "f-elif" },
+  };
+  if (cards[kind]) {
+    send(socket, { t: "toast", kind, body: "", ...cards[kind] });
+  }
+}
+
 function stack(socket) {
   later(0, () =>
     incoming(socket, "dm:ayse", "PixelAvci", "Akşam bedwars var mı? Ekip toplanıyor."),
@@ -1454,6 +1856,25 @@ function onFrame(socket, frame) {
     case "status":
       if (next.on) {
         onNext(socket, frame);
+      }
+      break;
+    case "find":
+    case "cancel-request":
+    case "unblock":
+    case "add-code":
+    case "crew-answer":
+    case "crew-ask":
+    case "crew-join":
+    case "crew-call":
+    case "plan-answer":
+    case "plan-make":
+    case "edit":
+    case "delete":
+    case "cards":
+    case "notify-set":
+      // OVL-SOC2: only a launcher that plays it, only from a mod that said the feature.
+      if (args.soc2) {
+        onSoc2(socket, frame);
       }
       break;
     case "dev":
@@ -1824,6 +2245,14 @@ function onReact(socket, frame) {
 
 function onDev(socket, frame) {
   switch (frame.cmd) {
+    case "card": {
+      // OVL-SOC2 (--soc2): one new card ("kind"), or a few one after another ("kinds").
+      const kinds = Array.isArray(frame.kinds) ? frame.kinds.slice(0, 9) : [frame.kind];
+      for (const [i, kind] of kinds.entries()) {
+        later(i * 150, () => soc2Card(socket, kind));
+      }
+      break;
+    }
     case "streamer-on":
     case "streamer-off":
       // OVL-SOC 2: streamer mode came or went: a new greeting says so.

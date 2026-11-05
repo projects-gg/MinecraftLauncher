@@ -133,7 +133,10 @@ public final class ToastLayer implements HudElement {
             return null;
         }
         Sounds.Cue cue = kind == ToastCard.Kind.CALL || kind == ToastCard.Kind.INVITE || kind == ToastCard.Kind.WORLD
-            ? Sounds.Cue.CALL : kind == ToastCard.Kind.MESSAGE ? Sounds.Cue.MESSAGE : null;
+            ? Sounds.Cue.CALL : kind == ToastCard.Kind.MESSAGE ? Sounds.Cue.MESSAGE
+            // OVL-SOC2: what waits for the player's answer (a request, a crew invite or request, a plan, a missed call)
+            // says it with the message sound; a friend coming online and "Ekibe katıldın" quietly.
+            : kind == ToastCard.Kind.SOCIAL && !quietCard(request.kind()) ? Sounds.Cue.MESSAGE : null;
         if (cue != null) {
             Sounds.play(cue, settings, now);
         }
@@ -412,11 +415,19 @@ public final class ToastLayer implements HudElement {
         return null;
     }
 
+    /** OVL-SOC2: a social card that comes without a sound (news only, nothing to answer). */
+    static boolean quietCard(String kind) {
+        return switch (kind) {
+            case "online", "projects", "friend", "crew-in" -> true;
+            default -> false;
+        };
+    }
+
     private static long duration(ToastCard.Kind kind, OverlaySettings settings, Minecraft mc) {
         long base = switch (kind) {
             case CALL, INVITE, WORLD, RING -> CALL_MS;
             case INFO, TRAVEL -> INFO_MS;
-            case MESSAGE, HOST -> MESSAGE_MS;
+            case MESSAGE, HOST, SOCIAL -> MESSAGE_MS;
         };
         double accessibility = mc.options.notificationDisplayTime().get();
         return Math.round(base * settings.duration().factor * accessibility);

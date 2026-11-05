@@ -42,6 +42,10 @@ pub struct NotifyPrefs {
     pub online_alerts: BTreeMap<String, bool>,
     /// OVL-UX2: "Favorilerim çevrimiçi olunca" (on unless turned off).
     pub favorites_online: bool,
+    /// OVL-SOC2: "Favori arkadaşların: Projects'e girince" (on unless turned off).
+    pub favorites_projects: bool,
+    /// OVL-SOC2: "Katılma istekleri" (on unless turned off).
+    pub join_requests: bool,
 }
 
 impl Default for NotifyPrefs {
@@ -53,6 +57,8 @@ impl Default for NotifyPrefs {
             favorites: Vec::new(),
             online_alerts: BTreeMap::new(),
             favorites_online: true,
+            favorites_projects: true,
+            join_requests: true,
         }
     }
 }
@@ -227,6 +233,56 @@ fn call_heard_in(named: &[String], s: &Situation<'_>) -> bool {
     crews.is_empty() || crews.iter().any(|crew| !crew.mute.on_at(s.now_ms))
 }
 
+/// OVL-SOC2: the friends feature's other moments a card may tell, as the launcher's `wantsNotice`
+/// reads them (`features/social/model.ts`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Moment<'a> {
+    /// Someone asked to be friends; a request was taken (a new friend); a crew invite came; a join
+    /// request of the player's was taken.
+    Request,
+    Friend,
+    CrewInvite,
+    CrewIn,
+    /// A friend came online, or started playing on Projects (`id` the friend).
+    Online {
+        id: &'a str,
+    },
+    Projects {
+        id: &'a str,
+    },
+    /// Someone asked to join crew `crew`; a crewmate made a plan in crew `crew`.
+    CrewAsk {
+        crew: &'a str,
+    },
+    Plan {
+        crew: &'a str,
+    },
+}
+
+/// Whether a [`Moment`] reaches the player in game (never on "Rahatsız etmeyin").
+pub fn moment_heard(moment: Moment<'_>, s: &Situation<'_>) -> bool {
+    if s.dnd {
+        return false;
+    }
+    match moment {
+        Moment::Request | Moment::Friend | Moment::CrewInvite | Moment::CrewIn => true,
+        Moment::Online { id } => s.prefs.alerts(id),
+        Moment::Projects { id } => s.prefs.favorites_projects && s.prefs.favorite(id),
+        Moment::CrewAsk { crew } => s.prefs.join_requests && !crew_silent(crew, s),
+        Moment::Plan { crew } => !crew_silent(crew, s),
+    }
+}
+
+/// One of the player's crews is muted now (on its own, or every crew at once); a crew the list does
+/// not have follows the mute of all (the launcher's `crewSilent`).
+fn crew_silent(id: &str, s: &Situation<'_>) -> bool {
+    all_muted(s)
+        || s.crews
+            .iter()
+            .find(|crew| crew.id == id)
+            .is_some_and(|crew| crew.mute.on_at(s.now_ms))
+}
+
 /// The toast for `notice`, or None when the rules say it stays quiet. The mod words calls and
 /// invites itself, in the game's language: for those `title` and `body` carry names only.
 pub fn toast_for(notice: &Notice<'_>, s: &Situation<'_>) -> Option<ToastView> {
@@ -251,6 +307,7 @@ pub fn toast_for(notice: &Notice<'_>, s: &Situation<'_>) -> Option<ToastView> {
             badge: None,
             marks: Vec::new(),
             by: None,
+            at: None,
         },
         Notice::Call { id, crew, from, .. } => ToastView {
             kind: ToastKind::Call,
@@ -263,6 +320,7 @@ pub fn toast_for(notice: &Notice<'_>, s: &Situation<'_>) -> Option<ToastView> {
             badge: None,
             marks: Vec::new(),
             by: None,
+            at: None,
         },
         Notice::Invite { id, from, .. } => ToastView {
             kind: ToastKind::Invite,
@@ -275,6 +333,7 @@ pub fn toast_for(notice: &Notice<'_>, s: &Situation<'_>) -> Option<ToastView> {
             badge: None,
             marks: Vec::new(),
             by: None,
+            at: None,
         },
     })
 }
@@ -592,5 +651,74 @@ mod tests {
         .unwrap();
         assert!(pushed.favorite("a") && !pushed.alerts("a") && !pushed.alerts("b"));
         assert!(pushed.crew_calls, "the rest keeps its defaults");
+        assert!(pushed.join_requests && pushed.favorites_projects);
+    }
+
+    #[test]
+    fn the_other_moments_follow_the_launchers_wants_notice() {
+        let mut prefs = NotifyPrefs::default();
+        prefs.set_favorite("fav", true);
+        let crews = [
+            CrewMute {
+                id: "t1".into(),
+                mute: Mute::default(),
+            },
+            CrewMute {
+                id: "t2".into(),
+                mute: Mute {
+                    muted: true,
+                    until: None,
+                },
+            },
+        ];
+        let s = Situation {
+            dnd: false,
+            service: None,
+            crews: &crews,
+            prefs: &prefs,
+            now_ms: 0,
+        };
+        for moment in [
+            Moment::Request,
+            Moment::Friend,
+            Moment::CrewInvite,
+            Moment::CrewIn,
+        ] {
+            assert!(moment_heard(moment, &s), "{moment:?}");
+            assert!(!moment_heard(moment, &Situation { dnd: true, ..s }));
+        }
+        assert!(moment_heard(Moment::Online { id: "fav" }, &s));
+        assert!(!moment_heard(Moment::Online { id: "other" }, &s));
+        assert!(moment_heard(Moment::Projects { id: "fav" }, &s));
+        assert!(!moment_heard(Moment::Projects { id: "other" }, &s));
+        // A crew of its own muted, or every crew: no join request and no plan card.
+        assert!(moment_heard(Moment::CrewAsk { crew: "t1" }, &s));
+        assert!(!moment_heard(Moment::CrewAsk { crew: "t2" }, &s));
+        assert!(moment_heard(Moment::Plan { crew: "t1" }, &s));
+        assert!(!moment_heard(Moment::Plan { crew: "t2" }, &s));
+        assert!(moment_heard(Moment::Plan { crew: "unknown" }, &s));
+        let all = Situation {
+            service: Some(CrewSettings {
+                calls: true,
+                mute: Mute {
+                    muted: true,
+                    until: None,
+                },
+            }),
+            ..s
+        };
+        assert!(!moment_heard(Moment::Plan { crew: "unknown" }, &all));
+        assert!(!moment_heard(Moment::CrewAsk { crew: "t1" }, &all));
+        // The player's own switches.
+        let quiet = NotifyPrefs {
+            join_requests: false,
+            favorites_projects: false,
+            favorites_online: false,
+            ..prefs.clone()
+        };
+        let s = Situation { prefs: &quiet, ..s };
+        assert!(!moment_heard(Moment::CrewAsk { crew: "t1" }, &s));
+        assert!(!moment_heard(Moment::Projects { id: "fav" }, &s));
+        assert!(!moment_heard(Moment::Online { id: "fav" }, &s));
     }
 }

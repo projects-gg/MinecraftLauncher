@@ -89,6 +89,8 @@ import { CrewRail } from "./crew-rail";
 import { CrewRequests, MyRequests } from "./crew-requests";
 import { CrewSlowMode } from "./crew-slow-mode";
 import { callableCrews, canAddCrew, NEW_CREW_TAB, shownCrew } from "./crews";
+import { CrewDiscover } from "./discover/discover-block";
+import { DiscoverEntry } from "./discover/discover-entry";
 import { newAccount } from "./identity";
 import { dayMonth, limitOf, opensIn } from "./limits";
 import { openMenuFromKey } from "./menu-key";
@@ -1321,6 +1323,13 @@ function CrewView({ team }: { team: SocialTeam }) {
           <CodeRow team={team} />
         </motion.div>
 
+        {/* CREW-DISCOVER: "Keşif", the leader's (Studio's switch). */}
+        {crew.discover && team.role === "founder" ? (
+          <motion.div {...glideBox}>
+            <CrewDiscover team={team} />
+          </motion.div>
+        ) : null}
+
         {crew.slow && (team.role === "founder" || team.moderator) ? (
           <motion.div {...glideBox}>
             <CrewChatRules team={team} />
@@ -1383,6 +1392,7 @@ function CrewView({ team }: { team: SocialTeam }) {
 function AddCrew({ canAdd, limit }: { canAdd: boolean; limit: number }) {
   const { t } = useTranslation();
   const invites = useSocialUi((s) => s.view.teamInvites);
+  const discover = useSocialUi((s) => s.view.crew.discover === true);
   // An invite link opened at the limit still shows its crew (and says why it cannot be joined).
   const linked = useSocialUi((s) => s.prefillLink !== null);
   const [keepJoin, setKeepJoin] = useState(linked);
@@ -1398,6 +1408,8 @@ function AddCrew({ canAdd, limit }: { canAdd: boolean; limit: number }) {
         </section>
       ) : null}
       <MyRequests />
+      {/* CREW-DISCOVER: "Ekip bul" while one more crew fits (Studio's switch). */}
+      {canAdd && discover ? <DiscoverEntry /> : null}
       {canAdd ? (
         <>
           {/* An invite link the player opened leads: the crew it shows comes first. */}

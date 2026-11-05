@@ -7,6 +7,8 @@ import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.motion.Tween;
 import gg.projects.overlay.settings.Defaults;
 import gg.projects.overlay.settings.OverlaySettings;
+import gg.projects.overlay.settings.SocialRows;
+import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.Sounds;
 import gg.projects.overlay.ui.Texts;
@@ -15,7 +17,11 @@ import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
@@ -37,10 +43,15 @@ import net.minecraft.util.FormattedCharSequence;
  * rows, left and right to change), Enter or Space flips. A change applies at once: the next toast already follows it.
  * Switch thumbs and choice plates glide on springs (they jump under reduced motion).
  *
- * <p>Adding a row: one {@code items.add(...)} in the constructor, in its section. A row may carry a help line
+ * <p>Adding a row: one {@code add(...)} in the constructor, to its part of the page ({@link #rebuild} puts the parts
+ * together, with the rows that come and go with what the launcher says). A row may carry a help line
  * ({@link Item#hint}: one short sentence saying what it really changes, wrapped beside its control, as the launcher's
- * settings rows do). A key the game binds goes in as a {@link Shortcut}: "Varsayılana dön" covers it with the display
- * settings ({@link Defaults}).
+ * settings rows do); a section may too, under its title. A key the game binds goes in as a {@link Shortcut}:
+ * "Varsayılana dön" covers it with the display settings ({@link Defaults}).
+ *
+ * <p>OVL-SOC2, while the launcher says it takes them ({@link People}): "Oyunda gösterilecek kartlar" (every card kind
+ * it takes over when off here, apart from the cards' look under "Bildirimler"), "Arkadaş bildirimleri" (its own
+ * switches, shared with it) and "Engellenenler" with "Engeli kaldır". The rows follow the launcher's words.
  */
 public final class SettingsList extends PanelWidget {
     private static final int ROW_H = 20;
@@ -55,15 +66,23 @@ public final class SettingsList extends PanelWidget {
     /** "Varsayılana dön" stands apart from the last section: a hairline this far down its row, the button below it. */
     private static final int RESET_RULE = 6;
     private static final int RESET_H = RESET_RULE + 26;
+    /** The note's plate at the list's foot ("X artık engelli değil"), as the friend list's. */
+    private static final int NOTE_H = 14;
 
     private abstract static class Item {
         String label;
+        /** The label as it fits beside the row's control (an ellipsis when narrow); set by {@link #layout}. */
+        String fitted = "";
         /** One short line under the label saying what the row really changes, or null. Wrapped by {@link #layout}. */
         String hint;
         List<FormattedCharSequence> hintLines = List.of();
         float y;
         int height = ROW_H;
-        boolean section;
+
+        /** Whether the arrows and the pointer stop on it (section titles and quiet lines they pass). */
+        boolean selectable() {
+            return true;
+        }
 
         boolean enabled(OverlaySettings s) {
             return true;
@@ -76,9 +95,31 @@ public final class SettingsList extends PanelWidget {
 
     private static final class Section extends Item {
         Section(String label) {
+            this(label, null);
+        }
+
+        /** {@code hint}: one quiet line under the title, about every row of the section ("Launcher'la ortak."). */
+        Section(String label, String hint) {
             this.label = label;
+            this.hint = hint;
             this.height = SECTION_H;
-            this.section = true;
+        }
+
+        @Override
+        boolean selectable() {
+            return false;
+        }
+    }
+
+    /** A quiet line in place of rows ("Kimseyi engellemedin."): nothing to press. */
+    private static final class QuietLine extends Item {
+        QuietLine(String label) {
+            this.label = label;
+        }
+
+        @Override
+        boolean selectable() {
+            return false;
         }
     }
 
@@ -220,6 +261,40 @@ public final class SettingsList extends PanelWidget {
     }
 
     /**
+     * OVL-SOC2: what the launcher says of the player's people, and the page's presses about them. The state says which
+     * rows show (the card kinds it takes, its notification switches, the blocked people); a switch goes to the launcher
+     * ({@code setNotify}, which shows it at once), "Engeli kaldır" too ({@code unblock}; its note says how it went).
+     * "Varsayılana dön" leaves the launcher's switches and the blocked people alone, as the language.
+     */
+    public interface People {
+        OverlayState state();
+
+        void setNotify(String key, boolean on);
+
+        void unblock(String id, String name);
+
+        static People of(Supplier<OverlayState> state, BiConsumer<String, Boolean> notify,
+            BiConsumer<String, String> unblock) {
+            return new People() {
+                @Override
+                public OverlayState state() {
+                    return state.get();
+                }
+
+                @Override
+                public void setNotify(String key, boolean on) {
+                    notify.accept(key, on);
+                }
+
+                @Override
+                public void unblock(String id, String name) {
+                    unblock.accept(id, name);
+                }
+            };
+        }
+    }
+
+    /**
      * A key the game binds that the page offers under "Kısayol" (the overlay key): its row's words, the key's name, and
      * changing it in the game's Controls. "Varsayılana dön" puts it back with the display settings ({@link Defaults}).
      */
@@ -266,6 +341,23 @@ public final class SettingsList extends PanelWidget {
         }
     }
 
+    /** Someone the player blocked (OVL-SOC2): their name and "Engeli kaldır", a quiet button (never gold). */
+    private static final class BlockedRow extends Item {
+        final String id;
+        /** The name as it fits beside the button, in display order. */
+        FormattedCharSequence name = FormattedCharSequence.EMPTY;
+
+        BlockedRow(String id, String name) {
+            this.id = id;
+            this.label = name;
+        }
+
+        @Override
+        Component value(OverlaySettings s) {
+            return Texts.tr("settings.unblock");
+        }
+    }
+
     private static final class ResetRow extends Item {
         ResetRow(String label) {
             this.label = label;
@@ -276,7 +368,23 @@ public final class SettingsList extends PanelWidget {
     private final Supplier<OverlaySettings> settings;
     private final java.util.function.Consumer<UnaryOperator<OverlaySettings>> apply;
     private final List<Shortcut> shortcuts;
+    private final People people;
     private final List<Item> items = new ArrayList<>();
+    /** The rows that always show, in their places; {@link #rebuild} puts them together with the launcher's. */
+    private final List<Item> general = new ArrayList<>();
+    private final Section notifications;
+    private final Section cardsSection;
+    private final Map<String, Toggle> cardToggles = new LinkedHashMap<>();
+    private final Toggle infoToggle;
+    private final List<Item> look = new ArrayList<>();
+    private final Section friendNotify;
+    private final Map<String, Toggle> notifyToggles = new HashMap<>();
+    private final List<Item> rest = new ArrayList<>();
+    private final Section blockedSection;
+    private final QuietLine blockedEmpty;
+    private final Map<String, BlockedRow> blockedRows = new HashMap<>();
+    private final ResetRow resetRow;
+    private final String unblockLabel;
     private final Spring scroll = Spring.snappy(0f);
     private int selected = -1;
     private float contentHeight;
@@ -292,6 +400,16 @@ public final class SettingsList extends PanelWidget {
     private int laidWidth = -1;
     private int laidScale = -1;
     private boolean laidBundled;
+    /** The state's revision the rows were last checked against, and what decided them then ({@link #shapeOf}). */
+    private int seenRevision = Integer.MIN_VALUE;
+    private String shape = "";
+    /** The person note at the list's foot ("X artık engelli değil"), as the friend list says it. */
+    private OverlayState.PersonNote note;
+    private FormattedCharSequence noteText;
+    private float noteWidth;
+    private boolean noteError;
+    private boolean noteComing;
+    private final Tween noteAlpha = new Tween(0f);
 
     /**
      * {@code shortcuts}: the keys under "Kısayol" (the overlay key and the chat emoji picker's, both in the game's
@@ -321,12 +439,23 @@ public final class SettingsList extends PanelWidget {
     public SettingsList(Supplier<OverlaySettings> settings,
         java.util.function.Consumer<UnaryOperator<OverlaySettings>> apply, List<Shortcut> shortcuts,
         Languages languages, EmojiSwitch emojis, boolean voice) {
+        this(settings, apply, shortcuts, languages, emojis, voice, null);
+    }
+
+    /**
+     * {@code people} (OVL-SOC2): the launcher's words about the player's people, and the presses about them; null
+     * leaves out every row that follows them (the page as before).
+     */
+    public SettingsList(Supplier<OverlaySettings> settings,
+        java.util.function.Consumer<UnaryOperator<OverlaySettings>> apply, List<Shortcut> shortcuts,
+        Languages languages, EmojiSwitch emojis, boolean voice, People people) {
         super(0, 0, 100, 100, Texts.tr("settings.title"));
         this.settings = settings;
         this.apply = apply;
         this.shortcuts = List.copyOf(shortcuts);
+        this.people = people;
         if (languages != null || emojis != null) {
-            items.add(new Section(Texts.str("settings.general")));
+            general.add(new Section(Texts.str("settings.general")));
         }
         if (languages != null) {
             Language[] all = Language.values();
@@ -338,68 +467,86 @@ public final class SettingsList extends PanelWidget {
                 null);
             language.pick = i -> languages.pick(all[i]);
             language.enabledIf = languages::editable;
-            items.add(language);
+            general.add(language);
         }
         if (emojis != null) {
             Toggle picker = new Toggle(Texts.str("settings.chat_emoji"), s -> emojis.on(), s -> s);
             picker.pick = emojis::set;
             picker.enabledIf = s -> emojis.editable();
-            items.add(picker);
+            general.add(picker);
         }
-        items.add(new Section(Texts.str("settings.notifications")));
-        items.add(new Toggle(Texts.str("settings.toasts.message"), OverlaySettings::messageToasts,
-            s -> s.withMessageToasts(!s.messageToasts())));
-        items.add(new Toggle(Texts.str("settings.toasts.call"), OverlaySettings::callToasts,
-            s -> s.withCallToasts(!s.callToasts())));
-        items.add(new Toggle(Texts.str("settings.toasts.invite"), OverlaySettings::inviteToasts,
-            s -> s.withInviteToasts(!s.inviteToasts())));
-        items.add(new Toggle(Texts.str("settings.toasts.info"), OverlaySettings::infoToasts,
-            s -> s.withInfoToasts(!s.infoToasts())));
+        notifications = new Section(Texts.str("settings.notifications"));
+        // The card kinds (OVL-SOC2: the newer four show only while the launcher takes them, in their own section).
+        for (String group : SocialRows.CARDS) {
+            cardToggles.put(group, new Toggle(Texts.str(SocialRows.words(group)), s -> SocialRows.shows(s, group),
+                s -> SocialRows.show(s, group, !SocialRows.shows(s, group))));
+        }
+        infoToggle = new Toggle(Texts.str("settings.toasts.info"), OverlaySettings::infoToasts,
+            s -> s.withInfoToasts(!s.infoToasts()));
+        cardsSection = new Section(Texts.str("settings.cards"), Texts.str("settings.cards.hint"));
         Toggle text = new Toggle(Texts.str("settings.show_text"), OverlaySettings::showMessageText,
             s -> s.withShowMessageText(!s.showMessageText()));
         text.enabledIf = OverlaySettings::messageToasts;
-        items.add(text);
+        look.add(text);
         // KEY-HINT: the toasts' one line that says which key opens the panel (the owner: a switch to hide it).
-        items.add(new Toggle(Texts.str("settings.key_hint"), OverlaySettings::showKeyHint,
+        look.add(new Toggle(Texts.str("settings.key_hint"), OverlaySettings::showKeyHint,
             s -> s.withShowKeyHint(!s.showKeyHint())));
-        items.add(new Choice(Texts.str("settings.duration"), new String[] {Texts.str("settings.duration.short"),
+        look.add(new Choice(Texts.str("settings.duration"), new String[] {Texts.str("settings.duration.short"),
             Texts.str("settings.duration.normal"), Texts.str("settings.duration.long")},
             s -> s.duration().ordinal(), (s, i) -> s.withDuration(OverlaySettings.Duration.values()[i])));
-        items.add(new Choice(Texts.str("settings.corner"), new String[] {Texts.str("settings.corner.bottom"),
+        look.add(new Choice(Texts.str("settings.corner"), new String[] {Texts.str("settings.corner.bottom"),
             Texts.str("settings.corner.top")}, s -> s.corner().ordinal(),
             (s, i) -> s.withCorner(OverlaySettings.Corner.values()[i])));
+        // OVL-SOC2: the launcher's notification switches; what they show is always what it said last.
+        friendNotify = new Section(Texts.str("settings.friend_notify"), Texts.str("settings.friend_notify.hint"));
+        if (people != null) {
+            for (SocialRows.Notify n : SocialRows.notify(true, true)) {
+                Toggle t = new Toggle(Texts.str(n.words()), s -> SocialRows.on(prefsNow(), n.key()), s -> s);
+                t.pick = on -> people.setNotify(n.key(), on);
+                notifyToggles.put(n.key(), t);
+            }
+        }
         if (voice) {
-            items.add(new Section(Texts.str("voice.title")));
-            items.add(new Toggle(Texts.str("settings.voice.speakers"), OverlaySettings::showSpeakers,
+            rest.add(new Section(Texts.str("voice.title")));
+            rest.add(new Toggle(Texts.str("settings.voice.speakers"), OverlaySettings::showSpeakers,
                 s -> s.withShowSpeakers(!s.showSpeakers())));
         }
-        items.add(new Section(Texts.str("settings.sound")));
-        items.add(new Toggle(Texts.str("settings.sound.message"), OverlaySettings::messageSound,
+        rest.add(new Section(Texts.str("settings.sound")));
+        rest.add(new Toggle(Texts.str("settings.sound.message"), OverlaySettings::messageSound,
             s -> s.withMessageSound(!s.messageSound())));
-        items.add(new Slider(Texts.str("settings.sound.volume"), OverlaySettings::messageVolume,
+        rest.add(new Slider(Texts.str("settings.sound.volume"), OverlaySettings::messageVolume,
             OverlaySettings::withMessageVolume, Sounds.Cue.MESSAGE, OverlaySettings::messageSound));
-        items.add(new Toggle(Texts.str("settings.sound.call"), OverlaySettings::callSound,
+        rest.add(new Toggle(Texts.str("settings.sound.call"), OverlaySettings::callSound,
             s -> s.withCallSound(!s.callSound())));
-        items.add(new Slider(Texts.str("settings.sound.volume"), OverlaySettings::callVolume,
+        rest.add(new Slider(Texts.str("settings.sound.volume"), OverlaySettings::callVolume,
             OverlaySettings::withCallVolume, Sounds.Cue.CALL, OverlaySettings::callSound));
-        items.add(new Section(Texts.str("settings.motion")));
+        rest.add(new Section(Texts.str("settings.motion")));
         Toggle motion = new Toggle(Texts.str("settings.reduce_motion"), OverlaySettings::reduceMotion,
             s -> s.withReduceMotion(!s.reduceMotion()));
         // What it really turns off (OVL-FIX; testers did not know): the panel's and the toasts' slide, the stickers'
         // motion. Dialogs, switches and scrolling stop moving too; those the player does not miss.
         motion.hint = Texts.str("settings.reduce_motion.hint");
-        items.add(motion);
+        rest.add(motion);
         if (!this.shortcuts.isEmpty()) {
-            items.add(new Section(Texts.str("settings.key")));
+            rest.add(new Section(Texts.str("settings.key")));
             for (Shortcut shortcut : this.shortcuts) {
-                items.add(new KeyRow(shortcut));
+                rest.add(new KeyRow(shortcut));
             }
         }
+        // OVL-SOC2: the blocked people last (a long list pushes no setting down), above the reset (which leaves them).
+        blockedSection = new Section(Texts.str("settings.blocked"));
+        blockedEmpty = new QuietLine(Texts.str("settings.blocked.empty"));
+        unblockLabel = Texts.str("settings.unblock");
         resetLabel = Texts.str("settings.reset");
-        items.add(new ResetRow(resetLabel));
+        resetRow = new ResetRow(resetLabel);
         resetDone = Texts.str("settings.reset.done");
         undoLabel = Texts.str("settings.reset.undo");
-        layout();
+        OverlayState st = people == null ? null : people.state();
+        if (st != null) {
+            seenRevision = st.revision();
+            shape = shapeOf(st);
+        }
+        rebuild(st);
     }
 
     public void setReducedMotion(boolean value) {
@@ -433,8 +580,22 @@ public final class SettingsList extends PanelWidget {
 
     /** The scenario driver: the list scrolled to its end at once ("Hareket", "Kısayol" and the reset in view). */
     public void scrollToEnd() {
+        follow();
         layout();
         scroll.snap(maxScroll());
+    }
+
+    /** The scenario driver: the list scrolled at once so the section titled {@code title} is at its top (false: none). */
+    public boolean scrollToSectionForDriver(String title) {
+        follow();
+        layout();
+        for (Item item : items) {
+            if (item instanceof Section && item.label.equals(title)) {
+                scroll.snap(Math.max(0f, Math.min(maxScroll(), item.y)));
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The scenario driver: the middle of "Varsayılana dön" (or "Geri al") on screen. */
@@ -462,9 +623,146 @@ public final class SettingsList extends PanelWidget {
         scroll.snap(from.scroll.target());
     }
 
+    /** The launcher's notification switches as it said them last, or null. */
+    private OverlayState.Prefs prefsNow() {
+        OverlayState st = people == null ? null : people.state();
+        return st == null ? null : st.prefs();
+    }
+
+    /**
+     * What decides the launcher's rows (OVL-SOC2): which sections it takes, and who is blocked. The rows are put
+     * together again only when it changes.
+     */
+    private static String shapeOf(OverlayState st) {
+        StringBuilder b = new StringBuilder(64);
+        b.append(st.cards2() ? 'c' : '-').append(st.prefs() != null ? 'p' : '-').append(st.crews2() ? 'w' : '-')
+            .append(st.has("chat") ? 'h' : '-').append(st.people5() ? 'b' : '-');
+        if (st.people5()) {
+            for (OverlayState.Request r : st.blocked()) {
+                b.append('\n').append(r.id()).append('\t').append(r.name());
+            }
+        }
+        return b.toString();
+    }
+
+    /** The rows follow the launcher's words: checked when the state changed, put together again when they changed. */
+    private void follow() {
+        OverlayState st = people == null ? null : people.state();
+        if (st == null || st.revision() == seenRevision) {
+            return;
+        }
+        seenRevision = st.revision();
+        String next = shapeOf(st);
+        if (!next.equals(shape)) {
+            shape = next;
+            rebuild(st);
+        }
+    }
+
+    /**
+     * The rows in their order for what the launcher says now ({@code st}; null: none of its rows). The chosen row stays
+     * chosen and the rows in view stay where they are; a row that went (someone no longer blocked) hands the choice to
+     * the one that took its place, else to the row above, never to the reset below it (Enter would press it next).
+     */
+    private void rebuild(OverlayState st) {
+        Item was = selected >= 0 && selected < items.size() ? items.get(selected) : null;
+        int wasIndex = selected;
+        Item anchor = was != null && inView(was) ? was : firstInView();
+        float anchorTop = anchor == null ? 0f : anchor.y - scroll.target();
+        items.clear();
+        items.addAll(general);
+        if (st != null && st.cards2()) {
+            // The launcher takes over the kinds turned off here: they have their own section, with what that means.
+            items.add(cardsSection);
+            items.addAll(cardToggles.values());
+            items.add(notifications);
+            items.add(infoToggle);
+        } else {
+            items.add(notifications);
+            items.add(cardToggles.get("message"));
+            items.add(cardToggles.get("call"));
+            items.add(cardToggles.get("invite"));
+            items.add(infoToggle);
+        }
+        items.addAll(look);
+        if (st != null && st.prefs() != null && !notifyToggles.isEmpty()) {
+            items.add(friendNotify);
+            for (SocialRows.Notify n : SocialRows.notify(st.crews2(), st.has("chat"))) {
+                items.add(notifyToggles.get(n.key()));
+            }
+        }
+        items.addAll(rest);
+        Map<String, BlockedRow> kept = new HashMap<>();
+        if (st != null && st.people5()) {
+            items.add(blockedSection);
+            List<OverlayState.Request> blocked = st.blocked();
+            if (blocked.isEmpty()) {
+                items.add(blockedEmpty);
+            }
+            for (OverlayState.Request r : blocked) {
+                BlockedRow row = blockedRows.get(r.id());
+                if (row == null || !row.label.equals(r.name())) {
+                    row = new BlockedRow(r.id(), r.name());
+                }
+                if (kept.putIfAbsent(r.id(), row) == null) {
+                    items.add(row);
+                }
+            }
+        }
+        blockedRows.clear();
+        blockedRows.putAll(kept);
+        items.add(resetRow);
+        if (was != null) {
+            int i = items.indexOf(was);
+            selected = i >= 0 ? i : settle(wasIndex, was);
+        }
+        laidWidth = -1;
+        layout();
+        if (anchor != null && items.contains(anchor)) {
+            scroll.snap(Math.max(0f, Math.min(maxScroll(), anchor.y - anchorTop)));
+        }
+    }
+
+    /** The row that takes a gone row's choice: the same kind in its place, else the nearest above, else below. */
+    private int settle(int index, Item was) {
+        int i = Math.min(index, items.size() - 1);
+        if (i < 0) {
+            return -1;
+        }
+        if (items.get(i).selectable() && items.get(i).getClass() == was.getClass()) {
+            return i;
+        }
+        for (int j = i - 1; j >= 0; j--) {
+            if (items.get(j).selectable()) {
+                return j;
+            }
+        }
+        for (int j = i; j < items.size(); j++) {
+            if (items.get(j).selectable()) {
+                return j;
+            }
+        }
+        return -1;
+    }
+
+    private boolean inView(Item item) {
+        float top = scroll.target();
+        return item.y + item.height > top && item.y < top + getHeight();
+    }
+
+    private Item firstInView() {
+        for (Item item : items) {
+            if (inView(item)) {
+                return item;
+            }
+        }
+        return null;
+    }
+
     /**
      * Lays the rows out for the list's width and the fonts drawing now: a row with a help line is as tall as its
-     * wrapped words. Runs again only when the width, the GUI scale or the font (the game's at GUI 1) changed.
+     * wrapped words, a label too long beside its control ends in an ellipsis. Runs again only when the width, the GUI
+     * scale or the font (the game's at GUI 1) changed, or the rows did.
      */
     private void layout() {
         int width = getWidth();
@@ -476,14 +774,34 @@ public final class SettingsList extends PanelWidget {
         laidWidth = width;
         laidScale = scale;
         laidBundled = bundled;
+        Font ui = Fonts.ui();
         Font small = Fonts.small();
         float y = 0f;
         for (Item item : items) {
-            if (item.hint != null) {
-                int room = Math.max(60, width - controlWidth(item, small) - CONTROL_GAP);
-                item.hintLines = balanced(small, Component.literal(item.hint), room);
-                // The label sits where a plain row's sits; the help lines follow, then a little air.
-                item.height = ROW_H + item.hintLines.size() * HINT_LINE_H - 1;
+            if (item instanceof Section) {
+                if (item.hint != null) {
+                    // The section's line under its title, then a pixel of air before its first row.
+                    item.hintLines = balanced(small, Component.literal(item.hint), Math.max(60, width));
+                    item.height = SECTION_H + item.hintLines.size() * HINT_LINE_H + 1;
+                }
+            } else if (item instanceof QuietLine) {
+                item.fitted = Texts.fit(small, item.label, Math.max(24, width));
+            } else if (!(item instanceof ResetRow)) {
+                if (item instanceof KeyRow k) {
+                    // The key's own name, not "Atanmamış", decides how much room its words have.
+                    k.check(now());
+                }
+                int room = Math.max(24, width - controlWidth(item, small) - CONTROL_GAP);
+                if (item instanceof BlockedRow b) {
+                    b.name = Texts.visual(Texts.fit(ui, b.label, room));
+                } else {
+                    item.fitted = Texts.fit(ui, item.label, room);
+                }
+                if (item.hint != null) {
+                    item.hintLines = balanced(small, Component.literal(item.hint), Math.max(60, room));
+                    // The label sits where a plain row's sits; the help lines follow, then a little air.
+                    item.height = ROW_H + item.hintLines.size() * HINT_LINE_H - 1;
+                }
             }
             item.y = y;
             y += item.height;
@@ -551,6 +869,8 @@ public final class SettingsList extends PanelWidget {
         } else if (item instanceof KeyRow k) {
             String shown = k.shown == null ? k.noneLabel : k.shown;
             return changeWidth(k) + 6 + small.width(shown) + 6;
+        } else if (item instanceof BlockedRow) {
+            return unblockWidth();
         }
         return 0f;
     }
@@ -578,9 +898,19 @@ public final class SettingsList extends PanelWidget {
         apply.accept(op);
     }
 
-    /** Whether a row takes input now: the reset only while something differs from its default or "Geri al" is up. */
+    /**
+     * Whether a row takes input now: the reset only while something differs from its default or "Geri al" is up, a
+     * blocked person's row not while their "Engeli kaldır" is on its way.
+     */
     private boolean enabled(Item item, OverlaySettings s, long now) {
-        return item instanceof ResetRow ? resetAvailable(s, now) : item.enabled(s);
+        if (item instanceof ResetRow) {
+            return resetAvailable(s, now);
+        }
+        if (item instanceof BlockedRow b) {
+            OverlayState st = people == null ? null : people.state();
+            return st != null && !st.pressing("unblock", b.id);
+        }
+        return item.enabled(s);
     }
 
     private boolean resetAvailable(OverlaySettings s, long now) {
@@ -623,6 +953,10 @@ public final class SettingsList extends PanelWidget {
             if (direction == 0) {
                 k.shortcut.change();
             }
+        } else if (item instanceof BlockedRow b) {
+            if (direction == 0) {
+                people.unblock(b.id, b.label);
+            }
         } else if (item instanceof ResetRow) {
             if (direction == 0) {
                 reset();
@@ -664,11 +998,11 @@ public final class SettingsList extends PanelWidget {
         int i = selected;
         do {
             i += direction;
-        } while (i >= 0 && i < items.size() && items.get(i).section);
+        } while (i >= 0 && i < items.size() && !items.get(i).selectable());
         if (i < 0 || i >= items.size()) {
             if (selected < 0) {
                 for (int j = 0; j < items.size(); j++) {
-                    if (!items.get(j).section) {
+                    if (items.get(j).selectable()) {
                         selected = j;
                         break;
                     }
@@ -687,7 +1021,12 @@ public final class SettingsList extends PanelWidget {
         Item item = items.get(selected);
         float target = scroll.target();
         if (item.y < target + 2) {
-            target = item.y - (selected > 0 && items.get(selected - 1).section ? SECTION_H : 4);
+            // The titles (and their lines) right above the row come into view with it, while the row stays in view.
+            float top = item.y - 4;
+            for (int j = selected - 1; j >= 0 && !items.get(j).selectable(); j--) {
+                top = items.get(j).y;
+            }
+            target = Math.max(top, item.y + item.height - getHeight() + 4);
         } else if (item.y + item.height > target + getHeight()) {
             target = item.y + item.height - getHeight() + 4;
         }
@@ -761,7 +1100,7 @@ public final class SettingsList extends PanelWidget {
         float cy = (float) mouseY - getY() + scroll.value();
         for (int i = 0; i < items.size(); i++) {
             Item item = items.get(i);
-            if (!item.section && cy >= item.y && cy < item.y + item.height) {
+            if (item.selectable() && cy >= item.y && cy < item.y + item.height) {
                 return i;
             }
         }
@@ -795,6 +1134,11 @@ public final class SettingsList extends PanelWidget {
         } else if (item instanceof KeyRow k) {
             if (event.x() >= right - changeWidth(k)) {
                 k.shortcut.change();
+            }
+        } else if (item instanceof BlockedRow b) {
+            // Only the button unblocks; a click on the name just chooses the row.
+            if (event.x() >= right - unblockWidth()) {
+                people.unblock(b.id, b.label);
             }
         } else if (item instanceof ResetRow) {
             if (onResetButton(item, event.x(), event.y())) {
@@ -833,10 +1177,15 @@ public final class SettingsList extends PanelWidget {
         return Fonts.small().width(k.changeLabel) + 12;
     }
 
+    private float unblockWidth() {
+        return Fonts.small().width(unblockLabel) + 12;
+    }
+
     @Override
     protected void draw(GuiGraphicsExtractor g, int mouseX, int mouseY, long now) {
         float dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
         lastFrame = now;
+        follow();
         layout();
         scroll.step(dt);
         OverlaySettings s = settings.get();
@@ -856,11 +1205,12 @@ public final class SettingsList extends PanelWidget {
                 stepHidden(item, s, dt);
                 continue;
             }
-            if (item.section) {
-                Draw.text(g, small, item.label, x0, Fonts.centeredY(Fonts.Face.SMALL, y + SECTION_H / 2f + 2),
-                    Theme.ASH_400);
-                Draw.hairline(g, x0 + small.width(item.label) + 6, right, y + SECTION_H / 2f + 1.5f,
-                    Theme.withAlpha(0xFFFFFF, 0.07f));
+            if (item instanceof Section) {
+                drawSection(g, item, small, x0, right, y);
+                continue;
+            }
+            if (item instanceof QuietLine) {
+                Draw.text(g, small, item.fitted, x0, Fonts.centeredY(Fonts.Face.SMALL, y + ROW_H / 2f), Theme.ASH_400);
                 continue;
             }
             boolean enabled = enabled(item, s, now);
@@ -876,7 +1226,11 @@ public final class SettingsList extends PanelWidget {
             float mid = y + item.height / 2f;
             if (!(item instanceof ResetRow)) {
                 float labelMid = item.hintLines.isEmpty() ? mid : y + ROW_H / 2f;
-                Draw.text(g, ui, item.label, x0, Fonts.centeredY(Fonts.Face.UI, labelMid), Theme.BONE_100);
+                if (item instanceof BlockedRow b) {
+                    Draw.text(g, ui, b.name, x0, Fonts.centeredY(Fonts.Face.UI, labelMid), Theme.BONE_100);
+                } else {
+                    Draw.text(g, ui, item.fitted, x0, Fonts.centeredY(Fonts.Face.UI, labelMid), Theme.BONE_100);
+                }
                 drawHint(g, item, small, x0, y);
             }
             if (item instanceof Toggle t) {
@@ -886,8 +1240,15 @@ public final class SettingsList extends PanelWidget {
             } else if (item instanceof Choice c) {
                 drawChoice(g, c, s, right, mid, dt, small, mouseX, lit);
             } else if (item instanceof KeyRow k) {
+                String was = k.shown;
                 k.check(now);
+                if (!k.shown.equals(was)) {
+                    // Another key (bound in Controls): its words get the room it leaves from the next frame.
+                    laidWidth = -1;
+                }
                 drawKey(g, k, right, mid, small, mouseX, lit);
+            } else if (item instanceof BlockedRow) {
+                drawUnblock(g, right, mid, small, enabled && lit && mouseX >= right - unblockWidth());
             } else if (item instanceof ResetRow) {
                 boolean over = enabled && isHovered() && onResetButton(item, mouseX, mouseY);
                 drawReset(g, (ResetRow) item, y, now, small, over, chosen);
@@ -895,6 +1256,27 @@ public final class SettingsList extends PanelWidget {
             Draw.popAlpha();
         }
         g.disableScissor();
+        if (people != null) {
+            OverlayState st = people.state();
+            setNote(st == null ? null : st.personNote(System.currentTimeMillis()), now);
+            drawNote(g, now);
+        }
+    }
+
+    /**
+     * A section's title with the hairline after it, and its quiet line under it when it has one: the secondary ink of
+     * text on the panel (design.md: ash-400 on solid).
+     */
+    private static void drawSection(GuiGraphicsExtractor g, Item item, Font small, float x0, float right, float y) {
+        float titleMid = y + SECTION_H / 2f + 2;
+        Draw.text(g, small, item.label, x0, Fonts.centeredY(Fonts.Face.SMALL, titleMid), Theme.ASH_400);
+        Draw.hairline(g, x0 + small.width(item.label) + 6, right, y + SECTION_H / 2f + 1.5f,
+            Theme.withAlpha(0xFFFFFF, 0.07f));
+        float lineMid = titleMid + HINT_LINE_H;
+        for (FormattedCharSequence line : item.hintLines) {
+            Draw.text(g, small, line, x0, Fonts.centeredY(Fonts.Face.SMALL, lineMid), Theme.ASH_400);
+            lineMid += HINT_LINE_H;
+        }
     }
 
     /** A row's help lines under its label: the secondary ink of text on the panel (design.md: ash-400 on solid). */
@@ -1014,6 +1396,15 @@ public final class SettingsList extends PanelWidget {
         }
     }
 
+    /** "Engeli kaldır": the quiet chip "Değiştir" is, lighter under the pointer; the row's alpha says it waits. */
+    private void drawUnblock(GuiGraphicsExtractor g, float right, float mid, Font small, boolean over) {
+        float bw = unblockWidth();
+        float bx = right - bw;
+        Draw.frame(g, over ? Frames.CHIP_HOVER : Frames.CHIP, bx, mid - 7, bw, 14);
+        Draw.text(g, small, unblockLabel, bx + 6, Fonts.centeredY(Fonts.Face.SMALL, mid), over ? Theme.BONE_50
+            : Theme.BONE_100);
+    }
+
     /**
      * The settings' last row, apart from the sections above by a hairline: "Varsayılana dön" in its middle, soft while
      * everything is at its default (the row's alpha); for a while after a reset "Varsayılanlar geri geldi." with "Geri
@@ -1070,14 +1461,57 @@ public final class SettingsList extends PanelWidget {
         }
     }
 
+    /**
+     * How a press about someone went ("X artık engelli değil", or that it did not go), said for a moment at the list's
+     * foot as the friend list says it (null: nothing to say). Its words are made only when the note changes.
+     */
+    private void setNote(OverlayState.PersonNote next, long now) {
+        if (next == note) {
+            return;
+        }
+        note = next;
+        if (next != null) {
+            Font small = Fonts.small();
+            String fitted = Texts.fit(small, FriendList.noteWords(next), Math.max(40, getWidth() - 12));
+            noteText = Texts.visual(fitted);
+            noteWidth = small.width(fitted) + 12;
+            noteError = next.error();
+            noteComing = noteAlpha.value(now) < 0.5f;
+            noteAlpha.animateTo(1f, now, 160, Ease.OUT);
+        } else {
+            noteComing = false;
+            noteAlpha.animateTo(0f, now, 110, Ease.OUT);
+        }
+    }
+
+    private void drawNote(GuiGraphicsExtractor g, long now) {
+        float a = noteAlpha.value(now);
+        if (a <= 0.01f || noteText == null) {
+            return;
+        }
+        float rise = noteComing && !reducedMotion ? (1f - a) * 3f : 0f;
+        float x = getX();
+        float y = getY() + getHeight() - NOTE_H - 2 + rise;
+        Draw.pushAlpha(a);
+        Draw.frame(g, Frames.POPOVER, x, y, noteWidth, NOTE_H);
+        Draw.text(g, Fonts.small(), noteText, x + 6, Fonts.centeredY(Fonts.Face.SMALL, y + NOTE_H / 2f),
+            noteError ? Theme.FLARE_300 : Theme.BONE_100);
+        Draw.popAlpha();
+    }
+
     @Override
     protected void updateWidgetNarration(NarrationElementOutput output) {
         output.add(NarratedElementType.TITLE, getMessage());
         if (selected >= 0 && selected < items.size()) {
             Item item = items.get(selected);
             Component value = item.value(settings.get());
-            output.add(NarratedElementType.HINT, item.hint == null ? Texts.tr("narration.setting", item.label, value)
-                : Texts.tr("narration.setting.hint", item.label, value, item.hint));
+            // The first row under a section with a line says that line too ("Launcher'la ortak.").
+            String hint = item.hint;
+            if (hint == null && selected > 0 && items.get(selected - 1) instanceof Section sec) {
+                hint = sec.hint;
+            }
+            output.add(NarratedElementType.HINT, hint == null ? Texts.tr("narration.setting", item.label, value)
+                : Texts.tr("narration.setting.hint", item.label, value, hint));
             output.add(NarratedElementType.USAGE, Texts.tr("narration.settings.usage"));
         }
     }

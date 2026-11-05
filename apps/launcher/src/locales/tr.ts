@@ -20,6 +20,7 @@ import { trCloudAfkMove } from "./tr-cloud-afk-move";
 import { trCloudStale } from "./tr-cloud-stale";
 import { trCrewWave2 } from "./tr-crew-wave2";
 import { trCrews } from "./tr-crews";
+import { trDiscover } from "./tr-discover";
 import { trDisk } from "./tr-disk";
 import { trEventJoin } from "./tr-event-join";
 import { trFastPack } from "./tr-fastpack";
@@ -125,6 +126,7 @@ export const tr = {
   chat2: trChat2,
   team6: trTeam6,
   chatCalm: trChatCalm,
+  discover: trDiscover,
   verify: trVerify,
   identity: trIdentity,
   badges: trBadges,

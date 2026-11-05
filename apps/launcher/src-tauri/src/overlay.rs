@@ -680,6 +680,8 @@ pub struct OverlayStateView {
     pub config: OverlayConfig,
     /// The mod in the running game is connected now.
     pub connected: bool,
+    /// OVL-SOC2: the notice kinds connected games show as their own cards (`OverlayStatus::kinds`).
+    pub kinds: Vec<String>,
     /// The Minecraft versions the launcher has the mod for (`26.1.2`, `26.2`, …): the ones this
     /// build ships, then those the signed content adds (OVL-AUTO). A Fabric instance on one of
     /// them gets it. Empty in a build without the jars and without the content's.
@@ -693,6 +695,7 @@ pub fn overlay_state(state: State<'_, AppState>) -> OverlayStateView {
     OverlayStateView {
         config: state.overlay.config(),
         connected: state.overlay.connected(),
+        kinds: state.overlay.shown_kinds(),
         versions: Jars {
             bundle: bundle(),
             content: &content,

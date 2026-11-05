@@ -76,6 +76,12 @@ function Subject({
             <span className="sr-only">{t("socNote.note.title")}: </span>"{statusNote}"
           </p>
         ) : null}
+        {/* CREW-DISCOVER: the text the crew shows in "Ekip bul". */}
+        {kind === "crew" && request.text ? (
+          <p className="mt-1 line-clamp-3 text-[13px] leading-snug text-bone-100 break-words">
+            {request.text}
+          </p>
+        ) : null}
         {kind === "message" && request.text ? (
           <p className="mt-1 line-clamp-3 text-[13px] leading-snug text-bone-100 break-words whitespace-pre-wrap">
             <span className="sr-only">{t("reports.message")}: </span>
@@ -210,7 +216,13 @@ export function ReportDialog() {
                 >
                   <RadioGroup.Indicator className="size-2 rounded-full bg-bone-50" />
                 </span>
-                {t(reasonKey(kind, option, fromPlan, fromReaction, fromNote))}
+                {/* CREW-DISCOVER: a card of "Ekip bul" also shows the crew's own text. */}
+                {kind === "crew" &&
+                option === "name" &&
+                request.target.kind === "crew" &&
+                request.target.discover
+                  ? t("discover.report.reason")
+                  : t(reasonKey(kind, option, fromPlan, fromReaction, fromNote))}
               </RadioGroup.Item>
             ))}
           </RadioGroup.Root>
