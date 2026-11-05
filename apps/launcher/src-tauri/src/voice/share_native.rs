@@ -19,7 +19,9 @@ use pl_voice::share::{
     ShareCmd, ShareEvent, ShareLostWhy, ShareOpts, SharePreset, ShareSource, ShareSourceInfo,
     ShareSources,
 };
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
+#[cfg(windows)]
+use tauri::Manager;
 
 use super::share::Publisher;
 
