@@ -724,6 +724,7 @@ fn crew_op_refusal(op: &VoiceCrewOp) -> Option<VoiceRefusal> {
             room,
             name,
             max,
+            ..
         } => {
             if !crew_ok(crew) || !kept(room) {
                 return Some(VoiceRefusal::NotAllowed);
@@ -763,6 +764,7 @@ mod crew_op_tests {
             room: room.into(),
             name: name.into(),
             max,
+            share_by: None,
         };
         assert_eq!(crew_op_refusal(&edit(ROOM, "Antrenman", Some(4))), None);
         assert_eq!(crew_op_refusal(&edit(ROOM, "  Taş Ocağı ", None)), None);

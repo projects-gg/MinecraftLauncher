@@ -400,6 +400,9 @@ pub enum VoiceCrewOp {
         room: String,
         name: String,
         max: Option<u16>,
+        /// SHARE-S: "Kim paylaşabilir" in it (none: as it is).
+        #[serde(default, rename = "shareBy")]
+        share_by: Option<crate::share::ShareBy>,
     },
     /// The crew's rooms ("Genel" aside) in this order (a drag, "Yukarı taşı", "Aşağı taşı").
     Order { crew: String, rooms: Vec<String> },
@@ -890,7 +893,8 @@ mod tests {
                 crew: "0123456789abcdef".into(),
                 room: "c0123456789abcdef".into(),
                 name: "Antrenman".into(),
-                max: None
+                max: None,
+                share_by: None,
             }
         );
         let order: VoiceCrewOp = serde_json::from_value(

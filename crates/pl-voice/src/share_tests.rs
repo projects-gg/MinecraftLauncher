@@ -1323,3 +1323,31 @@ fn closing_the_popout_while_the_launcher_is_away_holds_watching() {
     let effects = machine.share_visible(ShareSurface::Main, true, 9_000);
     assert!(matches!(sent(&effects)[..], [ToRoom::Watch { .. }]));
 }
+
+/// SHARE-S: the crew room form reads the service's switch and each room's "Kim paylaşabilir",
+/// outside a room as well.
+#[test]
+fn the_crew_room_form_knows_who_may_share() {
+    let mut machine = ready();
+    machine.crew_rooms(
+        "0123456789abcdef",
+        vec![
+            crate::machine::CrewRoom {
+                id: "g0123456789abcdef".into(),
+                name: "Genel".into(),
+                ..Default::default()
+            },
+            crate::machine::CrewRoom {
+                id: "c0123456789abcdef".into(),
+                name: "Oda 2".into(),
+                share_mods: true,
+                ..Default::default()
+            },
+        ],
+    );
+    let share = machine.view(0, UNIX).share;
+    assert!(share.service);
+    assert_eq!(share.crew_mods, ["c0123456789abcdef"]);
+    machine.set_share_service(None, 0);
+    assert!(!machine.view(0, UNIX).share.service);
+}

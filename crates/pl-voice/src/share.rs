@@ -556,6 +556,11 @@ pub struct VoiceStreamVolume {
 pub struct VoiceShareView {
     /// The room shares and watches (the service's switch, its `share1`); false: no share anywhere.
     pub on: bool,
+    /// The service's switch is on (`hello.voice.share`): the crew room form offers "Kim
+    /// paylaşabilir".
+    pub service: bool,
+    /// The crew rooms where only the crew's leader and moderators may share (their ids).
+    pub crew_mods: Vec<String>,
     /// This launcher can capture and send (false: watching only).
     pub can_share: bool,
     /// The room lets the player share ("Kim paylaşabilir").

@@ -1,10 +1,13 @@
 // What the share buttons do (SHARE): each asks the launcher and says a refusal in one toast; what
 // worked shows in the state (the panel's "Yayında", the stage).
 import { toast } from "@pl/ui";
+import { useSocialUi } from "@/features/social/store";
 import { keptVoicePrefs, useVoicePrefs } from "@/features/voice/prefs";
+import { faceNow, useVoiceUi } from "@/features/voice/store";
 import { voiceApi } from "@/lib/api/voice-api";
 import i18n from "@/lib/i18n";
 import { shareApi } from "@/share/api";
+import { grabShareFrame } from "@/share/frame";
 import {
   DEFAULT_SHARE_SETTINGS,
   type ShareClosedWhy,
@@ -139,4 +142,20 @@ export function setShareSetting<K extends keyof VoiceShareSettings>(
     .catch(() => {
       // The next change tries again.
     });
+}
+
+/**
+ * "Yayını rapor et": the report dialog about one share in the player's room, with what the player
+ * sees of it now (taken before the dialog covers it; none when it cannot be taken).
+ */
+export async function reportShare(person: string, n: number) {
+  const room = useVoiceUi.getState().state.room?.id;
+  if (!room) return;
+  const frame = await grabShareFrame(person, n);
+  const face = faceNow(person);
+  useSocialUi.getState().openReport({
+    target: { kind: "player", id: person, voice: room, share: { n, ...(frame ? { frame } : {}) } },
+    name: face.name,
+    person: { name: face.name, avatar: face.avatar ?? "discord", avatarUrl: face.avatarUrl },
+  });
 }

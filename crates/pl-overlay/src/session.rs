@@ -445,6 +445,7 @@ impl SocialActions for SocialService {
             plan: None,
             reaction: None,
             voice,
+            share: None,
         };
         async move { service.report(target, reason, note, block).await }
     }

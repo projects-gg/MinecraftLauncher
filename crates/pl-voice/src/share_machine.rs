@@ -1479,8 +1479,18 @@ impl Machine {
 
     pub(super) fn share_view(&self) -> VoiceShareView {
         let on = self.share_on();
+        // The crew room form's "Kim paylaşabilir", in a room or not.
+        let crew_mods: Vec<String> = self
+            .crews
+            .values()
+            .flatten()
+            .filter(|room| room.share_mods)
+            .map(|room| room.id.clone())
+            .collect();
         if !on {
             return VoiceShareView {
+                service: self.share.service.is_some(),
+                crew_mods,
                 can_share: self.share.publisher,
                 audio: self.share.audio,
                 surface: self.share.surface,
@@ -1522,6 +1532,8 @@ impl Machine {
         let connected = self.share.connected;
         VoiceShareView {
             on,
+            service: self.share.service.is_some(),
+            crew_mods,
             can_share: self.share.publisher,
             allowed: self.share_allowed() && self.mine_max() > 0,
             open: self.share.service.is_some_and(|service| service.open),

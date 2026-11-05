@@ -9882,6 +9882,15 @@ export type ReportReason =
 "voice";
 
 /**
+ *  SHARE-S: the screen share a player is reported for: its number in the room (1–3), and what the
+ *  reporter saw (`frame`: base64 of a JPEG of at most 60 KB; none when it could not be taken).
+ */
+export type ReportShare = {
+	n: number,
+	frame?: string | null,
+};
+
+/**
  *  What the player reports ("Rapor et"): a player, a crew (`code` when it was looked up by code)
  *  or a message as this device holds it.
  */
@@ -9895,7 +9904,9 @@ export type ReportTarget =
  *  VOICE: the voice room it is reported from (the room's person menu, or the person card
  *  for 24 hours after the call): the room's events go along as the moderators' evidence.
  */
-voice?: string | null } | 
+voice?: string | null; 
+/**  SHARE-S: their screen share in that room it is about, with the reporter's still frame. */
+share?: ReportShare | null } | 
 /**
  *  SOC-NOTE: a friend reported for their status note ("Uygunsuz not", reason
  *  `inappropriate`): the service keeps the note as the moderators' evidence.
@@ -11931,7 +11942,9 @@ export type VoiceCrewOp =
  *  "Odayı düzenle": its name (3–24 characters) and people at most (none: the crew room
  *  maximum). Never "Genel".
  */
-{ op: "edit"; crew: string; room: string; name: string; max: number | null } | 
+{ op: "edit"; crew: string; room: string; name: string; max: number | null; 
+/**  SHARE-S: "Kim paylaşabilir" in it (none: as it is). */
+shareBy?: ShareBy | null } | 
 /**  The crew's rooms ("Genel" aside) in this order (a drag, "Yukarı taşı", "Aşağı taşı"). */
 { op: "order"; crew: string; rooms: string[] } | 
 /**
@@ -12497,6 +12510,13 @@ export type VoiceShareSettings = {
 export type VoiceShareView = {
 	/**  The room shares and watches (the service's switch, its `share1`); false: no share anywhere. */
 	on: boolean,
+	/**
+	 *  The service's switch is on (`hello.voice.share`): the crew room form offers "Kim
+	 *  paylaşabilir".
+	 */
+	service: boolean,
+	/**  The crew rooms where only the crew's leader and moderators may share (their ids). */
+	crewMods: string[],
 	/**  This launcher can capture and send (false: watching only). */
 	canShare: boolean,
 	/**  The room lets the player share ("Kim paylaşabilir"). */

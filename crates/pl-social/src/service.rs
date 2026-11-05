@@ -4271,6 +4271,8 @@ impl SocialService {
         note: Option<String>,
         block: bool,
     ) -> Result<()> {
+        // SHARE-S: a screen share's still frame goes with the report about that share only.
+        let mut frame: Option<String> = None;
         let (wire, blocked) = {
             let mut core = self.lock();
             let extras = offered(&core).is_some();
@@ -4280,6 +4282,7 @@ impl SocialService {
                     plan,
                     reaction,
                     voice,
+                    share,
                 } => {
                     let mut wire = serde_json::json!({ "kind": "player", "id": id });
                     // From a voice room (VOICE, S2): the room, which the service checks; only to a
@@ -4288,6 +4291,13 @@ impl SocialService {
                         && self.inner.voice.taken()
                     {
                         wire["voice"] = serde_json::json!({ "room": room });
+                        // SHARE-S: about their screen share in it, with what the reporter saw.
+                        if let Some(share) =
+                            share.as_ref().filter(|share| (1..=3).contains(&share.n))
+                        {
+                            wire["voice"]["share"] = share.n.into();
+                            frame = share.frame().map(str::to_owned);
+                        }
                     }
                     // From a plan card (FIX2): the plan goes along as the moderators' evidence.
                     if let Some(plan) = plan.as_ref()
@@ -4376,16 +4386,25 @@ impl SocialService {
         // evidence.
         let reason = report_reason(reason, wire.get("voice").is_some());
         let again = (reason == ReportReason::Voice).then(|| (wire.clone(), note.clone()));
+        let again_frame = frame.clone();
         let sent = self
-            .call(
-                |session| async move { session.report(wire, reason, note.as_deref(), block).await },
-            )
+            .call(|session| async move {
+                session
+                    .report_with(wire, reason, note.as_deref(), block, frame.as_deref())
+                    .await
+            })
             .await;
         let (_, generation) = match (sent, again) {
             (Err(error), Some((wire, note))) if reason_refused(&error) => {
                 self.call(|session| async move {
                     session
-                        .report(wire, ReportReason::Other, note.as_deref(), block)
+                        .report_with(
+                            wire,
+                            ReportReason::Other,
+                            note.as_deref(),
+                            block,
+                            again_frame.as_deref(),
+                        )
                         .await
                 })
                 .await?

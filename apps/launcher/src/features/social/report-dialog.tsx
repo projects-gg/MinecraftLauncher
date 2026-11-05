@@ -4,6 +4,7 @@
 // The reported person never learns about it. Sent: "Raporun iletildi."; a refusal stays in place.
 // SOC-NOTE: a friend reported while their status note shows takes "Uygunsuz not" too, the note in
 // the dialog's top, and the note goes along as the moderators' evidence (whatever the reason).
+// SHARE: a screen share's report shows what goes along of it: the still frame the player saw.
 import { Button, Dialog, Segmented, toast } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { RadioGroup } from "radix-ui";
@@ -69,6 +70,25 @@ function Subject({
           <p className="mt-0.5 truncate text-[12.5px] text-ash-300">
             {t("chat2.report.reaction", { emoji: request.reaction.e })}
           </p>
+        ) : null}
+        {/* SHARE: about their screen share, with the frame the player saw. */}
+        {kind === "player" &&
+        !inviter &&
+        request.target.kind === "player" &&
+        request.target.share ? (
+          <>
+            <p className="mt-0.5 truncate text-[12.5px] text-ash-300">
+              {t("share.report.subject")}
+            </p>
+            {request.target.share.frame ? (
+              <img
+                src={`data:image/jpeg;base64,${request.target.share.frame}`}
+                alt={t("share.report.frame")}
+                draggable={false}
+                className="mt-2 aspect-video w-[208px] rounded-[8px] bg-obsidian-950 object-contain ring-1 ring-white/10"
+              />
+            ) : null}
+          </>
         ) : null}
         {/* SOC-NOTE: the friend's status note. */}
         {kind === "player" && !inviter && statusNote ? (

@@ -310,6 +310,7 @@ fn crew_rooms(rooms: pl_social::VoiceCrewRooms) -> (String, Vec<CrewRoom>) {
                 ids: room.ids,
                 max: room.max,
                 own: room.own,
+                share_mods: room.share_mods,
             })
             .collect(),
     )
@@ -323,11 +324,13 @@ fn crew_change_of(op: VoiceCrewOp) -> pl_social::VoiceCrewChange {
             room,
             name,
             max,
+            share_by,
         } => pl_social::VoiceCrewChange::Edit {
             crew,
             room,
             name: Some(name.trim().to_owned()),
             max: Some(max),
+            share_mods: share_by.map(|by| by == pl_voice::share::ShareBy::Mods),
         },
         VoiceCrewOp::Order { crew, rooms } => pl_social::VoiceCrewChange::Order { crew, rooms },
         VoiceCrewOp::Remove { crew, room, empty } => {

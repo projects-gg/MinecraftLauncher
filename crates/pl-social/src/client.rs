@@ -1365,7 +1365,22 @@ impl Session {
         note: Option<&str>,
         block: bool,
     ) -> Result<ReportAnswer> {
+        self.report_with(target, reason, note, block, None).await
+    }
+
+    /// "Rapor et" with SHARE-S's still frame of a screen share (`frame`: base64 JPEG).
+    pub async fn report_with(
+        &self,
+        target: serde_json::Value,
+        reason: ReportReason,
+        note: Option<&str>,
+        block: bool,
+        frame: Option<&str>,
+    ) -> Result<ReportAnswer> {
         let mut body = serde_json::json!({ "target": target, "reason": reason.as_wire() });
+        if let Some(frame) = frame {
+            body["frame"] = frame.into();
+        }
         if let Some(note) = note.map(str::trim).filter(|note| !note.is_empty()) {
             body["note"] = note.into();
         }

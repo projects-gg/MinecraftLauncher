@@ -138,6 +138,10 @@ export interface VoiceStreamVolume {
 export interface VoiceShareView {
   /** The room shares and watches; false: nothing of it anywhere. */
   on: boolean;
+  /** The service's switch is on: the crew room form offers "Kim paylaşabilir". */
+  service: boolean;
+  /** The crew rooms where only the crew's leader and moderators may share (their ids). */
+  crewMods: string[];
   /** This computer can capture and send (false: watching only). */
   canShare: boolean;
   /** "Kim paylaşabilir" lets the player share. */
@@ -167,6 +171,8 @@ export interface VoiceShareView {
 
 export const HIDDEN_SHARE_VIEW: VoiceShareView = {
   on: false,
+  service: false,
+  crewMods: [],
   canShare: false,
   allowed: false,
   open: false,
