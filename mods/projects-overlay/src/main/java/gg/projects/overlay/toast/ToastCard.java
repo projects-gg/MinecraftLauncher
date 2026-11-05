@@ -354,6 +354,14 @@ public final class ToastCard {
      * OVL-SOC2: what a social card says under its title (the person; a crew's name for "Ekibe katıldın"), in the
      * overlay's words; a plan's time as the launcher says it in a sentence ("Cumartesi 21:00 için plan yaptı").
      */
+    /** {@code text} with its first letter a capital, the Turkish way in Turkish ("ilk" to "İlk"). */
+    static String capital(String text) {
+        if (text.isBlank() || Character.isWhitespace(text.codePointAt(0))) {
+            return text;
+        }
+        return Texts.initial(text) + text.substring(text.offsetByCodePoints(0, 1));
+    }
+
     static String socialBody(OverlayState.ToastRequest request, long now) {
         String crew = request.crew() == null || request.crew().isEmpty() ? Texts.str("toast.crewmate")
             : request.crew();
@@ -365,7 +373,8 @@ public final class ToastCard {
             case "crew-invite" -> Texts.str("toast.crew_invite", crew);
             case "crew-ask" -> Texts.str("toast.crew_ask", crew);
             case "crew-in" -> Texts.str("toast.crew_in");
-            case "plan" -> Texts.str("toast.plan", PlanWhen.of(request.at(), now, true));
+            // "bugün 21:00 için plan yaptı" opens the card's line: its first letter is a capital.
+            case "plan" -> capital(Texts.str("toast.plan", PlanWhen.of(request.at(), now, true)));
             default -> Texts.str("toast.missed");
         };
     }

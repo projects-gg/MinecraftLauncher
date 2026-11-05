@@ -148,7 +148,7 @@ public final class PlanScreen extends Screen {
             if (plan.maybe() > 0) {
                 parts.add(Texts.str("plan.maybe_count", plan.maybe()));
             }
-            String counts = parts.isEmpty() ? Texts.str("plan.nobody") : String.join(" · ", parts);
+            String counts = parts.isEmpty() ? Texts.str("plan.nobody") : String.join(", ", parts);
             List<FormattedCharSequence> noteLines = plan.note() == null || state.streamer() ? List.of()
                 : Texts.wrap(small, "\"" + plan.note() + "\"", textW, 2);
             if (!blocks.isEmpty() && y + 10 + 9 + 9 + noteLines.size() * 9 + 6 + ActionButton.HEIGHT > room) {
@@ -163,7 +163,7 @@ public final class PlanScreen extends Screen {
                 String answer = ANSWERS[i];
                 ActionButton b = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("plan." + answer), null,
                     () -> overlay.answerPlan(plan.id(), answer));
-                b.setSelected(answer.equals(plan.my()));
+                b.setChosen(answer.equals(plan.my()));
                 b.active = !waiting && state.online();
                 answerButtons.add(b);
                 focusKeys.put(b, plan.id() + ":" + answer);
@@ -250,15 +250,18 @@ public final class PlanScreen extends Screen {
         dayY = y;
         y += 9 + 3;
         dayChips.clear();
-        int n = Math.max(1, days.size());
-        int cw = (textW - (n - 1) * 3) / n;
         for (int i = 0; i < days.size(); i++) {
             int index = i;
             ActionButton chip = new ActionButton(ActionButton.Style.SECONDARY,
                 Component.literal(PlanWhen.dayChip(days.get(i))), null, () -> pickDay(index));
-            chip.setSelected(i == day);
-            PanelWidget.place(chip, 0, y, cw, ActionButton.HEIGHT);
+            chip.setChosen(i == day);
             dayChips.add(chip);
+        }
+        // Each chip as wide as its words ("Yarın" and "Tomorrow" need more than "Cmt"), the room left shared out;
+        // when even that does not fit, the room in proportion and the words get smaller (LABEL-FIT).
+        int[] chipW = chipWidths(dayChips, textW, 3);
+        for (int i = 0; i < dayChips.size(); i++) {
+            PanelWidget.place(dayChips.get(i), 0, y, chipW[i], ActionButton.HEIGHT);
         }
         y += ActionButton.HEIGHT + 8;
         // The time: "Saat", ‹ 21:00 ›.
@@ -284,9 +287,11 @@ public final class PlanScreen extends Screen {
         cardH = y + ActionButton.HEIGHT + PAD;
         cardX = (width - WIDTH) / 2;
         cardY = Math.max(4, (height - cardH) / 2);
+        int chipX = cardX + PAD;
         for (int i = 0; i < dayChips.size(); i++) {
             ActionButton chip = dayChips.get(i);
-            PanelWidget.place(chip, cardX + PAD + i * (cw + 3), cardY + chip.getY(), cw, ActionButton.HEIGHT);
+            PanelWidget.place(chip, chipX, cardY + chip.getY(), chipW[i], ActionButton.HEIGHT);
+            chipX += chipW[i] + 3;
             add(chip);
         }
         int tw = 60;
@@ -312,6 +317,15 @@ public final class PlanScreen extends Screen {
         add(cancel);
         add(submit);
         setInitialFocus(dayChips.isEmpty() ? cancel : dayChips.get(day));
+    }
+
+    /** Widths for the day chips across {@code room} with {@code gap} between them ({@link PlanWhen#chipWidths}). */
+    private static int[] chipWidths(List<ActionButton> chips, int room, int gap) {
+        int[] wanted = new int[chips.size()];
+        for (int i = 0; i < wanted.length; i++) {
+            wanted[i] = chips.get(i).preferredWidth();
+        }
+        return PlanWhen.chipWidths(wanted, room, gap);
     }
 
     private void pickDay(int index) {

@@ -189,7 +189,7 @@ public final class FriendList extends PanelWidget {
     /** OVL-SOC2: the top's pills. */
     private static final int PILL_H = 16;
     private static final int PILL_PAD = 6;
-    private static final int PILL_SIGN = 9;
+    private static final int PILL_SIGN = 8;
     // The "…": on which row it shows, the one it is leaving, and the row whose menu is open.
     private String dotsRow;
     private String dotsLeaving;

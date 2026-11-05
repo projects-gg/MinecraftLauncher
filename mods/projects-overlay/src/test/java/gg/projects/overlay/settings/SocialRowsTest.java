@@ -35,7 +35,7 @@ class SocialRowsTest {
 
     @Test
     void everyCardRowTurnedOffGoesToTheLauncher() {
-        // "Kapattıkların launcher'ın bildirimiyle gelir.": each row off is a group the launcher hears.
+        // "Kapattıkların launcher bildirimi olarak gelir.": each row off is a group the launcher hears.
         for (String group : SocialRows.CARDS) {
             assertTrue(SocialRows.shows(OverlaySettings.DEFAULTS, group), group);
             OverlaySettings off = SocialRows.show(OverlaySettings.DEFAULTS, group, false);

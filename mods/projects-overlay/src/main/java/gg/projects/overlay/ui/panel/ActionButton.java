@@ -33,6 +33,7 @@ public class ActionButton extends PanelWidget {
     private Icon icon;
     private String label;
     private boolean selected;
+    private boolean chosen;
     /** The icon's own colour (a voice ring's gold phone, a leave's flare one; VOICE-O), 0 for the words' colour. */
     private int iconInk;
     /** How the label fits the button now, and for what it was worked out (width, GUI scale and font, the label). */
@@ -91,8 +92,13 @@ public class ActionButton extends PanelWidget {
         selected = value;
     }
 
+    /** Chosen among quiet choices (a plan's day, the player's answer; OVL-SOC2): the quiet chosen plate, never gold. */
+    public void setChosen(boolean value) {
+        chosen = value;
+    }
+
     public boolean selected() {
-        return selected;
+        return selected || chosen;
     }
 
     @Override
@@ -136,7 +142,7 @@ public class ActionButton extends PanelWidget {
                 }
             }
             case SECONDARY -> {
-                Draw.frame(g, Frames.BUTTON_SECONDARY, x, y, getWidth(), HEIGHT);
+                Draw.frame(g, chosen ? Frames.BUTTON_CHOSEN : Frames.BUTTON_SECONDARY, x, y, getWidth(), HEIGHT);
                 if (h > 0f) {
                     Draw.pushAlpha(h);
                     Draw.frame(g, Frames.BUTTON_SECONDARY_HOVER, x, y, getWidth(), HEIGHT);
