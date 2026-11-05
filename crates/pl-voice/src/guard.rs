@@ -11,11 +11,29 @@ use crate::VOICE_WINDOW;
 /// The voice page's commands (`voice_page_attach`, `voice_page_report`).
 pub const PAGE_COMMANDS: [&str; 2] = ["voice_page_attach", "voice_page_report"];
 
+/// SHARE: what the "Yayın" window calls: its stage's commands and the state to draw it from.
+pub const SHARE_WINDOW_COMMANDS: [&str; 12] = [
+    "voice_state",
+    "share_watch",
+    "share_unwatch",
+    "share_watch_layer",
+    "share_watch_attach",
+    "share_watch_report",
+    "share_watch_visible",
+    "share_watch_still",
+    "share_popout",
+    "share_popout_on_top",
+    "share_fullscreen",
+    "share_stream_volume",
+];
+
 /// Whether `window` may call the app command `command`.
 pub fn allowed(window: &str, command: &str) -> bool {
     let page_command = PAGE_COMMANDS.contains(&command);
     if window == VOICE_WINDOW {
         page_command
+    } else if window == crate::share::SHARE_WINDOW {
+        SHARE_WINDOW_COMMANDS.contains(&command)
     } else {
         !page_command
     }
@@ -50,5 +68,24 @@ mod tests {
         // A window label that only resembles the voice window's.
         assert!(!allowed("voice2", "voice_page_report"));
         assert!(!allowed("Voice", "voice_page_report"));
+    }
+
+    #[test]
+    fn the_share_window_reaches_only_its_stage() {
+        for command in SHARE_WINDOW_COMMANDS {
+            assert!(allowed(crate::share::SHARE_WINDOW, command), "{command}");
+            assert!(allowed("main", command), "{command}");
+        }
+        for other in [
+            "share_start",
+            "share_sources",
+            "voice_call",
+            "voice_page_report",
+            "social_send_request",
+            "app_quit",
+        ] {
+            assert!(!allowed(crate::share::SHARE_WINDOW, other), "{other}");
+        }
+        assert!(allowed("main", "share_start"));
     }
 }

@@ -175,6 +175,10 @@ pub struct VoiceSettings {
     /// "Ses seviyesi" under "Ses çıkışı" (VOICE-CALL, SOC-GAP §3.11): everyone's voice at once, on
     /// top of each person's own (percent, 0–200).
     pub output_volume: u16,
+    /// SHARE: "Ekran paylaşımı" (Settings → Sesli sohbet, and what the picker chose last).
+    /// Written only when the player changed something of it (the backup stays small).
+    #[serde(skip_serializing_if = "crate::share::VoiceShareSettings::is_default")]
+    pub share: crate::share::VoiceShareSettings,
 }
 
 impl Default for VoiceSettings {
@@ -195,6 +199,7 @@ impl Default for VoiceSettings {
             sounds: true,
             ask_before_call: true,
             output_volume: 100,
+            share: crate::share::VoiceShareSettings::default(),
         }
     }
 }
@@ -208,6 +213,7 @@ impl VoiceSettings {
         self.sensitivity = self.sensitivity.map(|value| value.min(100));
         self.mic_volume = self.mic_volume.min(MIC_VOLUME_MAX);
         self.output_volume = self.output_volume.min(VOLUME_MAX);
+        self.share = self.share.normalized();
         self.input_device = self.input_device.filter(|id| valid_device(id));
         self.output_device = self.output_device.filter(|id| valid_device(id));
         self.push_to_talk_key = self.push_to_talk_key.take().map(|key| key.with_mods(&[]));
@@ -289,6 +295,13 @@ pub struct VoicePersonPrefs {
     pub volume: u16,
     /// "Sustur (yalnız sen)".
     pub muted: bool,
+    /// SHARE: their shares' sound for the player (percent, 0–100). Written only when changed, so
+    /// the people file and the backup stay as small as before.
+    #[serde(skip_serializing_if = "is_full_volume")]
+    pub stream_volume: u16,
+    /// SHARE: their shares' sound muted for the player.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub stream_muted: bool,
 }
 
 impl Default for VoicePersonPrefs {
@@ -296,6 +309,8 @@ impl Default for VoicePersonPrefs {
         Self {
             volume: 100,
             muted: false,
+            stream_volume: 100,
+            stream_muted: false,
         }
     }
 }
@@ -515,6 +530,10 @@ impl Store {
     }
 }
 
+fn is_full_volume(volume: &u16) -> bool {
+    *volume == 100
+}
+
 /// A user id as the friends service gives them (digits).
 pub fn valid_person(id: &str) -> bool {
     !id.is_empty() && id.len() <= 32 && id.bytes().all(|b| b.is_ascii_alphanumeric())
@@ -524,6 +543,8 @@ fn clean_prefs(prefs: VoicePersonPrefs) -> VoicePersonPrefs {
     VoicePersonPrefs {
         volume: prefs.volume.min(VOLUME_MAX),
         muted: prefs.muted,
+        stream_volume: prefs.stream_volume.min(100),
+        stream_muted: prefs.stream_muted,
     }
 }
 

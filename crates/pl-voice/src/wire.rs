@@ -126,6 +126,8 @@ pub enum ModAct {
     Unmod,
     Name,
     Close,
+    /// SHARE: stop someone's share for everyone.
+    Unshare,
 }
 
 /// Client → room.
@@ -139,9 +141,16 @@ pub enum ToRoom {
         sdp: Option<Sdp>,
         #[serde(skip_serializing_if = "Option::is_none")]
         mid: Option<String>,
+        /// SHARE: what this launcher understands beyond voice (`share1`); an older room ignores it.
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        caps: Vec<String>,
     },
     /// Back with the resume ticket, the peer connection still working.
-    Sync,
+    Sync {
+        /// SHARE: as `join`'s (a new socket is a new attachment for the room).
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        caps: Vec<String>,
+    },
     /// The answer to the room's `offer`.
     Answer {
         sdp: Sdp,
@@ -178,9 +187,51 @@ pub enum ToRoom {
         /// `name`: the new name.
         #[serde(skip_serializing_if = "Option::is_none")]
         name: Option<String>,
+        /// SHARE: `unshare`: which of their shares.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        n: Option<u8>,
         rid: u32,
     },
     Leave,
+    // SHARE (`share1`, the lead's contract share.md §4) -----------------------------------------
+    /// A new share: the publisher's offer for its own SFU session (`ack.sdp` answers it).
+    ShareOpen {
+        n: u8,
+        src: crate::share::ShareKind,
+        audio: bool,
+        preset: crate::share::SharePreset,
+        fps: u8,
+        sdp: Sdp,
+        rid: u32,
+    },
+    /// Nobody watches: encoding rests (or goes on).
+    ShareSet {
+        n: u8,
+        paused: bool,
+    },
+    ShareClose {
+        n: u8,
+    },
+    /// Watch someone's share (`woffer` follows).
+    Watch {
+        u: String,
+        n: u8,
+        layer: crate::share::ShareLayer,
+        rid: u32,
+    },
+    Layer {
+        u: String,
+        n: u8,
+        layer: crate::share::ShareLayer,
+    },
+    Unwatch {
+        u: String,
+        n: u8,
+    },
+    /// The watching page's answer to `woffer`.
+    Wanswer {
+        sdp: Sdp,
+    },
 }
 
 impl fmt::Debug for ToRoom {
@@ -194,7 +245,7 @@ impl ToRoom {
     pub fn kind(&self) -> &'static str {
         match self {
             Self::Join { .. } => "join",
-            Self::Sync => "sync",
+            Self::Sync { .. } => "sync",
             Self::Answer { .. } => "answer",
             Self::Set { .. } => "set",
             Self::Q { .. } => "q",
@@ -203,6 +254,13 @@ impl ToRoom {
             Self::Cancel { .. } => "cancel",
             Self::Mod { .. } => "mod",
             Self::Leave => "leave",
+            Self::ShareOpen { .. } => "share_open",
+            Self::ShareSet { .. } => "share_set",
+            Self::ShareClose { .. } => "share_close",
+            Self::Watch { .. } => "watch",
+            Self::Layer { .. } => "layer",
+            Self::Unwatch { .. } => "unwatch",
+            Self::Wanswer { .. } => "wanswer",
         }
     }
 
@@ -210,9 +268,11 @@ impl ToRoom {
     pub fn rid(&self) -> Option<u32> {
         match self {
             Self::Turn { rid } => Some(*rid),
-            Self::Invite { rid, .. } | Self::Cancel { rid, .. } | Self::Mod { rid, .. } => {
-                Some(*rid)
-            }
+            Self::Invite { rid, .. }
+            | Self::Cancel { rid, .. }
+            | Self::Mod { rid, .. }
+            | Self::ShareOpen { rid, .. }
+            | Self::Watch { rid, .. } => Some(*rid),
             _ => None,
         }
     }
@@ -244,6 +304,9 @@ pub struct PersonWire {
     /// an older room, and for a card this launcher cannot read (the person still counts).
     #[serde(default, deserialize_with = "card_value")]
     pub card: Option<Box<pl_social::PublicProfile>>,
+    /// SHARE: their live shares (only to `share1` sockets).
+    #[serde(default, deserialize_with = "crate::share::shares_list")]
+    pub sh: Vec<crate::share::ShareWire>,
 }
 
 /// `hello.room` (the `room` message carries the name and roles again).
@@ -365,6 +428,9 @@ pub enum FromRoom {
         /// The service's clock (Unix seconds).
         #[serde(default)]
         now: Option<i64>,
+        /// SHARE: sharing in this room (only to `share1` sockets).
+        #[serde(default, deserialize_with = "crate::share::room_share")]
+        share: Option<crate::share::RoomShareWire>,
     },
     /// The SFU's offer: people to receive (`mids`: mid → person) or receivers closed.
     Offer {
@@ -391,6 +457,9 @@ pub enum FromRoom {
         sm: Option<bool>,
         #[serde(default, deserialize_with = "quality_option")]
         q: Option<u8>,
+        /// SHARE: their whole list of live shares, when it changed.
+        #[serde(default, deserialize_with = "crate::share::shares_option")]
+        sh: Option<Vec<crate::share::ShareWire>>,
     },
     /// The room's name or roles changed (VOICE-ROOMS: a crew room's `max` too, which the crew may
     /// change; none from an older service).
@@ -442,6 +511,11 @@ pub enum FromRoom {
         /// `invite`.
         #[serde(default)]
         until: Option<i64>,
+        /// SHARE: `share_open`: the SFU's answer, for share `n`.
+        #[serde(default)]
+        sdp: Option<Sdp>,
+        #[serde(default)]
+        n: Option<u8>,
     },
     Error {
         #[serde(default)]
@@ -453,6 +527,25 @@ pub enum FromRoom {
         until: Option<i64>,
         #[serde(default)]
         item: Option<String>,
+    },
+    // SHARE --------------------------------------------------------------------------------------
+    /// Who watches one of the player's shares.
+    Watchers {
+        n: u8,
+        #[serde(default)]
+        ids: Vec<String>,
+    },
+    /// The SFU's offer for the player's watch session (`mids`: mid → share and kind).
+    Woffer {
+        sdp: Sdp,
+        #[serde(default, deserialize_with = "crate::share::watch_mids")]
+        mids: BTreeMap<String, crate::share::WatchMidWire>,
+    },
+    /// One of the player's shares ended without them.
+    ShareClosed {
+        n: u8,
+        #[serde(default)]
+        why: crate::share::ShareClosedWhy,
     },
     #[serde(other)]
     Unknown,
@@ -523,14 +616,19 @@ mod tests {
         let join = ToRoom::Join {
             sdp: Some(Sdp::new("v=0")),
             mid: Some("0".into()),
+            caps: Vec::new(),
         };
         assert_eq!(value(&join), json!({"t":"join","sdp":"v=0","mid":"0"}));
         let listen = ToRoom::Join {
             sdp: None,
             mid: None,
+            caps: Vec::new(),
         };
         assert_eq!(value(&listen), json!({"t":"join"}));
-        assert_eq!(value(&ToRoom::Sync), json!({"t":"sync"}));
+        assert_eq!(
+            value(&ToRoom::Sync { caps: Vec::new() }),
+            json!({"t":"sync"})
+        );
         assert_eq!(
             value(&ToRoom::Answer {
                 sdp: Sdp::new("v=0 a")
@@ -566,6 +664,7 @@ mod tests {
                 to: Some("u2".into()),
                 room: None,
                 name: None,
+                n: None,
                 rid: 5
             }),
             json!({"t":"mod","act":"mute","to":"u2","rid":5})
@@ -576,6 +675,7 @@ mod tests {
                 to: Some("u2".into()),
                 room: Some("c0123456789abcdef".into()),
                 name: None,
+                n: None,
                 rid: 6
             }),
             json!({"t":"mod","act":"move","to":"u2","room":"c0123456789abcdef","rid":6})
@@ -586,6 +686,7 @@ mod tests {
                 to: None,
                 room: None,
                 name: Some("Gece".into()),
+                n: None,
                 rid: 7
             }),
             json!({"t":"mod","act":"name","name":"Gece","rid":7})
@@ -596,6 +697,7 @@ mod tests {
                 to: None,
                 room: None,
                 name: None,
+                n: None,
                 rid: 8
             }),
             json!({"t":"mod","act":"close","rid":8})
@@ -620,6 +722,7 @@ mod tests {
             sdp,
             resume,
             now,
+            ..
         } = FromRoom::parse(text)
         else {
             panic!("not a hello");
@@ -712,7 +815,8 @@ mod tests {
                 mute: None,
                 deaf: None,
                 sm: Some(true),
-                q: None
+                q: None,
+                sh: None,
             }
         );
         assert_eq!(
@@ -722,7 +826,8 @@ mod tests {
                 mute: Some(true),
                 deaf: Some(false),
                 sm: None,
-                q: None
+                q: None,
+                sh: None,
             }
         );
         assert_eq!(
@@ -732,7 +837,8 @@ mod tests {
                 mute: None,
                 deaf: None,
                 sm: None,
-                q: Some(2)
+                q: Some(2),
+                sh: None,
             }
         );
         assert_eq!(
@@ -813,14 +919,16 @@ mod tests {
         );
         assert!(matches!(
             FromRoom::parse(r#"{"t":"ack","rid":2,"ice":{"urls":["turn:turn.cloudflare.com:443?transport=tcp"],"username":"x","credential":"y","ttl":7200}}"#),
-            FromRoom::Ack { rid: Some(2), ice: Some(ice), until: None } if ice.urls.len() == 1 && ice.ttl == 7200
+            FromRoom::Ack { rid: Some(2), ice: Some(ice), until: None, .. } if ice.urls.len() == 1 && ice.ttl == 7200
         ));
         assert_eq!(
             FromRoom::parse(r#"{"t":"ack","rid":3,"until":130}"#),
             FromRoom::Ack {
                 rid: Some(3),
                 ice: None,
-                until: Some(130)
+                until: Some(130),
+                sdp: None,
+                n: None,
             }
         );
         assert_eq!(
@@ -849,6 +957,7 @@ mod tests {
         let join = ToRoom::Join {
             sdp: Some(Sdp::new("v=0 secret")),
             mid: None,
+            caps: Vec::new(),
         };
         assert_eq!(format!("{join:?}"), "join");
         let ice: IceWire = serde_json::from_str(

@@ -153,6 +153,7 @@ impl Room {
                 deaf,
                 sm,
                 q,
+                ..
             } => {
                 if *u == self.me {
                     if let Some(sm) = sm {
@@ -241,6 +242,7 @@ mod tests {
             sm: false,
             q: 0,
             card: None,
+            sh: Vec::new(),
         }
     }
 
@@ -302,6 +304,7 @@ mod tests {
             deaf: None,
             sm: None,
             q: Some(1),
+            sh: None,
         });
         assert!(applied.changed && !applied.playback);
         assert!(room.people["a"].mute);
@@ -312,6 +315,7 @@ mod tests {
             deaf: None,
             sm: Some(true),
             q: None,
+            sh: None,
         });
         assert!(applied.playback);
         // The player muted for everyone.
@@ -321,6 +325,7 @@ mod tests {
             deaf: None,
             sm: Some(true),
             q: None,
+            sh: None,
         });
         assert!(applied.muted_me && room.my_sm);
         let again = room.apply(&FromRoom::State {
@@ -329,6 +334,7 @@ mod tests {
             deaf: None,
             sm: Some(true),
             q: None,
+            sh: None,
         });
         assert!(!again.muted_me);
         let applied = room.apply(&FromRoom::Left {
@@ -344,7 +350,8 @@ mod tests {
                     mute: Some(true),
                     deaf: None,
                     sm: None,
-                    q: None
+                    q: None,
+                    sh: None,
                 })
                 .changed
         );

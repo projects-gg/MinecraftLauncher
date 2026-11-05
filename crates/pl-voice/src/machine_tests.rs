@@ -53,6 +53,7 @@ fn person(u: &str, j: i64) -> PersonWire {
         sm: false,
         q: 0,
         card: None,
+        sh: Vec::new(),
     }
 }
 
@@ -100,6 +101,7 @@ fn hello(people: Vec<PersonWire>, role: Role, sdp: bool) -> FromRoom {
         sdp: sdp.then(|| Sdp::new("v=0 answer")),
         resume: Some(Ticket::new("v1.resume.mac")),
         now: Some(UNIX),
+        share: None,
     }
 }
 
@@ -249,7 +251,8 @@ fn a_call_joins_and_goes_live() {
         sent(&effects)[..],
         [ToRoom::Join {
             sdp: Some(_),
-            mid: Some(_)
+            mid: Some(_),
+            ..
         }]
     ));
     // `hello` brings the SFU's answer; the state goes out; the caller waits alone.
@@ -504,7 +507,7 @@ fn a_dropped_socket_comes_back_with_sync() {
     )));
     // The audio still flows: `sync`, no new offer.
     let effects = machine.socket_open(again, 11_500);
-    assert!(matches!(sent(&effects)[..], [ToRoom::Sync]));
+    assert!(matches!(sent(&effects)[..], [ToRoom::Sync { .. }]));
     // Old sockets' words change nothing.
     assert!(machine.socket_closed(generation, None, 11_600).is_empty());
     let effects = machine.tick(12_000, UNIX, 12_000);
@@ -782,6 +785,7 @@ fn mute_and_deafen() {
             deaf: None,
             sm: Some(true),
             q: None,
+            sh: None,
         },
         10,
         UNIX,
@@ -1021,6 +1025,8 @@ fn requests_are_answered_by_rid() {
             rid: Some(rid),
             ice: None,
             until: Some(UNIX + 30),
+            sdp: None,
+            n: None,
         },
         10,
         UNIX,
@@ -1079,6 +1085,8 @@ fn turn_credentials_reach_the_page() {
             rid: Some(rid),
             ice: Some(ice),
             until: None,
+            sdp: None,
+            n: None,
         },
         11,
         UNIX,
@@ -1436,6 +1444,8 @@ fn a_refused_turn_request_is_a_lost_connection() {
             rid: Some(rid),
             ice: None,
             until: None,
+            sdp: None,
+            n: None,
         },
         20_100,
         UNIX,
@@ -1875,6 +1885,7 @@ fn a_call_sounds_as_it_goes() {
         deaf: None,
         sm: Some(sm),
         q: None,
+        sh: None,
     };
     let effects = machine.socket_message(generation, state(true), 5_000, UNIX);
     assert_eq!(sounds(&effects), [EngineSound::MicOff]);
