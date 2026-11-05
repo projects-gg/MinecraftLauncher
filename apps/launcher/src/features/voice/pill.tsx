@@ -24,6 +24,7 @@ import { cn, Tooltip, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { SharePillPart } from "@/features/share/pill-part";
 import { enter, leave, swap } from "@/features/social/motion";
 import { callFriend, leaveRoom, retryRoom, toggleDeaf, toggleMute } from "./actions";
 import { CallTime, callStart } from "./call-time";
@@ -302,6 +303,8 @@ function Pill() {
           <WordButton onClick={() => void retryRoom()}>{t("voice.room.retry")}</WordButton>
         ) : me ? (
           <>
+            {/* SHARE: "Yayında" and how many watch, or "Ekranını paylaş". */}
+            <SharePillPart />
             {/* Deafened, both are off and both say so (Discord's way): the headphones undeafen, the
                 microphone comes back as it was. */}
             <AnimatePresence initial={false}>

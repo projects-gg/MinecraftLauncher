@@ -9,6 +9,7 @@
 import { Menu } from "@pl/ui";
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { WatchButton } from "@/features/share/panel";
 import { usePersonItems } from "@/features/social/person-menu";
 import { useSocialUi } from "@/features/social/store";
 import type { VoicePerson, VoiceRoomView, VoiceState } from "@/lib/api/voice-types";
@@ -122,6 +123,7 @@ export function CallStage({
   const calling = useVoiceUi((s) => s.state.calling);
   const since = useVoiceUi((s) => callStart(s.state));
   const friend = room.people[0];
+  const friendFace = useFace(friend?.id ?? "");
   const meFace: VoiceFace = {
     id: room.me.id,
     name: me?.name ?? t("voice.room.you"),
@@ -144,6 +146,8 @@ export function CallStage({
         ) : null}
         <Seat face={meFace} line={t("voice.room.you")} marks={marksOf(room.me)} />
       </div>
+      {/* SHARE: the friend shares: "İzle" under the two. */}
+      {friend ? <WatchButton person={friend.id} name={friendFace.name} className="mt-4" /> : null}
       {/* The call's time; its room is kept while the call still rings, so nothing moves on an answer. */}
       <div className="mt-5 flex h-8 items-center">
         {since !== null ? (

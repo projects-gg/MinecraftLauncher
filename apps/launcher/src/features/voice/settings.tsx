@@ -31,6 +31,7 @@ import { Slider as RadixSlider } from "radix-ui";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Row } from "@/features/settings/row";
+import { ShareSettingsRows } from "@/features/share/settings";
 import { enter, leave } from "@/features/social/motion";
 import { voiceApi } from "@/lib/api/voice-api";
 import {
@@ -551,6 +552,8 @@ export function VoiceSettingsSection() {
                 onPick={(deafenKey) => change({ deafenKey })}
               />
               <Advanced settings={settings} change={change} />
+              {/* SHARE: "Ekran paylaşımı", what a new share starts with. */}
+              <ShareSettingsRows value={settings.share} onChange={(share) => change({ share })} />
             </motion.div>
           </motion.div>
         ) : null}

@@ -50,6 +50,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { Dialog } from "radix-ui";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useUnshareItem } from "@/features/share/menu";
+import { ShareFooterRow, ShareMark, WatchButton } from "@/features/share/panel";
 import { openMenuFromKey } from "@/features/social/menu-key";
 import { enter, glide, leave, pageVariants, rise } from "@/features/social/motion";
 import { usePersonItems } from "@/features/social/person-menu";
@@ -210,42 +212,49 @@ function PersonRow({ person }: { person: VoicePerson }) {
   const face = useFace(person.id);
   const [open, setOpen] = useState(false);
   const ref = { id: face.id, name: face.name, avatar: face.avatar, avatarUrl: face.avatarUrl };
-  const items = usePersonItems(ref, { from: "list" });
+  // SHARE: a leader's or moderator's "Paylaşımı durdur" on someone who shares.
+  const items = [...usePersonItems(ref, { from: "list" }), ...useUnshareItem(person)];
   const role = roleWord(person.role, t);
   const marks = marksOf(person, t);
   const label = [face.name, role, ...marks.map((m) => m.label)].filter(Boolean).join(", ");
   return (
-    <Menu
-      items={items}
-      align="start"
-      open={open}
-      onOpenChange={setOpen}
-      trigger={
-        <button
-          type="button"
-          aria-label={label}
-          // A right click, Shift+F10 or the menu key open the same menu (FIX2: one menu per person).
-          onContextMenu={(event) => {
-            event.preventDefault();
-            setOpen(true);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+    // SHARE: "İzle" beside the row, outside its menu button.
+    <div className="flex items-center gap-1">
+      <Menu
+        items={items}
+        align="start"
+        open={open}
+        onOpenChange={setOpen}
+        trigger={
+          <button
+            type="button"
+            aria-label={label}
+            // A right click, Shift+F10 or the menu key open the same menu (FIX2: one menu per person).
+            onContextMenu={(event) => {
               event.preventDefault();
               setOpen(true);
-            }
-          }}
-          className={cn(
-            rowShape,
-            "cursor-pointer transition-[background-color,box-shadow] duration-150 hover:bg-white/[0.045] focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=open]:bg-white/[0.06]",
-          )}
-        >
-          <SpeakingFace face={face} size={36} />
-          <NameBlock name={face.name} second={role} />
-          <Marks marks={marks} />
-        </button>
-      }
-    />
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+                event.preventDefault();
+                setOpen(true);
+              }
+            }}
+            className={cn(
+              rowShape,
+              "min-w-0 flex-1",
+              "cursor-pointer transition-[background-color,box-shadow] duration-150 hover:bg-white/[0.045] focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=open]:bg-white/[0.06]",
+            )}
+          >
+            <SpeakingFace face={face} size={36} />
+            <NameBlock name={face.name} second={role} />
+            <ShareMark person={person.id} />
+            <Marks marks={marks} />
+          </button>
+        }
+      />
+      <WatchButton person={person.id} name={face.name} className="shrink-0" />
+    </div>
   );
 }
 
@@ -770,6 +779,8 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
   const ringing = useVoiceUi((s) => Boolean(s.state.calling)) && stage;
   return (
     <footer className="shrink-0 border-t border-white/8 px-4 pt-3 pb-3.5">
+      {/* SHARE: the player's shares and "Ekranını paylaş". */}
+      <ShareFooterRow />
       {/* "Mikrofon" a little wider: its meter beside the word ("Microphone" in English). */}
       <div className="grid grid-cols-[1.3fr_1fr_1fr] gap-2">
         <Tooltip content={micLabel}>

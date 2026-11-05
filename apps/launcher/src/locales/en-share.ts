@@ -93,6 +93,11 @@ export const enShare = {
   settings: {
     title: "Screen sharing",
   },
+  who: {
+    label: "Who can share",
+    all: "Everyone",
+    mods: "Leader and moderators",
+  },
   notice: {
     mod: "A moderator stopped your share.",
     off: "Screen sharing isn't available right now.",

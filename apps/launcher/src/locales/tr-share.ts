@@ -94,6 +94,11 @@ export const trShare = {
   settings: {
     title: "Ekran paylaşımı",
   },
+  who: {
+    label: "Kim paylaşabilir",
+    all: "Herkes",
+    mods: "Lider ve moderatörler",
+  },
   notice: {
     mod: "Bir moderatör paylaşımını durdurdu.",
     off: "Ekran paylaşımı şu an kullanılamıyor.",

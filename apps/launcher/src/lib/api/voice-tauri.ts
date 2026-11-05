@@ -12,6 +12,7 @@ import {
   type CmdError,
   commands,
 } from "@/bindings";
+import { DEFAULT_SHARE_SETTINGS, type VoiceShareSettings } from "@/share/types";
 import {
   DEFAULT_VOICE_SETTINGS,
   VOICE_OK,
@@ -85,7 +86,10 @@ const asKey = (key: BindingKey | null): VoiceKey | null =>
 /** The settings with every field set (each is optional on the wire: Rust fills its defaults). */
 function asSettings(s: BindingSettings): VoiceSettings {
   const d = DEFAULT_VOICE_SETTINGS;
+  // SHARE: "Ekran paylaşımı" travels with the rest (a save without it would reset it).
+  const share = (s as { share?: Partial<VoiceShareSettings> | null }).share;
   return {
+    ...(share ? { share: { ...DEFAULT_SHARE_SETTINGS, ...share } } : {}),
     enabled: s.enabled ?? d.enabled,
     inputDevice: s.inputDevice ?? null,
     outputDevice: s.outputDevice ?? null,

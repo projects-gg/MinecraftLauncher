@@ -30,10 +30,13 @@ export default defineConfig({
     // The CLI sets TAURI_ENV_DEBUG to "true" or "false"; Boolean("false") is true, so compare the text.
     sourcemap: process.env.TAURI_ENV_DEBUG === "true",
     rolldownOptions: {
-      // The launcher's page and the hidden voice chat window's (src-tauri voice.rs).
+      // The launcher's page, the hidden voice chat window's (src-tauri voice.rs) and the "Yayın"
+      // window's (SHARE).
       input: {
         main: fileURLToPath(new URL("./index.html", import.meta.url)),
         voice: fileURLToPath(new URL("./voice.html", import.meta.url)),
+        // SHARE: the "Yayın" window (src-tauri voice/share.rs).
+        share: fileURLToPath(new URL("./share.html", import.meta.url)),
       },
     },
   },
