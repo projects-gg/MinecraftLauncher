@@ -112,6 +112,7 @@ public final class ToastCard {
         this.conversation = b.conversation;
         this.crewChat = b.crewChat;
         this.face = b.crewChat ? Face.sign(Icon.CREW)
+            : b.sign != null ? Face.sign(b.sign)
             : b.initial == null || b.initial.isEmpty() ? null : Face.of(b.initial, b.by);
         this.title = b.title;
         this.titleWidth = b.titleWidth;
@@ -318,6 +319,11 @@ public final class ToastCard {
         String conversation;
         boolean crewChat;
         String initial;
+        /**
+         * OVL-SHARE: a card that names nobody (a message or an invite while the game is in the player's share) shows
+         * its kind's sign where a face would be, not the letter of "Biri".
+         */
+        Icon sign;
         /** OVL-AVATARS: whose picture the face shows (a user id), or null for the letter. */
         String by;
         FormattedCharSequence title;
@@ -400,7 +406,9 @@ public final class ToastCard {
         // OVL-SOC2: "Ekibe katıldın" is titled by its crew; a plan by someone the lists do not name, "Bir ekip arkadaşın".
         String name = !request.title().isEmpty() ? request.title()
             : request.kind().equals("crew-in") && request.crew() != null && !request.crew().isEmpty() ? request.crew()
-            : request.kind().equals("plan") ? Texts.str("toast.crewmate") : someone;
+            : request.kind().equals("plan") ? Texts.str("toast.crewmate")
+            // OVL-SHARE: a crew's call while the game is in the player's share names no crew.
+            : request.kind().equals("call") ? Texts.str("toast.call_title") : someone;
         String bodyText = switch (b.kind) {
             case CALL -> Texts.str("toast.call", request.body().isEmpty() ? someone : request.body());
             case INVITE -> Texts.str("toast.invite");
@@ -434,6 +442,16 @@ public final class ToastCard {
         b.titleWidth = strong.width(titleText);
         b.initial = Texts.initial(name);
         b.by = request.by();
+        if (request.title().isEmpty() && b.by == null) {
+            b.sign = switch (b.kind) {
+                case MESSAGE -> Icon.MESSAGE;
+                case INVITE -> Icon.PLAY_INVITE;
+                case WORLD -> Icon.WORLD_INVITE;
+                case CALL -> Icon.CALL;
+                case SOCIAL -> request.kind().equals("plan") ? Icon.CLOCK : null;
+                default -> null;
+            };
+        }
         String crewName = request.crew() == null || request.crew().isEmpty() ? null : request.crew();
         if (b.kind == Kind.MESSAGE && crewName != null) {
             b.crew = Texts.visual(Texts.fit(small, crewName, TEXT_W));

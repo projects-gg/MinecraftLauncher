@@ -123,7 +123,9 @@ public enum Icon {
     TRAVEL("AirplaneTilt"),
     BALL("SoccerBall"),
     BULB("Lightbulb"),
-    SHAPES("Shapes");
+    SHAPES("Shapes"),
+    /** Screen sharing in a voice room (OVL-SHARE). */
+    SCREENCAST("Screencast");
 
     /** The sizes icons are drawn at, in GUI pixels. */
     public static final int[] SIZES = {8, 10, 12};

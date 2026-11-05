@@ -1622,6 +1622,16 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         voiceSend(Protocol.voiceLeave());
     }
 
+    /** OVL-SHARE: "Oyunu paylaş". */
+    public void voiceShareGame() {
+        voiceSend(Protocol.voiceShareGame());
+    }
+
+    /** OVL-SHARE: "Paylaşımı durdur" on the player's share {@code n}. */
+    public void voiceShareStop(int n) {
+        voiceSend(Protocol.voiceShareStop(n));
+    }
+
     /** "Katıl" ({@code join}) or "Reddet" on a ring: it rings no more here either way. */
     public void voiceAnswer(String room, boolean join) {
         ringsSeen.add(room);

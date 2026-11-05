@@ -18,14 +18,18 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use pl_voice::share::{
+    ShareClosedWhy, ShareKind, ShareMinePhase, ShareNotice, ShareRefusal, VoiceShareView,
+};
 use pl_voice::view::{
     VoiceAnswer, VoiceLeftReason, VoiceMic, VoiceModAction, VoiceNotice, VoiceRefusal,
     VoiceSpeaking, VoiceState, shown_room_name,
 };
 
 use crate::protocol::{
-    FromGame, ToGame, VoiceCan, VoiceCrewRoomShown, VoiceCrewShown, VoiceMeShown, VoiceNoticeView,
-    VoicePersonRef, VoicePersonShown, VoiceRingShown, VoiceRoomShown, VoiceView,
+    FromGame, ToGame, ToastKind, ToastView, VoiceCan, VoiceCrewRoomShown, VoiceCrewShown,
+    VoiceLiveShown, VoiceMeShown, VoiceMyShareShown, VoiceNoticeView, VoicePersonRef,
+    VoicePersonShown, VoiceRingShown, VoiceRoomShown, VoiceShareShown, VoiceView,
 };
 
 /// The top of a person's volume, in percent (the launcher's slider; an engine that plays through
@@ -66,6 +70,11 @@ pub enum VoiceAct {
         room: Option<String>,
         new: bool,
     },
+    /// OVL-SHARE: "Oyunu paylaş": the running game with the player's saved share settings. A
+    /// refusal reaches the game as a share notice ([`crate::Overlay::share_notice`]).
+    ShareGame,
+    /// OVL-SHARE: "Paylaşımı durdur" on the player's share `n`.
+    ShareStop { n: u8 },
 }
 
 impl VoiceAct {
@@ -75,6 +84,8 @@ impl VoiceAct {
         match self {
             Self::Accept { .. } | Self::JoinCrew { .. } => Some("join"),
             Self::Call { .. } => Some("call"),
+            // OVL-SHARE: the mod's "Oyunu paylaş" waits for an answer (a refusal comes as a note).
+            Self::ShareGame => Some("share"),
             Self::Invite { .. } => Some("invite"),
             Self::Moderate(action) => moderation_name(action),
             _ => None,
@@ -216,6 +227,19 @@ pub fn check(
             Err(Refused::of("invite", friend, VoiceRefusal::Nothing))
         }
         FromGame::VoiceJoin { crew, room, new } => join_crew(state, crew, room, *new, &is_crew),
+        // OVL-SHARE: only while "Oyunu paylaş" shows (the room checks "Kim paylaşabilir" and its
+        // limits again, and says no through a share notice).
+        // A press that does nothing still hears a `voice-result` (the mod lays out again).
+        FromGame::VoiceShareGame {} => match state {
+            Some(state) if share_of(state).game == Some("ready") => Ok(VoiceAct::ShareGame),
+            _ => Err(Refused::of("share", "", VoiceRefusal::Nothing)),
+        },
+        FromGame::VoiceShareStop { n } => match state {
+            Some(state) if state.share.mine.iter().any(|share| share.n == *n) => {
+                Ok(VoiceAct::ShareStop { n: *n })
+            }
+            _ => Err(Refused::quiet()),
+        },
         _ => return None,
     })
 }
@@ -525,15 +549,175 @@ pub fn notice_of(
     })
 }
 
+/// A share's kind on the wire.
+fn kind_name(kind: ShareKind) -> &'static str {
+    match kind {
+        ShareKind::Game => "game",
+        ShareKind::Screen => "screen",
+        ShareKind::Window => "window",
+    }
+}
+
+/// Screen sharing in the player's room as the game shows it (OVL-SHARE): "Oyunu paylaş" while it
+/// may show (`ready`, or `off` with why it is dim), the player's own shares with how many watch,
+/// and who else shares. Nothing while voice chat may not be used, out of a room, or while the
+/// room does not share.
+pub fn share_of(state: &VoiceState) -> VoiceShareShown {
+    let share: &VoiceShareView = &state.share;
+    if !(state.available && state.enabled) || state.room.is_none() || !share.on {
+        return VoiceShareShown::default();
+    }
+    let mine: Vec<VoiceMyShareShown> = share
+        .mine
+        .iter()
+        .map(|mine| VoiceMyShareShown {
+            n: mine.n,
+            kind: kind_name(mine.kind),
+            live: mine.phase != ShareMinePhase::Starting,
+            watchers: u16::try_from(mine.watchers.len()).unwrap_or(u16::MAX),
+        })
+        .collect();
+    let game_shared = share.mine.iter().any(|mine| mine.kind == ShareKind::Game);
+    let (game, why) = if !share.can_share || game_shared {
+        (None, None)
+    } else if share.mine_max == 0 {
+        // The room lets nobody share now (a limit): not "Kim paylaşabilir".
+        (Some("off"), Some("closed"))
+    } else if !share.allowed {
+        (Some("off"), Some("not-allowed"))
+    } else if !share.open {
+        (Some("off"), Some("closed"))
+    } else if share.mine.len() >= usize::from(share.mine_max) {
+        (Some("off"), Some("full"))
+    } else {
+        (Some("ready"), None)
+    };
+    VoiceShareShown {
+        game,
+        why,
+        mine,
+        live: share
+            .live
+            .iter()
+            .map(|live| VoiceLiveShown {
+                person: live.person.clone(),
+                kind: kind_name(live.kind),
+            })
+            .collect(),
+    }
+}
+
+/// Cards keep their words to themselves now (OVL-SHARE): the player shares the game or a whole
+/// screen (the game is in the picture) and hides notifications while sharing (`quiet`,
+/// "Paylaşırken bildirimleri gizle", on unless they turned it off). A window's share shows no
+/// game.
+pub fn private(state: Option<&VoiceState>, quiet: bool) -> bool {
+    quiet
+        && state.is_some_and(|state| {
+            state
+                .share
+                .mine
+                .iter()
+                .any(|mine| matches!(mine.kind, ShareKind::Game | ShareKind::Screen))
+        })
+}
+
+/// A card while the game is shared ([`private`]; OVL-SHARE), or none: what waits for an answer (a
+/// message, an invite, a world invite, a crew's call, a plan) comes without whose it is and what it
+/// says (the mod's "Biri", "Yeni mesaj"), so the player still sees something waits and opens it in
+/// the panel; the stream's watchers learn nothing. Every other card names someone or says
+/// something of the player's own (a request, a friend online, a crew's news, a missed call, an AFK
+/// notice): it stays away while the share runs (the launcher's lists keep them).
+pub fn keep_private(mut toast: ToastView) -> Option<ToastView> {
+    match toast.kind {
+        ToastKind::Message
+        | ToastKind::Invite
+        | ToastKind::World
+        | ToastKind::Call
+        | ToastKind::Plan => {
+            toast.title.clear();
+            toast.body.clear();
+            toast.crew = None;
+            toast.sticker = None;
+            toast.badge = None;
+            toast.marks.clear();
+            toast.by = None;
+            Some(toast)
+        }
+        _ => None,
+    }
+}
+
+/// A screen sharing moment as the game's note (OVL-SHARE), or none for the ones the game leaves
+/// to the launcher (watching happens there; leaving the room says itself).
+pub fn share_notice_of(notice: &ShareNotice) -> Option<VoiceNoticeView> {
+    let view = |kind, reason| VoiceNoticeView {
+        kind,
+        reason,
+        name: String::new(),
+    };
+    Some(match notice {
+        ShareNotice::Refused { refusal } => view(
+            "share-refused",
+            Some(match refusal {
+                ShareRefusal::Off => "off",
+                ShareRefusal::Unsupported => "unsupported",
+                ShareRefusal::NotAllowed => "not-allowed",
+                ShareRefusal::Limited => "limited",
+                ShareRefusal::Full => "full",
+                ShareRefusal::RoomFull => "room-full",
+                ShareRefusal::Budget => "budget",
+                ShareRefusal::Failed => "failed",
+                ShareRefusal::WatchFull | ShareRefusal::WatchMax | ShareRefusal::Gone => {
+                    return None;
+                }
+            }),
+        ),
+        ShareNotice::Closed { why, src } => view(
+            "share-closed",
+            Some(match why {
+                ShareClosedWhy::Mod => "mod",
+                ShareClosedWhy::Budget => "budget",
+                ShareClosedWhy::Idle => "idle",
+                ShareClosedWhy::Limit => "limit",
+                ShareClosedWhy::SourceGone if *src == ShareKind::Game => "game-gone",
+                ShareClosedWhy::SourceGone => "source-gone",
+                ShareClosedWhy::Network => "network",
+                ShareClosedWhy::Error => "error",
+                ShareClosedWhy::Left => return None,
+            }),
+        ),
+        ShareNotice::AudioOff => view("share-audio-off", None),
+        ShareNotice::WatchStopped | ShareNotice::WatchFailed => return None,
+    })
+}
+
 /// What the live mod was told of voice chat, for the next differences.
 #[derive(Debug, Default)]
 pub struct VoiceMirror {
     view: Option<VoiceView>,
     /// The crews' rooms the mod was told (V21), none before the first.
     crews: Option<Vec<VoiceCrewShown>>,
+    /// Screen sharing the mod was told (OVL-SHARE), none before the first.
+    share: Option<VoiceShareShown>,
 }
 
 impl VoiceMirror {
+    /// `voice-share` when screen sharing differs from what the mod has (OVL-SHARE). A mod that
+    /// heard none hears nothing while there is nothing to show; once it heard some, an empty one
+    /// says it is gone.
+    pub fn update_share(&mut self, share: VoiceShareShown) -> Option<ToGame> {
+        if self.share.as_ref() == Some(&share) {
+            return None;
+        }
+        if self.share.is_none() && share.is_empty() {
+            self.share = Some(share);
+            return None;
+        }
+        self.share = Some(share.clone());
+        Some(ToGame::VoiceShare(share))
+    }
+
     /// `voice-crews` when the crews' rooms differ from what the mod has (V21). A mod that heard
     /// none hears nothing while there is nothing to show (voice chat off, or the player in no
     /// crew); once it heard some, an empty list says they are gone.
@@ -1290,5 +1474,249 @@ mod tests {
             "gone: said once"
         );
         assert!(mirror.update_crews(Vec::new()).is_none());
+    }
+
+    /// The player in a room that shares (OVL-SHARE): Kaan_07 shares a window.
+    fn sharing_state() -> VoiceState {
+        use pl_voice::share::{SharePreset, VoiceLiveShare};
+        let mut state = in_room();
+        state.share.on = true;
+        state.share.can_share = true;
+        state.share.allowed = true;
+        state.share.open = true;
+        state.share.mine_max = 2;
+        state.share.live = vec![VoiceLiveShare {
+            person: "u-kaan".into(),
+            n: 1,
+            kind: ShareKind::Window,
+            audio: true,
+            preset: SharePreset::Normal,
+            fps: 30,
+            watchers: 1,
+            since: 1_800_000_000,
+        }];
+        state
+    }
+
+    fn my_share(
+        n: u8,
+        kind: ShareKind,
+        phase: ShareMinePhase,
+        watchers: usize,
+    ) -> pl_voice::share::VoiceMyShare {
+        pl_voice::share::VoiceMyShare {
+            n,
+            kind,
+            label: String::new(),
+            phase,
+            audio: true,
+            preset: pl_voice::share::SharePreset::Normal,
+            fps: 30,
+            watchers: (0..watchers).map(|i| format!("u-{i}")).collect(),
+            since: 1_800_000_000,
+        }
+    }
+
+    #[test]
+    fn sharing_shows_who_is_live_the_game_button_and_the_players_own_shares() {
+        let mut state = sharing_state();
+        assert_eq!(
+            serde_json::to_value(ToGame::VoiceShare(share_of(&state))).unwrap(),
+            json!({"t": "voice-share", "game": "ready",
+                   "live": [{"person": "u-kaan", "kind": "window"}]})
+        );
+        // The game shared: no "Oyunu paylaş", the share with how many watch.
+        state.share.mine = vec![my_share(1, ShareKind::Game, ShareMinePhase::Live, 2)];
+        assert_eq!(
+            serde_json::to_value(share_of(&state)).unwrap(),
+            json!({"mine": [{"n": 1, "kind": "game", "live": true, "watchers": 2}],
+                   "live": [{"person": "u-kaan", "kind": "window"}]})
+        );
+        // A window from the launcher's picker: the game may still go, while one more may.
+        state.share.mine = vec![my_share(2, ShareKind::Window, ShareMinePhase::Starting, 0)];
+        let share = share_of(&state);
+        assert_eq!((share.game, share.why), (Some("ready"), None));
+        assert!(!share.mine[0].live);
+        state.share.mine_max = 1;
+        assert_eq!(share_of(&state).why, Some("full"));
+        state.share.mine_max = 0;
+        assert_eq!(share_of(&state).why, Some("closed"), "nobody may share now");
+        state.share.mine_max = 2;
+        // Dim with why: the room's "Kim paylaşabilir", the month's budget.
+        state.share.mine.clear();
+        state.share.allowed = false;
+        assert_eq!(
+            (share_of(&state).game, share_of(&state).why),
+            (Some("off"), Some("not-allowed"))
+        );
+        state.share.allowed = true;
+        state.share.open = false;
+        assert_eq!(share_of(&state).why, Some("closed"));
+        // This computer cannot share: watching only, no button.
+        state.share.can_share = false;
+        assert_eq!(share_of(&state).game, None);
+        // The room does not share, or no room: nothing at all.
+        state.share.on = false;
+        assert!(share_of(&state).is_empty());
+        let mut out = sharing_state();
+        out.room = None;
+        assert!(share_of(&out).is_empty());
+    }
+
+    #[test]
+    fn sharing_presses_go_only_while_they_show() {
+        let frame = |value: serde_json::Value| serde_json::from_value::<FromGame>(value).unwrap();
+        let go = |state: &VoiceState, value| {
+            check(&frame(value), Some(state), |_| false, |_| false).unwrap()
+        };
+        let mut state = sharing_state();
+        assert_eq!(
+            go(&state, json!({"t": "voice-share-game"})),
+            Ok(VoiceAct::ShareGame)
+        );
+        assert!(frame(json!({"t": "voice-share-game"})).is_voice());
+        state.share.allowed = false;
+        assert_eq!(
+            go(&state, json!({"t": "voice-share-game"})),
+            Err(Refused::of("share", "", VoiceRefusal::Nothing))
+        );
+        assert!(refused_result(&Refused::of("share", "", VoiceRefusal::Nothing)).is_some());
+        state.share.mine = vec![my_share(1, ShareKind::Game, ShareMinePhase::Live, 0)];
+        assert_eq!(
+            go(&state, json!({"t": "voice-share-stop", "n": 1})),
+            Ok(VoiceAct::ShareStop { n: 1 })
+        );
+        assert_eq!(
+            go(&state, json!({"t": "voice-share-stop", "n": 2})),
+            Err(Refused::quiet()),
+            "not one of the player's"
+        );
+        assert_eq!(
+            check(
+                &frame(json!({"t": "voice-share-game"})),
+                None,
+                |_| false,
+                |_| false
+            ),
+            Some(Err(Refused::of("share", "", VoiceRefusal::Nothing)))
+        );
+        assert_eq!(VoiceAct::ShareGame.result_name(), Some("share"));
+    }
+
+    #[test]
+    fn the_mirror_tells_sharing_when_it_changes_only() {
+        let mut mirror = VoiceMirror::default();
+        assert!(mirror.update_share(VoiceShareShown::default()).is_none());
+        let share = share_of(&sharing_state());
+        assert!(mirror.update_share(share.clone()).is_some());
+        assert!(mirror.update_share(share).is_none());
+        assert_eq!(
+            serde_json::to_value(mirror.update_share(VoiceShareShown::default()).unwrap()).unwrap(),
+            json!({"t": "voice-share"})
+        );
+    }
+
+    #[test]
+    fn cards_keep_their_words_while_the_game_is_in_the_share() {
+        let mut state = sharing_state();
+        assert!(!private(Some(&state), true), "not sharing");
+        state.share.mine = vec![my_share(1, ShareKind::Window, ShareMinePhase::Live, 0)];
+        assert!(!private(Some(&state), true), "a window shows no game");
+        state
+            .share
+            .mine
+            .push(my_share(2, ShareKind::Screen, ShareMinePhase::Live, 0));
+        assert!(private(Some(&state), true));
+        assert!(
+            !private(Some(&state), false),
+            "the player chose to show them"
+        );
+        assert!(!private(None, true));
+        let card = |kind| ToastView {
+            kind,
+            key: "k".into(),
+            title: "Kaan_07".into(),
+            body: "the secret".into(),
+            conv: Some("d:u-kaan".into()),
+            crew: Some("Gece Kuşları".into()),
+            sticker: Some("gg".into()),
+            badge: Some("GK".into()),
+            marks: vec!["early".into()],
+            by: Some("u-kaan".into()),
+            at: None,
+        };
+        let message = keep_private(card(ToastKind::Message)).unwrap();
+        assert_eq!(
+            serde_json::to_value(ToGame::Toast(message)).unwrap(),
+            json!({"t": "toast", "kind": "message", "key": "k", "title": "", "body": "",
+                   "conv": "d:u-kaan"})
+        );
+        for kind in [
+            ToastKind::Invite,
+            ToastKind::World,
+            ToastKind::Call,
+            ToastKind::Plan,
+        ] {
+            let card = keep_private(card(kind)).unwrap();
+            assert!(
+                card.title.is_empty()
+                    && card.body.is_empty()
+                    && card.by.is_none()
+                    && card.crew.is_none()
+            );
+        }
+        // Who came online, who asks, a missed call, an AFK notice: not while the share runs.
+        for kind in [
+            ToastKind::Request,
+            ToastKind::Friend,
+            ToastKind::Online,
+            ToastKind::Projects,
+            ToastKind::CrewInvite,
+            ToastKind::CrewAsk,
+            ToastKind::CrewIn,
+            ToastKind::Missed,
+            ToastKind::Info,
+        ] {
+            assert!(keep_private(card(kind)).is_none(), "{kind:?}");
+        }
+    }
+
+    #[test]
+    fn sharing_notices_use_the_wire_names() {
+        let notice = |notice: ShareNotice| {
+            share_notice_of(&notice)
+                .map(|view| serde_json::to_value(ToGame::VoiceNotice(view)).unwrap())
+        };
+        assert_eq!(
+            notice(ShareNotice::Refused {
+                refusal: ShareRefusal::NotAllowed
+            }),
+            Some(json!({"t": "voice-notice", "kind": "share-refused", "reason": "not-allowed"}))
+        );
+        assert_eq!(
+            notice(ShareNotice::Closed {
+                why: ShareClosedWhy::Idle,
+                src: ShareKind::Game
+            }),
+            Some(json!({"t": "voice-notice", "kind": "share-closed", "reason": "idle"}))
+        );
+        assert_eq!(
+            notice(ShareNotice::AudioOff),
+            Some(json!({"t": "voice-notice", "kind": "share-audio-off"}))
+        );
+        assert_eq!(
+            notice(ShareNotice::Closed {
+                why: ShareClosedWhy::Left,
+                src: ShareKind::Game
+            }),
+            None
+        );
+        assert_eq!(notice(ShareNotice::WatchFailed), None);
+        assert_eq!(
+            notice(ShareNotice::Refused {
+                refusal: ShareRefusal::WatchFull
+            }),
+            None
+        );
     }
 }

@@ -200,6 +200,23 @@ fn wire_overlay(overlay: &pl_overlay::Overlay, voice: &Voice) {
             VoiceAct::JoinCrew { crew, room, new } => {
                 Box::pin(async move { voice.join_crew(crew, room, new).await })
             }
+            // OVL-SHARE: "Oyunu paylaş" in the game: the game the launcher runs, with the
+            // player's saved share settings (the room's answer is in the next state, or a
+            // share notice; a refusal here is said in the game as one too).
+            VoiceAct::ShareGame => {
+                if let Err(refusal) =
+                    voice.share_start(pl_voice::share::ShareSource::Game, String::new())
+                    && let Some(overlay) =
+                        PLATFORM.get().and_then(|platform| platform.overlay.get())
+                {
+                    overlay.share_notice(&pl_voice::share::ShareNotice::Refused { refusal });
+                }
+                done()
+            }
+            VoiceAct::ShareStop { n } => {
+                voice.share_stop(n);
+                done()
+            }
         }
     });
 }
@@ -800,10 +817,18 @@ impl Platform for AppPlatform {
     }
 
     fn share_notice(&self, notice: pl_voice::share::ShareNotice) {
+        // OVL-SHARE: the game says the player's own share's moments too.
+        if let Some(overlay) = self.overlay.get() {
+            overlay.share_notice(&notice);
+        }
         let _ = self.app.emit(SHARE_NOTICE_EVENT, notice);
     }
 
     fn share_privacy(&self, hide: bool, quiet: bool) {
+        // OVL-SHARE: while the game is in the share, the game's cards keep their words too.
+        if let Some(overlay) = self.overlay.get() {
+            overlay.share_privacy(quiet);
+        }
         share::privacy(&self.app, hide, quiet);
     }
 

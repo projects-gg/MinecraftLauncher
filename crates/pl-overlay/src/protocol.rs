@@ -302,6 +302,16 @@ pub enum FromGame {
         #[serde(default)]
         new: bool,
     },
+    /// OVL-SHARE (from a mod whose hello lists `voice` and `share`): "Oyunu paylaş" on the room
+    /// page: the running game, with the player's saved share settings. The next `voice-share`
+    /// says how it stands; a refusal comes as a `voice-notice` (`share-refused`).
+    VoiceShareGame {},
+    /// OVL-SHARE: "Paylaşımı durdur" on one of the player's shares (`n`, as `voice-share` listed
+    /// it).
+    VoiceShareStop {
+        #[serde(default)]
+        n: u8,
+    },
     /// OVL-SOC 2 (from a mod whose hello lists `people4`): the status switcher in the panel's
     /// header picked `status` (`online`, `dnd` or `invisible`); with SOC-NEXT on (`next` among
     /// the welcome's features) `dnd` and `invisible` come `for` one of the crew mute's durations
@@ -554,6 +564,9 @@ pub const FEATURE_CHAT3: &str = "chat3";
 /// (`cards`) and the launcher's notification switches (`prefs`, `notify-set`); the `welcome`
 /// feature that says this launcher takes `cards` and `notify-set` (signed in).
 pub const FEATURE_CARDS2: &str = "cards2";
+/// OVL-SHARE: the `hello` feature of a mod that shows screen sharing in voice rooms beside `voice`
+/// (`voice-share`, the `share-*` notices) and sends `voice-share-game` and `voice-share-stop`.
+pub const FEATURE_SHARE: &str = "share";
 
 /// The card kinds the player may turn off in game (`cards`), and the toast kinds each covers.
 pub const CARD_GROUPS: [(&str, &[ToastKind]); 7] = [
@@ -600,6 +613,8 @@ impl FromGame {
                 | Self::VoiceCall { .. }
                 | Self::VoiceInvite { .. }
                 | Self::VoiceJoin { .. }
+                | Self::VoiceShareGame {}
+                | Self::VoiceShareStop { .. }
         )
     }
 
@@ -908,6 +923,10 @@ pub enum ToGame {
     VoiceCrews {
         crews: Vec<VoiceCrewShown>,
     },
+    /// OVL-SHARE: screen sharing in the player's voice room, whole, after the greeting and whenever
+    /// it changes (an empty one once there is nothing more to show). Only to a mod that said
+    /// `voice` and `share`.
+    VoiceShare(VoiceShareShown),
     /// OVL-AVATARS: a person's picture for their face, the answer to `avatar-want` and again when it changes:
     /// `v` its version (the mod keeps a picture by person and this; `-` for none), `n` this connection's count of
     /// them (pictures are prepared side by side: an older one after a newer one is dropped), `png` the picture
@@ -1829,7 +1848,12 @@ pub struct VoiceCrewRoomShown {
 pub struct VoiceNoticeView {
     /// `left` (with `reason`), `moved` (a moderator moved the player to another room of the
     /// crew), `muted` (a moderator muted the player), `mic` (with `reason`: `denied`, `missing`),
-    /// `mic-changed` (the microphone was unplugged; the default one took over).
+    /// `mic-changed` (the microphone was unplugged; the default one took over). OVL-SHARE, only
+    /// to a mod that said `share`: `share-refused` (with `reason`: `off`, `unsupported`,
+    /// `not-allowed`, `limited`, `full`, `room-full`, `budget`, `failed`), `share-closed` (with
+    /// `reason`: `mod`, `budget`, `idle`, `limit`, `game-gone`, `source-gone`, `network`,
+    /// `error`),
+    /// `share-audio-off` (the share goes on without its sound).
     pub kind: &'static str,
     /// `left`: `closed`, `alone`, `no-answer`, `elsewhere`, `kicked`, `crew`, `idle`,
     /// `unavailable`, `failed`.
@@ -1838,6 +1862,59 @@ pub struct VoiceNoticeView {
     /// `left` / `no-answer`: the friend who did not join (absent when unknown).
     #[serde(skip_serializing_if = "String::is_empty")]
     pub name: String,
+}
+
+/// OVL-SHARE: screen sharing in the player's voice room as the game shows it (no picture: watching
+/// is the launcher's). Everything absent is false, empty or none.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct VoiceShareShown {
+    /// "Oyunu paylaş": `ready`, or `off` (shown dim, with `why`); absent while it does not show
+    /// (sharing off in this room, this computer cannot share, the game is shared already).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub game: Option<&'static str>,
+    /// Why "Oyunu paylaş" is dim: `not-allowed` ("Kim paylaşabilir"), `closed` (the month's
+    /// budget), `full` (the player shares as much as they may).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub why: Option<&'static str>,
+    /// The player's own shares (the launcher's picker may have started a window or a screen).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub mine: Vec<VoiceMyShareShown>,
+    /// Others in the room who share now (their row's "Yayında").
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub live: Vec<VoiceLiveShown>,
+}
+
+impl VoiceShareShown {
+    /// Nothing to show.
+    pub fn is_empty(&self) -> bool {
+        self.game.is_none() && self.mine.is_empty() && self.live.is_empty()
+    }
+}
+
+/// One of the player's shares (OVL-SHARE).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VoiceMyShareShown {
+    pub n: u8,
+    /// `game`, `window` or `screen`.
+    pub kind: &'static str,
+    /// The room took it ("Yayında"); false while it starts.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub live: bool,
+    /// How many watch.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub watchers: u16,
+}
+
+fn is_zero(value: &u16) -> bool {
+    *value == 0
+}
+
+/// Someone else's share in the room (OVL-SHARE).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct VoiceLiveShown {
+    pub person: String,
+    /// `game`, `window` or `screen`.
+    pub kind: &'static str,
 }
 
 fn is_good(quality: &pl_voice::view::VoiceQuality) -> bool {

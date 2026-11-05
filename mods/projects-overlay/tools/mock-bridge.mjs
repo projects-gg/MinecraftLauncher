@@ -90,6 +90,12 @@
 // "queued"; the second "crew-call" is refused with "wait" 240; "edit" and "delete" come back as the message); "cards" is
 // only logged. Dev command "card" (with "kind": request, friend, online, projects, crew-invite, crew-ask, crew-in, plan,
 // missed; or "kinds", a few one after another) sends that card as the launcher would.
+// --share (with --voice; OVL-SHARE) plays screen sharing in the voice room to a mod whose hello lists "voice" and
+// "share": "voice-share" with PixelAvci sharing the game and "Oyunu paylaş" ready; "voice-share-game" starts the
+// player's game share (starting, then live with two watching), "voice-share-stop" ends it. Dev commands: "share-dim"
+// ("Oyunu paylaş" dim with "why", default "not-allowed"), "share-ready", "share-note" (a "voice-notice" with "kind",
+// default "share-closed", and "reason", default "idle"), "share-private" (a message, an invite and a crew's call as the
+// launcher sends them while the game is in the player's share: nobody's, nothing said).
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
@@ -751,6 +757,18 @@ function friendRows() {
 
 // VOICE-O: voice chat as the launcher shows it, and whether the connected mod shows it (its hello lists "voice").
 const voiceMock = { hears: false, view: null, rooms: false, crews: null };
+/** OVL-SHARE (--share): screen sharing in the room, as the launcher's "voice-share" says it. */
+const shareMock = { hears: false, view: null };
+
+function shareStart() {
+  return { game: "ready", live: [{ person: "f-ayse", kind: "game" }] };
+}
+
+function sendShare(socket) {
+  if (args.share && shareMock.hears) {
+    send(socket, { t: "voice-share", ...shareMock.view });
+  }
+}
 // OVL-AVATARS: whether the mod draws pictures, and the connection's count of "avatar" frames.
 const avatarsMock = { hears: false, n: 0 };
 
@@ -854,6 +872,7 @@ function sendVoice(socket) {
   if (args.voice && voiceMock.hears) {
     send(socket, { t: "voice", ...voiceMock.view });
     sendCrews(socket);
+    sendShare(socket);
   }
 }
 
@@ -1004,8 +1023,68 @@ function onVoice(socket, frame) {
 }
 
 /** Dev commands of voice chat (the scenario driver's). */
+/** OVL-SHARE: "Oyunu paylaş" and "Paylaşımı durdur", answered as the launcher would. */
+function onShare(socket, frame) {
+  const view = shareMock.view;
+  if (frame.t === "voice-share-game") {
+    if (view.game !== "ready") {
+      send(socket, { t: "voice-notice", kind: "share-refused", reason: view.why ?? "off" });
+      return;
+    }
+    view.game = undefined;
+    view.mine = [{ n: 1, kind: "game" }];
+    sendShare(socket);
+    later(900, () => {
+      if (view.mine?.[0]?.n === 1) {
+        view.mine = [{ n: 1, kind: "game", live: true, watchers: 2 }];
+        sendShare(socket);
+      }
+    });
+    return;
+  }
+  view.mine = (view.mine ?? []).filter((m) => m.n !== frame.n);
+  if (!view.mine.some((m) => m.kind === "game")) {
+    view.game = "ready";
+  }
+  sendShare(socket);
+}
+
+function onShareDev(socket, frame) {
+  const view = shareMock.view;
+  switch (frame.cmd) {
+    case "share-dim":
+      view.mine = [];
+      view.game = "off";
+      view.why = frame.why ?? "not-allowed";
+      sendShare(socket);
+      return true;
+    case "share-ready":
+      shareMock.view = shareStart();
+      sendShare(socket);
+      return true;
+    case "share-note":
+      send(socket, {
+        t: "voice-notice",
+        kind: frame.kind ?? "share-closed",
+        ...(frame.reason !== "" ? { reason: frame.reason ?? "idle" } : {}),
+      });
+      return true;
+    case "share-private":
+      // What pl-overlay's keep_private leaves of a message and an invite while the game is shared.
+      send(socket, { t: "toast", kind: "message", key: "conv:dm:ayse", title: "", body: "", conv: "dm:ayse" });
+      later(150, () => send(socket, { t: "toast", kind: "invite", key: "invite:private", title: "", body: "" }));
+      later(300, () => send(socket, { t: "toast", kind: "call", key: "call:private", title: "", body: "" }));
+      return true;
+    default:
+      return false;
+  }
+}
+
 function onVoiceDev(socket, frame) {
   const view = voiceMock.view;
+  if (args.share && shareMock.hears && onShareDev(socket, frame)) {
+    return true;
+  }
   switch (frame.cmd) {
     case "voice-ring":
       view.rings = [
@@ -1153,6 +1232,8 @@ function onConnection(socket) {
         emojis.quiet = Array.isArray(frame.features) && frame.features.includes("panel-off");
         voiceMock.hears = Array.isArray(frame.features) && frame.features.includes("voice");
         voiceMock.rooms = voiceMock.hears && frame.features.includes("voice-rooms");
+        shareMock.hears = voiceMock.hears && frame.features.includes("share");
+        shareMock.view = shareStart();
         next.on = Boolean(args.next && args.people2) && frame.features.includes("people4");
         soc2.said = new Set(
           args.soc2 && Array.isArray(frame.features)
@@ -1894,6 +1975,13 @@ function onFrame(socket, frame) {
       // VOICE-O: only a launcher that plays voice chat, only from a mod that said "voice".
       if (args.voice && voiceMock.hears) {
         onVoice(socket, frame);
+      }
+      break;
+    case "voice-share-game":
+    case "voice-share-stop":
+      // OVL-SHARE: only a launcher that plays it, only from a mod that said "share".
+      if (args.share && shareMock.hears) {
+        onShare(socket, frame);
       }
       break;
     case "emoji": {

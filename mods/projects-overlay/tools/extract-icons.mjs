@@ -83,6 +83,8 @@ const ICONS = [
   ["SoccerBall", "regular"],
   ["Lightbulb", "regular"],
   ["Shapes", "regular"],
+  // Screen sharing in voice rooms (OVL-SHARE; the launcher's share menu).
+  ["Screencast", "regular"],
 ];
 
 // The crew palette's emblems (crew-look.ts EMBLEMS) and the icons team-emblem.tsx draws them with.

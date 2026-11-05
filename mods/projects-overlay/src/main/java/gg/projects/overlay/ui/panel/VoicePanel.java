@@ -36,6 +36,10 @@ import net.minecraft.util.FormattedCharSequence;
  */
 final class VoicePanel {
     private static final int RING_H = 34;
+    /** OVL-SHARE: one of the player's shares on the room page (what it shows, who watches, "Paylaşımı durdur"). */
+    private static final int SHARE_ROW = 24;
+    /** The player's shares the page lists (Studio lets a player run up to three). */
+    private static final int SHARE_ROWS = 3;
     private static final int STRIP_H = 40;
     private static final int FACE = 18;
 
@@ -54,6 +58,10 @@ final class VoicePanel {
     final ActionButton pageMic;
     final ActionButton pageDeaf;
     final ActionButton pageLeave;
+    /** OVL-SHARE: "Oyunu paylaş", and "Paylaşımı durdur" on each of the player's shares. */
+    final ActionButton shareGame;
+    final ActionButton[] shareStops = new ActionButton[SHARE_ROWS];
+    private final int[] shareN = new int[SHARE_ROWS];
 
     private int seenRevision = -1;
     private int seenSpeaking = -1;
@@ -71,6 +79,13 @@ final class VoicePanel {
     private int pageTitleY = -1;
     private FormattedCharSequence pageTitle;
     private FormattedCharSequence pageSub;
+    /** One of the player's shares on the page: what it shows, how it stands, its row's top. */
+    private record ShareLine(FormattedCharSequence title, FormattedCharSequence sub, boolean live, int y) {
+    }
+
+    private final List<ShareLine> shareLines = new ArrayList<>();
+    private FormattedCharSequence shareWhy;
+    private int shareWhyY = -1;
 
     VoicePanel(OverlayScreen screen, OverlayClient overlay) {
         this.screen = screen;
@@ -95,6 +110,20 @@ final class VoicePanel {
         pageLeave = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("voice.room.leave"), Icon.PHONE_OFF,
             overlay::voiceLeave);
         pageLeave.setIconInk(Theme.FLARE_300);
+        shareGame = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("share.game"), Icon.SCREENCAST,
+            this::shareGame);
+        for (int i = 0; i < SHARE_ROWS; i++) {
+            int index = i;
+            // Quiet like the bar's "Ayrıl": a share stops at once and starts again with one press.
+            shareStops[i] = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("share.stop"), null,
+                () -> overlay.voiceShareStop(shareN[index]));
+        }
+    }
+
+    /** "Oyunu paylaş": once; the next state (the share starting) or a note says how it went. */
+    private void shareGame() {
+        shareGame.active = false;
+        overlay.voiceShareGame();
     }
 
     private VoiceState voice() {
@@ -103,8 +132,8 @@ final class VoicePanel {
 
     /** Every control, for the screen to add (the ring's answers first: they are what the player came for). */
     AbstractWidget[] widgets() {
-        return new AbstractWidget[] {ringJoin, ringDecline, strip, mic, deaf, leave, list, pageMic, pageDeaf,
-            pageLeave};
+        return new AbstractWidget[] {ringJoin, ringDecline, strip, mic, deaf, leave, list, shareGame, shareStops[0],
+            shareStops[1], shareStops[2], pageMic, pageDeaf, pageLeave};
     }
 
     /** Nothing of voice chat on the panel until the next layout places it (no card or page draws where it stood). */
@@ -116,6 +145,8 @@ final class VoicePanel {
         ringRoom = null;
         stripY = -1;
         pageTitleY = -1;
+        shareLines.clear();
+        shareWhyY = -1;
     }
 
     /** The room of the ring the card shows now, or null (the toasts' corner does not ring for it too). */
@@ -179,7 +210,7 @@ final class VoicePanel {
         if (room == null) {
             return;
         }
-        strip.speaking(stripPeople(room), now);
+        strip.speaking(stripPeople(room, v), now);
         list.speaking(room, now);
     }
 
@@ -204,11 +235,11 @@ final class VoicePanel {
         }
     }
 
-    private static List<VoiceStrip.Person> stripPeople(VoiceState.Room room) {
+    private static List<VoiceStrip.Person> stripPeople(VoiceState.Room room, VoiceState live) {
         List<VoiceStrip.Person> out = new ArrayList<>(room.people().size());
         for (VoiceState.Person p : room.people()) {
             out.add(new VoiceStrip.Person(p.id(), VoiceState.shown(p.name(), WORDS), p.speaking(),
-                VoiceMarks.face(p.mute(), p.deaf(), p.mutedByModerator())));
+                VoiceMarks.face(p.mute(), p.deaf(), p.mutedByModerator()), live.sharing(p.id())));
         }
         return out;
     }
@@ -302,7 +333,15 @@ final class VoicePanel {
             PanelWidget.place(strip, sx, y + 7, Math.max(40, mic.getX() - 6 - sx), STRIP_H - 14);
             String title = calling ? Texts.str("voice.ringing_name", VoiceState.shown(v.calling().name(), WORDS))
                 : VoiceState.title(room, v.calling(), WORDS);
-            strip.show(title, stateWords(room), stripPeople(room), now);
+            // OVL-SHARE: the player's own share where the room's state goes ("Yayında, 2 kişi izliyor"), in jade.
+            String stateText = stateWords(room);
+            int ink = Theme.ASH_300;
+            if (stateText == null && v.live()) {
+                stateText = v.watchers() > 0 ? Texts.str("share.strip.watching", v.watchers())
+                    : Texts.str("share.live");
+                ink = Theme.JADE_400;
+            }
+            strip.show(title, stateText, ink, stripPeople(room, v), now);
             y += STRIP_H + 8;
         }
         seenSpeaking = v.speakingRevision();
@@ -387,10 +426,73 @@ final class VoicePanel {
         for (ActionButton b : bar) {
             b.setLargestFace(face);
         }
+        int listBottom = layoutShare(x, width, by - 8);
         list.visible = true;
-        PanelWidget.place(list, x, y, width, Math.max(VoiceList.ROW_H, by - 8 - y));
-        list.show(room, overlay.state().me(), WORDS, now);
+        PanelWidget.place(list, x, y, width, Math.max(VoiceList.ROW_H, listBottom - y));
+        list.show(room, overlay.state().me(), WORDS, v, now);
         seenSpeaking = v.speakingRevision();
+    }
+
+    /**
+     * OVL-SHARE: the player's shares and "Oyunu paylaş" above the page's bar, up from {@code bottom}: each share's row
+     * (what it shows, "Başlıyor…" or who watches, "Paylaşımı durdur"), then "Oyunu paylaş" while it shows (dim with one
+     * quiet line saying why). Returns where the list above them ends.
+     */
+    private int layoutShare(int x, int width, int bottom) {
+        shareLines.clear();
+        shareWhyY = -1;
+        VoiceState v = voice();
+        List<VoiceState.MyShare> mine = v.myShares();
+        int rows = Math.min(SHARE_ROWS, mine.size());
+        String game = v.shareGame();
+        if (rows == 0 && game.isEmpty()) {
+            return bottom;
+        }
+        Font small = Fonts.small();
+        String why = switch (v.shareWhy()) {
+            case "not-allowed" -> Texts.str("share.note.not_allowed");
+            case "full" -> Texts.str("share.note.full");
+            default -> Texts.str("share.note.off");
+        };
+        boolean dim = game.equals("off");
+        int height = rows * SHARE_ROW + (game.isEmpty() ? 0 : ActionButton.HEIGHT + 4 + (dim ? 12 : 0));
+        int y = bottom - height;
+        int top = y;
+        for (int i = 0; i < rows; i++) {
+            VoiceState.MyShare share = mine.get(i);
+            shareN[i] = share.n();
+            ActionButton stop = shareStops[i];
+            int sw = stop.preferredWidth();
+            stop.visible = true;
+            stop.active = overlay.state().online();
+            PanelWidget.place(stop, x + width - sw, y + (SHARE_ROW - ActionButton.HEIGHT) / 2, sw,
+                ActionButton.HEIGHT);
+            int textW = Math.max(30, width - sw - 8 - 14);
+            String title = Texts.str(switch (share.kind()) {
+                case "game" -> "share.mine.game";
+                case "screen" -> "share.mine.screen";
+                default -> "share.mine.window";
+            });
+            String sub = !share.live() ? Texts.str("share.starting")
+                : share.watchers() > 0 ? Texts.str("share.watchers", share.watchers())
+                : Texts.str("share.resting");
+            shareLines.add(new ShareLine(Texts.visual(Texts.fit(Fonts.ui(), title, textW)),
+                Texts.visual(Texts.fit(small, sub, textW)), share.live(), y));
+            y += SHARE_ROW;
+        }
+        if (!game.isEmpty()) {
+            y += 2;
+            int gw = Math.min(width, shareGame.preferredWidth());
+            shareGame.visible = true;
+            shareGame.active = !dim && overlay.state().online();
+            PanelWidget.place(shareGame, x, y, gw, ActionButton.HEIGHT);
+            y += ActionButton.HEIGHT + 2;
+            if (dim) {
+                shareWhy = Texts.visual(Texts.fit(small, why, width));
+                shareWhyY = y;
+            }
+        }
+        return top - 6;
     }
 
     void drawPage(GuiGraphicsExtractor g, int mouseX, int mouseY, long now) {
@@ -405,6 +507,21 @@ final class VoicePanel {
         }
         list.setNote(overlay.state().personNote(System.currentTimeMillis()), now);
         render(g, list, mouseX, mouseY);
+        for (ShareLine line : shareLines) {
+            // A share the room took wears the jade sign; one still starting, the quiet one.
+            Draw.icon(g, Icon.SCREENCAST, 10, pageX, line.y + 2, line.live ? Theme.JADE_400 : Theme.ASH_300);
+            Draw.text(g, Fonts.ui(), line.title, pageX + 14, Fonts.centeredY(Fonts.Face.UI, line.y + 7f), Theme.BONE_100);
+            Draw.text(g, Fonts.small(), line.sub, pageX + 14, Fonts.centeredY(Fonts.Face.SMALL, line.y + 18f),
+                Theme.ASH_300);
+        }
+        for (ActionButton stop : shareStops) {
+            render(g, stop, mouseX, mouseY);
+        }
+        render(g, shareGame, mouseX, mouseY);
+        if (shareWhyY >= 0) {
+            Draw.text(g, Fonts.small(), shareWhy, pageX, Fonts.centeredY(Fonts.Face.SMALL, shareWhyY + 5f),
+                Theme.ASH_300);
+        }
         render(g, pageMic, mouseX, mouseY);
         render(g, pageDeaf, mouseX, mouseY);
         render(g, pageLeave, mouseX, mouseY);
