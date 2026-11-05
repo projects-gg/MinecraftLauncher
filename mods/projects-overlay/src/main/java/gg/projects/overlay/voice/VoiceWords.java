@@ -75,6 +75,26 @@ public final class VoiceWords {
                 default -> null;
             };
             case "mic-changed" -> "voice.mic.changed";
+            // OVL-SHARE: the player's own screen share (the launcher's share notices, its words).
+            case "share-refused" -> switch (notice.reason()) {
+                case "unsupported" -> "share.note.unsupported";
+                case "not-allowed" -> "share.note.not_allowed";
+                case "limited" -> "share.note.limited";
+                case "full" -> "share.note.full";
+                case "room-full" -> "share.note.room_full";
+                case "failed" -> "share.note.failed";
+                default -> "share.note.off";
+            };
+            case "share-closed" -> switch (notice.reason()) {
+                case "mod" -> "share.note.mod";
+                case "budget", "limit" -> "share.note.off";
+                case "idle" -> "share.note.idle";
+                case "game-gone" -> "share.note.game_gone";
+                case "source-gone" -> "share.note.source_gone";
+                case "network" -> "share.note.network";
+                default -> "share.note.stopped";
+            };
+            case "share-audio-off" -> "share.note.audio_off";
             default -> null;
         };
     }

@@ -69,6 +69,11 @@ import org.slf4j.LoggerFactory;
  * <p>OVL-SOC2 ({@code -Dprojects.overlay.dev.script=soc2}, the mock's {@code --voice --people --people2 --chat2 --next
  * --soc2}): every new card, the friends page's management, "Ekle", crew chat's own line, the plans and the settings'
  * new sections, one screenshot each ({@code soc2-NN-<name>.png}, results in {@code soc2-results.json}).
+ *
+ * <p>OVL-SHARE ({@code -Dprojects.overlay.dev.script=share}, the mock's {@code --voice --people --people2 --share}):
+ * PixelAvci live in the room (the strip's sign, the room page's row), "Oyunu paylaş", the player's share starting and
+ * live with two watching, "Paylaşımı durdur", "Oyunu paylaş" dim with why, a share note, and a message and an invite
+ * as they come while the game is shared ({@code share-NN-<name>.png}).
  */
 public final class SocialScenario implements ClientModInitializer {
     private static final Logger LOG = LoggerFactory.getLogger("OVL-SOC scenario");
@@ -95,7 +100,7 @@ public final class SocialScenario implements ClientModInitializer {
     public void onInitializeClient() {
         String which = System.getProperty("projects.overlay.dev.script");
         if (!"social".equals(which) && !"social2".equals(which) && !"avatars".equals(which) && !"fit".equals(which)
-            && !"invite".equals(which) && !"soc2".equals(which)) {
+            && !"invite".equals(which) && !"soc2".equals(which) && !"share".equals(which)) {
             return;
         }
         out = Path.of(System.getProperty("projects.overlay.dev.out", "social-out")).toAbsolutePath();
@@ -103,6 +108,9 @@ public final class SocialScenario implements ClientModInitializer {
         if ("soc2".equals(which)) {
             prefix = "soc2";
             script6();
+        } else if ("share".equals(which)) {
+            prefix = "share";
+            script7();
         } else if ("social2".equals(which)) {
             script2();
         } else if ("avatars".equals(which)) {
@@ -478,6 +486,43 @@ public final class SocialScenario implements ClientModInitializer {
      * code; crew chat's own line ("Ekibi çağır", "Bugün 21:00 · 2 +1"), a call and a second one too soon; the crew's
      * plans and "Plan yap"; the settings' card kinds, friend notifications and blocked people.
      */
+    /** OVL-SHARE: screen sharing in the room. */
+    private void script7() {
+        step(0.5, "open", mc -> OverlayClient.get().togglePanel());
+        step(0.6, "chats", mc -> need(mc).showPage(OverlayScreen.Page.CHATS));
+        step(0.8, "shot strip", mc -> {
+            results.addProperty("pixelLive", OverlayClient.get().voice().sharing("f-ayse"));
+            results.addProperty("game", OverlayClient.get().voice().shareGame());
+            shot(mc, "strip-live");
+        });
+        step(0.1, "room page", mc -> need(mc).showPage(OverlayScreen.Page.VOICE));
+        step(0.8, "shot page", mc -> shot(mc, "page-ready"));
+        step(0.1, "share the game", mc -> OverlayClient.get().voiceShareGame());
+        step(0.3, "shot starting", mc -> shot(mc, "page-starting"));
+        step(1.4, "shot live", mc -> {
+            results.addProperty("mine", OverlayClient.get().voice().myShares().toString());
+            shot(mc, "page-live");
+        });
+        step(0.1, "chats again", mc -> need(mc).showPage(OverlayScreen.Page.CHATS));
+        step(0.8, "shot strip live", mc -> shot(mc, "strip-mine"));
+        // The cards while the game is in the share: nobody's, nothing said.
+        step(0.1, "close", mc -> need(mc).close());
+        step(0.3, "private cards", mc -> dev("share-private"));
+        step(1.2, "shot private", mc -> shot(mc, "cards-private"));
+        step(5.0, "open again", mc -> OverlayClient.get().togglePanel());
+        step(0.6, "room page again", mc -> need(mc).showPage(OverlayScreen.Page.VOICE));
+        step(0.1, "stop", mc -> OverlayClient.get().voiceShareStop(1));
+        step(0.8, "shot stopped", mc -> {
+            results.addProperty("afterStop", OverlayClient.get().voice().myShares().size());
+            shot(mc, "page-stopped");
+        });
+        step(0.1, "dim", mc -> dev("share-dim"));
+        step(0.8, "shot dim", mc -> shot(mc, "page-dim"));
+        step(0.1, "note", mc -> dev("share-note"));
+        step(0.8, "shot note", mc -> shot(mc, "page-note"));
+        step(0.1, "close at last", mc -> need(mc).close());
+    }
+
     private void script6() {
         step(0.5, "cards 1", mc -> devCards("request", "friend", "online"));
         step(1.6, "shot cards 1", mc -> shot(mc, "cards-request-friend-online"));

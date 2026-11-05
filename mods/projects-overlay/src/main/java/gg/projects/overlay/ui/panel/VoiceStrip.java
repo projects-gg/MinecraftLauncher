@@ -41,14 +41,19 @@ public final class VoiceStrip extends PanelWidget {
     private static final long RING_IN_MS = 100;
     private static final long RING_OUT_MS = 300;
 
-    /** Someone's face in the strip; {@code mark} null while their microphone and sound are on. */
-    public record Person(String id, String name, boolean speaking, VoiceMarks.Mark mark) {
+    /**
+     * Someone's face in the strip; {@code mark} null while their microphone and sound are on; {@code live} while they
+     * share their screen (OVL-SHARE: a small jade sign on the face's upper corner).
+     */
+    public record Person(String id, String name, boolean speaking, VoiceMarks.Mark mark, boolean live) {
     }
 
     private final Runnable onOpen;
     private FormattedCharSequence title;
     private FormattedCharSequence state;
     private float stateWidth;
+    private int stateInk = Theme.ASH_300;
+    private final java.util.Set<String> live = new java.util.HashSet<>();
     private final List<String> ids = new ArrayList<>();
     private final Map<String, Face> faces = new HashMap<>();
     private final Map<String, VoiceMarks.Mark> marks = new HashMap<>();
@@ -66,6 +71,12 @@ public final class VoiceStrip extends PanelWidget {
      * many as fit), laid out for the strip's width.
      */
     public void show(String titleText, String stateText, List<Person> people, long now) {
+        show(titleText, stateText, Theme.ASH_300, people, now);
+    }
+
+    /** As {@link #show(String, String, List, long)}, the state in {@code ink} (OVL-SHARE: the player's "Yayında"). */
+    public void show(String titleText, String stateText, int ink, List<Person> people, long now) {
+        stateInk = ink;
         Font strong = Fonts.strong();
         Font small = Fonts.small();
         int w = getWidth();
@@ -76,6 +87,7 @@ public final class VoiceStrip extends PanelWidget {
         int shown = people.size() <= fit ? people.size() : Math.max(0, fit - 1);
         ids.clear();
         marks.clear();
+        live.clear();
         List<String> names = new ArrayList<>(people.size());
         for (int i = 0; i < people.size(); i++) {
             Person p = people.get(i);
@@ -93,6 +105,9 @@ public final class VoiceStrip extends PanelWidget {
                 }
                 if (p.mark != null) {
                     marks.put(p.id, p.mark);
+                }
+                if (p.live) {
+                    live.add(p.id);
                 }
             }
         }
@@ -155,7 +170,7 @@ public final class VoiceStrip extends PanelWidget {
         }
         if (state != null) {
             Draw.text(g, Fonts.small(), state, x + getWidth() - stateWidth, Fonts.centeredY(Fonts.Face.SMALL, y + 5),
-                Theme.ASH_300);
+                stateInk);
         }
         float fy = y + 14;
         float fx = x;
@@ -171,6 +186,14 @@ public final class VoiceStrip extends PanelWidget {
                 Draw.pushAlpha(spoke);
                 Draw.frame(g, Frames.SPEAKING, Draw.snap(fx), Draw.snap(fy), FACE, FACE);
                 Draw.popAlpha();
+            }
+            if (live.contains(id)) {
+                // OVL-SHARE: sharing their screen, on the face's upper corner (the lower one is the microphone's).
+                float cx = fx + FACE - 1;
+                float cy = fy + 1;
+                Draw.disc(g, MARK_DISC, cx, cy, Theme.OBSIDIAN_950);
+                Draw.icon(g, gg.projects.overlay.ui.draw.Icon.SCREENCAST, MARK, cx - MARK / 2f, cy - MARK / 2f,
+                    Theme.JADE_400);
             }
             VoiceMarks.Mark mark = marks.get(id);
             if (mark != null) {

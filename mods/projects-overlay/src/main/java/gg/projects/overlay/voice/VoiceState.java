@@ -37,6 +37,8 @@ public final class VoiceState {
     /** Crews and rooms a crew a {@code voice-crews} frame carries at most (the service: 5 crews, 5 rooms). */
     static final int MAX_CREWS = 10;
     static final int MAX_CREW_ROOMS = 8;
+    /** The player's shares a {@code voice-share} frame carries at most (the service allows up to 3). */
+    static final int MAX_SHARES = 4;
 
     /** Someone else in the player's room. */
     public record Person(String id, String name, String role, boolean mute, boolean deaf, boolean mutedByModerator,
@@ -141,6 +143,16 @@ public final class VoiceState {
     public record Result(String act, boolean ok, String reason, String who) {
     }
 
+    /**
+     * One of the player's screen shares (OVL-SHARE): its number, what it shows ({@code game}, {@code window},
+     * {@code screen}), whether the room took it ("Yayında"; false while it starts) and how many watch.
+     */
+    public record MyShare(int n, String kind, boolean live, int watchers) {
+        public boolean game() {
+            return "game".equals(kind);
+        }
+    }
+
     /** What someone's menu offers of voice chat (the launcher's {@code callOffer}). */
     public enum Offer {
         NONE,
@@ -166,6 +178,11 @@ public final class VoiceState {
     private int speakingRevision;
     private final Deque<Notice> notices = new ArrayDeque<>();
     private Result result;
+    // OVL-SHARE: screen sharing in the room ({@code voice-share}).
+    private String shareGame = "";
+    private String shareWhy = "";
+    private List<MyShare> myShares = List.of();
+    private Set<String> sharing = Set.of();
 
     /**
      * Applies a launcher frame of voice chat's ({@code voice}, {@code voice-speaking}, {@code voice-notice},
@@ -193,6 +210,7 @@ public final class VoiceState {
             case "voice-result" -> result = new Result(id(frame, "act"), Protocol.bool(frame, "ok", false),
                 id(frame, "reason"), id(frame, "who"));
             case "voice-crews" -> crews = crewsOf(arr(frame, "crews"));
+            case "voice-share" -> putShare(frame);
             default -> {
                 return false;
             }
@@ -203,9 +221,14 @@ public final class VoiceState {
 
     /** The launcher went away: nothing of voice chat stays on screen until it speaks again. */
     public void clear() {
-        if (!heard && room == null && rings.isEmpty() && notices.isEmpty() && result == null && crews.isEmpty()) {
+        if (!heard && room == null && rings.isEmpty() && notices.isEmpty() && result == null && crews.isEmpty()
+            && shareGame.isEmpty() && myShares.isEmpty() && sharing.isEmpty()) {
             return;
         }
+        shareGame = "";
+        shareWhy = "";
+        myShares = List.of();
+        sharing = Set.of();
         heard = false;
         on = false;
         room = null;
@@ -316,6 +339,48 @@ public final class VoiceState {
             }
         }
         return out;
+    }
+
+    /**
+     * OVL-SHARE: "Oyunu paylaş": {@code ready}, {@code off} (dim, {@link #shareWhy} says why), or empty while it does not
+     * show (the room does not share, this computer cannot, the game is shared already).
+     */
+    public String shareGame() {
+        return shareGame;
+    }
+
+    /** Why "Oyunu paylaş" is dim: {@code not-allowed}, {@code closed}, {@code full}; empty otherwise. */
+    public String shareWhy() {
+        return shareWhy;
+    }
+
+    /** The player's own shares, in the launcher's order. */
+    public List<MyShare> myShares() {
+        return myShares;
+    }
+
+    /** The player shares something the room took ("Yayında"). */
+    public boolean live() {
+        for (MyShare m : myShares) {
+            if (m.live) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** How many watch the player's shares, all together. */
+    public int watchers() {
+        int out = 0;
+        for (MyShare m : myShares) {
+            out += m.watchers;
+        }
+        return out;
+    }
+
+    /** Whether someone else in the room shares now ("Yayında" on their row). */
+    public boolean sharing(String id) {
+        return id != null && sharing.contains(id);
     }
 
     /** The oldest notice not said yet, or null. */
@@ -517,6 +582,41 @@ public final class VoiceState {
             Protocol.bool(r, "general", false), crew.isEmpty() ? null : crew, word(r, "phase", "live"),
             (int) Math.max(2, Math.min(MAX_PEOPLE, Protocol.num(r, "max", 10))), me,
             Collections.unmodifiableList(people), Collections.unmodifiableList(ringing));
+    }
+
+    /** OVL-SHARE: {@code voice-share}, whole. */
+    private void putShare(JsonObject frame) {
+        String game = id(frame, "game");
+        shareGame = game.equals("ready") || game.equals("off") ? game : "";
+        shareWhy = shareGame.equals("off") ? id(frame, "why") : "";
+        List<MyShare> mine = new ArrayList<>();
+        JsonArray list = arr(frame, "mine");
+        if (list != null) {
+            for (JsonElement e : list) {
+                if (e.isJsonObject() && mine.size() < MAX_SHARES) {
+                    JsonObject o = e.getAsJsonObject();
+                    int n = (int) Protocol.num(o, "n", 0);
+                    if (n > 0 && n < 256) {
+                        mine.add(new MyShare(n, word(o, "kind", "window"), Protocol.bool(o, "live", false),
+                            (int) Math.max(0, Math.min(999, Protocol.num(o, "watchers", 0)))));
+                    }
+                }
+            }
+        }
+        myShares = Collections.unmodifiableList(mine);
+        Set<String> live = new HashSet<>();
+        JsonArray others = arr(frame, "live");
+        if (others != null) {
+            for (JsonElement e : others) {
+                if (e.isJsonObject() && live.size() < MAX_PEOPLE) {
+                    String person = id(e.getAsJsonObject(), "person");
+                    if (!person.isEmpty()) {
+                        live.add(person);
+                    }
+                }
+            }
+        }
+        sharing = Collections.unmodifiableSet(live);
     }
 
     private void putSpeaking(JsonObject frame) {

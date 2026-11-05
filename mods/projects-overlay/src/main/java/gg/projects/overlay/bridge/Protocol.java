@@ -99,6 +99,7 @@ public final class Protocol {
             features.add(PLANS);
             features.add(CHAT3);
             features.add(CARDS2);
+            features.add(SHARE);
         }
         features.add(LANG);
         features.add(EMOJI);
@@ -520,6 +521,24 @@ public final class Protocol {
      * ({@link #cards}) and the launcher's notification switches ({@code prefs}, {@link #notifySet}).
      */
     public static final String CARDS2 = "cards2";
+
+    /**
+     * OVL-SHARE: the hello feature of a mod that shows screen sharing in voice rooms beside {@link #VOICE}: it hears
+     * {@code voice-share} and the {@code share-*} notices and sends {@link #voiceShareGame} and {@link #voiceShareStop}.
+     */
+    public static final String SHARE = "share";
+
+    /** "Oyunu paylaş" on the room page: the running game with the player's saved share settings. */
+    public static JsonObject voiceShareGame() {
+        return message("voice-share-game");
+    }
+
+    /** "Paylaşımı durdur" on one of the player's shares ({@code n} as {@code voice-share} listed it). */
+    public static JsonObject voiceShareStop(int n) {
+        JsonObject o = message("voice-share-stop");
+        o.addProperty("n", n);
+        return o;
+    }
 
     /** "İsteği geri çek" on a request the player sent. */
     public static JsonObject cancelRequest(String id) {

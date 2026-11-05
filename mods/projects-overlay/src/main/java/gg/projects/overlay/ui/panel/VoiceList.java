@@ -110,6 +110,14 @@ public final class VoiceList extends PanelWidget {
 
     /** The rows for {@code room}: the player ({@code meName}), the others, the invites that ring. */
     public void show(VoiceState.Room room, String meName, VoiceState.Words words, long now) {
+        show(room, meName, words, null, now);
+    }
+
+    /**
+     * As {@link #show(VoiceState.Room, String, VoiceState.Words, long)}; {@code voice} (OVL-SHARE) says who shares their
+     * screen, a jade sign first among the row's signs ("Yayında"), the player's own too.
+     */
+    public void show(VoiceState.Room room, String meName, VoiceState.Words words, VoiceState voice, long now) {
         Map<String, Row> old = new HashMap<>();
         for (Row r : rows) {
             old.put((r.ringing ? "~" : "") + r.id, r);
@@ -128,6 +136,9 @@ public final class VoiceList extends PanelWidget {
         fill(mine, own, Avatars.ME, role == null ? you : you + " · " + role, strong, small, textW);
         mine.marks.clear();
         mine.markInks.clear();
+        if (voice != null && voice.live()) {
+            mark(mine, Icon.SCREENCAST, Theme.JADE_400);
+        }
         voiceMarks(mine, me.mute(), me.deaf(), me.mutedByModerator());
         mine.bars = bars(me.quality());
         mine.narration = narration(own, state(mine, me.talking()));
@@ -139,6 +150,9 @@ public final class VoiceList extends PanelWidget {
             fill(row, name, p.id(), roleOr(p.role(), null), strong, small, textW);
             row.marks.clear();
             row.markInks.clear();
+            if (voice != null && voice.sharing(p.id())) {
+                mark(row, Icon.SCREENCAST, Theme.JADE_400);
+            }
             voiceMarks(row, p.mute(), p.deaf(), p.mutedByModerator());
             if (p.mutedForMe()) {
                 mark(row, Icon.MUTE_FOR_ME, Theme.ASH_300);
@@ -251,7 +265,8 @@ public final class VoiceList extends PanelWidget {
         }
         for (int i = 0; i < row.marks.size(); i++) {
             Icon icon = row.marks.get(i);
-            parts.add(Texts.str(icon == Icon.MIC_OFF
+            parts.add(Texts.str(icon == Icon.SCREENCAST ? "share.live"
+                : icon == Icon.MIC_OFF
                 ? (row.markInks.get(i) == Theme.FLARE_300 ? "voice.person.muted_for_all" : "voice.person.mic_off")
                 : icon == Icon.DEAF ? "voice.person.deafened" : "voice.person.muted_for_me"));
         }

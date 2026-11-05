@@ -8,6 +8,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use pl_content::ChatEmojis;
@@ -18,6 +19,7 @@ use pl_social::{
     ReportTarget, SendOutcome, SocialError, SocialNotice, SocialService, SocialView,
     TEAM_FEATURE_ROLES, TeamRole,
 };
+use pl_voice::share::ShareNotice;
 use pl_voice::view::{VoiceAnswer, VoiceNotice, VoiceRefusal, VoiceSpeaking, VoiceState};
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
@@ -733,6 +735,8 @@ pub(crate) enum Msg {
     Speaking(VoiceSpeaking),
     /// VOICE-O: a voice chat moment worth a note.
     VoiceNotice(VoiceNotice),
+    /// OVL-SHARE: a screen sharing moment worth a note.
+    ShareNotice(ShareNotice),
 }
 
 /// The panel sends at most this many messages ...
@@ -864,6 +868,8 @@ pub(crate) struct VoiceHooks {
     pub(crate) act: VoiceActFn,
     /// Tells the hub whether this session's mod shows voice chat now.
     pub(crate) shown: ConnectedFn,
+    /// OVL-SHARE: the player shares and hides notifications while sharing.
+    pub(crate) quiet: Arc<AtomicBool>,
 }
 
 /// Whom a person menu frame may be about (OVL-UX2): the friend list's people for most rows; crew
@@ -961,6 +967,8 @@ struct Live {
     voice: bool,
     /// The mod shows the crews' voice rooms in crew chat (OVL-SOC: `voice-rooms` beside `voice`).
     voice_rooms: bool,
+    /// The mod shows screen sharing in voice rooms (OVL-SHARE: `share` beside `voice`).
+    share: bool,
     voice_mirror: VoiceMirror,
     /// The mod draws people's pictures (OVL-AVATARS: `avatars` in its hello).
     avatars: bool,
@@ -1097,6 +1105,8 @@ pub(crate) struct Session<S> {
     voice_act: VoiceActFn,
     voice_shown: ConnectedFn,
     recent_voice: VecDeque<Instant>,
+    /// OVL-SHARE: the player shares and hides notifications while sharing (the hub's flag).
+    share_quiet: Arc<AtomicBool>,
     /// OVL-AVATARS: the prepared pictures every session shares, and the people this mod asked about with the
     /// version it was answered with (`-`: the letter), to tell it again when theirs changes.
     pictures: Arc<Pictures>,
@@ -1286,6 +1296,7 @@ impl<S: SocialActions> Session<S> {
             voice_act: voice.act,
             voice_shown: voice.shown,
             recent_voice: VecDeque::new(),
+            share_quiet: voice.quiet,
             pictures,
             told: HashMap::new(),
             told_order: VecDeque::new(),
@@ -1541,6 +1552,7 @@ impl<S: SocialActions> Session<S> {
                 self.voice_speaking = Some(speaking);
             }
             Msg::VoiceNotice(notice) => self.on_voice_notice(&notice),
+            Msg::ShareNotice(notice) => self.on_share_notice(&notice),
         }
     }
 
@@ -1582,11 +1594,20 @@ impl<S: SocialActions> Session<S> {
                     |id| scene.name_of(id).map(str::to_owned),
                 )
             });
+        // OVL-SHARE: screen sharing, worked out only for a mod that shows it.
+        let share = self
+            .live
+            .as_ref()
+            .is_some_and(|live| live.share)
+            .then(|| voice::share_of(state));
         let mut frames = Vec::new();
         if let Some(live) = self.live.as_mut() {
             frames.extend(live.voice_mirror.update(view));
             if let Some(crews) = crews {
                 frames.extend(live.voice_mirror.update_crews(crews));
+            }
+            if let Some(share) = share {
+                frames.extend(live.voice_mirror.update_share(share));
             }
         }
         if !frames.is_empty() {
@@ -1619,7 +1640,8 @@ impl<S: SocialActions> Session<S> {
                 .live
                 .as_ref()
                 .is_some_and(|live| live.said.cards2 && live.shows(ToastKind::Missed));
-            if shows && !self.scene.dnd && !self.scene.is_ignored(from) {
+            // OVL-SHARE: not while the game is in the player's share (the launcher's list keeps it).
+            if shows && !self.scene.dnd && !self.scene.is_ignored(from) && !self.private() {
                 let title = self
                     .scene
                     .nickname_of(from)
@@ -1648,6 +1670,29 @@ impl<S: SocialActions> Session<S> {
         }
     }
 
+    /// OVL-SHARE: `voice-notice` (`share-*`) to a mod that shows screen sharing.
+    fn on_share_notice(&self, notice: &ShareNotice) {
+        if !self
+            .live
+            .as_ref()
+            .is_some_and(|live| live.voice && live.share)
+        {
+            return;
+        }
+        if let Some(view) = voice::share_notice_of(notice) {
+            self.send(vec![ToGame::VoiceNotice(view)]);
+        }
+    }
+
+    /// OVL-SHARE: cards keep their words to themselves: the game is in the player's share and
+    /// they hide notifications while sharing ([`voice::private`]).
+    fn private(&self) -> bool {
+        voice::private(
+            self.voice.as_ref().map(|(state, _)| state.as_ref()),
+            self.share_quiet.load(Ordering::SeqCst),
+        )
+    }
+
     /// A press in the game's voice chat: checked against the newest state, at most
     /// [`VOICE_BURST`] in [`VOICE_WINDOW`], then the launcher's voice chat carries it out; the mod
     /// hears how one with a result of its own went (`voice-result`). Only from a mod that shows
@@ -1666,6 +1711,14 @@ impl<S: SocialActions> Session<S> {
         // OVL-SOC: a crew room's "Katıl" only from a mod that shows the crews' rooms.
         if matches!(frame, FromGame::VoiceJoin { .. })
             && !self.live.as_ref().is_some_and(|live| live.voice_rooms)
+        {
+            return;
+        }
+        // OVL-SHARE: sharing's presses only from a mod that shows it.
+        if matches!(
+            frame,
+            FromGame::VoiceShareGame {} | FromGame::VoiceShareStop { .. }
+        ) && !self.live.as_ref().is_some_and(|live| live.share)
         {
             return;
         }
@@ -1696,6 +1749,7 @@ impl<S: SocialActions> Session<S> {
                 | VoiceAct::Deaf(true)
                 | VoiceAct::Leave
                 | VoiceAct::Decline { .. }
+                | VoiceAct::ShareStop { .. }
         );
         let doing = if !closes && full(&mut self.recent_voice, now, VOICE_WINDOW, VOICE_BURST) {
             Err(VoiceRefusal::RateLimited)
@@ -2029,6 +2083,16 @@ impl<S: SocialActions> Session<S> {
             live.panel && toast.conv.is_some() && live.open.as_deref() == toast.conv.as_deref()
         });
         if !shown {
+            // OVL-SHARE: while the game is in the player's share, a card shows the stream nothing
+            // private, or does not come (any mod: an older one draws the same neutral card).
+            let toast = if self.private() {
+                voice::keep_private(toast)
+            } else {
+                Some(toast)
+            };
+            let Some(toast) = toast else {
+                return;
+            };
             self.send(vec![ToGame::Toast(toast)]);
         }
         // An AFK notice the game showed was seen: the phone stays quiet (AFKPLUS).
@@ -2163,6 +2227,9 @@ impl<S: SocialActions> Session<S> {
                     voice_rooms: !quiet
                         && features.iter().any(|f| f == FEATURE_VOICE)
                         && features.iter().any(|f| f == FEATURE_VOICE_ROOMS),
+                    share: !quiet
+                        && features.iter().any(|f| f == FEATURE_VOICE)
+                        && features.iter().any(|f| f == protocol::FEATURE_SHARE),
                     voice_mirror: VoiceMirror::default(),
                     avatars: !quiet && features.iter().any(|f| f == FEATURE_AVATARS),
                     said,
@@ -2359,7 +2426,9 @@ impl<S: SocialActions> Session<S> {
             | FromGame::VoiceCall { .. }
             | FromGame::VoiceInvite { .. }
             // OVL-SOC: "Katıl" and "Yeni oda" in crew chat's "Sesli".
-            | FromGame::VoiceJoin { .. }) => self.on_voice_press(&frame),
+            | FromGame::VoiceJoin { .. }
+            | FromGame::VoiceShareGame {}
+            | FromGame::VoiceShareStop { .. }) => self.on_voice_press(&frame),
             // OVL-SOC 2: the status switcher and the friend requests.
             FromGame::Status { status, preset } => self.on_status(&status, preset.as_deref()),
             FromGame::Request { id, accept } => self.on_request(id, accept),

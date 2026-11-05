@@ -22,6 +22,7 @@ use std::time::Duration;
 use pl_content::ChatEmojis;
 use pl_lang::Lang;
 use pl_social::SocialUpdate;
+use pl_voice::share::ShareNotice;
 use pl_voice::view::{VoiceNotice, VoiceSpeaking, VoiceState};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
@@ -241,6 +242,9 @@ struct Shared {
     voice: Mutex<Option<VoiceSink>>,
     /// A game's mod shows voice chat now (VOICE-O).
     voice_shown: AtomicBool,
+    /// OVL-SHARE: the player shares and hides notifications while sharing ("Paylaşırken
+    /// bildirimleri gizle"); every session reads it.
+    share_quiet: Arc<AtomicBool>,
     /// OVL-SOC2: a game's mod shows missed calls as cards now; the kinds the page heard last.
     missed_shown: AtomicBool,
     kinds_told: Mutex<Vec<String>>,
@@ -287,6 +291,7 @@ impl Overlay {
                 emoji: Mutex::new(None),
                 voice: Mutex::new(None),
                 voice_shown: AtomicBool::new(false),
+                share_quiet: Arc::new(AtomicBool::new(false)),
                 missed_shown: AtomicBool::new(false),
                 kinds_told: Mutex::new(Vec::new()),
                 pictures: Arc::default(),
@@ -617,6 +622,7 @@ impl Overlay {
                 speaking,
                 act,
                 shown,
+                quiet: Arc::clone(&self.shared.share_quiet),
             },
             Arc::clone(&self.shared.pictures),
         )
@@ -1008,6 +1014,23 @@ impl Overlay {
         let inner = self.lock();
         if !inner.sessions.is_empty() {
             inner.tell_others(None, || Msg::VoiceNotice(notice.clone()));
+        }
+    }
+
+    /// OVL-SHARE: whether the player shares and hides notifications while sharing (the app's
+    /// `Platform::share_privacy`): while the game is in a share, cards keep their words to
+    /// themselves.
+    pub fn share_privacy(&self, quiet: bool) {
+        // Read when a card goes out: nothing to tell the sessions now.
+        self.shared.share_quiet.store(quiet, Ordering::SeqCst);
+    }
+
+    /// OVL-SHARE: a screen sharing moment worth a note (the app's `Platform::share_notice`, and a
+    /// refusal of the game's "Oyunu paylaş"). Without a game it is dropped at once.
+    pub fn share_notice(&self, notice: &ShareNotice) {
+        let inner = self.lock();
+        if !inner.sessions.is_empty() {
+            inner.tell_others(None, || Msg::ShareNotice(notice.clone()));
         }
     }
 
