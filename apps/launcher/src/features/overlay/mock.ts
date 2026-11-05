@@ -28,15 +28,39 @@ let config: OverlayConfig = {
     favorites: [],
     onlineAlerts: {},
     favoritesOnline: true,
+    favoritesProjects: true,
+    joinRequests: true,
   },
 };
+
+/** What a connected newer mod shows as its own cards (OVL-SOC2). */
+const MOCK_KINDS = [
+  "afkNotice",
+  "chatMessage",
+  "crewCall",
+  "crewPlan",
+  "friendAdded",
+  "friendOnProjects",
+  "friendOnline",
+  "invite",
+  "joinRequest",
+  "request",
+  "requestAccepted",
+  "teamInvite",
+];
 
 export const mockOverlay: OverlayApi = {
   async configure(next) {
     config = next;
   },
   async state() {
-    return { config, connected: connected(), versions: ["26.1.2", "26.2", "26.3"] };
+    const on = connected();
+    return {
+      config,
+      connected: on,
+      kinds: on ? MOCK_KINDS : [],
+      versions: ["26.1.2", "26.2", "26.3"],
+    };
   },
   onStatus() {
     return () => {};

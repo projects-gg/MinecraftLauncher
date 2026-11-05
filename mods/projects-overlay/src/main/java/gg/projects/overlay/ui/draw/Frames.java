@@ -64,6 +64,12 @@ public enum Frames {
         .chamfer().fixed(16)),
     BUTTON_SECONDARY_HOVER(FrameSpec.rounded(3, Theme.withAlpha(Theme.OBSIDIAN_700, 0.92f),
         Theme.withAlpha(0xFFFFFF, 0.2f)).chamfer().fixed(16)),
+    /**
+     * A choice made among secondary buttons (a plan's day, the player's own answer to a plan; OVL-SOC2): the quiet
+     * plate under a faint gold hairline, never the gold of the one primary action.
+     */
+    BUTTON_CHOSEN(FrameSpec.rounded(3, Theme.withAlpha(Theme.OBSIDIAN_700, 0.95f), Theme.withAlpha(Theme.GOLD_400, 0.4f))
+        .chamfer().fixed(16)),
     BUTTON_GHOST_HOVER(FrameSpec.rounded(3, Theme.withAlpha(0xFFFFFF, 0.07f), 0).chamfer().fixed(16)),
     /**
      * A destructive action ("Paylaşımı kapat", "Dünyadan çıkar"; HOST1): the secondary button's obsidian under a

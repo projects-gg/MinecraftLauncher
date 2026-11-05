@@ -328,6 +328,113 @@ pub enum FromGame {
         #[serde(default)]
         ids: Vec<String>,
     },
+    // --- OVL-SOC2: social management in game (`docs/tasks/ovl2-protocol.md` → "OVL-SOC2") ---------
+    /// `people5`: "İsteği geri çek" on a friend request the player sent (`lists`' `outgoing`).
+    /// Answered with `done` (`cancel-request`).
+    CancelRequest {
+        #[serde(default)]
+        id: String,
+    },
+    /// `people5`: "Engeli kaldır" on someone in `lists`' `blocked`. Answered with `done`
+    /// (`unblock`).
+    Unblock {
+        #[serde(default)]
+        id: String,
+    },
+    /// `people5` or `crews2`: "Bul" in the panel's "Ekle": a friend code, a crew code or a crew
+    /// invite link, as typed (the launcher tells which). Answered with `found`.
+    Find {
+        #[serde(default)]
+        code: String,
+    },
+    /// `people5`: "İstek gönder" to the friend code a `found` named. Answered with `done`
+    /// (`add-code`; `queued` while the request waits for them).
+    AddCode {
+        #[serde(default)]
+        code: String,
+    },
+    /// `crews2`: "Katıl" (`accept`) or "Reddet" on an invite to a crew (`lists`' `invites`).
+    /// Answered with `done` (`crew-answer`).
+    CrewAnswer {
+        #[serde(default)]
+        crew: String,
+        #[serde(default)]
+        accept: bool,
+    },
+    /// `crews2`: "Kabul et" (`accept`) or "Reddet" on someone's request to join one of the
+    /// player's crews (`lists`' `asks`). Answered with `done` (`crew-ask`).
+    CrewAsk {
+        #[serde(default)]
+        crew: String,
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        accept: bool,
+    },
+    /// `crews2`: "Ekibe katıl" or "Katılma isteği gönder" to the crew code or invite link a
+    /// `found` named. Answered with `done` (`crew-join`; `queued` while the request waits).
+    CrewJoin {
+        #[serde(default)]
+        code: String,
+    },
+    /// `crews2`: "Ekibi çağır" for one of `lists`' `callers`. Answered with `done` (`crew-call`).
+    CrewCall {
+        #[serde(default)]
+        crew: String,
+    },
+    /// `plans`: "Geliyorum" (`yes`), "Belki" (`maybe`) or "Gelemem" (`no`) to a plan of `lists`'
+    /// `plans`. Answered with `done` (`plan-answer`).
+    PlanAnswer {
+        #[serde(default)]
+        plan: String,
+        #[serde(default)]
+        answer: String,
+    },
+    /// `plans`: a new plan in one of `lists`' `planners` at `at` (Unix seconds, a whole quarter
+    /// of an hour, 5 minutes to 7 days ahead) with its note (at most 80 characters; only while
+    /// `lists`' `notes`). Answered with `done` (`plan-make`).
+    PlanMake {
+        #[serde(default)]
+        crew: String,
+        #[serde(default)]
+        at: i64,
+        #[serde(default)]
+        note: String,
+    },
+    /// `chat3`: the player edits their own message `sid` (15 minutes; never a sticker). Answered
+    /// with `done` (`edit`); the new text comes as the message itself.
+    Edit {
+        #[serde(default)]
+        conv: String,
+        #[serde(default)]
+        sid: i64,
+        #[serde(default)]
+        text: String,
+    },
+    /// `chat3`: the player deletes their own message `sid` for everyone (7 days). Answered with
+    /// `done` (`delete`); the tombstone comes as the message itself.
+    Delete {
+        #[serde(default)]
+        conv: String,
+        #[serde(default)]
+        sid: i64,
+    },
+    /// `cards2`: the card kinds the player turned off in the overlay's settings (`message`,
+    /// `call`, `invite`, `request`, `online`, `plan`, `missed`): the launcher sends none of them
+    /// to this game and keeps its own notifications for them. After the hello and on every change.
+    Cards {
+        #[serde(default)]
+        off: Vec<String>,
+    },
+    /// `cards2`: one of the launcher's notification switches changed in the overlay's settings
+    /// (`favoritesOnline`, `favoritesProjects`, `crewCalls`, `crewChat`, `joinRequests`). The
+    /// launcher's page keeps it, as its own switch would; the next `prefs` says how it stands.
+    NotifySet {
+        #[serde(default)]
+        key: String,
+        #[serde(default)]
+        on: bool,
+    },
     /// Anything newer than this launcher.
     #[serde(other)]
     Unknown,
@@ -425,6 +532,58 @@ pub const FEATURE_NEXT: &str = "next";
 /// OVL-SOC 2: the `welcome` feature that says streamer mode is on (SOC-NEXT §3.4): the mod shows
 /// no server address (it still knows them, to join). Only to a mod that said `people4`.
 pub const FEATURE_STREAMER: &str = "streamer";
+
+/// OVL-SOC2: the `hello` feature of a mod with the friends page's whole management: the requests
+/// the player sent (`lists`' `outgoing`, `cancel-request`), "Ekle" with a code (`find`, `found`,
+/// `add-code`), the player's own code (`lists`' `code`) and the blocked (`lists`' `blocked`,
+/// `unblock`); the `welcome` feature that says this launcher takes those frames (signed in).
+pub const FEATURE_PEOPLE5: &str = "people5";
+/// OVL-SOC2: the `hello` feature of a mod with crews in game: invites and join requests answered
+/// (`lists`' `invites` and `asks`, `crew-answer`, `crew-ask`), joining by code or link (`find`,
+/// `crew-join`) and "Ekibi çağır" (`lists`' `call` and `callers`, `crew-call`); the `welcome`
+/// feature that says this launcher takes them (signed in, crews on).
+pub const FEATURE_CREWS2: &str = "crews2";
+/// OVL-SOC2: the `hello` feature of a mod that shows crew plans (`lists`' `plans`, `planners`,
+/// `notes`; `plan-answer`, `plan-make`); the `welcome` feature that says the service has plans now.
+pub const FEATURE_PLANS: &str = "plans";
+/// OVL-SOC2: the `hello` feature of a mod that edits and deletes the player's own messages (`edit`,
+/// `delete`); the `welcome` feature that says chat is on.
+pub const FEATURE_CHAT3: &str = "chat3";
+/// OVL-SOC2: the `hello` feature of a mod with the new cards (`request`, `friend`, `online`,
+/// `projects`, `crew-invite`, `crew-ask`, `crew-in`, `plan`, `missed`), the player's card kinds
+/// (`cards`) and the launcher's notification switches (`prefs`, `notify-set`); the `welcome`
+/// feature that says this launcher takes `cards` and `notify-set` (signed in).
+pub const FEATURE_CARDS2: &str = "cards2";
+
+/// The card kinds the player may turn off in game (`cards`), and the toast kinds each covers.
+pub const CARD_GROUPS: [(&str, &[ToastKind]); 7] = [
+    ("message", &[ToastKind::Message]),
+    ("call", &[ToastKind::Call]),
+    (
+        "invite",
+        &[ToastKind::Invite, ToastKind::World, ToastKind::CrewInvite],
+    ),
+    (
+        "request",
+        &[
+            ToastKind::Request,
+            ToastKind::Friend,
+            ToastKind::CrewAsk,
+            ToastKind::CrewIn,
+        ],
+    ),
+    ("online", &[ToastKind::Online, ToastKind::Projects]),
+    ("plan", &[ToastKind::Plan]),
+    ("missed", &[ToastKind::Missed]),
+];
+
+/// The group of a toast kind the player may turn off (`cards`); none for one that always shows.
+pub fn card_group(kind: ToastKind) -> Option<&'static str> {
+    CARD_GROUPS
+        .iter()
+        .find(|(_, kinds)| kinds.contains(&kind))
+        .map(|(group, _)| *group)
+}
 
 impl FromGame {
     /// One of VOICE-O's presses: they go to the launcher's voice chat, never to the friends
@@ -689,6 +848,10 @@ pub enum ToGame {
         /// et", "Reddet"; never someone blocked). Only to a mod that said `people4`.
         #[serde(skip_serializing_if = "Vec::is_empty")]
         requests: Vec<RequestItem>,
+        /// OVL-SOC2: the management lists of `people5`, `crews2` and `plans` (each only to a mod
+        /// that said it).
+        #[serde(flatten)]
+        extra: ListsExtra,
     },
     /// OVL-UX (P8): how a friend menu action went. `queued`: the invite waits for the friend
     /// (offline or on do-not-disturb); `reason` when it did not go. Only to a mod that said
@@ -757,9 +920,160 @@ pub enum ToGame {
         #[serde(skip_serializing_if = "Option::is_none")]
         png: Option<String>,
     },
+    /// OVL-SOC2: what a `find` found, by the `code` the mod sent. Only to a mod that said
+    /// `people5` or `crews2`.
+    Found(Box<FoundView>),
+    /// OVL-SOC2: how one of the new presses went (`act`: `cancel-request`, `unblock`, `add-code`,
+    /// `crew-answer`, `crew-ask`, `crew-join`, `crew-call`, `plan-answer`, `plan-make`, `edit`,
+    /// `delete`, `notify-set`), by what it named (`id`: the person, the code, the crew, the plan,
+    /// the message's `sid`, the switch). `queued`: a request or a join request waits for its
+    /// answer. `wait`: seconds until the next crew call may go. `reason` when it did not go (the
+    /// mod says a general "Olmadı." for one it does not know).
+    Done {
+        act: &'static str,
+        id: String,
+        ok: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<&'static str>,
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        queued: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        wait: Option<u32>,
+    },
+    /// OVL-SOC2: the launcher's notification switches as they stand (its Settings → Arkadaşlar →
+    /// Bildirimler), after the greeting and on every change. Only to a mod that said `cards2`.
+    Prefs(PrefsView),
     Bye {
         reason: ByeReason,
     },
+}
+
+/// OVL-SOC2: what a code typed in "Ekle" leads to (`found`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct FoundView {
+    /// As the mod sent it.
+    pub code: String,
+    /// `friend`, `crew`, or `none` (nothing found, or it could not be asked: `reason`).
+    pub kind: &'static str,
+    /// The person's or the crew's id (their face, a crew's look is not drawn).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub id: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    /// A person: `none`, `friend`, `outgoing`, `incoming`, `blocked`, `self`. A crew: `none`,
+    /// `member`, `elsewhere`, `blocked`, `full`, `limit`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relation: Option<&'static str>,
+    /// A crew: how many are in it, its tag, and whether it approves newcomers ("Katılma isteği
+    /// gönder") or the player's request to it waits already.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub members: Option<u32>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub tag: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub approval: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub requested: bool,
+    /// With `none`: `invalid` (not a code), `not-found`, `rate` (too many lookups), `offline`,
+    /// `failed`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<&'static str>,
+}
+
+/// OVL-SOC2: the launcher's notification switches the overlay's settings show (`prefs`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrefsView {
+    /// "Favori arkadaşların: Çevrimiçi olunca".
+    pub favorites_online: bool,
+    /// "Favori arkadaşların: Projects'e girince".
+    pub favorites_projects: bool,
+    /// "Ekibin: Çağrılar" (the service's switch where it keeps it).
+    pub crew_calls: bool,
+    /// "Ekip sohbeti bildirimleri".
+    pub crew_chat: bool,
+    /// "Katılma istekleri" (only while some crew of the player's may get them).
+    pub join_requests: bool,
+}
+
+/// OVL-SOC2: what `lists` adds for the friends page's, crews' and plans' management.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct ListsExtra {
+    /// `people5`: the friend requests the player sent that wait ("Gönderilenler", "İsteği geri
+    /// çek"), the people they blocked ("Engellenenler", "Engeli kaldır") and their own friend code
+    /// ("Kodun", "Kopyala").
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub outgoing: Vec<RequestItem>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub blocked: Vec<RequestItem>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub code: String,
+    /// `crews2`: crew invites waiting for the player, and the requests to join their crews they may
+    /// answer.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub invites: Vec<CrewInviteItem>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub asks: Vec<CrewAskItem>,
+    /// `crews2`: where "Ekibi çağır" stands (`ok`, `needs-server`, `server-hidden`) while crew calls
+    /// are on, and the crews the player may call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub call: Option<&'static str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub callers: Vec<String>,
+    /// `plans`: the crews' plans not over yet, soonest first; the crews the player may plan in;
+    /// whether a plan may carry a note.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub plans: Vec<PlanItem>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub planners: Vec<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub notes: bool,
+}
+
+/// OVL-SOC2: a crew invite waiting for the player (`lists`' `invites`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CrewInviteItem {
+    pub crew: String,
+    pub name: String,
+    /// Who invited, as the lists show them, and their id (their face).
+    pub from: String,
+    pub by: String,
+    pub members: u32,
+}
+
+/// OVL-SOC2: someone's request to join one of the player's crews (`lists`' `asks`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CrewAskItem {
+    pub crew: String,
+    /// The crew's name.
+    #[serde(rename = "crewName")]
+    pub crew_name: String,
+    pub id: String,
+    pub name: String,
+}
+
+/// OVL-SOC2: a crew plan still ahead or under way (`lists`' `plans`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PlanItem {
+    pub id: String,
+    pub crew: String,
+    /// The plan's time (Unix ms) to show; it starts and ends at `start` and `end` on this
+    /// computer's clock (gone after `end`, "Başladı" from `start`).
+    pub at: i64,
+    pub start: i64,
+    pub end: i64,
+    /// Who made it, as the crew shows them (empty: someone not in the list).
+    pub by: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub mine: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The player's answer: `yes`, `maybe`, `no`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub my: Option<&'static str>,
+    pub yes: u32,
+    pub maybe: u32,
+    pub no: u32,
 }
 
 /// A friend menu action, as `friend-result` names it (OVL-UX).
@@ -1023,6 +1337,9 @@ pub struct ConvView {
     /// last message there; the service decides anyway.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slow: Option<u32>,
+    /// OVL-SOC2, crew conversations: the crew's id (crew chat's own line: "Ekibi çağır", its plans).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub crew: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1210,6 +1527,9 @@ pub struct ToastView {
     /// OVL-AVATARS: the person `title` names (a message's sender, an invite's friend), for their picture.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub by: Option<String>,
+    /// OVL-SOC2: a plan's time (Unix ms; `plan` cards: "{title}, {when} için plan yaptı").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -1226,6 +1546,26 @@ pub enum ToastKind {
     /// HOST1 (H14): a world invite, `title` the friend ("%s seni dünyasına çağırıyor"). Only to a
     /// mod that said `host`.
     World,
+    // OVL-SOC2: the cards below go only to a mod that said `cards2`; the mod words each one, `title`
+    // the person (`by` their id), `crew` the crew's name where one is named.
+    /// "{title} seni eklemek istiyor".
+    Request,
+    /// "{title} ile artık arkadaşsınız".
+    Friend,
+    /// "{title} çevrimiçi".
+    Online,
+    /// "{title} Projects'e girdi".
+    Projects,
+    /// "{title} seni {crew} ekibine davet etti".
+    CrewInvite,
+    /// "{title}, {crew} ekibine katılmak istiyor".
+    CrewAsk,
+    /// "{crew} ekibine katıldın" (a join request of the player's was taken; `conv` the crew's chat).
+    CrewIn,
+    /// "{title}, {when} için plan yaptı" (`at`; `body` the plan's note, `conv` the crew's chat).
+    Plan,
+    /// "Cevapsız arama", `title` the caller.
+    Missed,
 }
 
 /// Why a message did not go. The mod shows a general "could not send" for a reason it does not
@@ -1865,6 +2205,7 @@ mod tests {
             badge: None,
             marks: Vec::new(),
             by: None,
+            at: None,
         }))
         .unwrap();
         assert_eq!(toast["kind"], "world");
@@ -1994,6 +2335,7 @@ mod tests {
             discord: Vec::new(),
             roles: BTreeMap::new(),
             requests: Vec::new(),
+            extra: ListsExtra::default(),
         })
         .unwrap();
         assert_eq!(
@@ -2012,6 +2354,7 @@ mod tests {
             discord: vec!["u-cem".into(), "u-ali".into()],
             roles: BTreeMap::new(),
             requests: Vec::new(),
+            extra: ListsExtra::default(),
         })
         .unwrap();
         assert_eq!(
@@ -2069,6 +2412,7 @@ mod tests {
                 ),
             ]),
             requests: Vec::new(),
+            extra: ListsExtra::default(),
         })
         .unwrap();
         assert_eq!(
@@ -2202,6 +2546,7 @@ mod tests {
             badge: None,
             marks: Vec::new(),
             by: None,
+            at: None,
         });
         let json = serde_json::to_value(&toast).unwrap();
         assert_eq!(json["t"], "toast");

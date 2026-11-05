@@ -31,8 +31,8 @@ use crate::policy::NotifyPrefs;
 use crate::protocol::{ByeReason, ToGame};
 use crate::server::{Bridge, Endpoint};
 use crate::session::{
-    CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, EmojiFn, LangFn, Msg, PeopleChange,
-    PeopleFn, Session, SocialActions, VoiceActFn, VoiceHooks,
+    CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, EmojiFn, KindsFn, LangFn, Msg,
+    PeopleChange, PeopleFn, Session, SocialActions, VoiceActFn, VoiceHooks,
 };
 use crate::voice::{VoiceAct, VoiceFuture};
 
@@ -120,10 +120,15 @@ impl OverlayConfig {
 
 /// Whether the mod in a running game is connected (`overlay-status`): while one is, its toasts
 /// stand in for the launcher's system notifications of the same events.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OverlayStatus {
     pub connected: bool,
+    /// OVL-SOC2: the friends feature's notice kinds (`chatMessage`, `teamInvite`, …) a connected
+    /// game shows as its own cards: the page shows no system notification of them. An older mod
+    /// shows `chatMessage`, `crewCall`, `invite` and `afkNotice`; a newer one more, less the
+    /// kinds the player turned off in it.
+    pub kinds: Vec<String>,
 }
 
 type StatusFn = Arc<dyn Fn(OverlayStatus) + Send + Sync>;
@@ -161,6 +166,8 @@ struct Running {
     /// What its mod's hello told world sharing ([`HostSignal::Connected`]): told again when its
     /// game becomes the one world sharing follows ([`Overlay::set_host`]).
     hello: Option<HostSignal>,
+    /// OVL-SOC2: the notice kinds its game shows as cards now (empty while its mod is away).
+    kinds: Vec<&'static str>,
 }
 
 struct Inner {
@@ -234,6 +241,9 @@ struct Shared {
     voice: Mutex<Option<VoiceSink>>,
     /// A game's mod shows voice chat now (VOICE-O).
     voice_shown: AtomicBool,
+    /// OVL-SOC2: a game's mod shows missed calls as cards now; the kinds the page heard last.
+    missed_shown: AtomicBool,
+    kinds_told: Mutex<Vec<String>>,
     /// OVL-AVATARS: people's pictures, prepared once for every game.
     pictures: Arc<crate::avatar::Pictures>,
 }
@@ -277,6 +287,8 @@ impl Overlay {
                 emoji: Mutex::new(None),
                 voice: Mutex::new(None),
                 voice_shown: AtomicBool::new(false),
+                missed_shown: AtomicBool::new(false),
+                kinds_told: Mutex::new(Vec::new()),
                 pictures: Arc::default(),
             }),
         }
@@ -553,6 +565,7 @@ impl Overlay {
                 connected: false,
                 voice: false,
                 hello: None,
+                kinds: Vec::new(),
             });
             (
                 inner.config.clone(),
@@ -584,6 +597,8 @@ impl Overlay {
         let act: VoiceActFn = Arc::new(move |press| hub.voice_act(press));
         let hub = self.clone();
         let shown: ConnectedFn = Arc::new(move |on| hub.voice_report(id, on));
+        let hub = self.clone();
+        let kinds: KindsFn = Arc::new(move |kinds| hub.kinds_report(id, kinds));
         let session = Session::new(
             social,
             launcher,
@@ -604,7 +619,8 @@ impl Overlay {
                 shown,
             },
             Arc::clone(&self.shared.pictures),
-        );
+        )
+        .with_kinds(kinds);
         tokio::spawn(bridge.serve(control_rx, events_tx));
         tokio::spawn(session.run(msgs_rx, events));
         tracing::info!(port = endpoint.port(), "in-game overlay bridge ready");
@@ -848,6 +864,18 @@ impl Overlay {
                 }
                 // OVL-SOC 2: the page changes the status; every game hears it in the next view.
                 PeopleChange::Status { .. } => false,
+                // OVL-SOC2: a notification switch from the overlay's settings.
+                PeopleChange::Notify { key, on } => {
+                    match key.as_str() {
+                        "favoritesOnline" => notify.favorites_online = *on,
+                        "favoritesProjects" => notify.favorites_projects = *on,
+                        "crewCalls" => notify.crew_calls = *on,
+                        "crewChat" => notify.crew_chat = *on,
+                        "joinRequests" => notify.join_requests = *on,
+                        _ => {}
+                    }
+                    true
+                }
             };
             if marked {
                 let config = inner.config.clone();
@@ -1045,6 +1073,72 @@ impl Overlay {
         if self.shared.connected.swap(connected, Ordering::SeqCst) == connected {
             return;
         }
+        self.tell_status(true);
+    }
+
+    /// OVL-SOC2: a session says which notice kinds its game shows as cards now (none: its mod
+    /// went). The page hears every connected game's together when they changed.
+    fn kinds_report(&self, session: u64, kinds: Vec<&'static str>) {
+        let missed = {
+            let mut inner = self.lock();
+            // Only a connected game's change is news now: one connecting or going is told with its connection.
+            let told = match inner
+                .sessions
+                .iter_mut()
+                .find(|running| running.id == session)
+            {
+                Some(running) => {
+                    running.kinds = kinds;
+                    running.connected
+                }
+                None if !kinds.is_empty() => return,
+                None => false,
+            };
+            let missed = inner
+                .sessions
+                .iter()
+                .any(|running| running.kinds.contains(&"voiceMissed"));
+            (missed, told)
+        };
+        let (missed, told) = missed;
+        self.shared.missed_shown.store(missed, Ordering::SeqCst);
+        if told {
+            self.tell_status(false);
+        }
+    }
+
+    /// The page hears whether a game's mod is connected and the kinds its cards stand in for, when
+    /// either changed since it last heard (`connected_changed`: the caller saw it change).
+    fn tell_status(&self, connected_changed: bool) {
+        let status = {
+            let inner = self.lock();
+            let mut kinds: Vec<String> = Vec::new();
+            for kind in inner
+                .sessions
+                .iter()
+                .flat_map(|running| running.kinds.iter())
+            {
+                if !kinds.iter().any(|known| known == kind) {
+                    kinds.push((*kind).to_owned());
+                }
+            }
+            kinds.sort();
+            OverlayStatus {
+                connected: self.shared.connected.load(Ordering::SeqCst),
+                kinds,
+            }
+        };
+        {
+            let mut told = self
+                .shared
+                .kinds_told
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            if !connected_changed && *told == status.kinds {
+                return;
+            }
+            told.clone_from(&status.kinds);
+        }
         let sink = self
             .shared
             .status
@@ -1052,8 +1146,23 @@ impl Overlay {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clone();
         if let Some(sink) = sink {
-            sink(OverlayStatus { connected });
+            sink(status);
         }
+    }
+
+    /// OVL-SOC2: a game's mod shows missed calls as cards now: the launcher's own notification of
+    /// one stays quiet.
+    pub fn shows_missed(&self) -> bool {
+        self.shared.missed_shown.load(Ordering::SeqCst)
+    }
+
+    /// OVL-SOC2: the kinds connected games show as cards now (the page asks at its start).
+    pub fn shown_kinds(&self) -> Vec<String> {
+        self.shared
+            .kinds_told
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
     }
 }
 

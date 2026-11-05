@@ -5,6 +5,7 @@ import com.mojang.blaze3d.platform.cursor.CursorTypes;
 import gg.projects.overlay.bridge.Protocol;
 import gg.projects.overlay.chat.ChatTime;
 import gg.projects.overlay.compat.Compat;
+import gg.projects.overlay.emoji.EmojiCatalog;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.state.OverlayState;
@@ -49,6 +50,11 @@ import org.joml.Matrix3x2fStack;
  * player press, a link's card as a line in the bubble, and "Görüldü" under the last message a friend has seen.
  * A message under the pointer, or picked with the arrow keys, shows "Tepki ver" and "Yanıtla" beside it;
  * "Tepki ver" opens six quick reactions and "Yanıtla" in their place.
+ *
+ * <p>CHAT3 (OVL-SOC2): after the quick reactions a "+" ("Başka tepki") opens the emoji picker to react with any emoji.
+ * On the player's own message the toolbar carries a "…" too, and the same strip a second row: "Düzenle" (15 minutes,
+ * not a sticker) and "Sil" (a week, asked first), as the launcher's message menu. The arrows walk the strip (↑ and ↓
+ * between its rows), Enter does the one picked, and the narrator says each.
  *
  * <p>The list sits at its newest message: a new one rises in and the older ones glide up to make room.
  * Scrolled up, it stays where it is and a "Yeni mesajlar" pill takes the player down. A short conversation
@@ -114,6 +120,21 @@ public final class MessageList extends PanelWidget {
     /** The quick reactions, as sent (fully qualified) and as the game's font draws them. */
     static final String[] QUICK = {"👍", "❤️", "😂", "😭", "🔥", "😮"};
     private static final String[] QUICK_SHOWN = new String[QUICK.length];
+    /** CHAT3: the player's own message can be edited this long after it went, and deleted this long. */
+    static final long EDIT_WINDOW_MS = 15L * 60_000L;
+    static final long DELETE_WINDOW_MS = 7L * 86_400_000L;
+    /** The strip's cells after the quick reactions (whose kinds are their indexes): "+", "Yanıtla", "Düzenle", "Sil". */
+    private static final int CELL_MORE = 100;
+    private static final int CELL_REPLY = 101;
+    private static final int CELL_EDIT = 102;
+    private static final int CELL_DELETE = 103;
+    /** The toolbar's buttons: "Tepki ver", "Yanıtla" and, on the player's own message, "…" (CHAT3). */
+    private static final int TOOL_REACT = 0;
+    private static final int TOOL_REPLY = 1;
+    private static final int TOOL_MORE = 2;
+    /** The strip's second row: "Düzenle" and "Sil" as words, the failed message's actions' size. */
+    private static final int ACTION_H = 14;
+    private static final int ACTION_GAP = 2;
 
     static {
         for (int i = 0; i < QUICK.length; i++) {
@@ -144,6 +165,18 @@ public final class MessageList extends PanelWidget {
          * the friend of a direct conversation; {@code badge}: the tag they wear, or null.
          */
         default void person(String id, String name, String badge, PersonMenu.Anchor at, boolean keys) {
+        }
+
+        /** CHAT3: "Düzenle" on the player's own message (the field takes its words). */
+        default void edit(OverlayState.ChatLine line) {
+        }
+
+        /** CHAT3: "Sil" on the player's own message (asked first; it goes for everyone). */
+        default void delete(OverlayState.ChatLine line) {
+        }
+
+        /** CHAT3: "Başka tepki": the emoji picker gives the reaction to this message. */
+        default void moreReactions(OverlayState.ChatLine line) {
         }
     }
 
@@ -287,6 +320,14 @@ public final class MessageList extends PanelWidget {
     // What the player may do now (CHAT2): set on every refresh.
     private boolean canReply;
     private boolean canReact;
+    /** CHAT3: the player may edit (the field is open) and delete their own messages; the emoji picker can open. */
+    private boolean canEdit;
+    private boolean canDelete;
+    private boolean morePicker;
+    private FormattedCharSequence editWord = FormattedCharSequence.EMPTY;
+    private float editW;
+    private FormattedCharSequence deleteWord = FormattedCharSequence.EMPTY;
+    private float deleteW;
     private boolean turkish = true;
     // Pointer and keyboard (row indexes; -1 none).
     private int hoverRow = -1;
@@ -462,6 +503,9 @@ public final class MessageList extends PanelWidget {
         boolean writable = conv != null && conv.writable() && state.online() && state.has("chat");
         canReply = writable && state.has("replies");
         canReact = writable && state.has("reactions");
+        // CHAT3: an edit is written in the field (open only while the player may write); a delete needs no field.
+        canEdit = writable && state.chat3();
+        canDelete = conv != null && state.online() && state.chat3();
         if (conversation == null) {
             rows.clear();
             contentHeight = 0f;
@@ -579,6 +623,13 @@ public final class MessageList extends PanelWidget {
         String below = Texts.str("chat.new_below");
         newBelowWord = Texts.visual(below);
         newBelowWidth = small.width(below) + 22f;
+        String editWords = Texts.str("chat.edit");
+        editWord = Texts.visual(editWords);
+        editW = small.width(editWords) + 8;
+        String deleteWords = Texts.str("chat.delete");
+        deleteWord = Texts.visual(deleteWords);
+        deleteW = small.width(deleteWords) + 8;
+        morePicker = EmojiCatalog.available(turkish ? "tr" : "en");
         setEmpty(Texts.str("chat.empty"), small);
         rows.clear();
         // The frames' clock (`now`) counts from the game's start, messages carry wall times: the day lines and a
@@ -1143,13 +1194,26 @@ public final class MessageList extends PanelWidget {
     @Override
     public boolean keyPressed(KeyEvent event) {
         if (stripRow >= 0) {
-            int count = stripCount();
+            Row strip = stripRow < rows.size() ? rows.get(stripRow) : null;
+            int count = strip == null ? 0 : stripCount(strip);
+            if (count == 0) {
+                closeStrip();
+                return false;
+            }
+            int top = topCells(strip);
+            stripFocus = Math.max(0, Math.min(count - 1, stripFocus));
+            int before = stripFocus;
             if (event.isLeft()) {
                 stripFocus = Math.max(0, stripFocus - 1);
             } else if (event.isRight()) {
                 stripFocus = Math.min(count - 1, stripFocus + 1);
             } else if (event.isSelection() || event.isConfirmation()) {
                 activateStrip(stripFocus);
+            } else if (event.isDown() && stripFocus < top && count > top) {
+                // CHAT3: ↓ goes to "Düzenle" or "Sil" under it, ↑ back to the cell over it.
+                stripFocus = nearestCell(strip, cellCenter(strip, stripFocus), top, count);
+            } else if (event.isUp() && stripFocus >= top && top > 0) {
+                stripFocus = nearestCell(strip, cellCenter(strip, stripFocus), 0, top);
             } else if (event.isUp() || event.isDown()) {
                 closeStrip();
                 return keyPressed(event);
@@ -1157,6 +1221,9 @@ public final class MessageList extends PanelWidget {
                 return false;
             }
             PanelInput.usedKeyboard();
+            if (stripRow >= 0 && stripFocus != before) {
+                sayStripCell();
+            }
             return true;
         }
         if (selected >= 0 && selected < rows.size() && (event.key() == Compat.KEY_MENU
@@ -1168,6 +1235,13 @@ public final class MessageList extends PanelWidget {
                 float top = getY() + row.y - scroll.value() + row.bubbleTop;
                 actions.person(row.line.by, row.line.from, row.line.badge, PersonMenu.Anchor.at(getX() + 1,
                     top + row.bubbleH + 1), true);
+                return true;
+            }
+            if (row.line != null && actionCells(row) > 0) {
+                // CHAT3: on the player's own message, its strip with the keys on "Düzenle" (the launcher's menu).
+                PanelInput.usedKeyboard();
+                openStrip(selected, topCells(row));
+                sayStripCell();
                 return true;
             }
             return false;
@@ -1199,8 +1273,10 @@ public final class MessageList extends PanelWidget {
                     unfold(row);
                 } else if (row.quote && row.quoteTarget != null && !row.actionable) {
                     jumpTo(row.quoteTarget);
-                } else if (row.actionable && (canReact || canReply)) {
-                    openStrip(selected, canReact ? 0 : QUICK.length);
+                } else if (row.actionable && stripCount(row) > 0) {
+                    // The keys start on the strip's first cell, whatever it is (a reply alone, "Düzenle").
+                    openStrip(selected, 0);
+                    sayStripCell();
                 } else {
                     return false;
                 }
@@ -1249,16 +1325,29 @@ public final class MessageList extends PanelWidget {
 
     /**
      * A right click on a sender's name (or the tag before it, or the badge after it) over a group in crew chat: their
-     * person menu at the pointer, as the launcher's name does (OVL-UX2). Anything else a right click lands on does
-     * nothing.
+     * person menu at the pointer, as the launcher's name does (OVL-UX2). On the player's own bubble (CHAT3): its strip
+     * with "Düzenle" and "Sil", as the launcher's message menu. Anything else a right click lands on does nothing.
      */
     private void rightClick(float mx, float my) {
         if (my >= visibleBottom) {
             return;
         }
         float cy = my - getY() + scroll.value();
-        for (Row row : rows) {
-            if (row.line == null || row.name == null || row.mine || cy < row.y || cy > row.y + row.height) {
+        for (int i = 0; i < rows.size(); i++) {
+            Row row = rows.get(i);
+            if (row.line == null || cy < row.y || cy > row.y + row.height) {
+                continue;
+            }
+            if (row.mine) {
+                float bx = bubbleX(row);
+                float top = row.y + row.bubbleTop;
+                if (actionCells(row) > 0 && mx >= bx && mx < bx + row.bubbleW && cy >= top
+                    && cy < top + row.bubbleH) {
+                    openStrip(i, topCells(row));
+                }
+                return;
+            }
+            if (row.name == null) {
                 continue;
             }
             float nameTop = row.y + (row.divider ? DIVIDER_H : 0);
@@ -1320,7 +1409,7 @@ public final class MessageList extends PanelWidget {
         }
         boolean hadStrip = stripRow >= 0;
         if (hadStrip) {
-            int cell = quickAt(mx, my);
+            int cell = stripCellAt(mx, my);
             if (cell >= 0) {
                 activateStrip(cell);
                 return;
@@ -1362,12 +1451,17 @@ public final class MessageList extends PanelWidget {
             }
             // The toolbar was hidden under the open strip: this press only closed the strip.
             int tool = hadStrip ? -1 : toolAt(row, mx, local);
-            if (tool == 0 && canReact) {
+            if (tool == TOOL_REACT && canReact) {
                 openStrip(i, -1);
                 return;
             }
-            if (tool == 1 && canReply) {
+            if (tool == TOOL_REPLY && canReply) {
                 actions.reply(row.line);
+                return;
+            }
+            if (tool == TOOL_MORE) {
+                // "…" on the player's own message: the same strip, its "Düzenle" and "Sil" under the reactions.
+                openStrip(i, topCells(row));
                 return;
             }
             if (row.quote && row.quoteTarget != null && quoteContains(row, mx, local)) {
@@ -1401,13 +1495,15 @@ public final class MessageList extends PanelWidget {
         return row.actionable && System.currentTimeMillis() - row.line.at < OverlayState.REACT_WINDOW_MS;
     }
 
-    private void openStrip(int row, int focus) {
-        if (!reactable(rows.get(row)) && !canReply) {
+    private void openStrip(int index, int focus) {
+        Row row = rows.get(index);
+        int count = stripCount(row);
+        if (!row.actionable || count == 0) {
             return;
         }
-        stripRow = row;
-        stripLine = rows.get(row).line;
-        stripFocus = Math.max(0, focus);
+        stripRow = index;
+        stripLine = row.line;
+        stripFocus = Math.max(0, Math.min(count - 1, focus));
         stripOpenedAt = now();
     }
 
@@ -1416,12 +1512,63 @@ public final class MessageList extends PanelWidget {
         stripLine = null;
     }
 
-    /** Cells of the strip: six reactions while the message takes them, then "Yanıtla" when replies are on. */
-    private int stripCount() {
-        Row row = stripRow >= 0 && stripRow < rows.size() ? rows.get(stripRow) : null;
-        int n = row != null && canReact && reactable(row) ? QUICK.length : 0;
-        // "Yanıtla" too, however it opened: the toolbar steps aside while the strip is open.
+    /**
+     * The strip's first row: six reactions and "+" while the message takes them, then "Yanıtla" when replies are on
+     * (however it opened: the toolbar steps aside while the strip is open).
+     */
+    private int topCells(Row row) {
+        int n = canReact && reactable(row) ? QUICK.length + (morePicker ? 1 : 0) : 0;
         return n + (canReply ? 1 : 0);
+    }
+
+    /** CHAT3: the strip's second row on the player's own message: "Düzenle" while it may be edited, "Sil". */
+    private int actionCells(Row row) {
+        if (row.line == null || !row.actionable || !row.mine) {
+            return 0;
+        }
+        long wall = System.currentTimeMillis();
+        return (canEdit && editable(row.line, wall) ? 1 : 0) + (canDelete && deletable(row.line, wall) ? 1 : 0);
+    }
+
+    private int stripCount(Row row) {
+        return topCells(row) + actionCells(row);
+    }
+
+    /** What strip cell {@code cell} of {@code row} is: a quick reaction's index or a {@code CELL_} kind; -1 none. */
+    private int stripKind(Row row, int cell) {
+        if (cell < 0) {
+            return -1;
+        }
+        int c = cell;
+        if (canReact && reactable(row)) {
+            if (c < QUICK.length) {
+                return c;
+            }
+            c -= QUICK.length;
+            if (morePicker) {
+                if (c == 0) {
+                    return CELL_MORE;
+                }
+                c--;
+            }
+        }
+        if (canReply) {
+            if (c == 0) {
+                return CELL_REPLY;
+            }
+            c--;
+        }
+        if (row.line == null || !row.actionable || !row.mine) {
+            return -1;
+        }
+        long wall = System.currentTimeMillis();
+        if (canEdit && editable(row.line, wall)) {
+            if (c == 0) {
+                return CELL_EDIT;
+            }
+            c--;
+        }
+        return c == 0 && canDelete && deletable(row.line, wall) ? CELL_DELETE : -1;
     }
 
     private void activateStrip(int cell) {
@@ -1429,16 +1576,73 @@ public final class MessageList extends PanelWidget {
             return;
         }
         Row row = rows.get(stripRow);
-        boolean reactions = canReact && reactable(row);
-        int n = reactions ? QUICK.length : 0;
+        int kind = stripKind(row, cell);
         closeStrip();
-        if (cell < n) {
-            OverlayState.Reaction given = row.line.reaction(QUICK_SHOWN[cell]);
-            actions.react(row.line, given != null ? given.emoji() : QUICK[cell], QUICK_SHOWN[cell],
-                given == null || !given.mine());
-        } else if (canReply && cell == n) {
-            actions.reply(row.line);
+        if (kind < 0) {
+            return;
         }
+        if (kind < QUICK.length) {
+            OverlayState.Reaction given = row.line.reaction(QUICK_SHOWN[kind]);
+            actions.react(row.line, given != null ? given.emoji() : QUICK[kind], QUICK_SHOWN[kind],
+                given == null || !given.mine());
+            return;
+        }
+        switch (kind) {
+            case CELL_MORE -> actions.moreReactions(row.line);
+            case CELL_REPLY -> actions.reply(row.line);
+            case CELL_EDIT -> actions.edit(row.line);
+            case CELL_DELETE -> actions.delete(row.line);
+            default -> {
+            }
+        }
+    }
+
+    /** The narrator says the strip cell the keys are on ("👍 ile tepki ver", "Başka tepki", "Düzenle"…). */
+    private void sayStripCell() {
+        if (stripRow < 0 || stripRow >= rows.size()) {
+            return;
+        }
+        Component label = cellLabel(stripKind(rows.get(stripRow), stripFocus));
+        if (label != null) {
+            net.minecraft.client.Minecraft.getInstance().getNarrator().saySystemQueued(label);
+        }
+    }
+
+    private static Component cellLabel(int kind) {
+        if (kind < 0) {
+            return null;
+        }
+        if (kind < QUICK.length) {
+            return Texts.tr("chat.reactions.give", QUICK_SHOWN[kind]);
+        }
+        return switch (kind) {
+            case CELL_MORE -> Texts.tr("chat.react.more");
+            case CELL_REPLY -> Texts.tr("chat.reply");
+            case CELL_EDIT -> Texts.tr("chat.edit");
+            case CELL_DELETE -> Texts.tr("chat.delete");
+            default -> null;
+        };
+    }
+
+    /**
+     * CHAT3: whether the player may still edit this message (as the service decides it): their own, confirmed (it has
+     * the service's id), not deleted, not a sticker, younger than 15 minutes on this computer's clock.
+     */
+    static boolean editable(OverlayState.ChatLine line, long now) {
+        return line != null && editable(line.mine, line.sid, line.deleted, line.sticker != null, line.at, now);
+    }
+
+    static boolean editable(boolean mine, long sid, boolean deleted, boolean sticker, long at, long now) {
+        return mine && sid > 0 && !deleted && !sticker && now - at < EDIT_WINDOW_MS;
+    }
+
+    /** CHAT3: whether the player may still delete this message for everyone: their own, confirmed, a week. */
+    static boolean deletable(OverlayState.ChatLine line, long now) {
+        return line != null && deletable(line.mine, line.sid, line.deleted, line.at, now);
+    }
+
+    static boolean deletable(boolean mine, long sid, boolean deleted, long at, long now) {
+        return mine && sid > 0 && !deleted && now - at < DELETE_WINDOW_MS;
     }
 
     // ---- Geometry --------------------------------------------------------------------------------------
@@ -1447,24 +1651,45 @@ public final class MessageList extends PanelWidget {
         return row.mine ? getX() + getWidth() - row.bubbleW : getX();
     }
 
-    /** The toolbar's buttons beside a bubble (react, reply); 0 when the row has none. */
+    /** The toolbar's buttons beside a bubble (react, reply, and "…" on the player's own); 0 when the row has none. */
     private int toolCount(Row row) {
         if (!row.actionable) {
             return 0;
         }
-        return (canReact && reactable(row) ? 1 : 0) + (canReply ? 1 : 0);
+        return (canReact && reactable(row) ? 1 : 0) + (canReply ? 1 : 0) + (actionCells(row) > 0 ? 1 : 0);
+    }
+
+    /** What the toolbar's {@code k}-th button is ({@code TOOL_}), -1 none. */
+    private int toolKind(Row row, int k) {
+        int c = k;
+        if (canReact && reactable(row)) {
+            if (c == 0) {
+                return TOOL_REACT;
+            }
+            c--;
+        }
+        if (canReply) {
+            if (c == 0) {
+                return TOOL_REPLY;
+            }
+            c--;
+        }
+        return c == 0 && actionCells(row) > 0 ? TOOL_MORE : -1;
     }
 
     private float toolbarW(int n) {
         return n * TOOL + (n - 1) * TOOL_GAP + 2 * TOOL_PAD;
     }
 
+    /** Beside the bubble; over its corner when the bubble leaves no room (a long message in a narrow panel). */
     private float toolbarX(Row row, int n) {
         float bx = bubbleX(row);
-        return row.mine ? bx - 4 - toolbarW(n) : bx + row.bubbleW + 4;
+        float w = toolbarW(n);
+        float x = row.mine ? bx - 4 - w : bx + row.bubbleW + 4;
+        return Math.max(getX(), Math.min(getX() + getWidth() - w, x));
     }
 
-    /** Which toolbar button (0 react, 1 reply) is at {@code mx}, row-local {@code ly}; -1 none. */
+    /** Which toolbar button ({@code TOOL_}) is at {@code mx}, row-local {@code ly}; -1 none. */
     private int toolAt(Row row, float mx, float ly) {
         int n = toolCount(row);
         if (n == 0 || stripRow >= 0 || hoverTag || !(hoverRowIs(row) || rowIndex(row) == selected)) {
@@ -1475,11 +1700,10 @@ public final class MessageList extends PanelWidget {
         if (ly < ty || ly >= ty + TOOL) {
             return -1;
         }
-        boolean react = canReact && reactable(row);
         for (int k = 0; k < n; k++) {
             float bx = tx + k * (TOOL + TOOL_GAP);
             if (mx >= bx && mx < bx + TOOL) {
-                return react ? k : 1;
+                return toolKind(row, k);
             }
         }
         return -1;
@@ -1541,36 +1765,102 @@ public final class MessageList extends PanelWidget {
     }
 
     /** The strip's box: above the bubble when there is room, else below it (list coordinates). */
-    private float stripX(Row row, int n) {
-        float w = stripW(n);
+    private float stripX(Row row) {
+        float w = stripW(row);
         float x = row.mine ? bubbleX(row) + row.bubbleW - w : bubbleX(row);
         return Math.max(getX(), Math.min(getX() + getWidth() - w, x));
     }
 
-    private float stripW(int n) {
-        return n * QUICK_CELL + 6;
+    private float stripW(Row row) {
+        int top = topCells(row);
+        int n = stripCount(row);
+        float w = top > 0 ? top * QUICK_CELL + 6 : 0f;
+        if (n > top) {
+            float actionsW = 6;
+            for (int i = top; i < n; i++) {
+                actionsW += actionW(stripKind(row, i)) + (i > top ? ACTION_GAP : 0);
+            }
+            w = Math.max(w, actionsW);
+        }
+        return w;
+    }
+
+    /** The reactions' row, then (CHAT3) a hairline and "Düzenle" and "Sil". */
+    private float stripH(Row row) {
+        int top = topCells(row);
+        boolean acts = actionCells(row) > 0;
+        return 6 + (top > 0 ? QUICK_CELL : 0) + (acts ? (top > 0 ? 2 : 0) + ACTION_H : 0);
+    }
+
+    /** The top of the strip's second row. */
+    private static float actionsTop(float stripY, int top) {
+        return stripY + 3 + (top > 0 ? QUICK_CELL + 2 : 0);
+    }
+
+    private float actionW(int kind) {
+        return kind == CELL_DELETE ? deleteW : kind == CELL_EDIT ? editW : 0f;
+    }
+
+    /** The middle of strip cell {@code cell} from the strip's left edge (↑ and ↓ between its rows). */
+    private float cellCenter(Row row, int cell) {
+        int top = topCells(row);
+        if (cell < top) {
+            return 3 + cell * QUICK_CELL + QUICK_CELL / 2f;
+        }
+        float ax = 3;
+        for (int i = top; i < cell; i++) {
+            ax += actionW(stripKind(row, i)) + ACTION_GAP;
+        }
+        return ax + actionW(stripKind(row, cell)) / 2f;
+    }
+
+    /** The cell from {@code from} (inclusive) to {@code to} whose middle is nearest {@code center}. */
+    private int nearestCell(Row row, float center, int from, int to) {
+        int best = from;
+        float bestDistance = Float.MAX_VALUE;
+        for (int i = from; i < to; i++) {
+            float d = Math.abs(cellCenter(row, i) - center);
+            if (d < bestDistance) {
+                bestDistance = d;
+                best = i;
+            }
+        }
+        return best;
     }
 
     private float stripY(Row row) {
         float top = getY() + row.y + row.bubbleTop - scroll.value();
-        float above = top - QUICK_CELL - 6 - 3;
-        return above >= getY() ? above : Math.min(getY() + getHeight() - QUICK_CELL - 6,
-            top + row.bubbleH + 3);
+        float h = stripH(row);
+        float above = top - h - 3;
+        return above >= getY() ? above : Math.min(getY() + getHeight() - h, top + row.bubbleH + 3);
     }
 
-    private int quickAt(float mx, float my) {
+    /** The strip cell at {@code (mx, my)}: the reactions' row, then "Düzenle" and "Sil" (CHAT3); -1 none. */
+    private int stripCellAt(float mx, float my) {
         if (stripRow < 0 || stripRow >= rows.size()) {
             return -1;
         }
         Row row = rows.get(stripRow);
-        int n = stripCount();
-        float x = stripX(row, n);
+        int top = topCells(row);
+        int n = stripCount(row);
+        float x = stripX(row);
         float y = stripY(row);
-        if (my < y + 3 || my >= y + 3 + QUICK_CELL) {
-            return -1;
+        if (top > 0 && my >= y + 3 && my < y + 3 + QUICK_CELL) {
+            int cell = (int) Math.floor((mx - x - 3) / QUICK_CELL);
+            return cell >= 0 && cell < top ? cell : -1;
         }
-        int cell = (int) Math.floor((mx - x - 3) / QUICK_CELL);
-        return cell >= 0 && cell < n ? cell : -1;
+        float ay = actionsTop(y, top);
+        if (n > top && my >= ay && my < ay + ACTION_H) {
+            float ax = x + 3;
+            for (int i = top; i < n; i++) {
+                float aw = actionW(stripKind(row, i));
+                if (mx >= ax && mx < ax + aw) {
+                    return i;
+                }
+                ax += aw + ACTION_GAP;
+            }
+        }
+        return -1;
     }
 
     private float pillLeft() {
@@ -1685,7 +1975,7 @@ public final class MessageList extends PanelWidget {
             return;
         }
         if (stripRow >= 0) {
-            hoverQuick = quickAt(mouseX, mouseY);
+            hoverQuick = stripCellAt(mouseX, mouseY);
         }
         if (mouseY >= visibleBottom) {
             // Under the floating line: nothing of the list shows there.
@@ -2057,7 +2347,10 @@ public final class MessageList extends PanelWidget {
         return mine ? Theme.BONE_50 : Theme.ASH_300;
     }
 
-    /** "Tepki ver" and "Yanıtla" beside the message under the pointer (or picked with the keys). */
+    /**
+     * "Tepki ver", "Yanıtla" and, on the player's own message, "…" (CHAT3) beside the message under the pointer (or
+     * picked with the keys).
+     */
     private void drawToolbar(GuiGraphicsExtractor g, long now) {
         // The open strip has both actions, a tag's bubble is about the sender: one popover at a time.
         int index = stripRow >= 0 || hoverTag || bubble.showing(now) ? -1 : hoverRow >= 0 ? hoverRow : selected;
@@ -2075,38 +2368,43 @@ public final class MessageList extends PanelWidget {
         }
         float x = toolbarX(row, n);
         Draw.frame(g, Frames.POPOVER, x, y, toolbarW(n), TOOL + 2 * TOOL_PAD);
-        boolean react = canReact && reactable(row);
         float bx = x + TOOL_PAD;
         for (int k = 0; k < n; k++) {
-            int kind = react ? k : 1;
+            int kind = toolKind(row, k);
             boolean lit = index == hoverRow && hoverTool == kind;
             if (lit) {
                 Draw.frame(g, Frames.CHIP_HOVER, bx, y + TOOL_PAD, TOOL, TOOL);
                 g.requestCursor(CursorTypes.POINTING_HAND);
             }
-            Draw.icon(g, kind == 0 ? Icon.SMILEY : Icon.REPLY, 10, bx + 2, y + TOOL_PAD + 2,
-                lit ? Theme.BONE_50 : Theme.ASH_300);
+            Icon icon = kind == TOOL_REACT ? Icon.SMILEY : kind == TOOL_REPLY ? Icon.REPLY : Icon.DOTS;
+            Draw.icon(g, icon, 10, bx + 2, y + TOOL_PAD + 2, lit ? Theme.BONE_50 : Theme.ASH_300);
             bx += TOOL + TOOL_GAP;
         }
     }
 
-    /** The six quick reactions and "Yanıtla", over the message (its toolbar steps aside meanwhile). */
+    /**
+     * The six quick reactions, "+" and "Yanıtla" over the message (its toolbar steps aside meanwhile); on the player's
+     * own message "Düzenle" and "Sil" under them (CHAT3), "Sil" in flare as the menus' actions that end something.
+     */
     private void drawStrip(GuiGraphicsExtractor g, long now, Font small) {
         if (stripRow < 0 || stripRow >= rows.size()) {
             return;
         }
         Row row = rows.get(stripRow);
-        int n = stripCount();
+        int top = topCells(row);
+        int n = stripCount(row);
         if (n == 0) {
             closeStrip();
             return;
         }
+        // "Düzenle" goes from the strip when its 15 minutes end while it is open: the keys stay on a cell.
+        stripFocus = Math.min(stripFocus, n - 1);
         float t = Math.min(1f, (now - stripOpenedAt) / (float) STRIP_MS);
         float eased = Ease.OUT_EXPO.at(t);
-        float x = stripX(row, n);
+        float x = stripX(row);
         float y = stripY(row);
-        float w = stripW(n);
-        float h = QUICK_CELL + 6;
+        float w = stripW(row);
+        float h = stripH(row);
         Matrix3x2fStack m = g.pose();
         m.pushMatrix();
         if (!reducedMotion && eased < 1f) {
@@ -2120,34 +2418,60 @@ public final class MessageList extends PanelWidget {
         }
         Draw.pushAlpha(Ease.OUT.at(t));
         Draw.frame(g, Frames.POPOVER, x, y, w, h);
-        boolean reactions = canReact && reactable(row);
-        int quick = reactions ? QUICK.length : 0;
-        for (int i = 0; i < n; i++) {
+        boolean keys = keyboardFocus();
+        for (int i = 0; i < top; i++) {
+            int kind = stripKind(row, i);
             float cx = x + 3 + i * QUICK_CELL;
             float cy = y + 3;
-            boolean lit = i == hoverQuick || (keyboardFocus() && i == stripFocus);
+            boolean lit = i == hoverQuick || (keys && i == stripFocus);
             if (lit) {
                 Draw.frame(g, Frames.CELL_HOVER, cx, cy, QUICK_CELL, QUICK_CELL);
                 g.requestCursor(CursorTypes.POINTING_HAND);
             }
-            if (keyboardFocus() && i == stripFocus) {
+            if (keys && i == stripFocus) {
                 Draw.frame(g, Frames.CELL_FOCUS, cx, cy, QUICK_CELL, QUICK_CELL);
             }
-            if (i < quick) {
-                OverlayState.Reaction given = row.line.reaction(QUICK_SHOWN[i]);
+            if (kind >= 0 && kind < QUICK.length) {
+                OverlayState.Reaction given = row.line.reaction(QUICK_SHOWN[kind]);
                 if (given != null && given.mine()) {
                     // Already given: a bone dot under it (pressing it takes it back; never gold, BETA2-FIX).
                     Draw.disc(g, 3, cx + QUICK_CELL / 2f, cy + QUICK_CELL - 1f, Theme.BONE_100);
                 }
                 // The game's emoji glyphs are 16 texels: at twice the text size they stay whole pixels.
                 m.pushMatrix();
-                m.translate(cx + (QUICK_CELL - 2f * quickW[i]) / 2f + 1f, cy + 1f);
+                m.translate(cx + (QUICK_CELL - 2f * quickW[kind]) / 2f + 1f, cy + 1f);
                 m.scale(2f, 2f);
-                Draw.text(g, Fonts.ui(), quickLines[i], 0, -0.5f, Theme.BONE_50);
+                Draw.text(g, Fonts.ui(), quickLines[kind], 0, -0.5f, Theme.BONE_50);
                 m.popMatrix();
             } else {
-                Draw.icon(g, Icon.REPLY, 10, cx + (QUICK_CELL - 10) / 2f, cy + (QUICK_CELL - 10) / 2f,
-                    lit ? Theme.BONE_50 : Theme.ASH_300);
+                // "+" (CHAT3: any emoji, the picker) and "Yanıtla".
+                Draw.icon(g, kind == CELL_MORE ? Icon.PLUS : Icon.REPLY, 10, cx + (QUICK_CELL - 10) / 2f,
+                    cy + (QUICK_CELL - 10) / 2f, lit ? Theme.BONE_50 : Theme.ASH_300);
+            }
+        }
+        if (n > top) {
+            // CHAT3: "Düzenle" and "Sil" as words, under a hairline when the reactions' row is over them.
+            float ay = actionsTop(y, top);
+            if (top > 0) {
+                Draw.hairline(g, x + 3, x + w - 3, ay - 1, Theme.withAlpha(0xFFFFFF, 0.07f));
+            }
+            float ax = x + 3;
+            for (int i = top; i < n; i++) {
+                int kind = stripKind(row, i);
+                float aw = actionW(kind);
+                boolean lit = i == hoverQuick || (keys && i == stripFocus);
+                if (lit) {
+                    Draw.frame(g, Frames.CHIP_HOVER, ax, ay, aw, ACTION_H);
+                    g.requestCursor(CursorTypes.POINTING_HAND);
+                }
+                if (keys && i == stripFocus) {
+                    Draw.frame(g, Frames.FOCUS_14, ax, ay, aw, ACTION_H);
+                }
+                boolean delete = kind == CELL_DELETE;
+                Draw.text(g, small, delete ? deleteWord : editWord, ax + 4,
+                    Fonts.centeredY(Fonts.Face.SMALL, ay + ACTION_H / 2f),
+                    delete ? Theme.FLARE_300 : lit ? Theme.BONE_100 : Theme.ASH_300);
+                ax += aw + ACTION_GAP;
             }
         }
         Draw.popAlpha();

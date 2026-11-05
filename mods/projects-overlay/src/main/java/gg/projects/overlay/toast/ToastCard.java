@@ -7,6 +7,7 @@ import gg.projects.overlay.stickers.StickerSet;
 import gg.projects.overlay.ui.Face;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.Marks;
+import gg.projects.overlay.ui.PlanWhen;
 import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
@@ -70,7 +71,8 @@ public final class ToastCard {
     /** The ending of a hint sentence's Fn form ("toast.hint.open.fn": "Açmak için %s tuşlarına bas"). */
     static final String FN_FORM = ".fn";
 
-    public enum Kind { MESSAGE, CALL, INVITE, INFO, TRAVEL, WORLD, HOST, RING }
+    /** {@code SOCIAL} (OVL-SOC2): a request, a new friend, a friend online, a crew invite or request, a plan, a missed call. */
+    public enum Kind { MESSAGE, CALL, INVITE, INFO, TRAVEL, WORLD, HOST, RING, SOCIAL }
 
     final Kind kind;
     final String conversation;
@@ -342,7 +344,38 @@ public final class ToastCard {
             case "invite" -> Kind.INVITE;
             case "info" -> Kind.INFO;
             case "world" -> Kind.WORLD;
+            case "request", "friend", "online", "projects", "crew-invite", "crew-ask", "crew-in", "plan", "missed" ->
+                Kind.SOCIAL;
             default -> Kind.MESSAGE;
+        };
+    }
+
+    /**
+     * OVL-SOC2: what a social card says under its title (the person; a crew's name for "Ekibe katıldın"), in the
+     * overlay's words; a plan's time as the launcher says it in a sentence ("Cumartesi 21:00 için plan yaptı").
+     */
+    /** {@code text} with its first letter a capital, the Turkish way in Turkish ("ilk" to "İlk"). */
+    static String capital(String text) {
+        if (text.isBlank() || Character.isWhitespace(text.codePointAt(0))) {
+            return text;
+        }
+        return Texts.initial(text) + text.substring(text.offsetByCodePoints(0, 1));
+    }
+
+    static String socialBody(OverlayState.ToastRequest request, long now) {
+        String crew = request.crew() == null || request.crew().isEmpty() ? Texts.str("toast.crewmate")
+            : request.crew();
+        return switch (request.kind()) {
+            case "request" -> Texts.str("toast.request");
+            case "friend" -> Texts.str("toast.friend");
+            case "online" -> Texts.str("toast.online");
+            case "projects" -> Texts.str("toast.projects");
+            case "crew-invite" -> Texts.str("toast.crew_invite", crew);
+            case "crew-ask" -> Texts.str("toast.crew_ask", crew);
+            case "crew-in" -> Texts.str("toast.crew_in");
+            // "bugün 21:00 için plan yaptı" opens the card's line: its first letter is a capital.
+            case "plan" -> capital(Texts.str("toast.plan", PlanWhen.of(request.at(), now, true)));
+            default -> Texts.str("toast.missed");
         };
     }
 
@@ -364,22 +397,33 @@ public final class ToastCard {
         Font strong = Fonts.strong();
         Font small = Fonts.small();
         String someone = Texts.str("toast.someone");
-        String name = request.title().isEmpty() ? someone : request.title();
+        // OVL-SOC2: "Ekibe katıldın" is titled by its crew; a plan by someone the lists do not name, "Bir ekip arkadaşın".
+        String name = !request.title().isEmpty() ? request.title()
+            : request.kind().equals("crew-in") && request.crew() != null && !request.crew().isEmpty() ? request.crew()
+            : request.kind().equals("plan") ? Texts.str("toast.crewmate") : someone;
         String bodyText = switch (b.kind) {
             case CALL -> Texts.str("toast.call", request.body().isEmpty() ? someone : request.body());
             case INVITE -> Texts.str("toast.invite");
             case WORLD -> Texts.str("toast.world");
             case INFO, TRAVEL, HOST, RING -> request.body();
             case MESSAGE -> showText && !request.body().isEmpty() ? request.body() : Texts.str("toast.new_message");
+            case SOCIAL -> socialBody(request, System.currentTimeMillis());
         };
-        if (count > 1) {
+        // A plan's note is the player's own words: after the sentence while "Mesaj metnini göster" is on (the
+        // launcher's "…: \"note\"").
+        if (b.kind == Kind.SOCIAL && request.kind().equals("plan") && showText && !request.body().isEmpty()) {
+            bodyText = Texts.str("toast.plan_note", bodyText, request.body());
+        }
+        // One social card stands for one moment (a friend online then on Projects is the same card): no count.
+        if (count > 1 && b.kind != Kind.SOCIAL) {
             b.countText = count > 99 ? "99+" : Integer.toString(count);
             b.countWidth = small.width(b.countText) + 8;
         }
         if (b.kind == Kind.MESSAGE) {
             b.chip = TagChip.of(request.badge(), TagChip.ROW);
         }
-        if ((b.kind == Kind.MESSAGE || b.kind == Kind.INVITE || b.kind == Kind.WORLD) && request.marks() != null) {
+        if ((b.kind == Kind.MESSAGE || b.kind == Kind.INVITE || b.kind == Kind.WORLD || b.kind == Kind.SOCIAL)
+            && request.marks() != null) {
             // The title names a person: their first badge right of the name (BADGES-UI).
             b.marks = request.marks();
         }
@@ -414,7 +458,7 @@ public final class ToastCard {
         String spokenName = b.chip == null ? marked : Texts.str("row.badge", marked, b.chip.badge.tag());
         b.narration = switch (b.kind) {
             case CALL -> Texts.tr("toast.narration.notice", name, bodyText);
-            case INVITE, WORLD -> Texts.tr("toast.narration.notice", marked, bodyText);
+            case INVITE, WORLD, SOCIAL -> Texts.tr("toast.narration.notice", marked, bodyText);
             case INFO, TRAVEL, HOST, RING -> Component.literal(name + ". " + bodyText);
             case MESSAGE -> crewName != null ? Texts.tr("toast.narration.crew", spokenName, crewName, bodyText)
                 : Texts.tr("toast.narration.message", spokenName, bodyText);
@@ -677,7 +721,7 @@ public final class ToastCard {
             }
             // FIX-209: a "Birlikte oyna" invite shows the friend's face as the launcher's card does (OVL-AVATARS A4), not
             // a controller: their picture, the letter until it comes or when they have none.
-            case MESSAGE, INVITE, HOST, WORLD, RING -> {
+            case MESSAGE, INVITE, HOST, WORLD, RING, SOCIAL -> {
                 if (face != null) {
                     face.draw(g, FACE, cx, cy);
                 } else {

@@ -75,6 +75,8 @@ public final class OverlayScreen extends Screen {
     private static final int HEADER_H = 30;
     private static final int COMPOSER_H = 22;
     private static final int REPLY_H = 20;
+    /** CHAT3: the one-line strip over the field while the player edits a message of theirs. */
+    private static final int EDIT_H = 18;
     private static final int LINE_PLATE_H = 14;
     /**
      * The conversation keeps at least this much height before crew chat's quick replies take their row (a short GUI,
@@ -124,6 +126,8 @@ public final class OverlayScreen extends Screen {
     /** Crew chat's "Sesli": the crew's voice rooms under the conversation chips (OVL-SOC). */
     private final CrewVoiceStrip crewVoice;
     private int crewVoiceSpeaking = -1;
+    /** OVL-SOC2: crew chat's own line ("Ekibi çağır", the next plan, "Plan yap"). */
+    private final CrewBar crewBar;
     /** The screen the panel came from (the pause menu), or null: closing goes back to it. */
     private final Screen parent;
     private final Tween lineAlpha = new Tween(0f);
@@ -211,6 +215,19 @@ public final class OverlayScreen extends Screen {
     private int replyY = -1;
     private FormattedCharSequence replyTitle;
     private FormattedCharSequence replyQuote;
+    /**
+     * CHAT3: the player's own message being edited in the field (the strip over it says so; it and a reply exclude each
+     * other), its conversation, its words as the field compares them, and the draft and reply from before the edit
+     * (they come back when it ends).
+     */
+    private OverlayState.ChatLine editing;
+    private String editConversation;
+    private String editingWords = "";
+    private String draftBeforeEdit = "";
+    private OverlayState.Reply replyBeforeEdit;
+    private FormattedCharSequence editTitle;
+    /** CHAT3: "Başka tepki": the emoji picker reacts to this message instead of writing into the field. */
+    private OverlayState.ChatLine reactTo;
     /** "Ayşe yazıyor…" or a note: what the line at the bottom of the conversation says now. */
     private FormattedCharSequence lineText;
     private float lineWidth;
@@ -250,6 +267,19 @@ public final class OverlayScreen extends Screen {
         back = new IconButton(Icon.BACK, Texts.tr("panel.back"), this::goBack);
         host = new HostPanel(this, overlay);
         voice = new VoicePanel(this, overlay);
+        crewBar = new CrewBar(new CrewBar.Actions() {
+            @Override
+            public void call(String crew) {
+                overlay.callCrew(crew, crewNameOf(crew), conversation);
+            }
+
+            @Override
+            public void plans(String crew, boolean make) {
+                closeMenu();
+                Compat.setScreen(minecraft, new PlanScreen(OverlayScreen.this, overlay, crew, crewNameOf(crew),
+                    make));
+            }
+        });
         crewVoice = new CrewVoiceStrip(new CrewVoiceStrip.Actions() {
             @Override
             public void join(String crew, String room) {
@@ -299,6 +329,11 @@ public final class OverlayScreen extends Screen {
             public void rewrite(OverlayState.ChatLine line) {
                 OverlayState.ChatLine taken = state.takeFailed(line.clientId, now());
                 if (taken != null) {
+                    if (editing != null) {
+                        // Its words go again as a new message: an edit open in the field ends first (CHAT3).
+                        leaveEdit(false);
+                        layout();
+                    }
                     field.setValue(taken.text);
                     lastDraft = field.getValue();
                     if (taken.reply != null && taken.reply.sid() > 0) {
@@ -316,6 +351,21 @@ public final class OverlayScreen extends Screen {
             @Override
             public void reply(OverlayState.ChatLine line) {
                 startReply(line);
+            }
+
+            @Override
+            public void edit(OverlayState.ChatLine line) {
+                startEdit(line);
+            }
+
+            @Override
+            public void delete(OverlayState.ChatLine line) {
+                askDelete(line);
+            }
+
+            @Override
+            public void moreReactions(OverlayState.ChatLine line) {
+                pickReaction(line);
             }
 
             @Override
@@ -367,6 +417,16 @@ public final class OverlayScreen extends Screen {
             public void requestMenu(String requestId, String name, PersonMenu.Anchor anchor, boolean keys) {
                 openRequestMenu(requestId, name, anchor, keys);
             }
+
+            @Override
+            public void add(boolean crew) {
+                openAdd(crew);
+            }
+
+            @Override
+            public void answerRow(String key, boolean accept) {
+                OverlayScreen.this.answerRow(key, accept);
+            }
         });
         friendFilter.setMaxLength(32);
         friendFilter.setPlaceholder(Texts.tr("friends.search"));
@@ -403,7 +463,9 @@ public final class OverlayScreen extends Screen {
             // CHAT-EMOJI: the launcher's emoji picker switch, once the launcher has spoken of it.
             overlay.emojis().heard() ? overlay.emojiSwitch() : null,
             // VOICE-O: "Konuşanları göster", once the launcher has spoken of voice chat.
-            overlay.voice().heard());
+            overlay.voice().heard(),
+            // OVL-SOC2: the card kinds, the launcher's notification switches and the blocked people, as it says them.
+            SettingsList.People.of(overlay::state, overlay::setNotify, overlay::unblock));
         lastListPage = state.has("chat") || !state.welcomed() ? Page.CHATS : Page.FRIENDS;
         page = overlay.lastPage() == Page.SETTINGS || overlay.lastPage() == Page.WORLD
             || (overlay.lastPage() == Page.VOICE && !overlay.voice().inRoom()) ? lastListPage : overlay.lastPage();
@@ -412,6 +474,12 @@ public final class OverlayScreen extends Screen {
         }
         if (page != Page.SETTINGS && page != Page.WORLD && page != Page.VOICE) {
             lastListPage = page;
+        }
+        // OVL-SOC2: a recent social card opens the panel where its answer is (the friends page, its crew chat).
+        Page fromCard = start == null ? overlay.toastPage() : null;
+        if (fromCard == Page.FRIENDS || fromCard == Page.CHATS && state.has("chat")) {
+            page = fromCard;
+            lastListPage = fromCard;
         }
         if (start == Page.WORLD) {
             page = Page.WORLD;
@@ -434,9 +502,11 @@ public final class OverlayScreen extends Screen {
         if (from.conversation != null) {
             conversation = from.conversation;
         }
-        field.setValue(from.field.getValue());
+        // An edit does not carry over (CHAT3): its words would go as a new message; the draft from before it does.
+        boolean edit = from.editing != null;
+        field.setValue(edit ? from.draftBeforeEdit : from.field.getValue());
         lastDraft = field.getValue();
-        carriedReply = from.replyTo;
+        carriedReply = edit ? from.replyBeforeEdit : from.replyTo;
         settingsList.carry(from.settingsList);
         long now = now();
         openedAt = now - 10 * ENTER_MS;
@@ -1056,10 +1126,14 @@ public final class OverlayScreen extends Screen {
             }
             case REPORT -> openReport(friendId);
             // OVL-SOC 2: a friend request's answers and the status switcher (without SOC-NEXT's durations).
-            case ACCEPT_REQUEST, DECLINE_REQUEST -> {
+            case ACCEPT_REQUEST, DECLINE_REQUEST, CANCEL_REQUEST -> {
                 String name = requestName(friendId);
-                if (name != null) {
-                    overlay.answerRequest(friendId, name, action == FriendMenu.Action.ACCEPT_REQUEST);
+                boolean accept = action == FriendMenu.Action.ACCEPT_REQUEST;
+                if (name != null && isAnswerKey(friendId)) {
+                    // OVL-SOC2: a crew invite, a join request, a request the player sent.
+                    answerRow(friendId, accept);
+                } else if (name != null) {
+                    overlay.answerRequest(friendId, name, accept);
                 }
             }
             case STATUS_ONLINE -> overlay.chooseStatus("online", null);
@@ -1270,27 +1344,135 @@ public final class OverlayScreen extends Screen {
             new PersonMenu.Choice("forever", Texts.str("status.preset.forever"), false, false));
     }
 
-    /** OVL-SOC 2: a friend request's two answers ("Kabul et" first) at {@code anchor}. */
+    /**
+     * OVL-SOC 2: a friend request's two answers ("Kabul et" first) at {@code anchor}. OVL-SOC2: a crew invite's and a
+     * join request's too, with their own line on top; a request the player sent has "İsteği geri çek" alone.
+     */
     private void openRequestMenu(String id, String name, PersonMenu.Anchor anchor, boolean keys) {
         if (requestName(id) == null) {
             return;
         }
-        List<FriendMenu.Row> rows = List.of(new FriendMenu.Row(FriendMenu.Action.ACCEPT_REQUEST, false, false),
-            new FriendMenu.Row(FriendMenu.Action.DECLINE_REQUEST, false, false));
-        menu.noteNext(Texts.str("friend.wants_to_add"));
+        List<FriendMenu.Row> rows = id.startsWith("out:")
+            ? List.of(new FriendMenu.Row(FriendMenu.Action.CANCEL_REQUEST, false, false))
+            : List.of(new FriendMenu.Row(FriendMenu.Action.ACCEPT_REQUEST, false, false),
+                new FriendMenu.Row(FriendMenu.Action.DECLINE_REQUEST, false, false));
+        menu.noteNext(answerLine(id));
         if (openRows(id, name, rows, action -> List.of(), anchor, keys)) {
             friends.setMenuFor(id, !anchor.pointer());
         }
     }
 
-    /** The name of whoever asked to be friends with {@code id}, or null when no such request is listed. */
+    /** The quiet line over an answer row's menu: what it is about. */
+    private String answerLine(String id) {
+        if (id.startsWith("invite:")) {
+            OverlayState.Invite invite = inviteOf(id);
+            return invite == null ? "" : Texts.str("friend.crew_invite", invite.name());
+        }
+        if (id.startsWith("ask:")) {
+            OverlayState.Ask ask = askOf(id);
+            return ask == null ? "" : Texts.str("friend.crew_ask", ask.crewName());
+        }
+        if (id.startsWith("out:")) {
+            return Texts.str("friend.request_waiting");
+        }
+        return Texts.str("friend.wants_to_add");
+    }
+
+    /** OVL-SOC2: the friend list's answer rows other than friend requests are keyed by what they are. */
+    private static boolean isAnswerKey(String id) {
+        return id.startsWith("invite:") || id.startsWith("ask:") || id.startsWith("out:");
+    }
+
+    private OverlayState.Invite inviteOf(String key) {
+        String crew = key.substring("invite:".length());
+        for (OverlayState.Invite i : state.invites()) {
+            if (i.crew().equals(crew)) {
+                return i;
+            }
+        }
+        return null;
+    }
+
+    private OverlayState.Ask askOf(String key) {
+        String rest = key.substring("ask:".length());
+        int cut = rest.lastIndexOf(':');
+        if (cut < 0) {
+            return null;
+        }
+        String crew = rest.substring(0, cut);
+        String id = rest.substring(cut + 1);
+        for (OverlayState.Ask a : state.asks()) {
+            if (a.crew().equals(crew) && a.id().equals(id)) {
+                return a;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * OVL-SOC2: the chip ({@code accept}) or the × of an answer row: "Katıl" / "Reddet" on a crew invite, "Kabul et" /
+     * "Reddet" on a join request, "İsteği geri çek" on a request the player sent.
+     */
+    private void answerRow(String key, boolean accept) {
+        if (key.startsWith("invite:")) {
+            OverlayState.Invite invite = inviteOf(key);
+            if (invite != null) {
+                overlay.answerInvite(invite.crew(), invite.name(), accept);
+            }
+        } else if (key.startsWith("ask:")) {
+            OverlayState.Ask ask = askOf(key);
+            if (ask != null) {
+                overlay.answerAsk(ask.crew(), ask.id(), ask.name(), accept);
+            }
+        } else if (key.startsWith("out:") && !accept) {
+            String id = key.substring("out:".length());
+            for (OverlayState.Request r : state.outgoing()) {
+                if (r.id().equals(id)) {
+                    overlay.cancelRequest(id, r.name());
+                }
+            }
+        }
+    }
+
+    /**
+     * The name of whoever asked to be friends with {@code id}, or null when no such request is listed. OVL-SOC2: a crew
+     * invite's crew, a join request's or a sent request's person, by their row's key.
+     */
     private String requestName(String id) {
+        if (id.startsWith("invite:")) {
+            OverlayState.Invite invite = inviteOf(id);
+            return invite == null ? null : invite.name();
+        }
+        if (id.startsWith("ask:")) {
+            OverlayState.Ask ask = askOf(id);
+            return ask == null ? null : ask.name();
+        }
+        if (id.startsWith("out:")) {
+            String person = id.substring("out:".length());
+            for (OverlayState.Request r : state.outgoing()) {
+                if (r.id().equals(person)) {
+                    return r.name();
+                }
+            }
+            return null;
+        }
         for (OverlayState.Request r : state.requests()) {
             if (r.id().equals(id)) {
                 return r.name();
             }
         }
         return null;
+    }
+
+    /** OVL-SOC2: "Arkadaş ekle" ({@code crew} false) or "Ekibe katıl": the code's dialog over the panel. */
+    private void openAdd(boolean crew) {
+        closeMenu();
+        Compat.setScreen(minecraft, new AddScreen(this, overlay, crew));
+    }
+
+    /** OVL-SOC2: the scenario driver presses the friend list's "Arkadaş ekle" ({@code crew} false) or "Ekibe katıl". */
+    public void openAddForDriver(boolean crew) {
+        openAdd(crew);
     }
 
     /** Opens a menu of {@code rows} that is no person's plan (the status switcher, a request's answers). */
@@ -1564,8 +1746,8 @@ public final class OverlayScreen extends Screen {
         // The picker floats over the conversation: it is asked about a click before the list under it.
         for (AbstractWidget w : new AbstractWidget[] {emojiPicker, picker, gear, back, retry, answers[0], answers[1],
             answers[2],
-            callJoin, tabs, chips, crewVoice, messages, quick, replyClose, field, stickerButton, send, statusButton,
-            friendFilter, friends, settingsList}) {
+            callJoin, tabs, chips, crewVoice, crewBar, messages, quick, replyClose, field, stickerButton, send,
+            statusButton, friendFilter, friends, settingsList}) {
             addWidget(w);
         }
         for (AbstractWidget w : host.widgets()) {
@@ -1606,6 +1788,12 @@ public final class OverlayScreen extends Screen {
             case WORLD -> host.initialFocus();
             case VOICE -> voice.initialFocus();
         };
+    }
+
+    /** OVL-SOC2: a crew's name as its conversation is titled, else empty. */
+    private String crewNameOf(String crew) {
+        OverlayState.Conversation c = state.conversation(state.conversationOfCrew(crew));
+        return c == null ? "" : c.title();
     }
 
     private boolean isCrew(String conv) {
@@ -1717,6 +1905,11 @@ public final class OverlayScreen extends Screen {
     }
 
     private boolean canSend() {
+        if (editing != null) {
+            // CHAT3: an edit waits out no slow mode, and words left as they were have nothing to save (the launcher's).
+            String text = Protocol.plain(field.getValue(), Protocol.MAX_MESSAGE_CHARS);
+            return composerOpen() && !text.isEmpty() && !text.equals(editingWords);
+        }
         return composerOpen() && slowLeft() == 0
             && !Protocol.plain(field.getValue(), Protocol.MAX_MESSAGE_CHARS).isEmpty();
     }
@@ -1749,6 +1942,10 @@ public final class OverlayScreen extends Screen {
     }
 
     private void sendDraft() {
+        if (editing != null) {
+            saveEdit();
+            return;
+        }
         String text = Protocol.plain(field.getValue(), Protocol.MAX_MESSAGE_CHARS);
         // In slow mode the text waits in the field until it may go.
         if (text.isEmpty() || !composerOpen() || slowLeft() > 0) {
@@ -1789,12 +1986,20 @@ public final class OverlayScreen extends Screen {
         if (!composerOpen() || !state.has("replies") || line.sid <= 0) {
             return;
         }
+        // A reply and an edit exclude each other (CHAT3): the edit ends, its draft comes back for the reply.
+        leaveEdit(false);
         setReply(OverlayState.quoteOf(line));
         setFocused(field);
     }
 
     private void setReply(OverlayState.Reply quote) {
         replyTo = quote;
+        replyWords(quote);
+        layout();
+    }
+
+    /** The reply strip's words for {@code quote} ("Yanıtlanıyor: Ayşe" over what was said). */
+    private void replyWords(OverlayState.Reply quote) {
         Font small = Fonts.small();
         int room = Math.max(40, panelW - 2 * P - 8 - 12 - 6 - IconButton.SIZE - 4);
         String name = quote.mine() ? Texts.str("chat.quote.you") : quote.from().isEmpty() ? Texts.str("toast.someone")
@@ -1809,14 +2014,146 @@ public final class OverlayScreen extends Screen {
             said = quote.text() == null ? "" : quote.text();
         }
         replyQuote = Texts.visual(Texts.fit(small, said, room));
-        layout();
     }
 
+    /**
+     * Takes the strip over the field away (its ✕, another conversation): the reply, or an edit (CHAT3), whose draft from
+     * before it comes back.
+     */
     private void clearReply() {
+        if (editing != null) {
+            leaveEdit(true);
+            layout();
+            return;
+        }
         if (replyTo != null) {
             replyTo = null;
             layout();
         }
+    }
+
+    // ---- Editing and deleting the player's own messages, any reaction (CHAT3) ---------------------------
+
+    /**
+     * "Düzenle" on the player's own message: the field takes its words and the strip over it says "Mesajı
+     * düzenliyorsun"; Enter or the send button saves, ✕ or Esc leaves the edit. A reply waits meanwhile (it and the
+     * draft come back when the edit ends).
+     */
+    private void startEdit(OverlayState.ChatLine line) {
+        if (line == null || conversation == null || !composerOpen() || !state.chat3()
+            || !MessageList.editable(line, System.currentTimeMillis())) {
+            return;
+        }
+        if (editing == null) {
+            draftBeforeEdit = field.getValue();
+            replyBeforeEdit = replyTo;
+        }
+        replyTo = null;
+        editing = line;
+        editConversation = conversation;
+        String words = line.text == null ? "" : line.text;
+        editingWords = Protocol.plain(words, Protocol.MAX_MESSAGE_CHARS);
+        field.setValue(words);
+        lastDraft = field.getValue();
+        int room = Math.max(40, panelW - 2 * P - 8 - 6 - IconButton.SIZE - 2);
+        editTitle = Texts.visual(Texts.fit(Fonts.small(), Texts.str("chat.editing"), room));
+        layout();
+        focusAfterPress(field);
+        // The strip is drawn only: the narrator says it (the field then reads its words, the send button "Kaydet").
+        minecraft.getNarrator().saySystemQueued(Texts.tr("chat.editing"));
+    }
+
+    /**
+     * The edit ends (saved, left, its conversation or its message gone): the draft from before it comes back, and its
+     * reply with {@code restoreReply} while the same conversation is open. The caller lays out.
+     */
+    private void leaveEdit(boolean restoreReply) {
+        if (editing == null) {
+            return;
+        }
+        boolean same = Objects.equals(conversation, editConversation);
+        editing = null;
+        editConversation = null;
+        editingWords = "";
+        editTitle = null;
+        field.setValue(draftBeforeEdit == null ? "" : draftBeforeEdit);
+        lastDraft = field.getValue();
+        OverlayState.Reply quote = replyBeforeEdit;
+        draftBeforeEdit = "";
+        replyBeforeEdit = null;
+        if (restoreReply && same && quote != null && quote.sid() > 0 && state.has("replies")) {
+            replyTo = quote;
+            replyWords(quote);
+        }
+    }
+
+    /** Enter or the send button during an edit: the new words go (the message comes back "düzenlendi"). */
+    private void saveEdit() {
+        OverlayState.ChatLine line = editing;
+        String conv = editConversation;
+        String text = Protocol.plain(field.getValue(), Protocol.MAX_MESSAGE_CHARS);
+        if (line == null || text.isEmpty() || !composerOpen()) {
+            // Empty words do not go: the edit stays (✕ or Esc leaves it).
+            return;
+        }
+        boolean changed = !text.equals(editingWords);
+        leaveEdit(true);
+        layout();
+        if (changed && conv != null) {
+            // The service decides (15 minutes): a refusal comes back as the chat's note.
+            overlay.editMessage(conv, line.sid, text);
+        }
+    }
+
+    /** "Sil" on the player's own message: asked first, the keys on "Vazgeç"; then it goes for everyone. */
+    private void askDelete(OverlayState.ChatLine line) {
+        String conv = conversation;
+        if (line == null || conv == null || !state.online() || !state.chat3()
+            || !MessageList.deletable(line, System.currentTimeMillis())) {
+            return;
+        }
+        long sid = line.sid;
+        ask(new ConfirmScreen.Question(Texts.tr("chat.delete.ask"), null, null, Texts.tr("chat.delete"), null, true),
+            () -> {
+                if (editing != null && editing.sid == sid) {
+                    // The message being edited goes, and its edit with it.
+                    leaveEdit(true);
+                    layout();
+                }
+                overlay.deleteMessage(conv, sid);
+            });
+    }
+
+    /** "Başka tepki": the emoji picker opens to react to this message (a pick reacts and closes it; Esc closes it). */
+    private void pickReaction(OverlayState.ChatLine line) {
+        if (line == null || line.sid <= 0 || line.deleted || !composerOpen() || !state.has("reactions")) {
+            return;
+        }
+        reactTo = line;
+        openPicker(PickerTabs.EMOJI, false, false);
+        if (!emojiPicker.isOpen()) {
+            reactTo = null;
+        }
+    }
+
+    /** An emoji picked for {@link #reactTo}: the same reaction the quick ones give (again: taken back). */
+    private void reactWith(String emoji) {
+        OverlayState.ChatLine line = reactTo;
+        // The message's own conversation (the panel may have moved on since the picker opened).
+        String conv = line == null ? null : state.conversationOf(line);
+        closePickers();
+        layout();
+        if (line == null || conv == null || emoji == null || emoji.isEmpty() || line.sid <= 0
+            || !state.has("reactions")) {
+            return;
+        }
+        String shown = Protocol.plain(emoji, 8);
+        if (shown.isEmpty()) {
+            return;
+        }
+        OverlayState.Reaction given = line.reaction(shown);
+        overlay.react(conv, line, given != null ? given.emoji() : emoji, shown, given == null || !given.mine());
+        overlay.updateSettings(s -> s.withChatEmojiUsed(emoji));
     }
 
     private void togglePicker() {
@@ -1828,8 +2165,9 @@ public final class OverlayScreen extends Screen {
         }
     }
 
+    /** Stickers in the picker: while the service takes them, never for an edit or a reaction (CHAT3). */
     private boolean stickersOn() {
-        return state.has("stickers") && !StickerSet.get().isEmpty();
+        return state.has("stickers") && !StickerSet.get().isEmpty() && editing == null && reactTo == null;
     }
 
     private boolean pickerOpen() {
@@ -1838,6 +2176,8 @@ public final class OverlayScreen extends Screen {
 
     private void closePickers() {
         boolean hadKeys = getFocused() == picker || getFocused() == emojiPicker;
+        // A reaction picker closed without a pick gives nothing (CHAT3).
+        reactTo = null;
         picker.close();
         emojiPicker.close();
         if (hadKeys) {
@@ -1890,7 +2230,11 @@ public final class OverlayScreen extends Screen {
         }
         picker.close();
         emojiPicker.open(emoji, drawableEmoji(), overlay.settings().recentChatEmojis(), both, swap, keysOnTabs, now);
-        overlay.rememberPickerTab(PickerTabs.EMOJI);
+        // CHAT3: "Başka tepki" opens it for a reaction; neither that nor an edit is the player's choice of tab.
+        emojiPicker.setReacting(reactTo != null);
+        if (reactTo == null && editing == null) {
+            overlay.rememberPickerTab(PickerTabs.EMOJI);
+        }
         layout();
         // As the launcher's picker: its search has the keys (letters find, the arrows pick, Enter writes).
         focusAfterPress(emojiPicker);
@@ -1901,6 +2245,11 @@ public final class OverlayScreen extends Screen {
      * A pointer's pick hands the keys back to the message; Enter's keeps them in the picker.
      */
     private void insertEmoji(String emoji, boolean keys) {
+        if (reactTo != null) {
+            // CHAT3: opened by "Başka tepki": the pick is a reaction, nothing goes into the field.
+            reactWith(emoji);
+            return;
+        }
         if (!composerOpen() || emoji == null || emoji.isEmpty()) {
             return;
         }
@@ -1923,7 +2272,8 @@ public final class OverlayScreen extends Screen {
             return;
         }
         lastDraft = value;
-        if (!value.isBlank() && conversation != null && composerOpen() && state.has("typing")) {
+        // An edit (CHAT3) is no new message on its way: no "yazıyor…".
+        if (editing == null && !value.isBlank() && conversation != null && composerOpen() && state.has("typing")) {
             overlay.typing(conversation);
         }
     }
@@ -2117,15 +2467,31 @@ public final class OverlayScreen extends Screen {
             crewVoiceSpeaking = overlay.voice().speakingRevision();
             y += CrewVoiceStrip.HEIGHT + 6;
         }
+        // OVL-SOC2: crew chat's own line: "Ekibi çağır" and the crew's next plan (or "Plan yap").
+        String barCrew = isCrew(conversation) && state.online() && (state.crews2() || state.plansOn())
+            ? state.crewOf(conversation) : null;
+        if (barCrew != null) {
+            PanelWidget.place(crewBar, x0, y, cw, CrewBar.HEIGHT);
+            if (crewBar.show(state, barCrew, System.currentTimeMillis())) {
+                crewBar.visible = true;
+                y += CrewBar.HEIGHT + 6;
+            }
+        }
         composerY = height - P - COMPOSER_H;
         int listBottom = composerY - 6;
         composerNote = null;
+        if (editing != null && (!composerOpen() || !state.chat3() || editing.deleted
+            || !Objects.equals(conversation, editConversation))) {
+            // CHAT3: an edit ends with what made it possible (the field, its conversation, the message itself).
+            leaveEdit(composerOpen());
+        }
         if (conversation == null) {
             listBottom = height - P;
         } else if (composerOpen()) {
             field.visible = true;
             field.setEditable(true);
             send.visible = true;
+            send.setMessage(Texts.tr(editing != null ? "chat.edit.save" : "chat.send"));
             // The picker's button: emoji always (the launcher's set is in the jar), stickers when the service takes them.
             boolean stickers = true;
             int stickerRoom = stickers ? IconButton.SIZE + 2 : 0;
@@ -2156,19 +2522,30 @@ public final class OverlayScreen extends Screen {
             hintShown = hint.getString();
             int above = composerY;
             replyY = -1;
-            if (replying()) {
+            if (editing != null) {
+                // CHAT3: "Mesajı düzenliyorsun" over the field in the reply strip's place; its ✕ leaves the edit.
+                replyY = composerY - 4 - EDIT_H;
+                replyClose.visible = true;
+                replyClose.setMessage(Texts.tr("join.cancel"));
+                PanelWidget.place(replyClose, x0 + cw - IconButton.SIZE - 2, replyY + (EDIT_H - IconButton.SIZE) / 2,
+                    IconButton.SIZE, IconButton.SIZE);
+                above = replyY;
+                listBottom = replyY - 6;
+            } else if (replying()) {
                 replyY = composerY - 4 - REPLY_H;
                 replyClose.visible = true;
+                replyClose.setMessage(Texts.tr("chat.reply.cancel"));
                 PanelWidget.place(replyClose, x0 + cw - IconButton.SIZE - 2, replyY + (REPLY_H - IconButton.SIZE) / 2,
                     IconButton.SIZE, IconButton.SIZE);
                 above = replyY;
                 listBottom = replyY - 6;
             }
-            // Crew chat's quick replies (CHAT2-O2 follow-up: they always took a row): not while a reply is written
-            // (one would go as the reply; the launcher hides them too), not under the sticker picker, and only while
-            // the conversation keeps room for a few messages.
+            // Crew chat's quick replies (CHAT2-O2 follow-up: they always took a row): not while a reply or an edit is
+            // written (one would go as a new message; the launcher hides them too), not under the sticker picker, and
+            // only while the conversation keeps room for a few messages.
             int qy = above - 6 - QuickReplies.HEIGHT;
-            if (isCrew(conversation) && !replying() && !pickerOpen() && qy - 6 - y >= MIN_LIST_WITH_QUICK) {
+            if (isCrew(conversation) && !replying() && editing == null && !pickerOpen()
+                && qy - 6 - y >= MIN_LIST_WITH_QUICK) {
                 quick.visible = true;
                 PanelWidget.place(quick, x0, qy, cw, QuickReplies.HEIGHT);
                 quick.setHidden(!field.getValue().isEmpty(), now);
@@ -2214,7 +2591,8 @@ public final class OverlayScreen extends Screen {
 
     private void hideAll() {
         for (AbstractWidget w : new AbstractWidget[] {retry, answers[0], answers[1], answers[2], callJoin, tabs,
-            chips, crewVoice, messages, quick, field, send, friends, settingsList, stickerButton, replyClose,
+            chips, crewVoice, crewBar, messages, quick, field, send, friends, settingsList, stickerButton,
+            replyClose,
             statusButton, friendFilter}) {
             w.visible = false;
         }
@@ -2423,6 +2801,11 @@ public final class OverlayScreen extends Screen {
         if (messages.dismiss()) {
             return true;
         }
+        if (editing != null && page == Page.CHATS) {
+            // CHAT3: Esc leaves an edit before the panel (the draft from before it comes back).
+            clearReply();
+            return true;
+        }
         if (replyTo != null) {
             clearReply();
             return true;
@@ -2582,6 +2965,10 @@ public final class OverlayScreen extends Screen {
         if (voice.ringOver(System.currentTimeMillis())) {
             layout();
         }
+        // OVL-SOC2: crew chat's plan says "Başladı" on time, and goes when the plan is over.
+        if (crewBar.visible && crewBar.stale(System.currentTimeMillis())) {
+            layout();
+        }
     }
 
     // ---- Drawing ------------------------------------------------------------------------------------
@@ -2690,6 +3077,7 @@ public final class OverlayScreen extends Screen {
             crewVoice.speaking(overlay.voice(), now);
         }
         renderUnder(g, crewVoice, underPicker, mouseX, mouseY);
+        renderUnder(g, crewBar, underPicker, mouseX, mouseY);
         Draw.stratum(g);
         messages.setFloatingShown(lineText == null ? 0f : lineAlpha.value(now));
         render(g, messages, mouseX, mouseY);
@@ -2867,7 +3255,8 @@ public final class OverlayScreen extends Screen {
             hintShown = hint.getString();
         }
         int length = field.getValue().codePointCount(0, field.getValue().length());
-        int wait = slowLeft();
+        // An edit (CHAT3) waits out no slow mode.
+        int wait = editing != null ? 0 : slowLeft();
         if (wait > 0 && length > 0 && length < 250) {
             String left = Texts.str("chat.slow.seconds", wait);
             Font small = Fonts.small();
@@ -2882,13 +3271,21 @@ public final class OverlayScreen extends Screen {
         }
     }
 
-    /** "Yanıtlanıyor: Ayşe" and the quoted line over the field, with ✕. */
+    /** "Yanıtlanıyor: Ayşe" and the quoted line over the field, with ✕; "Mesajı düzenliyorsun" in an edit (CHAT3). */
     private void drawReplyStrip(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        int x0 = panelX + P;
+        int cw = panelW - 2 * P;
+        if (replyY >= 0 && editing != null && editTitle != null) {
+            // One quiet line, as the launcher's: the field under it holds the words, the send button saves them.
+            Draw.frame(g, Frames.CARD, x0, replyY, cw, EDIT_H);
+            Draw.text(g, Fonts.small(), editTitle, x0 + 8, Fonts.centeredY(Fonts.Face.SMALL, replyY + EDIT_H / 2f),
+                Theme.BONE_100);
+            render(g, replyClose, mouseX, mouseY);
+            return;
+        }
         if (replyY < 0 || replyTitle == null) {
             return;
         }
-        int x0 = panelX + P;
-        int cw = panelW - 2 * P;
         // As the launcher's strip: the gold arrow beside both lines, who is answered over what was said (no
         // colored bar at the edge).
         Draw.frame(g, Frames.CARD, x0, replyY, cw, REPLY_H);
