@@ -1071,9 +1071,20 @@ function onShareDev(socket, frame) {
       return true;
     case "share-private":
       // What pl-overlay's keep_private leaves of a message and an invite while the game is shared.
-      send(socket, { t: "toast", kind: "message", key: "conv:dm:ayse", title: "", body: "", conv: "dm:ayse" });
-      later(150, () => send(socket, { t: "toast", kind: "invite", key: "invite:private", title: "", body: "" }));
-      later(300, () => send(socket, { t: "toast", kind: "call", key: "call:private", title: "", body: "" }));
+      send(socket, {
+        t: "toast",
+        kind: "message",
+        key: "conv:dm:ayse",
+        title: "",
+        body: "",
+        conv: "dm:ayse",
+      });
+      later(150, () =>
+        send(socket, { t: "toast", kind: "invite", key: "invite:private", title: "", body: "" }),
+      );
+      later(300, () =>
+        send(socket, { t: "toast", kind: "call", key: "call:private", title: "", body: "" }),
+      );
       return true;
     default:
       return false;
