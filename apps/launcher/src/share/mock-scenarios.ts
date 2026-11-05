@@ -248,7 +248,7 @@ export function mockFrame(person: string): string {
 export const MOCK_SOURCES: ShareSources = {
   game: {
     source: { kind: "game" },
-    label: "Minecraft 1.21.4",
+    label: "Minecraft 26.1.2",
     app: "javaw",
     thumb: scene("#7fb0de", "#4a7a35", "#f6dc78", 5),
     primary: false,

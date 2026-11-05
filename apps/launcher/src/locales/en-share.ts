@@ -105,7 +105,7 @@ export const enShare = {
     idle: "Your share stopped because nobody was watching.",
     sourceGone: "The shared window was closed.",
     gameGone: "Your share stopped because the game closed.",
-    network: "Sharing can't start from this network.",
+    network: "Screen sharing can't start on this network.",
     limited: "New accounts can only watch for a while.",
     stopped: "Your share stopped.",
     unsupported: "This computer can't share.",

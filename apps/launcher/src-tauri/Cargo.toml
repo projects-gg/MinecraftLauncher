@@ -71,6 +71,8 @@ pl-host = { workspace = true }
 pl-worlds = { workspace = true }
 pl-items = { workspace = true }
 pl-voice = { workspace = true }
+# SHARE: the screen share publisher (capture, H.264, process audio, the SFU transport).
+pl-share = { workspace = true }
 pl-telemetry = { workspace = true }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

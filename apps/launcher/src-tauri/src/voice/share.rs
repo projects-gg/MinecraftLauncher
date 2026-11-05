@@ -1,8 +1,9 @@
 //! Screen sharing in the app (SHARE; the lead's contract `docs/tasks/share.md` §6): the
-//! publisher behind `pl_voice::share::ShareCmd` (SHARE-N's `pl-share` once it lands; until then
-//! a stand-in that cannot share, so the page offers watching only), the pages that watch (the main
-//! window and the "Yayın" window, each through the channel it attaches), the "Yayın" window
-//! itself, and the privacy of the player's own windows while they share:
+//! publisher behind `pl_voice::share::ShareCmd` (SHARE-N's `pl-share`, [`super::share_native`];
+//! where it cannot start, a stand-in that cannot share, so the page offers watching only), the
+//! service's word on sharing ([`service_of`]), the pages that watch (the main window and the
+//! "Yayın" window, each through the channel it attaches), the "Yayın" window itself, and the
+//! privacy of the player's own windows while they share:
 //!
 //! - "Launcher'ı yayında gizle": the launcher's windows leave every capture
 //!   (`WDA_EXCLUDEFROMCAPTURE`), so a whole screen never shows its chats;
@@ -33,7 +34,7 @@ pub trait Publisher: Send + Sync + 'static {
     fn command(&self, cmd: ShareCmd, game_pid: Option<u32>);
 }
 
-/// Until `pl-share` lands: nothing can be shared here (watching works all the same).
+/// Where the publisher cannot start: nothing can be shared here (watching works all the same).
 struct Unavailable {
     voice: Voice,
 }
@@ -60,7 +61,7 @@ impl Publisher for Unavailable {
 /// The app's share parts.
 struct Parts {
     app: AppHandle,
-    publisher: Box<dyn Publisher>,
+    publisher: Arc<dyn Publisher>,
     /// The watching pages' channels: [main, popout].
     channels: Mutex<[Option<Channel<WatchCmd>>; 2]>,
 }
@@ -86,9 +87,12 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 /// Wires the publisher to voice chat (in setup, after `voice::create`).
 pub fn install(app: &AppHandle, voice: &Voice) {
-    let publisher: Box<dyn Publisher> = Box::new(Unavailable {
-        voice: voice.clone(),
-    });
+    let publisher: Arc<dyn Publisher> = match super::share_native::Native::start(app, voice) {
+        Some(native) => native,
+        None => Arc::new(Unavailable {
+            voice: voice.clone(),
+        }),
+    };
     let (available, audio, high) = publisher.caps();
     let _ = PARTS.set(Arc::new(Parts {
         app: app.clone(),
@@ -96,6 +100,23 @@ pub fn install(app: &AppHandle, voice: &Voice) {
         channels: Mutex::new([None, None]),
     }));
     voice.set_share_publisher(available, audio, high);
+}
+
+/// What the service allows of screen sharing (`hello.voice.share`, SHARE-S): none while Studio's
+/// switch is off or the service is older.
+pub fn service_of(status: &pl_social::VoiceStatus) -> Option<pl_voice::share::ServiceShare> {
+    use pl_voice::share::SharePreset;
+    let share = status.share.filter(|share| share.on)?;
+    Some(pl_voice::share::ServiceShare {
+        per_user: share.per_user,
+        max_preset: match share.max_preset {
+            pl_social::SharePreset::Low => SharePreset::Low,
+            pl_social::SharePreset::Normal => SharePreset::Normal,
+            pl_social::SharePreset::High => SharePreset::High,
+        },
+        open: share.open,
+        watch: share.watch,
+    })
 }
 
 /// The game the launcher started and still runs (the first one), for "Oyunu paylaş".
@@ -183,28 +204,23 @@ pub fn quiet() -> bool {
     QUIET.load(Ordering::SeqCst)
 }
 
-#[cfg(windows)]
+/// Out of every capture (`WDA_EXCLUDEFROMCAPTURE`, pl-share's helper), on the window's own thread.
 fn exclude_from_capture(window: &tauri::WebviewWindow, on: bool) {
-    let Ok(hwnd) = window.hwnd() else {
-        return;
-    };
-    let raw = hwnd.0 as isize;
-    let _ = window.run_on_main_thread(move || {
-        use windows::Win32::Foundation::HWND;
-        use windows::Win32::UI::WindowsAndMessaging::{
-            SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+    #[cfg(windows)]
+    {
+        let Ok(hwnd) = window.hwnd() else {
+            return;
         };
-        let hwnd = HWND(raw as *mut std::ffi::c_void);
-        let affinity = if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE };
-        // SAFETY: one Win32 call on a window of this process, on its own thread.
-        if let Err(error) = unsafe { SetWindowDisplayAffinity(hwnd, affinity) } {
-            tracing::debug!(%error, "share: the window's capture rule did not change");
-        }
-    });
+        let raw = hwnd.0 as isize;
+        let _ = window.run_on_main_thread(move || {
+            if !pl_share::exclude_from_capture(raw, on) {
+                tracing::debug!("share: the window's capture rule did not change");
+            }
+        });
+    }
+    #[cfg(not(windows))]
+    let _ = (window, on);
 }
-
-#[cfg(not(windows))]
-fn exclude_from_capture(_window: &tauri::WebviewWindow, _on: bool) {}
 
 /// Opens (or brings to the front) or closes the "Yayın" window.
 pub fn popout(app: &AppHandle, open: bool) {

@@ -20,6 +20,7 @@ pub(crate) mod input;
 mod probe;
 /// SHARE: screen sharing's publisher, watching pages, "Yayın" window and privacy.
 pub(crate) mod share;
+mod share_native;
 mod window;
 
 use std::collections::HashMap;
@@ -244,12 +245,19 @@ fn on_hub(voice: &Voice, event: VoiceEvent) {
             taken,
             status,
             rooms,
-        } => voice.hub_hello(
-            taken,
-            status.map(service_voice),
-            rooms.into_iter().map(crew_rooms).collect(),
-        ),
-        VoiceEvent::Status(status) => voice.hub_settings(service_voice(status)),
+        } => {
+            // SHARE: screen sharing as the hub allows it (`hello.voice.share`; none: off).
+            voice.set_share_service(status.as_ref().and_then(share::service_of));
+            voice.hub_hello(
+                taken,
+                status.map(service_voice),
+                rooms.into_iter().map(crew_rooms).collect(),
+            );
+        }
+        VoiceEvent::Status(status) => {
+            voice.set_share_service(share::service_of(&status));
+            voice.hub_settings(service_voice(status));
+        }
         VoiceEvent::Ring { ring, quiet } => voice.ring(
             IncomingRing {
                 room: ring.room,

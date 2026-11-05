@@ -106,7 +106,7 @@ export const trShare = {
     idle: "Kimse izlemediği için paylaşım durdu.",
     sourceGone: "Paylaşılan pencere kapandı.",
     gameGone: "Oyun kapandığı için paylaşım durdu.",
-    network: "Bu ağdan paylaşım açılamadı.",
+    network: "Bu ağda ekran paylaşımı başlatılamadı.",
     limited: "Yeni hesaplar bir süre yalnız izleyebilir.",
     stopped: "Paylaşım durdu.",
     unsupported: "Bu bilgisayardan paylaşılamıyor.",
