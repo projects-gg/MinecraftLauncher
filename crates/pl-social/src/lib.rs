@@ -187,6 +187,8 @@ pub use voice::{
     PresenceVoice, VOICE_CAP, VoiceAck, VoiceCrewChange, VoiceCrewRoom, VoiceCrewRooms,
     VoiceCrewTicket, VoiceError, VoiceEvent, VoiceFrame, VoiceRing, VoiceSink, VoiceStatus,
 };
+// SHARE-S: `hello.voice.share`.
+pub use voice::{SharePreset, VoiceShareStatus};
 pub use world::{
     E4mcHint, Hidden, TurnIce, WORLDS_CAP, WorldAck, WorldAnswer, WorldError, WorldEvent,
     WorldFrame, WorldInvite, WorldRole, WorldSink, WorldsStatus,
