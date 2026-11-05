@@ -176,10 +176,10 @@ pub use view::{
     ChatTypingView, ChatView, ConversationView, CrewBadgeView, CrewCallView, CrewJoinView,
     CrewNotificationsView, FriendGroupsView, FriendView, GroupMember, InviteResult, InviteView,
     JoinRequestView, JoinResult, LastMessageView, LimitedView, LookupView, MeView, MessageState,
-    ModNoticeView, PlanAnswerView, PlanView, ProfileView, ReportPlan, ReportReaction, ReportTarget,
-    RequestView, RestrictionView, SendFailure, SendOutcome, SignInFailure, SkinBlockView,
-    SocialNotice, SocialView, TagOffView, TeamInviteView, TeamLookupView, TeamMemberView,
-    TeamRequestView, TeamView,
+    ModNoticeView, PlanAnswerView, PlanView, ProfileView, ReportPlan, ReportReaction, ReportShare,
+    ReportTarget, RequestView, RestrictionView, SendFailure, SendOutcome, SignInFailure,
+    SkinBlockView, SocialNotice, SocialView, TagOffView, TeamInviteView, TeamLookupView,
+    TeamMemberView, TeamRequestView, TeamView,
 };
 // SOC-NOTE's views.
 pub use view::{CrewPinsView, FriendNoteView, PinLineView, PinView, SocNoteView};

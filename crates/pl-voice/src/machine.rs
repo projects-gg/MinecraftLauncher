@@ -114,6 +114,8 @@ pub struct CrewRoom {
     pub max: Option<u16>,
     /// VOICE-ROOMS: the player opened it.
     pub own: bool,
+    /// SHARE-S: only the crew's leader and moderators may share in it ("Kim paylaşabilir").
+    pub share_mods: bool,
 }
 
 /// How a stay begins.

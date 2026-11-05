@@ -631,6 +631,9 @@ pub enum ReportTarget {
         /// for 24 hours after the call): the room's events go along as the moderators' evidence.
         #[serde(default)]
         voice: Option<String>,
+        /// SHARE-S: their screen share in that room it is about, with the reporter's still frame.
+        #[serde(default)]
+        share: Option<ReportShare>,
     },
     /// SOC-NOTE: a friend reported for their status note ("Uygunsuz not", reason
     /// `inappropriate`): the service keeps the note as the moderators' evidence.
@@ -653,6 +656,30 @@ pub enum ReportTarget {
         conv: String,
         id: i64,
     },
+}
+
+/// SHARE-S: the screen share a player is reported for: its number in the room (1–3), and what the
+/// reporter saw (`frame`: base64 of a JPEG of at most 60 KB; none when it could not be taken).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct ReportShare {
+    pub n: u8,
+    #[serde(default)]
+    pub frame: Option<String>,
+}
+
+impl ReportShare {
+    /// The largest still frame the service keeps (bytes).
+    pub const FRAME_BYTES: usize = 60 * 1024;
+
+    /// The frame when it could be one the service takes (base64 of at most 60 KB, a JPEG's start).
+    pub fn frame(&self) -> Option<&str> {
+        let frame = self.frame.as_deref()?;
+        let fits = frame.len() <= Self::FRAME_BYTES.div_ceil(3) * 4;
+        let base64 = frame
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'='));
+        (fits && base64 && frame.starts_with("/9j/")).then_some(frame)
+    }
 }
 
 /// The crew plan a player is reported from: its crew's id and its own.
@@ -1509,6 +1536,30 @@ pub(crate) fn me_view(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SHARE-S: only a JPEG's base64 of at most 60 KB goes with a share report.
+    #[test]
+    fn a_share_report_takes_only_a_small_jpeg() {
+        let share = |frame: Option<String>| ReportShare { n: 1, frame };
+        let jpeg = |bytes: usize| {
+            let mut data = vec![0xFF, 0xD8, 0xFF];
+            data.resize(bytes, 7);
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, data)
+        };
+        assert!(share(Some(jpeg(1000))).frame().is_some());
+        assert!(
+            share(Some(jpeg(ReportShare::FRAME_BYTES)))
+                .frame()
+                .is_some()
+        );
+        assert_eq!(
+            share(Some(jpeg(ReportShare::FRAME_BYTES + 3))).frame(),
+            None
+        );
+        assert_eq!(share(Some("iVBORw0KGgo=".into())).frame(), None);
+        assert_eq!(share(Some("/9j/<script>".into())).frame(), None);
+        assert_eq!(share(None).frame(), None);
+    }
 
     /// The launcher reads SOC-ID's notices by these names (social-tauri.ts).
     #[test]

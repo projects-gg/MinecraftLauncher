@@ -132,17 +132,28 @@ pub struct VoiceCrewRoom {
     /// VOICE-ROOMS: the player opened this room (they may change and delete it).
     #[serde(default)]
     pub own: bool,
+    /// SHARE-S: only the crew's leader and moderators may share in it (`shareBy: "mods"`; absent:
+    /// everyone).
+    #[serde(default, rename = "shareBy", deserialize_with = "mods_only")]
+    pub share_mods: bool,
+}
+
+fn mods_only<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.as_ref().and_then(serde_json::Value::as_str) == Some("mods"))
 }
 
 /// VOICE-ROOMS: a change of the crew's rooms from the crew page (README "Voice (VOICE-ROOMS)").
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VoiceCrewChange {
-    /// A room's name and people at most (`Some(None)`: the crew room maximum again).
+    /// A room's name and people at most (`Some(None)`: the crew room maximum again); SHARE-S:
+    /// who may share in it (`Some(true)`: its leader and moderators, `Some(false)`: everyone).
     Edit {
         crew: String,
         room: String,
         name: Option<String>,
         max: Option<Option<u16>>,
+        share_mods: Option<bool>,
     },
     /// The crew's rooms ("Genel" aside) in this order.
     Order { crew: String, rooms: Vec<String> },
@@ -169,6 +180,7 @@ impl VoiceCrewChange {
                 room,
                 name,
                 max,
+                share_mods,
             } => {
                 let mut body = serde_json::json!({ "crew": crew, "room": room });
                 if let Some(name) = name {
@@ -176,6 +188,9 @@ impl VoiceCrewChange {
                 }
                 if let Some(max) = max {
                     body["max"] = max.map_or(serde_json::Value::Null, Into::into);
+                }
+                if let Some(mods) = share_mods {
+                    body["shareBy"] = if *mods { "mods" } else { "all" }.into();
                 }
                 ("v1/voice/crew/room", body)
             }
@@ -433,6 +448,7 @@ mod tests {
                     room: room.clone(),
                     name: Some("Antrenman".into()),
                     max: Some(None),
+                    share_mods: None,
                 },
                 "v1/voice/crew/room",
                 serde_json::json!({"crew": crew, "room": room, "name": "Antrenman", "max": null}),
@@ -443,9 +459,22 @@ mod tests {
                     room: room.clone(),
                     name: None,
                     max: Some(Some(6)),
+                    share_mods: None,
                 },
                 "v1/voice/crew/room",
                 serde_json::json!({"crew": crew, "room": room, "max": 6}),
+            ),
+            // SHARE-S: who may share in a kept room.
+            (
+                VoiceCrewChange::Edit {
+                    crew: crew.clone(),
+                    room: room.clone(),
+                    name: None,
+                    max: None,
+                    share_mods: Some(true),
+                },
+                "v1/voice/crew/room",
+                serde_json::json!({"crew": crew, "room": room, "shareBy": "mods"}),
             ),
             (
                 VoiceCrewChange::Order {
@@ -502,5 +531,18 @@ mod tests {
         hub.deliver(VoiceEvent::Down);
         assert!(!hub.taken());
         assert_eq!(heard.lock().unwrap().len(), 2);
+    }
+
+    /// SHARE-S: a crew room's "Kim paylaşabilir" (`shareBy`), everyone unless it says "mods".
+    #[test]
+    fn crew_rooms_say_who_may_share() {
+        let room =
+            |json: serde_json::Value| -> VoiceCrewRoom { serde_json::from_value(json).unwrap() };
+        let id = "c0123456789abcdef";
+        assert!(room(serde_json::json!({"id": id, "shareBy": "mods"})).share_mods);
+        assert!(!room(serde_json::json!({"id": id, "shareBy": "all"})).share_mods);
+        assert!(!room(serde_json::json!({"id": id, "shareBy": 3})).share_mods);
+        assert!(!room(serde_json::json!({"id": id, "shareBy": null})).share_mods);
+        assert!(!room(serde_json::json!({"id": id})).share_mods);
     }
 }
