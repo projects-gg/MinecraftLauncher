@@ -4,7 +4,7 @@
 // active this week, size). The listing is fetched only when the page opens (listing.ts). Loading
 // shows card-shaped skeletons; a search swaps the list in place (no glide while typing); a card
 // that leaves (its crew left the listing) fades where it is and the rest glide up.
-import { Compass, Funnel, MagnifyingGlass, WarningCircle } from "@phosphor-icons/react";
+import { Funnel } from "@phosphor-icons/react";
 import { Button, EmptyState, IconButton, Menu, SearchInput, Skeleton } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
@@ -102,18 +102,11 @@ export function DiscoverPage() {
   const clock = dateTimeFormat({ hour: "2-digit", minute: "2-digit" });
 
   if (state === "off") {
-    return (
-      <EmptyState
-        icon={<Compass size={26} weight="duotone" />}
-        title={t("discover.off")}
-        className="pt-10"
-      />
-    );
+    return <EmptyState title={t("discover.off")} className="pt-10" />;
   }
   if (state === "error" && !kept) {
     return (
       <EmptyState
-        icon={<WarningCircle size={26} weight="duotone" />}
         title={t("discover.failed.title")}
         body={t("discover.failed.body")}
         action={
@@ -185,7 +178,7 @@ export function DiscoverPage() {
       </div>
 
       {offered.length > 0 ? (
-        <fieldset className="mt-2.5 flex min-w-0 flex-wrap gap-1.5 border-0 p-0">
+        <fieldset className="-mx-4 mt-2.5 flex min-w-0 gap-1.5 overflow-x-auto border-0 px-4 pt-0 pb-1 [scrollbar-width:none]">
           <legend className="sr-only">{t("discover.tagsLabel")}</legend>
           {offered.map((tag) => (
             <ToggleChip
@@ -209,14 +202,12 @@ export function DiscoverPage() {
           </div>
         ) : kept && kept.listing.crews.length === 0 ? (
           <EmptyState
-            icon={<Compass size={26} weight="duotone" />}
             title={t("discover.empty.title")}
             body={t("discover.empty.body")}
             className="pt-8"
           />
         ) : shown.length === 0 && kept ? (
           <EmptyState
-            icon={<MagnifyingGlass size={26} weight="duotone" />}
             title={t("discover.noMatch.title")}
             body={t("discover.noMatch.body")}
             action={
@@ -248,7 +239,7 @@ export function DiscoverPage() {
         )}
       </div>
 
-      {kept && wave ? (
+      {kept && wave && shown.length > 0 ? (
         <p className="mt-4 px-1 text-[12px] leading-snug text-ash-400">
           {t("discover.renews", {
             time: clock.format(new Date(kept.listing.next * 1000)),

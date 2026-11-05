@@ -208,7 +208,19 @@ pub enum DiscoverJoin {
 /// The discovery text as the service will keep it: one paragraph (line breaks become spaces,
 /// spaces collapse), trimmed; None outside 10-160 characters or with fewer than 5 letters.
 pub fn discover_text(text: &str) -> Option<String> {
-    let clean = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    // Invisible characters go first, as the service drops them (control characters other than
+    // spacing, zero-width spaces and joiners, the byte order mark).
+    let visible: String = text
+        .chars()
+        .filter(|c| {
+            let code = *c as u32;
+            !(c.is_control() && !c.is_whitespace())
+                && !(0x200B..=0x200F).contains(&code)
+                && !(0x2060..=0x2064).contains(&code)
+                && code != 0xFEFF
+        })
+        .collect();
+    let clean = visible.split_whitespace().collect::<Vec<_>>().join(" ");
     let length = clean.chars().count();
     let letters = clean.chars().filter(|c| c.is_alphabetic()).count();
     ((DISCOVER_TEXT_MIN..=DISCOVER_TEXT_MAX).contains(&length) && letters >= 5).then_some(clean)
@@ -270,6 +282,9 @@ mod tests {
         assert_eq!(discover_text("kısa"), None);
         assert_eq!(discover_text(&"ş".repeat(161)), None);
         assert!(discover_text(&"ş".repeat(160)).is_some());
+        // Invisible characters do not count (the service drops them too).
+        let hidden = format!("{}{}", "ş".repeat(160), char::from_u32(0x200B).unwrap());
+        assert!(discover_text(&hidden).is_some());
         let tags = |list: &[&str]| list.iter().map(|t| (*t).to_owned()).collect::<Vec<_>>();
         assert_eq!(
             discover_tags(&tags(&["pvp", "hg"])),

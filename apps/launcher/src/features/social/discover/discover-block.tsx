@@ -260,15 +260,21 @@ export function CrewDiscover({ team }: { team: SocialTeam }) {
             <label htmlFor={switchId} className="text-[13.5px] font-medium text-bone-100">
               {t("discover.block.switch")}
             </label>
-            <p id={helpId} className="mt-0.5 text-[12.5px] leading-snug text-ash-400">
-              {t("discover.block.help")}
-            </p>
+            {/* What becomes public, and who can join from the list (closed for good: nothing). */}
+            {status.state === "closed" ? null : (
+              <p id={helpId} className="mt-0.5 text-[12.5px] leading-snug text-ash-400">
+                {t("discover.block.help")}{" "}
+                {team.join === "approval"
+                  ? t("discover.block.helpApproval")
+                  : t("discover.block.helpOpen")}
+              </p>
+            )}
           </div>
           <Switch
             id={switchId}
             hideLabel
             label={t("discover.block.switch")}
-            describedBy={helpId}
+            describedBy={status.state === "closed" ? undefined : helpId}
             checked={on && !locked}
             disabled={busy || locked || (!on && !ready)}
             onCheckedChange={flip}
@@ -342,6 +348,9 @@ export function CrewDiscover({ team }: { team: SocialTeam }) {
                 onChange={(event) => setText(event.target.value.replace(/[\r\n]+/g, " "))}
                 className={cn(fieldClass, "mt-1.5")}
               />
+              <p className="mt-1 text-[12px] leading-snug text-ash-400">
+                {t("discover.block.textRules")}
+              </p>
               <p className="mt-3 text-[12.5px] font-medium text-ash-300">
                 {t("discover.block.tagsLabel")}{" "}
                 <span className="font-normal text-ash-400">{t("discover.block.tagsHelp")}</span>

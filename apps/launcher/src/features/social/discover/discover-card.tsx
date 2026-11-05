@@ -5,7 +5,7 @@
 // "⋯" (and a right click, Shift+F10) holds "Ekibi rapor et". Nothing moves but what the player
 // starts: the action's words cross-fade in their slot.
 import { CheckCircle, Clock, DotsThree, Flag } from "@phosphor-icons/react";
-import { Button, Chip, ContextMenu, cn, IconButton, Menu } from "@pl/ui";
+import { Button, ContextMenu, cn, IconButton, Menu } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -107,21 +107,16 @@ export function DiscoverCard({ crew, canAdd }: { crew: DiscoverCrew; canAdd: boo
           />
         </header>
         <p className="mt-2.5 text-[13.5px] leading-normal text-bone-100 break-words">{crew.text}</p>
-        <footer className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-2">
-          {crew.tags.length > 0 ? (
-            <ul
-              className="flex min-w-0 flex-1 flex-wrap gap-1.5"
-              aria-label={t("discover.tagsLabel")}
-            >
-              {crew.tags.map((tag) => (
-                <li key={tag}>
-                  <Chip className="font-medium text-ash-300">{t(`discover.tags.${tag}`)}</Chip>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <span className="flex-1" />
-          )}
+        <footer className="mt-2.5 flex items-center gap-3">
+          {/* Its topics as one quiet line (the filter row above already has them as chips). */}
+          <p className="min-w-0 flex-1 text-[12.5px] leading-snug text-ash-400">
+            {crew.tags.length > 0 ? (
+              <>
+                <span className="sr-only">{t("discover.tagsLabel")}: </span>
+                {crew.tags.map((tag) => t(`discover.tags.${tag}`)).join(", ")}
+              </>
+            ) : null}
+          </p>
           <div className="ml-auto flex h-8 items-center">
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div key={slot} className="flex items-center gap-1" {...swap(reduce, 0.18)}>

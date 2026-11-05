@@ -94,7 +94,11 @@ export function freshness(
 
 /** The leader's text as the service will keep it: one paragraph, spaces collapsed, trimmed. */
 export function cleanText(text: string): string {
-  return text.replace(/\s+/gu, " ").trim();
+  // Invisible characters go, as the service drops them (format and control ones but spacing).
+  return text
+    .replace(/[\p{Cf}\p{Co}]|(?!\s)\p{Cc}/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
 }
 
 /** Its length as the service counts it (characters, not UTF-16 units). */
