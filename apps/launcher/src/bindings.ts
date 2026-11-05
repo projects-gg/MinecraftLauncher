@@ -438,6 +438,85 @@ export const commands = {
 	/**  The voice page (the hidden `voice` window only): what happened there. */
 	voicePageReport: (report: PageReport) => typedError<null, CmdError>(__TAURI_INVOKE("voice_page_report", { report })),
 	/**
+	 *  The picker's list: "Oyunu paylaş" (the game the launcher runs), windows, screens. Thumbnails
+	 *  are made now, once per opening.
+	 */
+	shareSources: () => typedError<ShareSources, CmdError>(__TAURI_INVOKE("share_sources")),
+	/**  "Paylaş": null when it started (the state says "Yayında" once the room answers). */
+	shareStart: (source: ShareSource, label: string) => typedError<
+/**  Sharing is off (Studio, not in a room, an older room): "Ekran paylaşımı şu an kullanılamıyor." */
+"off" | 
+/**  This computer cannot share. */
+"unsupported" | 
+/**  The room lets only its leader and moderators share. */
+"notAllowed" | 
+/**  A new (limited) account may watch but not share yet. */
+"limited" | 
+/**  The player shares as much as they may. */
+"full" | 
+/**  The room has as many shares as it may. */
+"roomFull" | 
+/**  The share has as many watchers as it may. */
+"watchFull" | 
+/**  The player watches as many as they may. */
+"watchMax" | 
+/**  The month's budget: no new share or watch now. */
+"budget" | 
+/**  That share ended. */
+"gone" | 
+/**  The room did not answer: "Bağlanamadı.". */
+"failed" | null, CmdError>(__TAURI_INVOKE("share_start", { source, label })),
+	/**  "Durdur" on one of the player's shares. */
+	shareStop: (n: number) => typedError<null, CmdError>(__TAURI_INVOKE("share_stop", { n })),
+	/**  "İzle": null when asked for. */
+	shareWatch: (person: string, n: number) => typedError<
+/**  Sharing is off (Studio, not in a room, an older room): "Ekran paylaşımı şu an kullanılamıyor." */
+"off" | 
+/**  This computer cannot share. */
+"unsupported" | 
+/**  The room lets only its leader and moderators share. */
+"notAllowed" | 
+/**  A new (limited) account may watch but not share yet. */
+"limited" | 
+/**  The player shares as much as they may. */
+"full" | 
+/**  The room has as many shares as it may. */
+"roomFull" | 
+/**  The share has as many watchers as it may. */
+"watchFull" | 
+/**  The player watches as many as they may. */
+"watchMax" | 
+/**  The month's budget: no new share or watch now. */
+"budget" | 
+/**  That share ended. */
+"gone" | 
+/**  The room did not answer: "Bağlanamadı.". */
+"failed" | null, CmdError>(__TAURI_INVOKE("share_watch", { person, n })),
+	/**  "İzlemeyi bırak". */
+	shareUnwatch: (person: string, n: number) => typedError<null, CmdError>(__TAURI_INVOKE("share_unwatch", { person, n })),
+	/**  The tile of a watched share grew or shrank: the full or the small layer. */
+	shareWatchLayer: (person: string, n: number, layer: ShareLayer) => typedError<null, CmdError>(__TAURI_INVOKE("share_watch_layer", { person, n, layer })),
+	/**  A page that watches hands over its channel (the main window, or the "Yayın" window). */
+	shareWatchAttach: (onCommand: Channel<WatchCmd>) => typedError<null, CmdError>(__TAURI_INVOKE("share_watch_attach", { onCommand })),
+	/**  The watching page's report (its answer, TURN, connected, lost). */
+	shareWatchReport: (report: WatchReport) => typedError<null, CmdError>(__TAURI_INVOKE("share_watch_report", { report })),
+	/**  The watching page went out of sight (minimized, in the tray, the game in front) or came back. */
+	shareWatchVisible: (visible: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("share_watch_visible", { visible })),
+	/**  "Evet" on "Hâlâ izliyor musun?" (any touch of the stage too). */
+	shareWatchStill: () => typedError<null, CmdError>(__TAURI_INVOKE("share_watch_still")),
+	/**  "Ayrı pencerede aç" (`open`), or back into the launcher's window. */
+	sharePopout: (open: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("share_popout", { open })),
+	/**  "Her zaman üstte" on the "Yayın" window: now, and for the next one. */
+	sharePopoutOnTop: (on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("share_popout_on_top", { on })),
+	/**  The watching window fills the screen (or not). */
+	shareFullscreen: (on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("share_fullscreen", { on })),
+	/**  A sharer's stream sound for the player (percent 0–100, muted). */
+	shareStreamVolume: (person: string, volume: number, muted: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("share_stream_volume", { person, volume, muted })),
+	/**  "Paylaşımı durdur" on someone else's share (a leader or moderator; the room checks). */
+	shareUnshare: (person: string, n: number) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("share_unshare", { person, n })),
+	/**  "Kim paylaşabilir" in a friend room (its leader; the room checks). */
+	shareSetSharers: (who: ShareBy) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("share_set_sharers", { who })),
+	/**
 	 *  Server List Ping. Never fails: an unreachable server is reported as offline. Without a name
 	 *  and address it pings the featured server Studio published (else `play.projects.gg`).
 	 */
@@ -10096,6 +10175,151 @@ export type ShaderView = {
 };
 
 /**
+ *  Where a share's sound comes from (Gelişmiş): the shared app's processes, or the whole computer
+ *  without voice chat. A screen always shares the whole computer's.
+ */
+export type ShareAudioSource = "app" | "system";
+
+/**
+ *  "Kim paylaşabilir" (`hello.room.shareBy`, the `room` message): everyone, or the room's leader
+ *  and moderators. A room sends it only to `share1` sockets: its presence says the room shares.
+ */
+export type ShareBy = "mods" | "all";
+
+/**  Why one of the player's shares ended without the player. */
+export type ShareClosedWhy = 
+/**  A leader or moderator stopped it: "Bir moderatör paylaşımını durdurdu." */
+"mod" | 
+/**  The month's budget. */
+"budget" | 
+/**  Nobody watched for 15 minutes. */
+"idle" | 
+/**  A limit changed, or Studio switched sharing off (`off`). */
+"limit" | 
+/**  The player left the room. */
+"left" | 
+/**  The shared window closed, or the game ended (this launcher's own reason). */
+"sourceGone" | 
+/**  It could not reach the server from this network (this launcher's own reason). */
+"network" | 
+/**  Anything else (also any reason a newer service names). */
+"error";
+
+/**  What is shared: the game the launcher started, a window, or a whole screen (wire `src`). */
+export type ShareKind = "game" | "screen" | 
+/**  Also any kind a newer service names. */
+"window";
+
+/**  A simulcast layer a watcher gets: `f` full, `q` a quarter (a small tile). */
+export type ShareLayer = "f" | "q";
+
+/**  Where one of the player's shares is. */
+export type ShareMinePhase = 
+/**  Capture and the room's answer on their way. */
+"starting" | "live" | 
+/**  Live, nobody watches: encoding rests. */
+"resting";
+
+/**
+ *  "Netlik ↔ Akıcılık" (Gelişmiş): sharp text and still pictures, or smooth motion. `Auto` follows
+ *  the source (a game moves, a window or a screen is read).
+ */
+export type ShareMotion = "auto" | "clarity" | "motion";
+
+/**  A moment of screen sharing worth a toast (`share-notice`). */
+export type ShareNotice = 
+/**  One of the player's shares ended without them (`src`: what it showed). */
+{ kind: "closed"; why: ShareClosedWhy; src: ShareKind } | 
+/**  A share or a watch could not start. */
+{ kind: "refused"; refusal: ShareRefusal } | 
+/**  The share goes on without its sound. */
+{ kind: "audioOff" } | 
+/**  Watching stopped: nobody answered "Hâlâ izliyor musun?". */
+{ kind: "watchStopped" } | 
+/**  Watching could not connect. */
+{ kind: "watchFailed" };
+
+/**
+ *  "Kalite": Düşük (480p30) / Normal (720p30) / Yüksek (1080p30; 1080p60 for a game with
+ *  "Akıcılık"). Ordered: Studio's `shareMaxPreset` and the budget's step cap it.
+ */
+export type SharePreset = "low" | "normal" | "high";
+
+/**  Why a share or a watch was refused (`share_start`, `share_watch` and the room's errors). */
+export type ShareRefusal = 
+/**  Sharing is off (Studio, not in a room, an older room): "Ekran paylaşımı şu an kullanılamıyor." */
+"off" | 
+/**  This computer cannot share. */
+"unsupported" | 
+/**  The room lets only its leader and moderators share. */
+"notAllowed" | 
+/**  A new (limited) account may watch but not share yet. */
+"limited" | 
+/**  The player shares as much as they may. */
+"full" | 
+/**  The room has as many shares as it may. */
+"roomFull" | 
+/**  The share has as many watchers as it may. */
+"watchFull" | 
+/**  The player watches as many as they may. */
+"watchMax" | 
+/**  The month's budget: no new share or watch now. */
+"budget" | 
+/**  That share ended. */
+"gone" | 
+/**  The room did not answer: "Bağlanamadı.". */
+"failed";
+
+/**
+ *  What the player picked to share. Titles and ids stay on this computer: the room hears only the
+ *  kind.
+ */
+export type ShareSource = 
+/**  The game the launcher started (its window, its processes' sound). */
+{ kind: "game" } | 
+/**  A window by the publisher's id for it (a window handle, as text). */
+{ kind: "window"; id: string } | 
+/**  A screen by the publisher's id for it. */
+{ kind: "screen"; id: string };
+
+/**  One thing the picker offers. */
+export type ShareSourceInfo = {
+	source: ShareSource,
+	/**  The window's title, or the screen's name ("Ekran 1" is the page's when empty). */
+	label: string,
+	/**  The window's program ("javaw", "chrome"), when known. */
+	app: string | null,
+	/**  A small picture of it (`data:image/jpeg;base64,…`), when the publisher made one. */
+	thumb: string | null,
+	/**  Screens: the main one. */
+	primary: boolean,
+	/**  Screens: pixels. */
+	width: number,
+	height: number,
+};
+
+/**  The picker's list (`share_sources`). */
+export type ShareSources = {
+	/**  "Oyunu paylaş": the game the launcher started, while it runs with a window. */
+	game: ShareSourceInfo | null,
+	/**  Other windows (never the launcher's own). */
+	windows: ShareSourceInfo[],
+	screens: ShareSourceInfo[],
+	/**  The computer can share an app's own sound (Windows 10 2004 / build 20348 and later). */
+	audio: boolean,
+};
+
+/**  Where the player watches: the launcher's window, or its own "Yayın" window. */
+export type ShareSurface = "main" | "popout";
+
+/**  Where one watched share is. */
+export type ShareWatchPhase = 
+/**  Asked for, the picture on its way. */
+"connecting" | "live" | 
+/**  Let go while the window is out of sight; it comes back with the window. */
+"held";
+
+/**
  *  What a `.minecraft`-style folder shares between all its versions, counted without opening
  *  anything big.
  */
@@ -11724,6 +11948,20 @@ export type VoiceLevels = {
 	people: VoicePersonLevel[],
 };
 
+/**  Someone else's share in the room. */
+export type VoiceLiveShare = {
+	person: string,
+	n: number,
+	kind: ShareKind,
+	audio: boolean,
+	preset: SharePreset,
+	fps: number,
+	/**  How many watch. */
+	watchers: number,
+	/**  Unix seconds. */
+	since: number,
+};
+
 /**  The player in the room. */
 export type VoiceMe = {
 	id: string,
@@ -11792,6 +12030,22 @@ export type VoiceMouseButton = "middle" |
 "back" | 
 /**  The forward side button. */
 "forward";
+
+/**  One of the player's shares. */
+export type VoiceMyShare = {
+	n: number,
+	kind: ShareKind,
+	/**  The window's title or the screen's name (this computer only); empty for the game. */
+	label: string,
+	phase: ShareMinePhase,
+	audio: boolean,
+	preset: SharePreset,
+	fps: number,
+	/**  Who watches, as the room said (the panel shows their faces and names). */
+	watchers: string[],
+	/**  Unix seconds. */
+	since: number,
+};
 
 /**
  *  A moment worth a toast (`voice-notice`). The launcher shows the Windows notification itself
@@ -12045,6 +12299,77 @@ export type VoiceSettings = {
 	 *  top of each person's own (percent, 0–200).
 	 */
 	outputVolume?: number,
+	/**  SHARE: "Ekran paylaşımı" (Settings → Sesli sohbet, and what the picker chose last). */
+	share?: VoiceShareSettings,
+};
+
+/**
+ *  Settings → Sesli sohbet → "Ekran paylaşımı" (the picker writes back what the player chose, so
+ *  the next share starts the same). Travels in the settings backup with the rest of voice chat.
+ */
+export type VoiceShareSettings = {
+	/**  "Kalite". */
+	quality?: SharePreset,
+	/**  "Sesi de paylaş". */
+	audio?: boolean,
+	/**  Gelişmiş: "Netlik ↔ Akıcılık". */
+	motion?: ShareMotion,
+	/**
+	 *  Gelişmiş: "Kare hızı" (15, 30, 60); none follows the quality (30, a game's "Yüksek" with
+	 *  "Akıcılık" 60).
+	 */
+	fps?: number | null,
+	/**  Gelişmiş: "İmleci göster". */
+	cursor?: boolean,
+	/**  Gelişmiş: "Launcher'ı yayında gizle" (`WDA_EXCLUDEFROMCAPTURE` on the launcher's windows). */
+	hideLauncher?: boolean,
+	/**  Gelişmiş: "Paylaşırken bildirimleri gizle" (the launcher's own Windows notifications). */
+	quiet?: boolean,
+	/**  Gelişmiş: "Ses kaynağı". */
+	audioSource?: ShareAudioSource,
+	/**  Gelişmiş: "Kendi önizlememi göster" (the player's own stream, small, in the panel). */
+	selfPreview?: boolean,
+	/**  The "Yayın" window stays on top ("Her zaman üstte"). */
+	alwaysOnTop?: boolean,
+};
+
+/**  Screen sharing in the room now (`VoiceState.share`). */
+export type VoiceShareView = {
+	/**  The room shares and watches (the service's switch, its `share1`); false: no share anywhere. */
+	on: boolean,
+	/**  This launcher can capture and send (false: watching only). */
+	canShare: boolean,
+	/**  The room lets the player share ("Kim paylaşabilir"). */
+	allowed: boolean,
+	/**
+	 *  A new share may start now (false: the month's budget, "Ekran paylaşımı şu an
+	 *  kullanılamıyor.").
+	 */
+	open: boolean,
+	/**  "Kim paylaşabilir" in this room. */
+	shareBy: ShareBy,
+	/**  The player may change "Kim paylaşabilir" (a friend room's leader). */
+	canSetShareBy: boolean,
+	/**  The "Yayın" window stays on top ("Her zaman üstte", the player's choice). */
+	onTop: boolean,
+	/**  Shares the player may run at once here. */
+	mineMax: number,
+	/**  The best quality the room allows now ("Yüksek" may be off for the month's budget). */
+	maxPreset: SharePreset,
+	/**  The computer can share an app's own sound. */
+	audio: boolean,
+	mine: VoiceMyShare[],
+	/**  Others' shares, in the room's order of people. */
+	live: VoiceLiveShare[],
+	watching: VoiceWatch[],
+	/**  Where watching shows. */
+	surface: ShareSurface,
+	/**  "Hâlâ izliyor musun?" waits for an answer. */
+	stillAsking: boolean,
+	/**  Sharers' stream sound for the player (people with a choice of their own only). */
+	volumes: { [key in string]: VoiceStreamVolume },
+	/**  Names for the "Yayın" window, which has no friend list (the launcher fills them). */
+	names: { [key in string]: string },
 };
 
 /**  Which shortcut a key is for. */
@@ -12143,6 +12468,15 @@ export type VoiceState = {
 	 *  alone in it, and with no room; it holds through reconnects and people coming and going.
 	 */
 	togetherSince: number | null,
+	/**  Screen sharing in the room (`on` false: nothing of it shows). */
+	share: VoiceShareView,
+};
+
+/**  A sharer's stream sound for the player (kept per person, like their voice). */
+export type VoiceStreamVolume = {
+	/**  Percent, 0–100. */
+	volume: number,
+	muted: boolean,
 };
 
 /**  When the microphone sends. */
@@ -12151,6 +12485,47 @@ export type VoiceTalkMode =
 "voice" | 
 /**  "Bas-konuş": while the chosen key is held. */
 "pushToTalk";
+
+/**  A share the player watches. */
+export type VoiceWatch = {
+	person: string,
+	n: number,
+	layer: ShareLayer,
+	phase: ShareWatchPhase,
+};
+
+/**  Launcher → the watching page, through the channel it attached (`share_watch_attach`). */
+export type WatchCmd = 
+/**
+ *  The SFU's offer for the watch session: a new peer connection (`fresh`: a new session), or
+ *  the one it has again; `mids` are the m-lines this offer adds.
+ */
+{ t: "offer"; sdp: string; mids: WatchMid[]; fresh: boolean } | 
+/**  TURN for the next peer connection (only after ICE failed). */
+{ t: "ice"; ice: EngineIce } | 
+/**  Close the peer connection: nothing is watched on this page now. */
+{ t: "reset" };
+
+/**  What one of the watch session's m-lines carries. */
+export type WatchMid = {
+	mid: string,
+	/**  The one who shares. */
+	person: string,
+	n: number,
+	/**  `video` or `audio`. */
+	video: boolean,
+};
+
+/**  The watching page → launcher (`share_watch_report`). */
+export type WatchReport = 
+/**  The answer to the last offer. */
+{ t: "answer"; sdp: string } | 
+/**  ICE did not connect in 5 s: TURN, please. */
+{ t: "needTurn" } | 
+/**  The peer connection works. */
+{ t: "connected" } | 
+/**  The peer connection is gone: watching starts anew (a few times, then stops). */
+{ t: "lost" };
 
 export type WorldBackupView = {
 	fileName: string,
