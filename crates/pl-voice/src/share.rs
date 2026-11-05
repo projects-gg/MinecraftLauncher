@@ -199,11 +199,6 @@ impl Default for VoiceShareSettings {
 }
 
 impl VoiceShareSettings {
-    /// Nothing changed from the defaults.
-    pub fn is_default(&self) -> bool {
-        *self == Self::default()
-    }
-
     /// Values held to their ranges: 15, 30 or 60 frames a second.
     pub fn normalized(mut self) -> Self {
         self.fps = self.fps.map(|fps| match fps {

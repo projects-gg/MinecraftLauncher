@@ -1319,10 +1319,7 @@ impl Machine {
 
     /// A sharer's stream sound for the player (percent 0–100, muted).
     pub fn set_stream_volume(&mut self, person: &str, volume: u16, muted: bool) -> Vec<Effect> {
-        let changed = self.store.set_person(person, |prefs| {
-            prefs.stream_volume = volume;
-            prefs.stream_muted = muted;
-        });
+        let changed = self.store.set_stream(person, volume, muted);
         if changed {
             vec![Effect::Changed]
         } else {
@@ -1517,15 +1514,9 @@ impl Machine {
             .collect();
         let mut volumes = BTreeMap::new();
         for share in &live {
-            let prefs = self.store.person(&share.person);
-            if prefs.stream_volume != 100 || prefs.stream_muted {
-                volumes.insert(
-                    share.person.clone(),
-                    VoiceStreamVolume {
-                        volume: prefs.stream_volume,
-                        muted: prefs.stream_muted,
-                    },
-                );
+            let (volume, muted) = self.store.stream(&share.person);
+            if (volume, muted) != (100, false) {
+                volumes.insert(share.person.clone(), VoiceStreamVolume { volume, muted });
             }
         }
         let connected = self.share.connected;

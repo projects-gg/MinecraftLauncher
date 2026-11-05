@@ -14,6 +14,11 @@ use serde::{Deserialize, Serialize};
 pub const FOLDER: &str = "voice";
 const SETTINGS_FILE: &str = "settings.json";
 const PEOPLE_FILE: &str = "people.json";
+/// SHARE: sharers' stream sound for the player (this computer only, never in the backup: the
+/// backup's 16 KB stay for voices).
+const STREAMS_FILE: &str = "streams.json";
+/// Sharers whose stream sound is kept at most (the oldest change goes first).
+pub const STREAMS_MAX: usize = 200;
 /// Marks that Discord's keys were offered and answered, or found to be none (VOICE-KEYS): this
 /// computer only, never in the backup (Discord is on this computer).
 const DISCORD_FILE: &str = "discord-asked";
@@ -176,8 +181,6 @@ pub struct VoiceSettings {
     /// top of each person's own (percent, 0–200).
     pub output_volume: u16,
     /// SHARE: "Ekran paylaşımı" (Settings → Sesli sohbet, and what the picker chose last).
-    /// Written only when the player changed something of it (the backup stays small).
-    #[serde(skip_serializing_if = "crate::share::VoiceShareSettings::is_default")]
     pub share: crate::share::VoiceShareSettings,
 }
 
@@ -295,13 +298,6 @@ pub struct VoicePersonPrefs {
     pub volume: u16,
     /// "Sustur (yalnız sen)".
     pub muted: bool,
-    /// SHARE: their shares' sound for the player (percent, 0–100). Written only when changed, so
-    /// the people file and the backup stay as small as before.
-    #[serde(skip_serializing_if = "is_full_volume")]
-    pub stream_volume: u16,
-    /// SHARE: their shares' sound muted for the player.
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub stream_muted: bool,
 }
 
 impl Default for VoicePersonPrefs {
@@ -309,8 +305,6 @@ impl Default for VoicePersonPrefs {
         Self {
             volume: 100,
             muted: false,
-            stream_volume: 100,
-            stream_muted: false,
         }
     }
 }
@@ -349,6 +343,8 @@ pub struct Store {
     revision: u32,
     /// Discord's keys were offered once already (or there were none).
     discord_asked: bool,
+    /// SHARE: sharer → (stream volume percent, muted), last changed last.
+    streams: Vec<(String, (u16, bool))>,
 }
 
 impl Store {
@@ -372,12 +368,24 @@ impl Store {
             })
             .unwrap_or_default();
         let discord_asked = folder.join(DISCORD_FILE).is_file();
+        let streams = std::fs::read(folder.join(STREAMS_FILE))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Vec<(String, (u16, bool))>>(&bytes).ok())
+            .map(|list| {
+                list.into_iter()
+                    .filter(|(id, _)| valid_person(id))
+                    .map(|(id, (volume, muted))| (id, (volume.min(100), muted)))
+                    .take(STREAMS_MAX)
+                    .collect()
+            })
+            .unwrap_or_default();
         Self {
             folder,
             settings,
             people,
             revision: 0,
             discord_asked,
+            streams,
         }
     }
 
@@ -389,7 +397,36 @@ impl Store {
             people: Vec::new(),
             revision: 0,
             discord_asked: false,
+            streams: Vec::new(),
         }
+    }
+
+    /// SHARE: a sharer's stream sound for the player (percent 0–100, muted).
+    pub fn stream(&self, id: &str) -> (u16, bool) {
+        self.streams
+            .iter()
+            .find(|(person, _)| person == id)
+            .map_or((100, false), |(_, value)| *value)
+    }
+
+    /// SHARE: changes a sharer's stream sound; true when anything changed.
+    pub fn set_stream(&mut self, id: &str, volume: u16, muted: bool) -> bool {
+        let value = (volume.min(100), muted);
+        if !valid_person(id) || self.stream(id) == value {
+            return false;
+        }
+        self.streams.retain(|(person, _)| person != id);
+        if value != (100, false) {
+            self.streams.push((id.to_owned(), value));
+        }
+        if self.streams.len() > STREAMS_MAX {
+            let extra = self.streams.len() - STREAMS_MAX;
+            self.streams.drain(..extra);
+        }
+        if let Ok(bytes) = serde_json::to_vec(&self.streams) {
+            self.write(STREAMS_FILE, &bytes);
+        }
+        true
     }
 
     /// Discord's keys were offered once already, or there were none to offer.
@@ -530,10 +567,6 @@ impl Store {
     }
 }
 
-fn is_full_volume(volume: &u16) -> bool {
-    *volume == 100
-}
-
 /// A user id as the friends service gives them (digits).
 pub fn valid_person(id: &str) -> bool {
     !id.is_empty() && id.len() <= 32 && id.bytes().all(|b| b.is_ascii_alphanumeric())
@@ -543,8 +576,6 @@ fn clean_prefs(prefs: VoicePersonPrefs) -> VoicePersonPrefs {
     VoicePersonPrefs {
         volume: prefs.volume.min(VOLUME_MAX),
         muted: prefs.muted,
-        stream_volume: prefs.stream_volume.min(100),
-        stream_muted: prefs.stream_muted,
     }
 }
 
