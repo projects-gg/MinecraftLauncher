@@ -43,27 +43,26 @@ pub const LABEL_MAX: usize = 120;
 // --- kinds ---------------------------------------------------------------------------------------
 
 /// What is shared: the game the launcher started, a window, or a whole screen (wire `src`).
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Default,
-    Serialize,
-    Deserialize,
-    specta::Type,
-    PartialOrd,
-    Ord,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, specta::Type, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub enum ShareKind {
     Game,
     Screen,
     /// Also any kind a newer service names.
     #[default]
-    #[serde(other)]
     Window,
+}
+
+/// Any kind a newer service names reads as a window (by hand: the page's bindings cannot write
+/// `#[serde(other)]` for a plain string enum).
+impl<'de> Deserialize<'de> for ShareKind {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match String::deserialize(deserializer)?.as_str() {
+            "game" => Self::Game,
+            "screen" => Self::Screen,
+            _ => Self::Window,
+        })
+    }
 }
 
 /// "Kalite": Düşük (480p30) / Normal (720p30) / Yüksek (1080p30; 1080p60 for a game with
@@ -640,7 +639,7 @@ impl ShareRefusal {
 }
 
 /// Why one of the player's shares ended without the player.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ShareClosedWhy {
     /// A leader or moderator stopped it: "Bir moderatör paylaşımını durdurdu."
@@ -650,7 +649,6 @@ pub enum ShareClosedWhy {
     /// Nobody watched for 15 minutes.
     Idle,
     /// A limit changed, or Studio switched sharing off (`off`).
-    #[serde(alias = "off")]
     Limit,
     /// The player left the room.
     Left,
@@ -660,8 +658,21 @@ pub enum ShareClosedWhy {
     Network,
     /// Anything else (also any reason a newer service names).
     #[default]
-    #[serde(other)]
     Error,
+}
+
+/// The room's `share_closed.why`: `off` reads as a limit, anything unknown as an error.
+impl<'de> Deserialize<'de> for ShareClosedWhy {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match String::deserialize(deserializer)?.as_str() {
+            "mod" => Self::Mod,
+            "budget" => Self::Budget,
+            "idle" => Self::Idle,
+            "limit" | "off" => Self::Limit,
+            "left" => Self::Left,
+            _ => Self::Error,
+        })
+    }
 }
 
 /// A moment of screen sharing worth a toast (`share-notice`).
@@ -732,13 +743,22 @@ impl Default for ServiceShare {
 
 /// "Kim paylaşabilir" (`hello.room.shareBy`, the `room` message): everyone, or the room's leader
 /// and moderators. A room sends it only to `share1` sockets: its presence says the room shares.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ShareBy {
     Mods,
     #[default]
-    #[serde(other)]
     All,
+}
+
+/// Anything but `mods` reads as everyone.
+impl<'de> Deserialize<'de> for ShareBy {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match String::deserialize(deserializer)?.as_str() {
+            "mods" => Self::Mods,
+            _ => Self::All,
+        })
+    }
 }
 
 /// One share the room's watch session carries for the player (`hello.me.watch`).
