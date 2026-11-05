@@ -34,6 +34,8 @@ pub mod server;
 pub mod shortcut;
 pub mod skins;
 pub mod social;
+// CREW-DISCOVER: "Ekip bul".
+pub mod social_discover;
 pub mod subservers;
 pub mod troubleshoot;
 pub mod updates;
