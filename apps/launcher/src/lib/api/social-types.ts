@@ -317,7 +317,14 @@ export type ReportTarget =
     }
   /** `code`: the crew was looked up by code; `via`: reported from the tag a friend or crewmate wears
    * (TEAM6: that player's id, never kept by the service). */
-  | { kind: "crew"; id: string; code?: string; via?: string }
+  | {
+      kind: "crew";
+      id: string;
+      code?: string;
+      via?: string;
+      /** CREW-DISCOVER: reported from a card of "Ekip bul" (its text goes along as evidence). */
+      discover?: boolean;
+    }
   /** A message as this computer holds it (with the messages before it as context). */
   | { kind: "message"; conv: string; id: number };
 
@@ -649,6 +656,9 @@ export interface CrewFeatures {
   badgeRequests: boolean;
   /** Crew chat's slow mode, set by the leader and the moderators (CHAT-CALM). */
   slow: boolean;
+  /** "Ekip bul" and the leader's "Keşif" block (CREW-DISCOVER; Studio's switch). Optional: a
+   * snapshot made before it reads as off. */
+  discover?: boolean;
 }
 
 /** How newcomers with the crew's code or invite link get in: at once, or once approved. */

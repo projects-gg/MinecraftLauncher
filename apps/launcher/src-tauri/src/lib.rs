@@ -712,6 +712,12 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_team_badge_requests,
             commands::social::social_team_slow,
             commands::social::social_request_from_badge,
+            // CREW-DISCOVER: "Ekip bul" and the leader's "Keşif" block
+            commands::social_discover::social_discover_list,
+            commands::social_discover::social_discover_join,
+            commands::social_discover::social_discover_status,
+            commands::social_discover::social_discover_set,
+            commands::social_discover::social_discover_off,
             commands::social::social_crew_greet,
             commands::social::social_report,
             commands::social::social_notices_seen,

@@ -26,6 +26,7 @@ import { AddPage } from "./add-page";
 import { ChatHeader, ChatPage } from "./chat/chat-page";
 import { ConsentPage } from "./consent-page";
 import { CrewNotifyButton } from "./crew-notify";
+import { DiscoverPage } from "./discover/discover-page";
 import { useIdentityUi } from "./identity-store";
 import { ListTabs } from "./list-tabs";
 import { crossfade, pageVariants, useSocialMotion } from "./motion";
@@ -55,17 +56,20 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" | "name" 
   const several = useSocialUi((s) => s.view.crew.multi && s.view.crews.length > 1);
   const shownCrew = useShownCrewId();
   const goTo = useSocialUi((s) => s.goTo);
-  const sub = page === "add" || page === "settings" || page === "team";
+  // CREW-DISCOVER: "Ekip bul" goes back to the crew page it opens from.
+  const sub = page === "add" || page === "settings" || page === "team" || page === "discover";
   const chat = page === "chat";
   // The crew card says the crew's name in large: the header just says where this is.
   const subTitle =
     page === "add"
       ? t("social.add.title")
-      : page === "team"
-        ? several
-          ? t("crews.title")
-          : t("teams.title")
-        : t("social.settings.title");
+      : page === "discover"
+        ? t("discover.title")
+        : page === "team"
+          ? several
+            ? t("crews.title")
+            : t("teams.title")
+          : t("social.settings.title");
   return (
     <header className="flex h-[68px] shrink-0 items-center gap-2 border-b border-white/8 pr-3 pl-5">
       <div className="relative flex min-w-0 flex-1 items-center">
@@ -83,7 +87,7 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" | "name" 
                   label={t("social.actions.back")}
                   icon={<CaretLeft size={18} weight="bold" />}
                   className="-ml-2"
-                  onClick={() => goTo("list")}
+                  onClick={() => goTo(page === "discover" ? "team" : "list")}
                 />
                 <Dialog.Title className="truncate font-display text-[20px] leading-tight font-semibold text-bone-50">
                   {subTitle}
@@ -164,6 +168,7 @@ export function FriendsSheet() {
         ? "name"
         : view.me &&
             (page !== "team" || view.teams) &&
+            (page !== "discover" || (view.teams && view.crew.discover === true)) &&
             (page !== "chat" || (view.chat !== undefined && chatConv !== null))
           ? page
           : "list"
@@ -270,6 +275,8 @@ export function FriendsSheet() {
                               </div>
                             ) : shown === "chat" ? (
                               <ChatPage />
+                            ) : shown === "discover" ? (
+                              <DiscoverPage />
                             ) : (
                               <ListTabs />
                             )}
