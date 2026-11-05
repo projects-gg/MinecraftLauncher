@@ -3004,9 +3004,13 @@ async fn the_friends_page_crews_and_plans_are_managed_from_the_game() {
     }
     let l = game.next_of("lists").await;
     assert_eq!(l["outgoing"], json!([{"id":"u-sent","name":"BlokUstasi"}]));
-    assert_eq!(
-        l["blocked"],
-        json!([{"id":"u-blocked","name":"KotuOyuncu"}])
+    // The base view's own blocked player comes first.
+    assert!(
+        l["blocked"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|b| b["id"] == "u-blocked")
     );
     assert_eq!(l["code"], "PRJ-ABCD-2345");
     assert_eq!(

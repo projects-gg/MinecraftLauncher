@@ -2834,7 +2834,8 @@ pub(crate) mod tests {
         assert_eq!(
             scene.features,
             [
-                "friends", "chat", "calls", "people", "people2", "people3", "people4"
+                "friends", "chat", "calls", "people", "people2", "people3", "people4", "people5",
+                "crews2", "chat3", "cards2"
             ]
         );
         // In game first, then the launcher, then offline.
@@ -3479,7 +3480,11 @@ pub(crate) mod tests {
                 "people",
                 "people2",
                 "people3",
-                "people4"
+                "people4",
+                "people5",
+                "crews2",
+                "chat3",
+                "cards2"
             ]
         );
         assert!(scene.offers(|e| e.typing));
@@ -3505,7 +3510,8 @@ pub(crate) mod tests {
         assert_eq!(
             scene.features,
             [
-                "friends", "calls", "people", "people2", "people3", "people4"
+                "friends", "calls", "people", "people2", "people3", "people4", "people5", "crews2",
+                "cards2"
             ]
         );
     }
@@ -4022,7 +4028,8 @@ pub(crate) mod tests {
         assert_eq!(
             scene.features,
             [
-                "friends", "chat", "calls", "tags", "people", "people2", "people3", "people4"
+                "friends", "chat", "calls", "tags", "people", "people2", "people3", "people4",
+                "people5", "crews2", "chat3", "cards2"
             ]
         );
         assert_eq!(
@@ -4326,7 +4333,8 @@ pub(crate) mod tests {
         assert_eq!(
             scene.features,
             [
-                "friends", "chat", "calls", "people", "people2", "people3", "invite", "people4"
+                "friends", "chat", "calls", "people", "people2", "people3", "invite", "people4",
+                "people5", "crews2", "chat3", "cards2"
             ]
         );
         v.activity = pl_social::ActivityView::Playing {

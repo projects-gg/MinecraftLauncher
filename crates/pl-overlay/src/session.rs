@@ -1383,10 +1383,15 @@ impl<S: SocialActions> Session<S> {
                 .send(ConnectOutcome::unavailable("no-overlay"));
         }
         let now = self.live.as_ref().is_some_and(|live| !live.quiet);
-        // The kinds first: the page hears both together (OVL-SOC2).
-        self.report_kinds();
+        // OVL-SOC2: the kinds go with the connection: before it comes (the hub tells them with it), after it went.
+        if now {
+            self.report_kinds();
+        }
         if was != now {
             (self.connected)(now);
+        }
+        if !now {
+            self.report_kinds();
         }
         let voice_now = self.live.as_ref().is_some_and(|live| live.voice);
         if voice_was != voice_now {

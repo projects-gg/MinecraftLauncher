@@ -1081,22 +1081,30 @@ impl Overlay {
     fn kinds_report(&self, session: u64, kinds: Vec<&'static str>) {
         let missed = {
             let mut inner = self.lock();
-            match inner
+            // Only a connected game's change is news now: one connecting or going is told with its connection.
+            let told = match inner
                 .sessions
                 .iter_mut()
                 .find(|running| running.id == session)
             {
-                Some(running) => running.kinds = kinds,
+                Some(running) => {
+                    running.kinds = kinds;
+                    running.connected
+                }
                 None if !kinds.is_empty() => return,
-                None => {}
-            }
-            inner
+                None => false,
+            };
+            let missed = inner
                 .sessions
                 .iter()
-                .any(|running| running.kinds.contains(&"voiceMissed"))
+                .any(|running| running.kinds.contains(&"voiceMissed"));
+            (missed, told)
         };
+        let (missed, told) = missed;
         self.shared.missed_shown.store(missed, Ordering::SeqCst);
-        self.tell_status(false);
+        if told {
+            self.tell_status(false);
+        }
     }
 
     /// The page hears whether a game's mod is connected and the kinds its cards stand in for, when
