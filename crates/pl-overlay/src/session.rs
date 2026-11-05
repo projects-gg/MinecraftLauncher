@@ -24,14 +24,14 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::OverlayConfig;
 use crate::avatar::{Picture, Pictures};
-use crate::feed::{self, Listener, Mirror, Scene, Sends};
+use crate::feed::{self, Listener, Mirror, Said, Scene, Sends};
 use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
-    ByeReason, CallAnswer, FEATURE_AVATARS, FEATURE_CONNECT, FEATURE_EMOJI, FEATURE_HOST,
+    self, ByeReason, CallAnswer, FEATURE_AVATARS, FEATURE_CONNECT, FEATURE_EMOJI, FEATURE_HOST,
     FEATURE_LANG, FEATURE_LINK, FEATURE_MARKS, FEATURE_PANEL_OFF, FEATURE_PEOPLE, FEATURE_PEOPLE2,
-    FEATURE_PEOPLE3, FEATURE_PEOPLE4, FEATURE_TAGS, FEATURE_VOICE, FEATURE_VOICE_ROOMS,
+    FEATURE_PEOPLE3, FEATURE_PEOPLE4, FEATURE_TAGS, FEATURE_VOICE, FEATURE_VOICE_ROOMS, FoundView,
     FriendAction, FriendRefusal, FromGame, MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure,
-    ToGame,
+    ToGame, ToastKind, ToastView,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 use crate::voice::{self, VoiceAct, VoiceFuture, VoiceMirror};
@@ -105,6 +105,10 @@ pub enum PeopleChange {
         status: String,
         preset: Option<String>,
     },
+    /// OVL-SOC2: one of the friends notification switches changed in the overlay's settings
+    /// (`favoritesOnline`, `favoritesProjects`, `crewCalls`, `crewChat`, `joinRequests`): the page
+    /// keeps it as its own switch would.
+    Notify { key: String, on: bool },
 }
 
 /// A "Bağlan" the game has not answered yet.
@@ -231,6 +235,78 @@ pub trait SocialActions: Clone + Send + Sync + 'static {
         team: &str,
         member: &str,
     ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
+    /// OVL-SOC2: the friends page's, crews', plans' and own messages' management from the game.
+    fn manage(
+        &self,
+        act: Manage,
+    ) -> impl Future<Output = pl_social::Result<Managed>> + Send + 'static {
+        let _ = act;
+        async { Err(SocialError::InvalidInput("manage")) }
+    }
+}
+
+/// OVL-SOC2: one of the game's management presses, as the friends feature carries it out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Manage {
+    /// "İsteği geri çek" (the person's id).
+    CancelRequest(String),
+    /// "Engeli kaldır".
+    Unblock(String),
+    /// Who owns a friend code (`PRJ-XXXX-XXXX`), a crew code (`XXXX-XXXX`), an invite link.
+    Lookup(String),
+    LookupCrew(String),
+    LookupLink(String),
+    /// "İstek gönder" to a friend code.
+    SendRequest(String),
+    /// A crew invite answered.
+    CrewInvite {
+        crew: String,
+        accept: bool,
+    },
+    /// A join request to one of the player's crews answered.
+    CrewAsk {
+        crew: String,
+        user: String,
+        accept: bool,
+    },
+    /// Joining by a crew code or an invite link (or asking to).
+    JoinCrew(String),
+    JoinLink(String),
+    /// "Ekibi çağır".
+    CallCrew(String),
+    /// A plan answered; a new plan (`at` Unix seconds).
+    AnswerPlan {
+        plan: String,
+        answer: pl_social::PlanAnswer,
+    },
+    MakePlan {
+        crew: String,
+        at: i64,
+        note: Option<String>,
+    },
+    /// The player's own message edited or deleted for everyone.
+    Edit {
+        conv: String,
+        sid: i64,
+        text: String,
+    },
+    Delete {
+        conv: String,
+        sid: i64,
+    },
+}
+
+/// OVL-SOC2: how a [`Manage`] went.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Managed {
+    Done,
+    /// A friend request or a join request waits for its answer.
+    Queued,
+    /// What it was about is gone (a plan).
+    Gone,
+    Friend(Box<pl_social::LookupView>),
+    Crew(Box<pl_social::TeamLookupView>),
+    Call(pl_social::CallOutcome),
 }
 
 impl SocialActions for SocialService {
@@ -447,6 +523,178 @@ impl SocialActions for SocialService {
         let member = member.to_owned();
         async move { SocialService::remove_team_member(&service, &team, &member).await }
     }
+
+    fn manage(
+        &self,
+        act: Manage,
+    ) -> impl Future<Output = pl_social::Result<Managed>> + Send + 'static {
+        let service = self.clone();
+        async move {
+            Ok(match act {
+                Manage::CancelRequest(id) => {
+                    service.cancel_request(&id).await?;
+                    Managed::Done
+                }
+                Manage::Unblock(id) => {
+                    service.unblock(&id).await?;
+                    Managed::Done
+                }
+                Manage::Lookup(code) => Managed::Friend(Box::new(service.lookup(&code).await?)),
+                Manage::LookupCrew(code) => {
+                    Managed::Crew(Box::new(service.lookup_team(&code).await?))
+                }
+                Manage::LookupLink(link) => {
+                    Managed::Crew(Box::new(service.lookup_crew_link(&link).await?))
+                }
+                Manage::SendRequest(code) => match service.send_request(&code).await? {
+                    SendOutcome::Requested => Managed::Queued,
+                    SendOutcome::Friends => Managed::Done,
+                },
+                Manage::CrewInvite { crew, accept } => {
+                    if accept {
+                        service.accept_team_invite(&crew).await?;
+                    } else {
+                        service.decline_team_invite(&crew).await?;
+                    }
+                    Managed::Done
+                }
+                Manage::CrewAsk { crew, user, accept } => {
+                    service.answer_team_request(&crew, &user, accept).await?;
+                    Managed::Done
+                }
+                Manage::JoinCrew(code) => joined(service.join_team(&code).await?),
+                Manage::JoinLink(link) => joined(service.join_crew_link(&link).await?),
+                Manage::CallCrew(crew) => Managed::Call(service.call_crew(vec![crew]).await?),
+                Manage::AnswerPlan { plan, answer } => {
+                    if service.answer_plan(&plan, answer).await? {
+                        Managed::Done
+                    } else {
+                        Managed::Gone
+                    }
+                }
+                Manage::MakePlan { crew, at, note } => {
+                    service.make_plan(&crew, at, note.as_deref()).await?;
+                    Managed::Done
+                }
+                Manage::Edit { conv, sid, text } => {
+                    service.chat_edit(&conv, sid, &text).await?;
+                    Managed::Done
+                }
+                Manage::Delete { conv, sid } => {
+                    service.chat_delete(&conv, sid).await?;
+                    Managed::Done
+                }
+            })
+        }
+    }
+}
+
+/// A crew joined, or a join request that waits.
+fn joined(result: pl_social::JoinResult) -> Managed {
+    match result {
+        pl_social::JoinResult::Joined => Managed::Done,
+        pl_social::JoinResult::Requested => Managed::Queued,
+    }
+}
+
+/// OVL-SOC2: why a management press did not go, as the mod words it (`done`'s `reason`).
+fn done_reason(error: &SocialError) -> &'static str {
+    match error {
+        SocialError::RateLimited { .. } => "rate",
+        SocialError::Unavailable { .. } | SocialError::Network(_) | SocialError::Unauthorized => {
+            "offline"
+        }
+        SocialError::Limited { .. } | SocialError::Restricted { .. } => "limited",
+        SocialError::ChatRejected { .. } | SocialError::PlanNoteRejected { .. } => "words",
+        SocialError::ChatMuted { .. } => "muted",
+        SocialError::Refused { code, .. } => match code {
+            ErrorCode::LimitTeamMembers | ErrorCode::LimitTeamPlans => "full",
+            ErrorCode::LimitCrews
+            | ErrorCode::AlreadyInTeam
+            | ErrorCode::LimitFriends
+            | ErrorCode::LimitFriendsTarget
+            | ErrorCode::LimitOutgoingRequests
+            | ErrorCode::LimitTeamRequests
+            | ErrorCode::LimitOutgoingTeamRequests => "limit",
+            ErrorCode::PlanExists => "exists",
+            ErrorCode::PlanTime => "time",
+            ErrorCode::ChatTooOld => "old",
+            ErrorCode::Blocked | ErrorCode::BlockedMember => "blocked",
+            ErrorCode::CodeNotFound
+            | ErrorCode::InvalidCode
+            | ErrorCode::TeamNotFound
+            | ErrorCode::UserNotFound
+            | ErrorCode::NotFound => "not-found",
+            ErrorCode::RequestNotFound
+            | ErrorCode::TeamInviteNotFound
+            | ErrorCode::TeamRequestNotFound
+            | ErrorCode::PlanNotFound
+            | ErrorCode::MessageNotFound
+            | ErrorCode::BlockNotFound => "gone",
+            ErrorCode::CallActive => "active",
+            ErrorCode::CallNeedsServer => "needs-server",
+            ErrorCode::CallServerHidden => "server-hidden",
+            ErrorCode::AlreadyFriends => "friends",
+            ErrorCode::AlreadyMember => "member",
+            ErrorCode::TeamNotPermitted | ErrorCode::ChatNotPermitted => "not-allowed",
+            _ => "failed",
+        },
+        _ => "failed",
+    }
+}
+
+/// OVL-SOC2: what a code typed in the game's "Ekle" is: a friend code, a crew code or a crew
+/// invite link (pasted links too), normalised; none for anything else. A bare 8-symbol code is a
+/// friend code (crew codes are shown with their `EKP-` prefix).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Code {
+    Friend(String),
+    Crew(String),
+    Link(String),
+}
+
+fn code_of(input: &str) -> Option<Code> {
+    let input = input.trim();
+    if input.is_empty() || input.len() > 200 {
+        return None;
+    }
+    // A share link (`…/f/PRJ-…`, `projects://friend/…`) or an invite link's page (`…/e/…`,
+    // `projects://crew/…`): its last part.
+    let lower = input.to_ascii_lowercase();
+    let last = input
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or(input);
+    if lower.starts_with("projects://friend/") || lower.contains("/f/") {
+        return pl_social::normalize_friend_code(last).map(Code::Friend);
+    }
+    if lower.starts_with("projects://crew/") || lower.contains("/e/") {
+        return pl_social::normalize_crew_link(last).map(Code::Link);
+    }
+    if let Some(link) = pl_social::normalize_crew_link(input) {
+        return Some(Code::Link(link));
+    }
+    let upper = input.to_ascii_uppercase();
+    if upper.starts_with("EKP") || upper.starts_with("TKM") {
+        return pl_social::normalize_team_code(input).map(Code::Crew);
+    }
+    pl_social::normalize_friend_code(input).map(Code::Friend)
+}
+
+/// A plan's note as it goes: one line, spaces folded, at most [`PLAN_NOTE_CHARS`]; None when empty
+/// (the service's own cleaning; it checks the words itself).
+fn plan_note(note: &str) -> Option<String> {
+    let folded = note
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(PLAN_NOTE_CHARS)
+        .collect::<String>();
+    let note = folded.trim();
+    (!note.is_empty()).then(|| note.to_owned())
 }
 
 /// What the friends feature and the launcher tell a session.
@@ -715,6 +963,55 @@ struct Live {
     voice_mirror: VoiceMirror,
     /// The mod draws people's pictures (OVL-AVATARS: `avatars` in its hello).
     avatars: bool,
+    /// OVL-SOC2: the newer features it said, and the card kinds the player turned off in it.
+    said: Said,
+    cards_off: HashSet<String>,
+}
+
+impl Live {
+    /// OVL-SOC2: the player did not turn this card kind off in the game.
+    fn shows(&self, kind: ToastKind) -> bool {
+        protocol::card_group(kind).is_none_or(|group| !self.cards_off.contains(group))
+    }
+
+    /// The launcher's notice kinds this game's cards stand in for (the page then shows no system
+    /// notification of them): an older mod's four, a mod with the new cards those the player did
+    /// not turn off. `voiceMissed`: its missed call card (the launcher's voice chat asks).
+    fn kinds(&self) -> Vec<&'static str> {
+        if self.quiet {
+            return Vec::new();
+        }
+        let on = |group: &str| !self.cards_off.contains(group);
+        let mut kinds = vec!["afkNotice"];
+        for (group, kind) in [
+            ("message", "chatMessage"),
+            ("call", "crewCall"),
+            ("invite", "invite"),
+        ] {
+            if on(group) {
+                kinds.push(kind);
+            }
+        }
+        if self.said.cards2 {
+            for (group, more) in [
+                ("invite", &["teamInvite"][..]),
+                (
+                    "request",
+                    &["request", "friendAdded", "joinRequest", "requestAccepted"][..],
+                ),
+                ("online", &["friendOnline", "friendOnProjects"][..]),
+                ("plan", &["crewPlan"][..]),
+            ] {
+                if on(group) {
+                    kinds.extend_from_slice(more);
+                }
+            }
+            if self.voice && on("missed") {
+                kinds.push("voiceMissed");
+            }
+        }
+        kinds
+    }
 }
 
 /// The codeless linking permit this session holds (SKIN1-O). It never goes to a log.
@@ -805,7 +1102,28 @@ pub(crate) struct Session<S> {
     /// When the mod's last `avatar-want`s came (a few a minute at most are heard), and the count `avatar` carries.
     recent_avatars: VecDeque<Instant>,
     avatar_n: u64,
+    /// OVL-SOC2: tells the hub the notice kinds this game's cards stand in for, and what it told
+    /// last; when each friend's online card last showed (the launcher's ten minutes); when the
+    /// mod's last lookups came (each counts against the service's daily quota).
+    kinds: KindsFn,
+    kinds_told: Option<Vec<&'static str>>,
+    online_told: HashMap<String, Instant>,
+    recent_finds: VecDeque<Instant>,
 }
+
+/// OVL-SOC2: hears the notice kinds a session's game shows as cards (none: not connected).
+pub(crate) type KindsFn = Arc<dyn Fn(Vec<&'static str>) + Send + Sync>;
+
+/// OVL-SOC2: a friend's online card shows at most this often (the launcher's `FRIEND_NOTICE_GAP_MS`);
+/// "Projects'e girdi" may still follow "çevrimiçi" within [`ONLINE_UPGRADE`].
+const ONLINE_GAP: Duration = Duration::from_secs(10 * 60);
+const ONLINE_UPGRADE: Duration = Duration::from_secs(5);
+/// OVL-SOC2: lookups ("Bul") the game may ask for: a few a minute (the service keeps its own daily
+/// quota).
+const FIND_BURST: usize = 5;
+const FIND_WINDOW: Duration = Duration::from_secs(60);
+/// OVL-SOC2: a plan's note at most (the launcher's and the service's).
+const PLAN_NOTE_CHARS: usize = 80;
 
 fn now_ms() -> i64 {
     SystemTime::now()
@@ -961,6 +1279,25 @@ impl<S: SocialActions> Session<S> {
             told_order: VecDeque::new(),
             recent_avatars: VecDeque::new(),
             avatar_n: 0,
+            kinds: Arc::new(|_| {}),
+            kinds_told: None,
+            online_told: HashMap::new(),
+            recent_finds: VecDeque::new(),
+        }
+    }
+
+    /// OVL-SOC2: where the session tells which notice kinds its game shows as cards.
+    pub(crate) fn with_kinds(mut self, kinds: KindsFn) -> Self {
+        self.kinds = kinds;
+        self
+    }
+
+    /// Tells the hub the kinds this game's cards stand in for, when they changed.
+    fn report_kinds(&mut self) {
+        let kinds = self.live.as_ref().map(Live::kinds).unwrap_or_default();
+        if self.kinds_told.as_ref() != Some(&kinds) {
+            self.kinds_told = Some(kinds.clone());
+            (self.kinds)(kinds);
         }
     }
 
@@ -1028,6 +1365,8 @@ impl<S: SocialActions> Session<S> {
                 .send(ConnectOutcome::unavailable("no-overlay"));
         }
         let now = self.live.as_ref().is_some_and(|live| !live.quiet);
+        // The kinds first: the page hears both together (OVL-SOC2).
+        self.report_kinds();
         if was != now {
             (self.connected)(now);
         }
@@ -1245,6 +1584,36 @@ impl<S: SocialActions> Session<S> {
     /// `voice-notice` to a mod that shows voice chat (the ones the game says at all).
     fn on_voice_notice(&self, notice: &VoiceNotice) {
         if !self.live.as_ref().is_some_and(|live| live.voice) {
+            return;
+        }
+        // OVL-SOC2: a missed call is a card of its own in a mod that draws it (never on "Rahatsız
+        // etmeyin", never from someone ignored); the launcher's notification then stays quiet.
+        if let VoiceNotice::Missed { from, room } = notice {
+            let shows = self
+                .live
+                .as_ref()
+                .is_some_and(|live| live.said.cards2 && live.shows(ToastKind::Missed));
+            if shows && !self.scene.dnd && !self.scene.is_ignored(from) {
+                let title = self
+                    .scene
+                    .nickname_of(from)
+                    .or_else(|| self.scene.name_of(from))
+                    .unwrap_or_default()
+                    .to_owned();
+                self.send(vec![ToGame::Toast(ToastView {
+                    kind: ToastKind::Missed,
+                    key: format!("missed:{room}"),
+                    title,
+                    body: String::new(),
+                    conv: None,
+                    crew: None,
+                    sticker: None,
+                    badge: None,
+                    marks: self.scene.marks_of(from).to_vec(),
+                    by: (!from.is_empty()).then(|| from.clone()),
+                    at: None,
+                })]);
+            }
             return;
         }
         let scene = &self.scene;
@@ -1619,6 +1988,16 @@ impl<S: SocialActions> Session<S> {
         ) else {
             return;
         };
+        // OVL-SOC2: a kind the player turned off in the game says nothing there (the launcher's own
+        // notification takes it), and a friend's online card shows once in ten minutes.
+        if !self
+            .live
+            .as_ref()
+            .is_some_and(|live| live.shows(toast.kind))
+            || !self.online_due(&toast)
+        {
+            return;
+        }
         // The conversation the panel shows says it in place.
         let shown = self.live.as_ref().is_some_and(|live| {
             live.panel && toast.conv.is_some() && live.open.as_deref() == toast.conv.as_deref()
@@ -1631,6 +2010,30 @@ impl<S: SocialActions> Session<S> {
             && self.live.is_some()
         {
             self.social.afk_seen(&notice.id);
+        }
+    }
+
+    /// OVL-SOC2: whether a friend's online card may show now: once in [`ONLINE_GAP`] per friend
+    /// (the launcher's throttle), "Projects'e girdi" right after "çevrimiçi" taking its place. Any
+    /// other card always.
+    fn online_due(&mut self, toast: &ToastView) -> bool {
+        if !matches!(toast.kind, ToastKind::Online | ToastKind::Projects) {
+            return true;
+        }
+        let Some(id) = toast.by.as_deref() else {
+            return true;
+        };
+        let now = Instant::now();
+        self.online_told
+            .retain(|_, at| now.duration_since(*at) < ONLINE_GAP);
+        match self.online_told.get(id) {
+            Some(at) => {
+                toast.kind == ToastKind::Projects && now.duration_since(*at) < ONLINE_UPGRADE
+            }
+            None => {
+                self.online_told.insert(id.to_owned(), now);
+                true
+            }
         }
     }
 
@@ -1683,10 +2086,21 @@ impl<S: SocialActions> Session<S> {
                 let people4 = people3 && features.iter().any(|f| f == FEATURE_PEOPLE4);
                 let langs = features.iter().any(|f| f == FEATURE_LANG);
                 let marks = features.iter().any(|f| f == FEATURE_MARKS);
+                // OVL-SOC2: the management builds on OVL-SOC 2's people (an older mod says none).
+                let said = if people4 {
+                    Said::from_hello(&features)
+                } else {
+                    Said {
+                        chat3: features.iter().any(|f| f == protocol::FEATURE_CHAT3),
+                        cards2: features.iter().any(|f| f == protocol::FEATURE_CARDS2),
+                        ..Said::default()
+                    }
+                };
                 let mut mirror = Mirror::for_mod(tags, people2)
                     .with_people3(people3)
                     .with_people4(people4)
-                    .with_marks(marks);
+                    .with_marks(marks)
+                    .with_said(said);
                 mirror.set_lang(langs.then_some(self.lang));
                 let frames = mirror.greet(&self.scene, &self.launcher, self.config.reduced_motion);
                 // A reconnect forgets a "Bağlan" the earlier connection never answered.
@@ -1725,6 +2139,8 @@ impl<S: SocialActions> Session<S> {
                         && features.iter().any(|f| f == FEATURE_VOICE_ROOMS),
                     voice_mirror: VoiceMirror::default(),
                     avatars: !quiet && features.iter().any(|f| f == FEATURE_AVATARS),
+                    said,
+                    cards_off: HashSet::new(),
                 }));
                 // A new connection keeps no pictures: it asks again.
                 self.told.clear();
@@ -1921,6 +2337,21 @@ impl<S: SocialActions> Session<S> {
             FromGame::Status { status, preset } => self.on_status(&status, preset.as_deref()),
             FromGame::Request { id, accept } => self.on_request(id, accept),
             FromGame::AvatarWant { ids } => self.on_avatar_want(ids),
+            // OVL-SOC2: the friends page's, crews', plans' and own messages' management.
+            FromGame::CancelRequest { id } => self.on_cancel_request(id),
+            FromGame::Unblock { id } => self.on_unblock(id),
+            FromGame::Find { code } => self.on_find(code),
+            FromGame::AddCode { code } => self.on_add_code(code),
+            FromGame::CrewAnswer { crew, accept } => self.on_crew_answer(crew, accept),
+            FromGame::CrewAsk { crew, id, accept } => self.on_crew_ask(crew, id, accept),
+            FromGame::CrewJoin { code } => self.on_crew_join(code),
+            FromGame::CrewCall { crew } => self.on_crew_call(crew),
+            FromGame::PlanAnswer { plan, answer } => self.on_plan_answer(plan, &answer),
+            FromGame::PlanMake { crew, at, note } => self.on_plan_make(crew, at, &note),
+            FromGame::Edit { conv, sid, text } => self.on_edit(conv, sid, &text),
+            FromGame::Delete { conv, sid } => self.on_delete(conv, sid),
+            FromGame::Cards { off } => self.on_cards(off),
+            FromGame::NotifySet { key, on } => self.on_notify_set(&key, on),
             FromGame::Hello { .. } | FromGame::Unknown => {}
         }
     }
@@ -2105,6 +2536,457 @@ impl<S: SocialActions> Session<S> {
             let doing = self.social.decline(&id);
             self.settle(id, action, doing);
         }
+    }
+
+    // --- OVL-SOC2: management from the game ---------------------------------------------------------
+
+    /// The mod's newer features (none while no mod is connected).
+    fn said(&self) -> Said {
+        self.live.as_ref().map(|live| live.said).unwrap_or_default()
+    }
+
+    /// `done` to the live mod.
+    fn done(&self, act: &'static str, id: &str, reason: Option<&'static str>) {
+        self.send(vec![ToGame::Done {
+            act,
+            id: id.to_owned(),
+            ok: reason.is_none(),
+            reason,
+            queued: false,
+            wait: None,
+        }]);
+    }
+
+    /// Whether a management press may go: the game has not sent too many (the person menu's ten
+    /// seconds), it is about something the last lists named (`known`) and the friends service is
+    /// connected. Otherwise the mod hears why at once.
+    fn press_allowed(&mut self, act: &'static str, id: &str, known: bool) -> bool {
+        let now = Instant::now();
+        let refused = if full(&mut self.recent_people, now, PEOPLE_WINDOW, PEOPLE_BURST) {
+            Some("rate")
+        } else if !known {
+            Some("gone")
+        } else if !self.scene.online {
+            Some("offline")
+        } else {
+            None
+        };
+        if let Some(reason) = refused {
+            tracing::debug!(act, reason, "a management press from the game did not go");
+            self.done(act, id, Some(reason));
+            return false;
+        }
+        self.recent_people.push_back(now);
+        true
+    }
+
+    /// Carries a press out in a task of its own; the mod hears how it went (`done`).
+    fn settle_done(&self, act: &'static str, id: String, press: Manage) {
+        let Some(conn) = self.live.as_ref().map(|live| live.conn) else {
+            return;
+        };
+        let control = self.control.clone();
+        let doing = self.social.manage(press);
+        tracing::info!(act, "a management press from the in-game overlay");
+        tokio::spawn(async move {
+            let (reason, queued, wait) = match doing.await {
+                Ok(Managed::Queued) => (None, true, None),
+                Ok(Managed::Gone) => (Some("gone"), false, None),
+                Ok(Managed::Call(outcome)) => match outcome {
+                    pl_social::CallOutcome::Called => (None, false, None),
+                    pl_social::CallOutcome::Wait { seconds } => {
+                        (Some("wait"), false, Some(seconds))
+                    }
+                    pl_social::CallOutcome::Active => (Some("active"), false, None),
+                    pl_social::CallOutcome::NeedsServer => (Some("needs-server"), false, None),
+                    pl_social::CallOutcome::ServerHidden => (Some("server-hidden"), false, None),
+                },
+                Ok(_) => (None, false, None),
+                Err(error) => {
+                    tracing::info!(%error, act, "the overlay's management press did not go");
+                    (Some(done_reason(&error)), false, None)
+                }
+            };
+            let _ = control.send(Control::Send {
+                conn,
+                frames: vec![ToGame::Done {
+                    act,
+                    id,
+                    ok: reason.is_none(),
+                    reason,
+                    queued,
+                    wait,
+                }],
+            });
+        });
+    }
+
+    /// "İsteği geri çek" on a request the player sent (`people5`).
+    fn on_cancel_request(&mut self, id: String) {
+        if !self.said().people5 {
+            return;
+        }
+        let known = self.scene.lists.extra.outgoing.iter().any(|r| r.id == id);
+        if self.press_allowed("cancel-request", &id, known) {
+            self.settle_done("cancel-request", id.clone(), Manage::CancelRequest(id));
+        }
+    }
+
+    /// "Engeli kaldır" (`people5`).
+    fn on_unblock(&mut self, id: String) {
+        if !self.said().people5 {
+            return;
+        }
+        let known = self.scene.lists.extra.blocked.iter().any(|r| r.id == id);
+        if self.press_allowed("unblock", &id, known) {
+            self.settle_done("unblock", id.clone(), Manage::Unblock(id));
+        }
+    }
+
+    /// "Bul" in "Ekle" (`people5` or `crews2`): what the code leads to, by the code as the mod sent
+    /// it. A few lookups a minute (each counts against the service's daily quota); a code of a kind
+    /// the mod cannot act on is no code.
+    fn on_find(&mut self, code: String) {
+        let said = self.said();
+        if !(said.people5 || said.crews2) {
+            return;
+        }
+        let none = |reason| {
+            ToGame::Found(Box::new(FoundView {
+                code: code.clone(),
+                kind: "none",
+                reason: Some(reason),
+                ..FoundView::default()
+            }))
+        };
+        let press = match code_of(&code) {
+            Some(Code::Friend(friend)) if said.people5 => Manage::Lookup(friend),
+            Some(Code::Crew(crew)) if said.crews2 && self.scene.has_crews() => {
+                Manage::LookupCrew(crew)
+            }
+            Some(Code::Link(link)) if said.crews2 && self.scene.has_crews() => {
+                Manage::LookupLink(link)
+            }
+            _ => {
+                self.send(vec![none("invalid")]);
+                return;
+            }
+        };
+        let now = Instant::now();
+        if full(&mut self.recent_finds, now, FIND_WINDOW, FIND_BURST) {
+            self.send(vec![none("rate")]);
+            return;
+        }
+        if !self.scene.online {
+            self.send(vec![none("offline")]);
+            return;
+        }
+        self.recent_finds.push_back(now);
+        let Some(conn) = self.live.as_ref().map(|live| live.conn) else {
+            return;
+        };
+        let control = self.control.clone();
+        let doing = self.social.manage(press);
+        // A friend's nickname, as everywhere in the game.
+        let nicknames: HashMap<String, String> = self
+            .scene
+            .friends
+            .iter()
+            .map(|friend| (friend.id.clone(), friend.name.clone()))
+            .collect();
+        tokio::spawn(async move {
+            let found = match doing.await {
+                Ok(Managed::Friend(lookup)) => FoundView {
+                    code,
+                    kind: "friend",
+                    name: nicknames
+                        .get(&lookup.profile.id)
+                        .cloned()
+                        .unwrap_or_else(|| lookup.profile.name.clone()),
+                    id: lookup.profile.id,
+                    relation: Some(match lookup.relation {
+                        pl_social::Relation::None => "none",
+                        pl_social::Relation::Friend => "friend",
+                        pl_social::Relation::Outgoing => "outgoing",
+                        pl_social::Relation::Incoming => "incoming",
+                        pl_social::Relation::Blocked => "blocked",
+                        pl_social::Relation::Myself => "self",
+                    }),
+                    ..FoundView::default()
+                },
+                Ok(Managed::Crew(crew)) => FoundView {
+                    code,
+                    kind: "crew",
+                    id: crew.team_id,
+                    name: crew.name,
+                    relation: Some(match crew.relation {
+                        pl_social::TeamRelation::None => "none",
+                        pl_social::TeamRelation::Member => "member",
+                        pl_social::TeamRelation::Elsewhere => "elsewhere",
+                        pl_social::TeamRelation::Blocked => "blocked",
+                        pl_social::TeamRelation::Full => "full",
+                        pl_social::TeamRelation::Limit => "limit",
+                    }),
+                    members: Some(crew.members),
+                    tag: crew.tag,
+                    approval: crew.join == pl_social::JoinMode::Approval,
+                    requested: crew.requested_at.is_some(),
+                    ..FoundView::default()
+                },
+                Ok(_) => FoundView {
+                    code,
+                    kind: "none",
+                    reason: Some("failed"),
+                    ..FoundView::default()
+                },
+                Err(error) => FoundView {
+                    code,
+                    kind: "none",
+                    reason: Some(match done_reason(&error) {
+                        reason @ ("not-found" | "rate" | "offline") => reason,
+                        _ => "failed",
+                    }),
+                    ..FoundView::default()
+                },
+            };
+            let _ = control.send(Control::Send {
+                conn,
+                frames: vec![ToGame::Found(Box::new(found))],
+            });
+        });
+    }
+
+    /// "İstek gönder" to a friend code a `found` named (`people5`).
+    fn on_add_code(&mut self, code: String) {
+        if !self.said().people5 {
+            return;
+        }
+        let friend = match code_of(&code) {
+            Some(Code::Friend(friend)) => Some(friend),
+            _ => None,
+        };
+        if self.press_allowed("add-code", &code, friend.is_some())
+            && let Some(friend) = friend
+        {
+            self.settle_done("add-code", code, Manage::SendRequest(friend));
+        }
+    }
+
+    /// "Katıl" or "Reddet" on a crew invite (`crews2`).
+    fn on_crew_answer(&mut self, crew: String, accept: bool) {
+        if !self.said().crews2 {
+            return;
+        }
+        let known = self
+            .scene
+            .lists
+            .extra
+            .invites
+            .iter()
+            .any(|i| i.crew == crew);
+        if self.press_allowed("crew-answer", &crew, known) {
+            self.settle_done(
+                "crew-answer",
+                crew.clone(),
+                Manage::CrewInvite { crew, accept },
+            );
+        }
+    }
+
+    /// "Kabul et" or "Reddet" on a request to join one of the player's crews (`crews2`).
+    fn on_crew_ask(&mut self, crew: String, id: String, accept: bool) {
+        if !self.said().crews2 {
+            return;
+        }
+        let known = self
+            .scene
+            .lists
+            .extra
+            .asks
+            .iter()
+            .any(|ask| ask.crew == crew && ask.id == id);
+        if self.press_allowed("crew-ask", &id, known) {
+            self.settle_done(
+                "crew-ask",
+                id.clone(),
+                Manage::CrewAsk {
+                    crew,
+                    user: id,
+                    accept,
+                },
+            );
+        }
+    }
+
+    /// "Ekibe katıl" or "Katılma isteği gönder" with a crew code or an invite link (`crews2`).
+    fn on_crew_join(&mut self, code: String) {
+        if !self.said().crews2 {
+            return;
+        }
+        let press = match code_of(&code) {
+            Some(Code::Crew(crew)) => Some(Manage::JoinCrew(crew)),
+            Some(Code::Link(link)) => Some(Manage::JoinLink(link)),
+            _ => None,
+        };
+        let known = press.is_some() && self.scene.has_crews();
+        if self.press_allowed("crew-join", &code, known)
+            && let Some(press) = press
+        {
+            self.settle_done("crew-join", code, press);
+        }
+    }
+
+    /// "Ekibi çağır" (`crews2`): only a crew the player may call, only from where a call may start
+    /// (the launcher's CALL1 says why without asking the service); the service keeps its five
+    /// minutes and ten a day.
+    fn on_crew_call(&mut self, crew: String) {
+        if !self.said().crews2 {
+            return;
+        }
+        let extra = &self.scene.lists.extra;
+        let known = extra.callers.contains(&crew);
+        let place = extra.call;
+        if !self.press_allowed("crew-call", &crew, known) {
+            return;
+        }
+        match place {
+            Some("ok") => self.settle_done("crew-call", crew.clone(), Manage::CallCrew(crew)),
+            Some(other) => self.done("crew-call", &crew, Some(other)),
+            None => self.done("crew-call", &crew, Some("failed")),
+        }
+    }
+
+    /// "Geliyorum", "Belki" or "Gelemem" to a plan (`plans`).
+    fn on_plan_answer(&mut self, plan: String, answer: &str) {
+        if !self.said().plans {
+            return;
+        }
+        let answer = match answer {
+            "yes" => pl_social::PlanAnswer::Yes,
+            "maybe" => pl_social::PlanAnswer::Maybe,
+            "no" => pl_social::PlanAnswer::No,
+            _ => return,
+        };
+        let known = self.scene.lists.extra.plans.iter().any(|p| p.id == plan);
+        if self.press_allowed("plan-answer", &plan, known) {
+            self.settle_done(
+                "plan-answer",
+                plan.clone(),
+                Manage::AnswerPlan { plan, answer },
+            );
+        }
+    }
+
+    /// A new plan (`plans`): a crew the player may plan in, a whole quarter of an hour from 5
+    /// minutes to 7 days ahead, at most three ahead in the crew, its note cleaned (only while
+    /// notes are on). The service checks it all again.
+    fn on_plan_make(&mut self, crew: String, at: i64, note: &str) {
+        if !self.said().plans {
+            return;
+        }
+        let extra = &self.scene.lists.extra;
+        let known = extra.planners.contains(&crew);
+        let now = now_ms() / 1000;
+        let ahead = extra
+            .plans
+            .iter()
+            .filter(|plan| plan.crew == crew && plan.start > now * 1000)
+            .count();
+        let note = plan_note(note).filter(|_| extra.notes);
+        if !self.press_allowed("plan-make", &crew, known) {
+            return;
+        }
+        if at % 900 != 0 || at < now + 300 || at > now + 7 * 86_400 - 300 {
+            self.done("plan-make", &crew, Some("time"));
+        } else if ahead >= 3 {
+            self.done("plan-make", &crew, Some("full"));
+        } else {
+            self.settle_done(
+                "plan-make",
+                crew.clone(),
+                Manage::MakePlan { crew, at, note },
+            );
+        }
+    }
+
+    /// The player's own message edited (`chat3`): one the panel shows, within the service's 15
+    /// minutes (it decides; the words are checked as a message's).
+    fn on_edit(&mut self, conv: String, sid: i64, text: &str) {
+        if !self.said().chat3 {
+            return;
+        }
+        let text = text.trim();
+        let id = sid.to_string();
+        let known = sid > 0
+            && !text.is_empty()
+            && text.chars().count() <= MAX_MESSAGE_CHARS
+            && self.scene.convs.iter().any(|c| c.id == conv && c.writable);
+        if self.press_allowed("edit", &id, known) {
+            self.settle_done(
+                "edit",
+                id,
+                Manage::Edit {
+                    conv,
+                    sid,
+                    text: text.to_owned(),
+                },
+            );
+        }
+    }
+
+    /// The player's own message deleted for everyone (`chat3`; the service's 7 days).
+    fn on_delete(&mut self, conv: String, sid: i64) {
+        if !self.said().chat3 {
+            return;
+        }
+        let id = sid.to_string();
+        let known = sid > 0 && self.scene.convs.iter().any(|c| c.id == conv);
+        if self.press_allowed("delete", &id, known) {
+            self.settle_done("delete", id, Manage::Delete { conv, sid });
+        }
+    }
+
+    /// The card kinds the player turned off in the game (`cards2`): only the groups there are.
+    fn on_cards(&mut self, off: Vec<String>) {
+        let Some(live) = self.live.as_mut().filter(|live| live.said.cards2) else {
+            return;
+        };
+        live.cards_off = off
+            .into_iter()
+            .filter(|group| protocol::CARD_GROUPS.iter().any(|(name, _)| name == group))
+            .collect();
+        self.report_kinds();
+    }
+
+    /// One of the launcher's notification switches changed in the overlay's settings (`cards2`):
+    /// this session's choices follow at once (the `prefs` the mod hears), the page keeps it as its
+    /// own switch would (and pushes its choices back).
+    fn on_notify_set(&mut self, key: &str, on: bool) {
+        if !self.said().cards2 {
+            return;
+        }
+        let now = Instant::now();
+        if full(&mut self.recent_people, now, PEOPLE_WINDOW, PEOPLE_BURST) {
+            return;
+        }
+        let notify = &mut self.config.notify;
+        match key {
+            "favoritesOnline" => notify.favorites_online = on,
+            "favoritesProjects" => notify.favorites_projects = on,
+            "crewCalls" => notify.crew_calls = on,
+            "crewChat" => notify.crew_chat = on,
+            "joinRequests" => notify.join_requests = on,
+            _ => return,
+        }
+        self.recent_people.push_back(now);
+        tracing::info!(key, on, "a notification switch from the in-game overlay");
+        (self.people)(PeopleChange::Notify {
+            key: key.to_owned(),
+            on,
+        });
+        let view = Arc::clone(&self.view);
+        self.set_view(view);
+        self.refresh();
     }
 
     /// OVL-LANG (G4): the player picked the overlay's language in its settings. It speaks it at
