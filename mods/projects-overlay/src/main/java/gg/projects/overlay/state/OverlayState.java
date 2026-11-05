@@ -1337,7 +1337,9 @@ public final class OverlayState {
             }
         }
         if (words != null) {
-            personNote = new PersonNote(words, name, null, !ok, now, detail);
+            // "N dakika sonra yeniden çağırabilirsin" is a wait, not a failure: the calm note, never flare.
+            boolean error = !ok && !words.equals("call_wait");
+            personNote = new PersonNote(words, name, null, error, now, detail);
         }
         revision++;
     }

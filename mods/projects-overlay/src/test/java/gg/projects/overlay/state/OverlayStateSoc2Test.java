@@ -90,14 +90,14 @@ class OverlayStateSoc2Test {
         state.pressed("crew-join", "EKP-1", "Akıncılar", null, "crew_joined");
         apply("{\"t\":\"done\",\"act\":\"crew-join\",\"id\":\"EKP-1\",\"ok\":true,\"queued\":true}", 4_000);
         assertEquals("crew_requested", state.personNote(4_000).key());
-        // A call refused for now: the wait is kept and said in minutes.
+        // A call refused for now: the wait is kept and said in minutes, calmly (a wait, not an error).
         state.pressed("crew-call", "t1", "Gece Kuşları", "c:t1", "crew_called");
         apply("{\"t\":\"done\",\"act\":\"crew-call\",\"id\":\"t1\",\"ok\":false,\"reason\":\"wait\",\"wait\":90}",
             5_000);
         note = state.personNote(5_000);
         assertEquals("call_wait", note.key());
         assertEquals("2", note.detail());
-        assertTrue(note.error());
+        assertFalse(note.error());
         assertEquals(95_000, state.callWaitUntil(5_000));
         // Reasons this build does not know read as a general failure.
         state.pressed("plan-make", "t1", "Bugün 21:00", null, "plan_made");

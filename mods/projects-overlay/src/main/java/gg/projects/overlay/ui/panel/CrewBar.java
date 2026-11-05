@@ -89,11 +89,9 @@ public final class CrewBar extends PanelWidget {
         if (!plans.isEmpty()) {
             OverlayState.Plan next = plans.get(0);
             String when = next.start() <= wall ? Texts.str("plan.live") : PlanWhen.of(next.at(), wall, false);
-            // How many come, then how many more plans: "Bugün 21:00 · 3 +1".
-            String extra = next.yes() > 0 ? Integer.toString(next.yes()) : null;
-            if (plans.size() > 1) {
-                extra = (extra == null ? "" : extra + " ") + Texts.str("plan.more", plans.size() - 1);
-            }
+            // How many come, in words ("Bugün 21:00 3 kişi"): two bare numbers side by side read as one (the
+            // screenshots' second look). The other plans are on the plans screen the pill opens.
+            String extra = next.yes() > 0 ? Texts.str("plan.pill.coming", next.yes()) : null;
             pills.add(pill(Kind.PLAN, Icon.CLOCK, when, extra, false, Texts.tr("plan.pill.narration", when), ui,
                 small));
         } else if (state.plansOn() && state.mayPlan(crew, wall)) {

@@ -107,6 +107,35 @@ public final class PlanWhen {
         return Texts.str("plan.day.short." + day.weekday());
     }
 
+    /**
+     * The day chips' widths: each its {@code wanted} width and the room left shared out evenly, or, when they do not
+     * all fit, the room shared in proportion to them (the words then get smaller); with the gaps they fill
+     * {@code room} exactly.
+     */
+    public static int[] chipWidths(int[] wanted, int room, int gap) {
+        int n = wanted.length;
+        int[] out = new int[n];
+        if (n == 0) {
+            return out;
+        }
+        int free = room - (n - 1) * gap;
+        long sum = 0;
+        for (int w : wanted) {
+            sum += w;
+        }
+        int used = 0;
+        for (int i = 0; i < n; i++) {
+            out[i] = sum <= free ? wanted[i] + (int) ((free - sum) / n) : (int) (wanted[i] * (long) free / sum);
+            used += out[i];
+        }
+        // What rounding left over goes to the first chips, a pixel each.
+        for (int i = 0; used < free; i = (i + 1) % n) {
+            out[i]++;
+            used++;
+        }
+        return out;
+    }
+
     /** Where the form starts (Unix seconds): tonight 21:00, else the next whole hour, else tomorrow 21:00. */
     public static long defaultTime(long nowMs) {
         return defaultTime(nowMs, ZoneId.systemDefault());
