@@ -416,6 +416,10 @@ export function VoiceSettingsSection() {
   const devices = useVoiceUi((s) => s.state.devices);
   // "Ses seviyesi" stops at the engine's top (200 %, or 100 % through `<audio>`).
   const volumeMax = useVoiceUi((s) => s.state.volumeMax ?? 200);
+  // SHARE: "Ekran paylaşımı" only while the service offers sharing and this computer can share.
+  const shareOffered = useVoiceUi((s) =>
+    Boolean(s.state.share?.service && s.state.share?.canShare),
+  );
 
   // The engine runs for the devices and the level only while the page is open; a test the player
   // left running ends with it.
@@ -552,8 +556,10 @@ export function VoiceSettingsSection() {
                 onPick={(deafenKey) => change({ deafenKey })}
               />
               <Advanced settings={settings} change={change} />
-              {/* SHARE: "Ekran paylaşımı", what a new share starts with. */}
-              <ShareSettingsRows value={settings.share} onChange={(share) => change({ share })} />
+              {/* SHARE: "Ekran paylaşımı", what a new share starts with (only while offered). */}
+              {shareOffered ? (
+                <ShareSettingsRows value={settings.share} onChange={(share) => change({ share })} />
+              ) : null}
             </motion.div>
           </motion.div>
         ) : null}
