@@ -53,6 +53,52 @@ pub struct VoiceStatus {
     /// VOICE-ROOMS: crews arrange their rooms (Studio's "Oda yönetimi"): rooms stay until deleted
     /// and the crew page changes them ([`VoiceCrewChange`]). Absent (an older service): no.
     pub manage: bool,
+    /// SHARE-S: screen sharing in voice rooms, only while Studio has it on (`hello.voice.share`,
+    /// `voice_state.voice.share`). None: no sharing (an older service, or switched off).
+    pub share: Option<VoiceShareStatus>,
+}
+
+/// SHARE-S: the best quality a new share may use (`maxPreset`). Anything unknown reads as `Low`
+/// (a newer service's step the launcher does not know never lets it send more).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SharePreset {
+    #[default]
+    Normal,
+    High,
+    // Last: `other` must be (also reads "low").
+    #[serde(other)]
+    Low,
+}
+
+/// SHARE-S: what the service allows of screen sharing now: shares a player and a room may have,
+/// viewers per share, the best quality, and whether a new share (`open`) and a new watch (`watch`)
+/// may start (the month's budget). Studio's switch and the budget's steps change it; the hub sends
+/// `voice_state` again when it does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct VoiceShareStatus {
+    pub on: bool,
+    pub per_user: u8,
+    pub per_room: u8,
+    pub viewers: u8,
+    pub max_preset: SharePreset,
+    pub open: bool,
+    pub watch: bool,
+}
+
+impl Default for VoiceShareStatus {
+    fn default() -> Self {
+        Self {
+            on: false,
+            per_user: 2,
+            per_room: 3,
+            viewers: 10,
+            max_preset: SharePreset::Normal,
+            open: true,
+            watch: true,
+        }
+    }
 }
 
 impl Default for VoiceStatus {
@@ -66,6 +112,7 @@ impl Default for VoiceStatus {
             idle_minutes: 30,
             kbps: 24,
             manage: false,
+            share: None,
         }
     }
 }
@@ -334,6 +381,31 @@ mod tests {
             serde_json::from_str::<PresenceVoice>(r#""in""#).unwrap(),
             PresenceVoice::In
         );
+    }
+
+    /// SHARE-S: `hello.voice.share` as the hub writes it; absent (an older service, or sharing
+    /// off) and odd values keep the launcher on the safe side.
+    #[test]
+    fn reads_screen_sharing_in_hello_voice() {
+        let status: VoiceStatus = serde_json::from_str(
+            r#"{"on":true,"share":{"on":true,"perUser":2,"perRoom":3,"viewers":5,"maxPreset":"normal","open":true,"watch":false}}"#,
+        )
+        .unwrap();
+        let share = status.share.unwrap();
+        assert!(share.on && share.open && !share.watch);
+        assert_eq!((share.per_user, share.per_room, share.viewers), (2, 3, 5));
+        assert_eq!(share.max_preset, SharePreset::Normal);
+        assert_eq!(
+            serde_json::from_str::<VoiceStatus>(r#"{"on":true}"#)
+                .unwrap()
+                .share,
+            None
+        );
+        assert_eq!(VoiceStatus::default().share, None);
+        let newer: VoiceShareStatus =
+            serde_json::from_str(r#"{"on":true,"maxPreset":"ultra","later":1}"#).unwrap();
+        assert_eq!(newer.max_preset, SharePreset::Low);
+        assert_eq!(newer.viewers, 10);
     }
 
     /// VOICE-ROOMS: the switch, a room's own limit and opener, and the crew page's changes as the
