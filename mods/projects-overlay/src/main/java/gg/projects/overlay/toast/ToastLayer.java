@@ -15,7 +15,9 @@ import gg.projects.overlay.ui.Sounds;
 import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Shapes;
+import java.util.List;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -52,6 +54,13 @@ public final class ToastLayer implements HudElement {
     /** Room for five subtitle lines (the game draws them at the bottom right, 10 pixels each from 35 up). */
     private static final int ABOVE_SUBTITLES = 35 + 4 * 10 + 7;
     private static final int BELOW_EFFECTS = 52;
+    /**
+     * Minimaps drawn in the top right corner by default: Xaero's (the official pack's) and its fair-play build. The stack
+     * keeps below what {@link #MINIMAP_SHARE} of the screen's height takes there.
+     */
+    private static final List<String> MINIMAP_MODS = List.of("xaerominimap", "xaerominimapfair");
+    static final float MINIMAP_SHARE = 0.36f;
+    private static Boolean minimap;
     /** The title screen's copyright line (10 GUI pixels from the bottom) plus the card's usual margin. */
     private static final int ABOVE_TITLE_COPYRIGHT = 10;
     private static final long MESSAGE_MS = 5_000;
@@ -148,7 +157,7 @@ public final class ToastLayer implements HudElement {
         ToastStack.Entry<ToastCard> existing = find(request.key());
         int count = existing == null ? 1 : existing.count() + 1;
         ToastCard card = ToastCard.of(request, crewChat, count, settings.showMessageText(), keyName, line);
-        stack.setAnchoredAtTop(settings.corner() == OverlaySettings.Corner.TOP_RIGHT);
+        placeStack(mc, settings);
         stack.setReducedMotion(reducedMotion);
         stack.push(request.key(), card, card.height(), duration(kind, settings, mc), now);
         mc.getNarrator().saySystemQueued(card.narration());
@@ -198,7 +207,7 @@ public final class ToastLayer implements HudElement {
         }
         Shapes.prepare();
         boolean fresh = find(key) == null;
-        stack.setAnchoredAtTop(settings.corner() == OverlaySettings.Corner.TOP_RIGHT);
+        placeStack(Minecraft.getInstance(), settings);
         stack.setReducedMotion(reducedMotion);
         stack.pin(key, card, card.height(), ms, now());
         if (fresh) {
@@ -224,7 +233,7 @@ public final class ToastLayer implements HudElement {
             return;
         }
         Shapes.prepare();
-        stack.setAnchoredAtTop(settings.corner() == OverlaySettings.Corner.TOP_RIGHT);
+        placeStack(mc, settings);
         stack.setReducedMotion(reducedMotion);
         stack.push("overlay-notice", card, card.height(), duration(ToastCard.Kind.INFO, settings, mc), now());
         mc.getNarrator().saySystemQueued(card.narration());
@@ -240,7 +249,7 @@ public final class ToastLayer implements HudElement {
         }
         Minecraft mc = Minecraft.getInstance();
         Shapes.prepare();
-        stack.setAnchoredAtTop(settings.corner() == OverlaySettings.Corner.TOP_RIGHT);
+        placeStack(mc, settings);
         stack.setReducedMotion(reducedMotion);
         stack.push("overlay-voice-note", card, card.height(), duration(ToastCard.Kind.INFO, settings, mc), now());
         mc.getNarrator().saySystemQueued(card.narration());
@@ -257,7 +266,7 @@ public final class ToastLayer implements HudElement {
             return false;
         }
         Shapes.prepare();
-        stack.setAnchoredAtTop(settings.corner() == OverlaySettings.Corner.TOP_RIGHT);
+        placeStack(mc, settings);
         stack.setReducedMotion(reducedMotion);
         stack.push(key, card, card.height(), duration(ToastCard.Kind.HOST, settings, mc), now());
         mc.getNarrator().saySystemQueued(card.narration());
@@ -590,10 +599,47 @@ public final class ToastLayer implements HudElement {
         return bottom;
     }
 
-    /** Where the stack's top edge goes in the top corner: below the status effect icons when there are any. */
+    /**
+     * The stack's corner and how tall it may grow there before a new toast pushes the oldest out: from its edge to the
+     * screen's other margin, and in the bottom corner up to below a minimap in the top right (REL-209: three cards in a
+     * short window covered the official pack's Xaero map and its coordinates).
+     */
+    private void placeStack(Minecraft mc, OverlaySettings settings) {
+        boolean top = settings.corner() == OverlaySettings.Corner.TOP_RIGHT;
+        stack.setAnchoredAtTop(top);
+        int width = mc.getWindow().getGuiScaledWidth();
+        int height = mc.getWindow().getGuiScaledHeight();
+        float x = width - MARGIN - ToastCard.WIDTH;
+        stack.setRoom(top ? height - MARGIN - topEdge(mc)
+            : bottomEdge(mc, width, height, x) - belowMinimap(height, minimapLoaded()));
+    }
+
+    /**
+     * Where the stack's top edge goes in the top corner: below the status effect icons when there are any, and below a
+     * minimap there.
+     */
     private static float topEdge(Minecraft mc) {
         boolean effects = mc.player != null && !mc.player.getActiveEffects().isEmpty();
-        return MARGIN + (effects ? BELOW_EFFECTS : 0);
+        float edge = MARGIN + (effects ? BELOW_EFFECTS : 0);
+        return Math.max(edge, belowMinimap(mc.getWindow().getGuiScaledHeight(), minimapLoaded()));
+    }
+
+    /**
+     * Below a minimap in the top right corner, GUI pixels from the top (none: the screen's margin). Its size is the
+     * minimap's own setting, not readable here: {@link #MINIMAP_SHARE} of the height covers Xaero's default with its
+     * coordinates line (83 of 240 GUI pixels measured) and the sizes that grow with the window.
+     */
+    static float belowMinimap(int guiHeight, boolean shown) {
+        return shown ? (float) Math.ceil(guiHeight * MINIMAP_SHARE) + MARGIN : MARGIN;
+    }
+
+    /** Whether a mod that draws a minimap in the top right corner by default is in this game (asked once). */
+    private static boolean minimapLoaded() {
+        if (minimap == null) {
+            FabricLoader loader = FabricLoader.getInstance();
+            minimap = MINIMAP_MODS.stream().anyMatch(loader::isModLoaded);
+        }
+        return minimap;
     }
 
     static long now() {

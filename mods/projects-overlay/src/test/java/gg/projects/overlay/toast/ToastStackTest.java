@@ -75,6 +75,24 @@ class ToastStackTest {
     }
 
     @Test
+    void pastTheCornersRoomTheOldestGoesAndTheNewestAlwaysShows() {
+        // Room for two toasts and the gap between them, not three (a minimap above the corner).
+        stack.setRoom(2 * H + ToastStack.GAP + 1f);
+        for (String k : new String[] {"a", "b"}) {
+            stack.push(k, k, H, 5_000, now);
+            run(20);
+        }
+        assertEquals(List.of("b", "a"), visibleKeys());
+        stack.push("c", "c", H, 5_000, now);
+        assertEquals(List.of("c", "b"), visibleKeys());
+        // Less room than one toast: the newest still shows, alone.
+        stack.setRoom(H / 2);
+        stack.push("d", "d", H, 5_000, now);
+        assertEquals(List.of("d"), visibleKeys());
+        assertEquals(H, stack.laidOutHeight(), 0.01f);
+    }
+
+    @Test
     void toastsLeaveFromTheBottomOneAfterAnother() {
         stack.push("a", "A", H, 5_000, now);
         run(1_000);
