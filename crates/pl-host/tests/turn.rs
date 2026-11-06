@@ -378,6 +378,28 @@ async fn refreshes_keep_it_alive_and_revocation_ends_it() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_silent_server_loses_the_allocation_once_a_permission_goes_unanswered() {
+    let ca = TestCa::new();
+    let server = TurnServer::start(&ca, &[HOST, GUEST]).await;
+    let config = config(&ca);
+    // The host over UDP, the guest over TCP: a server that stops answering UDP drops the host's
+    // allocation without a word, as Cloudflare's revocation does (no answer, no 401; HOST1-E).
+    let Pair { host, guest, .. } = pair(&server, &config, &["udp"], &["tcp"]).await;
+    server.drop_udp(true);
+    let error = within(10, host.admit_peer(guest.relay()))
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, "turn_permission_failed");
+    // Lost within seconds, not offered until its ten minutes run out.
+    let lost = within(10, host.closed()).await;
+    assert_eq!(
+        (lost.step, lost.code.as_ref()),
+        (Step::Alloc, "turn_alloc_timeout")
+    );
+    assert!(within(2, host.accept()).await.is_err());
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn renewal_moves_to_a_new_allocation_with_the_same_pin() {
     let ca = TestCa::new();
     let renewed_user = ("w1.0123456789ab.sid.h2", "renewed-password");
