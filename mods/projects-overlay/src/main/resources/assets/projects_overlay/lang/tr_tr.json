@@ -474,6 +474,7 @@
   "projects_overlay.presence.dnd": "Rahatsız etmeyin",
   "projects_overlay.voice.call.start": "Sesli arama başlat",
   "projects_overlay.voice.call.ask": "%s aransın mı?",
+  "projects_overlay.voice.call.dnd": "Rahatsız etmeyin açık: zil çalmaz, aradığını sonra görür.",
   "projects_overlay.voice.crew.title": "Sesli",
   "projects_overlay.voice.crew.new_room": "Yeni oda",
   "projects_overlay.voice.crew.nobody": "Kimse yok",

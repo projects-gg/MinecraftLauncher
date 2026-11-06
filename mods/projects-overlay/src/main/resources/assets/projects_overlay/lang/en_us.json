@@ -474,6 +474,7 @@
   "projects_overlay.presence.dnd": "Do not disturb",
   "projects_overlay.voice.call.start": "Start voice call",
   "projects_overlay.voice.call.ask": "Call %s?",
+  "projects_overlay.voice.call.dnd": "Do not disturb is on: no ring, they'll see it later.",
   "projects_overlay.voice.crew.title": "Voice",
   "projects_overlay.voice.crew.new_room": "New room",
   "projects_overlay.voice.crew.nobody": "Nobody here",

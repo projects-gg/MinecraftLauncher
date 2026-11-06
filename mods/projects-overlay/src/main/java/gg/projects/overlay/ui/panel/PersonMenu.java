@@ -140,6 +140,8 @@ public final class PersonMenu {
      * the launcher's {@code afterHandingOn}), else a member: its question says which.
      */
     private boolean leadKeepsModerator;
+    /** DEBT-NEXT: the friend is on "Rahatsız etmeyin": "Sesli arama başlat"'s question says no ring comes. */
+    private boolean callDnd;
     private final List<FormattedCharSequence> question = new ArrayList<>(2);
     private final List<FormattedCharSequence> body = new ArrayList<>(3);
     private String cancelLabel = "";
@@ -183,6 +185,14 @@ public final class PersonMenu {
     /** OVL-UX3: what "Liderliği devret"'s question says the player becomes (set before the menu opens). */
     public void setLeadKeepsModerator(boolean value) {
         leadKeepsModerator = value;
+    }
+
+    /**
+     * DEBT-NEXT: whether the friend is on "Rahatsız etmeyin" (set before the menu opens): their launcher keeps the call
+     * as a missed one without ringing, so the question says so under it, as the launcher's does.
+     */
+    public void setCallDnd(boolean value) {
+        callDnd = value;
     }
 
     /** Whether it is open (not fading out). */
@@ -551,6 +561,7 @@ public final class PersonMenu {
         String bodyKey = switch (action) {
             case BLOCK -> "people.block.body";
             case REMOVE_FROM_WORLD -> "host.remove.body";
+            case CALL -> callDnd ? "voice.call.dnd" : null;
             default -> null;
         };
         confirmLabel = Texts.str(switch (action) {

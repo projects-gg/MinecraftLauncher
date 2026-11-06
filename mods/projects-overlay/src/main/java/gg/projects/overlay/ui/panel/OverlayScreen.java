@@ -912,6 +912,8 @@ public final class OverlayScreen extends Screen {
         menuCrew = rows3 == null ? null : crew;
         menuVoice = input.voice();
         menu.setLeadKeepsModerator(leadKeepsModerator(crew, id));
+        OverlayState.Friend friend = state.friend(id);
+        menu.setCallDnd(friend != null && friend.online() && friend.dnd());
         long now = now();
         friends.dismissBubble();
         messages.dismissBubble();
