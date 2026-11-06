@@ -52,7 +52,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useRoomTargets } from "@/features/share/live";
 import { LiveAppear, LiveTag, LiveTagButton, useLivePreview } from "@/features/share/live-card";
-import { useUnshareItem } from "@/features/share/menu";
+import { useUnshareItem, useWatchItem } from "@/features/share/menu";
 import { ShareFooterRow, WatchButton } from "@/features/share/panel";
 import { openMenuFromKey } from "@/features/social/menu-key";
 import { enter, glide, leave, pageVariants, rise } from "@/features/social/motion";
@@ -241,8 +241,13 @@ function PersonRow({ person }: { person: VoicePerson }) {
   const [open, setOpen] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
   const ref = { id: face.id, name: face.name, avatar: face.avatar, avatarUrl: face.avatarUrl };
-  // SHARE: a leader's or moderator's "Paylaşımı durdur" on someone who shares.
-  const items = [...usePersonItems(ref, { from: "list" }), ...useUnshareItem(person)];
+  // SHARE: "Yayını izle" first on someone live; a leader's or moderator's "Paylaşımı durdur" on
+  // someone who shares.
+  const items = [
+    ...useWatchItem(person),
+    ...usePersonItems(ref, { from: "list" }),
+    ...useUnshareItem(person),
+  ];
   // SHARE-LIVE: "YAYINDA" after the name; resting on it (or the row's keyboard focus) opens the
   // stream's card beside the panel.
   const live = useRoomTargets(person.id);
