@@ -19,6 +19,7 @@ import gg.projects.overlay.ui.panel.CrewBar;
 import gg.projects.overlay.ui.panel.EmojiPanel;
 import gg.projects.overlay.ui.panel.FriendList;
 import gg.projects.overlay.ui.panel.OverlayScreen;
+import gg.projects.overlay.ui.panel.PanelInput;
 import gg.projects.overlay.ui.panel.PlanScreen;
 import gg.projects.overlay.voice.VoiceState;
 import java.io.IOException;
@@ -100,7 +101,7 @@ public final class SocialScenario implements ClientModInitializer {
     public void onInitializeClient() {
         String which = System.getProperty("projects.overlay.dev.script");
         if (!"social".equals(which) && !"social2".equals(which) && !"avatars".equals(which) && !"fit".equals(which)
-            && !"invite".equals(which) && !"soc2".equals(which) && !"share".equals(which)) {
+            && !"invite".equals(which) && !"soc2".equals(which) && !"share".equals(which) && !"live".equals(which)) {
             return;
         }
         out = Path.of(System.getProperty("projects.overlay.dev.out", "social-out")).toAbsolutePath();
@@ -111,6 +112,9 @@ public final class SocialScenario implements ClientModInitializer {
         } else if ("share".equals(which)) {
             prefix = "share";
             script7();
+        } else if ("live".equals(which)) {
+            prefix = "live";
+            script8();
         } else if ("social2".equals(which)) {
             script2();
         } else if ("avatars".equals(which)) {
@@ -521,6 +525,46 @@ public final class SocialScenario implements ClientModInitializer {
         step(0.1, "note", mc -> dev("share-note"));
         step(0.8, "shot note", mc -> shot(mc, "page-note"));
         step(0.1, "close at last", mc -> need(mc).close());
+    }
+
+    /**
+     * SHARE-LIVE ({@code -Dprojects.overlay.dev.script=live}, the mock's {@code --voice --people --people2 --share
+     * --thumb <jpeg>}): "YAYINDA" after PixelAvci's name on the room page and the card the driver's pointer opens on it
+     * (the stream's picture, "Oyun, 2 kişi izliyor"), then KorAtesi's in the friend list, live in a call of their own:
+     * the card locked ({@code live-NN-<name>.png}).
+     */
+    private void script8() {
+        step(0.5, "open", mc -> OverlayClient.get().togglePanel());
+        step(0.6, "room page", mc -> need(mc).showPage(OverlayScreen.Page.VOICE));
+        step(0.9, "shot tags", mc -> {
+            results.addProperty("pixelLive", OverlayClient.get().voice().sharing("f-ayse"));
+            shot(mc, "page-tag");
+        });
+        step(0.1, "point at the tag", mc -> livePoint(need(mc).voiceLiveChip("f-ayse")));
+        step(1.4, "shot card", mc -> {
+            VoiceState.Thumb thumb = OverlayClient.get().voice().thumb("f-ayse");
+            results.addProperty("thumb", thumb == null ? "none yet" : thumb.kind());
+            shot(mc, "page-card");
+        });
+        step(0.1, "friends", mc -> {
+            PanelInput.clearPointer();
+            need(mc).showPage(OverlayScreen.Page.FRIENDS);
+        });
+        step(0.9, "shot friends", mc -> shot(mc, "friends-tag"));
+        step(0.1, "point at the friend's tag", mc -> livePoint(need(mc).friendLiveChip("f-can")));
+        step(1.4, "shot friend card", mc -> shot(mc, "friends-card"));
+        step(0.1, "close", mc -> {
+            PanelInput.clearPointer();
+            need(mc).close();
+        });
+    }
+
+    private void livePoint(float[] at) {
+        if (at == null) {
+            results.addProperty("point", "nothing there");
+            return;
+        }
+        PanelInput.pointAt(Math.round(at[0]), Math.round(at[1]));
     }
 
     private void script6() {

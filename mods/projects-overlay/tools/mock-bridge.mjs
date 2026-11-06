@@ -96,6 +96,10 @@
 // ("Oyunu paylaş" dim with "why", default "not-allowed"), "share-ready", "share-note" (a "voice-notice" with "kind",
 // default "share-closed", and "reason", default "idle"), "share-private" (a message, an invite and a crew's call as the
 // launcher sends them while the game is in the player's share: nobody's, nothing said).
+// SHARE-LIVE (with --share, to a mod whose hello lists "live" too): PixelAvci's share says what it shows, how many watch
+// and its picture's time ("w", "th"); KorAtesi is live in a call of their own (the friend list's "live"); the card's
+// "voice-share-thumb" is answered for PixelAvci with --thumb <jpeg file> (else "none"), for anyone else "locked"
+// ("private").
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
@@ -751,17 +755,49 @@ function friendRows() {
     ...(next.on && NICKNAMES[f.id] ? { name: NICKNAMES[f.id], real: f.name } : {}),
     badge: tagsOn ? f.badge : undefined,
     // VOICE-O (V14): online friends may be called.
-    voice: args.voice && f.where !== "offline" ? "ready" : undefined,
+    voice:
+      args.voice && f.where !== "offline"
+        ? shareMock.live && f.id === "f-can"
+          ? "in"
+          : "ready"
+        : undefined,
+    // SHARE-LIVE: KorAtesi shares their screen in a call of their own.
+    ...(shareMock.live && f.id === "f-can" ? { live: true } : {}),
   }));
 }
 
 // VOICE-O: voice chat as the launcher shows it, and whether the connected mod shows it (its hello lists "voice").
 const voiceMock = { hears: false, view: null, rooms: false, crews: null };
 /** OVL-SHARE (--share): screen sharing in the room, as the launcher's "voice-share" says it. */
-const shareMock = { hears: false, view: null };
+const shareMock = { hears: false, live: false, view: null };
 
 function shareStart() {
-  return { game: "ready", live: [{ person: "f-ayse", kind: "game" }] };
+  // SHARE-LIVE: what the share shows, how many watch and when its picture was stored, to a mod that said "live".
+  const extra = shareMock.live ? { w: 2, th: Math.floor(Date.now() / 1000) - 12 } : {};
+  return { game: "ready", live: [{ person: "f-ayse", kind: "game", ...extra }] };
+}
+
+/** SHARE-LIVE: the card's picture as the launcher answers it (a small JPEG, locked or none). */
+function onShareThumb(socket, frame) {
+  const person = typeof frame.person === "string" ? frame.person : "";
+  if (person === "f-ayse") {
+    let jpg = null;
+    if (typeof args.thumb === "string") {
+      try {
+        jpg = readFileSync(args.thumb).toString("base64");
+      } catch {
+        jpg = null;
+      }
+    }
+    send(
+      socket,
+      jpg
+        ? { t: "voice-share-thumb", person, kind: "image", jpg }
+        : { t: "voice-share-thumb", person, kind: "none" },
+    );
+    return;
+  }
+  send(socket, { t: "voice-share-thumb", person, kind: "locked", why: "private" });
 }
 
 function sendShare(socket) {
@@ -1244,6 +1280,7 @@ function onConnection(socket) {
         voiceMock.hears = Array.isArray(frame.features) && frame.features.includes("voice");
         voiceMock.rooms = voiceMock.hears && frame.features.includes("voice-rooms");
         shareMock.hears = voiceMock.hears && frame.features.includes("share");
+        shareMock.live = shareMock.hears && frame.features.includes("live");
         shareMock.view = shareStart();
         next.on = Boolean(args.next && args.people2) && frame.features.includes("people4");
         soc2.said = new Set(
@@ -1993,6 +2030,12 @@ function onFrame(socket, frame) {
       // OVL-SHARE: only a launcher that plays it, only from a mod that said "share".
       if (args.share && shareMock.hears) {
         onShare(socket, frame);
+      }
+      break;
+    case "voice-share-thumb":
+      // SHARE-LIVE: only from a mod that said "live".
+      if (args.share && shareMock.live) {
+        onShareThumb(socket, frame);
       }
       break;
     case "emoji": {

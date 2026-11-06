@@ -1632,6 +1632,14 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         voiceSend(Protocol.voiceShareStop(n));
     }
 
+    /**
+     * SHARE-LIVE: the live card on {@code person}'s "YAYINDA" opened: the launcher answers {@code voice-share-thumb}.
+     * Quiet when the launcher is away (the card waits on the dimmed face, no note).
+     */
+    public void voiceShareThumb(String person) {
+        bridge.send(Protocol.voiceShareThumb(person));
+    }
+
     /** "Katıl" ({@code join}) or "Reddet" on a ring: it rings no more here either way. */
     public void voiceAnswer(String room, boolean join) {
         ringsSeen.add(room);

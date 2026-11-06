@@ -6,10 +6,13 @@ import com.google.gson.JsonObject;
 import gg.projects.overlay.bridge.Protocol;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -153,6 +156,29 @@ public final class VoiceState {
         }
     }
 
+    /**
+     * SHARE-LIVE: someone else's share in the room as {@code voice-share} lists it: what it shows ({@code game},
+     * {@code window}, {@code screen}), how many watch ({@code -1}: not said) and when the room last stored its picture
+     * (Unix seconds, {@code 0}: none yet), so an open preview asks again when it moves.
+     */
+    public record LiveShare(String person, String kind, int watchers, long th) {
+    }
+
+    /**
+     * SHARE-LIVE: the launcher's answer to {@code voice-share-thumb}: a picture ({@code image}, the JPEG's bytes), none
+     * the player may see ({@code locked}; {@code why}: {@code full}, {@code private} or {@code locked}) or none yet
+     * ({@code none}). {@code at} counts answers, so a newer picture of the same person is told apart.
+     */
+    public record Thumb(String person, String kind, byte[] jpg, String why, int at) {
+        public boolean image() {
+            return "image".equals(kind) && jpg != null && jpg.length > 0;
+        }
+
+        public boolean locked() {
+            return "locked".equals(kind);
+        }
+    }
+
     /** What someone's menu offers of voice chat (the launcher's {@code callOffer}). */
     public enum Offer {
         NONE,
@@ -183,6 +209,9 @@ public final class VoiceState {
     private String shareWhy = "";
     private List<MyShare> myShares = List.of();
     private Set<String> sharing = Set.of();
+    // SHARE-LIVE: what each sharer shows, and the preview pictures the launcher answered.
+    private Map<String, LiveShare> liveShares = Map.of();
+    private final Map<String, Thumb> thumbs = new HashMap<>();
 
     /**
      * Applies a launcher frame of voice chat's ({@code voice}, {@code voice-speaking}, {@code voice-notice},
@@ -211,6 +240,7 @@ public final class VoiceState {
                 id(frame, "reason"), id(frame, "who"));
             case "voice-crews" -> crews = crewsOf(arr(frame, "crews"));
             case "voice-share" -> putShare(frame);
+            case "voice-share-thumb" -> putThumb(frame);
             default -> {
                 return false;
             }
@@ -229,6 +259,8 @@ public final class VoiceState {
         shareWhy = "";
         myShares = List.of();
         sharing = Set.of();
+        liveShares = Map.of();
+        thumbs.clear();
         heard = false;
         on = false;
         room = null;
@@ -381,6 +413,23 @@ public final class VoiceState {
     /** Whether someone else in the room shares now ("Yayında" on their row). */
     public boolean sharing(String id) {
         return id != null && sharing.contains(id);
+    }
+
+    /** SHARE-LIVE: someone's share in the room (what it shows, who watches), or null. */
+    public LiveShare liveShare(String id) {
+        return id == null ? null : liveShares.get(id);
+    }
+
+    /** SHARE-LIVE: the launcher's last preview answer for {@code person}, or null before one came. */
+    public Thumb thumb(String person) {
+        return person == null ? null : thumbs.get(person);
+    }
+
+    /** SHARE-LIVE: a preview no longer shows: its picture is let go (nothing held while no card is open). */
+    public void dropThumb(String person) {
+        if (person != null) {
+            thumbs.remove(person);
+        }
     }
 
     /** The oldest notice not said yet, or null. */
@@ -605,18 +654,55 @@ public final class VoiceState {
         }
         myShares = Collections.unmodifiableList(mine);
         Set<String> live = new HashSet<>();
+        Map<String, LiveShare> shown = new HashMap<>();
         JsonArray others = arr(frame, "live");
         if (others != null) {
             for (JsonElement e : others) {
                 if (e.isJsonObject() && live.size() < MAX_PEOPLE) {
-                    String person = id(e.getAsJsonObject(), "person");
+                    JsonObject o = e.getAsJsonObject();
+                    String person = id(o, "person");
                     if (!person.isEmpty()) {
                         live.add(person);
+                        // SHARE-LIVE: the first share of each person (the preview shows that one).
+                        shown.putIfAbsent(person, new LiveShare(person, word(o, "kind", "window"),
+                            o.has("w") ? (int) Math.max(0, Math.min(999, Protocol.num(o, "w", 0))) : -1,
+                            Math.max(0L, Protocol.num(o, "th", 0L))));
                     }
                 }
             }
         }
         sharing = Collections.unmodifiableSet(live);
+        liveShares = Collections.unmodifiableMap(shown);
+    }
+
+    /** The JPEG's base64 at most (the room takes 24 KB pictures, 32 KB in base64). */
+    static final int MAX_THUMB_CHARS = 48_000;
+    private int thumbAnswers;
+
+    /** SHARE-LIVE: {@code voice-share-thumb}, the launcher's answer to the overlay's preview request. */
+    private void putThumb(JsonObject frame) {
+        String person = id(frame, "person");
+        if (person.isEmpty()) {
+            return;
+        }
+        String kind = word(frame, "kind", "none");
+        byte[] jpg = null;
+        if (kind.equals("image")) {
+            String data = Protocol.str(frame, "jpg", "");
+            if (data.isEmpty() || data.length() > MAX_THUMB_CHARS) {
+                kind = "none";
+            } else {
+                try {
+                    jpg = Base64.getDecoder().decode(data);
+                } catch (IllegalArgumentException e) {
+                    kind = "none";
+                }
+            }
+        } else if (!kind.equals("locked")) {
+            kind = "none";
+        }
+        String why = kind.equals("locked") ? id(frame, "why") : "";
+        thumbs.put(person, new Thumb(person, kind, jpg, why, ++thumbAnswers));
     }
 
     private void putSpeaking(JsonObject frame) {

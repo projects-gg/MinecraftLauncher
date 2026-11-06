@@ -100,6 +100,7 @@ public final class Protocol {
             features.add(CHAT3);
             features.add(CARDS2);
             features.add(SHARE);
+            features.add(LIVE);
         }
         features.add(LANG);
         features.add(EMOJI);
@@ -537,6 +538,24 @@ public final class Protocol {
     public static JsonObject voiceShareStop(int n) {
         JsonObject o = message("voice-share-stop");
         o.addProperty("n", n);
+        return o;
+    }
+
+    /**
+     * SHARE-LIVE: the hello feature of a mod that shows "YAYINDA" and its preview beside {@link #SHARE}: it hears
+     * {@code live} on people's rows, {@code w}/{@code th} on {@code voice-share}'s shares and {@code voice-share-thumb},
+     * and sends {@link #voiceShareThumb}.
+     */
+    public static final String LIVE = "live";
+
+    /**
+     * SHARE-LIVE: the preview card opened on {@code person}'s "YAYINDA": the launcher finds their room and share itself
+     * and answers {@code voice-share-thumb} (a small JPEG, locked or none). Sent once per opening, and again only when
+     * the room's picture time moved while it stays open.
+     */
+    public static JsonObject voiceShareThumb(String person) {
+        JsonObject o = message("voice-share-thumb");
+        o.addProperty("person", person);
         return o;
     }
 
