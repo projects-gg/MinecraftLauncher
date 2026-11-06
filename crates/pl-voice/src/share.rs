@@ -19,6 +19,16 @@ use crate::engine::EngineIce;
 
 /// The room socket capability this launcher asks for (`join.caps`, `sync.caps`).
 pub const CAP: &str = "share1";
+/// SHARE-LIVE (the lead's contract `docs/tasks/share-live.md` §2): asked for with [`CAP`]: the
+/// player's live shares send their still picture (`share_thumb`) and the room's share state says
+/// when each one's last picture came (`th`).
+pub const LIVE_CAP: &str = "live1";
+/// SHARE-LIVE: a still picture's bytes at most (the publisher makes at most this much, so the
+/// frame stays within the room socket's ordinary frame limit); a larger one is not sent.
+pub const THUMB_MAX_BYTES: usize = 12_000;
+/// SHARE-LIVE: the same sharing sound plays at most once this often (two shares that start or end
+/// together sound once).
+pub const SOUND_GAP_MS: u64 = 1_000;
 /// Shares a player may run at once unless the room says fewer (Studio 1–3).
 pub const MINE_MAX: u8 = 2;
 /// Shares a player may watch at once.
@@ -398,6 +408,22 @@ pub enum ShareEvent {
     AudioUnavailable {
         n: u8,
     },
+    /// SHARE-LIVE: the share's still picture for people who do not watch (about 3 s after it went
+    /// live, then once a minute): it goes to the room as `share_thumb`.
+    Thumb {
+        n: u8,
+        jpg: ThumbJpeg,
+    },
+}
+
+/// SHARE-LIVE: a still picture's JPEG bytes (never in a log line: `Debug` says only its length).
+#[derive(Clone, PartialEq, Eq)]
+pub struct ThumbJpeg(pub Vec<u8>);
+
+impl std::fmt::Debug for ThumbJpeg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "<jpeg {} bytes>", self.0.len())
+    }
 }
 
 // --- the watching page ---------------------------------------------------------------------------
@@ -502,6 +528,9 @@ pub struct VoiceMyShare {
     pub watchers: Vec<String>,
     /// Unix seconds.
     pub since: i64,
+    /// SHARE-LIVE: when the room took this share's last still picture (Unix seconds, the room's
+    /// clock); none before the first. `share_thumb` answers the player's own from this computer.
+    pub th: Option<i64>,
 }
 
 /// Someone else's share in the room.
@@ -518,6 +547,9 @@ pub struct VoiceLiveShare {
     pub watchers: u16,
     /// Unix seconds.
     pub since: i64,
+    /// SHARE-LIVE: when its last still picture came (Unix seconds); none before the first (or in a
+    /// room from before SHARE-LIVE). The hover card's `share_thumb` keeps its answer by it.
+    pub th: Option<i64>,
 }
 
 /// Where one watched share is.
@@ -592,6 +624,16 @@ pub struct VoiceShareView {
     pub volumes: BTreeMap<String, VoiceStreamVolume>,
     /// Names for the "Yayın" window, which has no friend list (the launcher fills them).
     pub names: BTreeMap<String, String>,
+}
+
+impl VoiceShareView {
+    /// SHARE-LIVE: the player is live now (a share the room took, resting or not): the taskbar's
+    /// mark and the tray's "Yayındasın" follow it.
+    pub fn live_now(&self) -> bool {
+        self.mine
+            .iter()
+            .any(|mine| mine.phase != ShareMinePhase::Starting)
+    }
 }
 
 /// Why a share or a watch was refused (`share_start`, `share_watch` and the room's errors).
@@ -713,6 +755,16 @@ pub struct ShareWire {
     pub at: i64,
     #[serde(default)]
     pub paused: bool,
+    /// SHARE-LIVE (`live1`): when its last still picture came (Unix seconds); anything but a whole
+    /// number reads as none.
+    #[serde(default, deserialize_with = "unix_option")]
+    pub th: Option<i64>,
+}
+
+fn unix_option<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<i64>, D::Error> {
+    Ok(Option::<serde_json::Value>::deserialize(deserializer)?
+        .and_then(|value| value.as_i64())
+        .filter(|at| *at > 0))
 }
 
 /// What the service allows of screen sharing now (`hello.voice.share` on the presence socket,
@@ -905,15 +957,20 @@ mod tests {
             sh: Option<Vec<ShareWire>>,
         }
         let state: State = serde_json::from_value(json!({"sh": [
-            {"n":1,"src":"game","audio":true,"preset":"normal","fps":30,"w":3,"at":1730800000},
+            {"n":1,"src":"game","audio":true,"preset":"normal","fps":30,"w":3,"at":1730800000,"th":1730800060},
             {"n":"x"},
-            {"n":2,"src":"hologram","preset":"ultra"}
+            {"n":2,"src":"hologram","preset":"ultra"},
+            {"n":3,"src":"screen","th":"later"}
         ]}))
         .unwrap();
         let sh = state.sh.unwrap();
-        assert_eq!(sh.len(), 2);
+        assert_eq!(sh.len(), 3);
         assert_eq!(sh[0].src, ShareKind::Game);
         assert_eq!(sh[0].w, 3);
+        // SHARE-LIVE: the picture's time; an odd one costs nothing but itself.
+        assert_eq!(sh[0].th, Some(1_730_800_060));
+        assert_eq!(sh[1].th, None);
+        assert_eq!((sh[2].n, sh[2].th), (3, None));
         // Unknown kinds read as a window, unknown presets as "Normal".
         assert_eq!(sh[1].src, ShareKind::Window);
         assert_eq!(sh[1].preset, SharePreset::Normal);

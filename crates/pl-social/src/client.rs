@@ -1344,6 +1344,40 @@ impl Session {
         self.call(Method::POST, path, Some(body)).await.map(drop)
     }
 
+    /// SHARE-LIVE: a live share's still picture (`GET /v1/voice/thumb?room&u&n`): the JPEG,
+    /// `Locked` (403 `{"locked":true}`: the player sees the room but may not join it) or `None`
+    /// (404: no such share, no picture yet, a block, or a room the player cannot see). Kept
+    /// nowhere; the launcher holds an answer as long as the service allows (20 s).
+    pub async fn voice_thumb(
+        &self,
+        room: &str,
+        user: &str,
+        n: u8,
+    ) -> Result<crate::voice::VoiceThumb> {
+        use crate::voice::VoiceThumb;
+        if !crate::voice::is_room_id(room) || n == 0 {
+            return Err(SocialError::InvalidInput("not a share"));
+        }
+        let user = user_id(user)?;
+        let reply = self
+            .client
+            .send(
+                Method::GET,
+                &format!("v1/voice/thumb?room={room}&u={user}&n={n}"),
+                Some(&self.token),
+                None,
+                &[],
+            )
+            .await?;
+        match reply.status {
+            200 if VoiceThumb::is_picture(&reply.body) => Ok(VoiceThumb::Image(reply.body)),
+            200 => Err(SocialError::Protocol("not a picture".into())),
+            403 if crate::voice::says_locked(&reply.body) => Ok(VoiceThumb::Locked),
+            404 => Ok(VoiceThumb::None),
+            _ => Err(reply.error()),
+        }
+    }
+
     /// VOICE: the service's address, this session's token and the user agent, for the room
     /// socket (`GET /v1/voice?ticket=…`, `pl-voice`).
     pub fn voice_socket(&self) -> (Url, String, String) {
@@ -1432,6 +1466,78 @@ mod tests {
 
     fn token() -> SessionToken {
         SessionToken::new(format!("pls_{}", "A".repeat(43)))
+    }
+
+    /// SHARE-LIVE: a share's still picture, the lock, or nothing, as the service answers; nothing
+    /// is asked for what cannot be a share.
+    #[tokio::test]
+    async fn reads_a_shares_still_picture() {
+        use crate::voice::VoiceThumb;
+        let jpg = vec![0xFF, 0xD8, 0xFF, 0xE0, 1, 2];
+        let picture = jpg.clone();
+        let server = MockServer::start(move |req| {
+            assert_eq!(req.path, "/v1/voice/thumb");
+            match req.target.as_str() {
+                "/v1/voice/thumb?room=g0123456789abcdef&u=123456789012345678&n=1" => {
+                    MockReply::bytes(200, "image/jpeg", picture.clone())
+                }
+                "/v1/voice/thumb?room=c0123456789abcdef&u=123456789012345678&n=1" => {
+                    MockReply::json(403, r#"{"locked":true}"#)
+                }
+                "/v1/voice/thumb?room=f0123456789abcdef&u=123456789012345678&n=1" => {
+                    MockReply::empty(404)
+                }
+                _ => MockReply::json(403, r#"{"error":"forbidden"}"#),
+            }
+        })
+        .await;
+        let session = client(&server).session(token());
+        let user = "123456789012345678";
+        assert_eq!(
+            session
+                .voice_thumb("g0123456789abcdef", user, 1)
+                .await
+                .unwrap(),
+            VoiceThumb::Image(jpg)
+        );
+        assert_eq!(
+            session
+                .voice_thumb("c0123456789abcdef", user, 1)
+                .await
+                .unwrap(),
+            VoiceThumb::Locked
+        );
+        assert_eq!(
+            session
+                .voice_thumb("f0123456789abcdef", user, 1)
+                .await
+                .unwrap(),
+            VoiceThumb::None
+        );
+        // Another refusal is the service's error.
+        assert!(
+            session
+                .voice_thumb("g0123456789abcdef", user, 2)
+                .await
+                .is_err()
+        );
+        for (room, user, n) in [
+            ("g0123", user, 1),
+            ("g0123456789abcdef", "me", 1),
+            ("g0123456789abcdef", user, 0),
+        ] {
+            assert!(matches!(
+                session.voice_thumb(room, user, n).await,
+                Err(SocialError::InvalidInput(_))
+            ));
+        }
+        let requests = server.requests();
+        assert_eq!(requests.len(), 4);
+        assert!(
+            requests[0]
+                .header("authorization")
+                .is_some_and(|value| value.starts_with("Bearer pls_"))
+        );
     }
 
     const ME: &str = r#"{"id":"123456789012345678","username":"ayse","displayName":null,"avatar":"discord",
