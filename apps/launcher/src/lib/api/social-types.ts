@@ -161,6 +161,11 @@ export interface Friend extends SocialProfile {
    * a room (`in`); absent: they cannot be called (voice chat off, invisible, an older launcher).
    */
   voice?: "ready" | "in";
+  /**
+   * SHARE-LIVE (`presence.voice.live`): they share their screen in a voice room now (only friends
+   * hear it; absent while screen sharing is off).
+   */
+  voiceLive?: boolean;
   /** SOC-NOTE: their status note while they are online and notes are on (`chat.socNote.notes`). */
   note?: StatusNote;
 }

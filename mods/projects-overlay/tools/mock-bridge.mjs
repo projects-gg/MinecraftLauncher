@@ -96,6 +96,10 @@
 // ("Oyunu paylaş" dim with "why", default "not-allowed"), "share-ready", "share-note" (a "voice-notice" with "kind",
 // default "share-closed", and "reason", default "idle"), "share-private" (a message, an invite and a crew's call as the
 // launcher sends them while the game is in the player's share: nobody's, nothing said).
+// SHARE-LIVE (with --share): PixelAvci's share says its number, how many watch and its picture's time ("n", "watchers",
+// "th"); NetherKral is live in a call of their own (the friend list's "live"); the card's "voice-thumb" is answered for
+// PixelAvci's share in the room with --thumb <png file> (else "none"), for anything else "none" (as the launcher does
+// for a share the state does not show).
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
@@ -751,7 +755,14 @@ function friendRows() {
     ...(next.on && NICKNAMES[f.id] ? { name: NICKNAMES[f.id], real: f.name } : {}),
     badge: tagsOn ? f.badge : undefined,
     // VOICE-O (V14): online friends may be called.
-    voice: args.voice && f.where !== "offline" ? "ready" : undefined,
+    voice:
+      args.voice && f.where !== "offline"
+        ? args.share && f.id === "f-mert"
+          ? "in"
+          : "ready"
+        : undefined,
+    // SHARE-LIVE: NetherKral shares their screen in a call of their own.
+    ...(args.share && f.id === "f-mert" ? { live: true } : {}),
   }));
 }
 
@@ -761,7 +772,31 @@ const voiceMock = { hears: false, view: null, rooms: false, crews: null };
 const shareMock = { hears: false, view: null };
 
 function shareStart() {
-  return { game: "ready", live: [{ person: "f-ayse", kind: "game" }] };
+  // SHARE-LIVE: the share's number, how many watch and when its picture was stored.
+  const th = Math.floor(Date.now() / 1000) - 12;
+  return { game: "ready", live: [{ person: "f-ayse", kind: "game", n: 1, watchers: 2, th }] };
+}
+
+/** SHARE-LIVE: the card's picture as the launcher answers "voice-thumb" (a small PNG, locked or none). */
+function onVoiceThumb(socket, frame) {
+  const room = typeof frame.room === "string" ? frame.room : "";
+  const u = typeof frame.u === "string" ? frame.u : "";
+  const n = Number.isInteger(frame.n) ? frame.n : 0;
+  let png = null;
+  if (u === "f-ayse" && n === 1 && typeof args.thumb === "string") {
+    try {
+      png = readFileSync(args.thumb).toString("base64");
+    } catch {
+      png = null;
+    }
+  }
+  send(socket, {
+    t: "voice-thumb",
+    room,
+    u,
+    n,
+    ...(png ? { kind: "image", png } : { kind: "none" }),
+  });
 }
 
 function sendShare(socket) {
@@ -1993,6 +2028,12 @@ function onFrame(socket, frame) {
       // OVL-SHARE: only a launcher that plays it, only from a mod that said "share".
       if (args.share && shareMock.hears) {
         onShare(socket, frame);
+      }
+      break;
+    case "voice-thumb":
+      // SHARE-LIVE: only from a mod that said "voice" and "share".
+      if (args.share && shareMock.hears) {
+        onVoiceThumb(socket, frame);
       }
       break;
     case "emoji": {

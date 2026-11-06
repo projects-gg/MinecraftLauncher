@@ -10,6 +10,8 @@ import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.state.Presence;
 import gg.projects.overlay.ui.Face;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.LiveChip;
+import gg.projects.overlay.ui.LiveTip;
 import gg.projects.overlay.ui.MarkTip;
 import gg.projects.overlay.ui.Marks;
 import gg.projects.overlay.ui.PresenceDot;
@@ -21,6 +23,7 @@ import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
 import gg.projects.overlay.ui.draw.MarkSprites;
 import gg.projects.overlay.ui.draw.ShapeSet;
+import gg.projects.overlay.voice.VoiceState;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -89,6 +92,15 @@ public final class FriendList extends PanelWidget {
         /** "Katıl" on a friend. */
         void join(String friendId);
 
+        /** SHARE-LIVE: the card on a friend's "YAYINDA" opened: asks the launcher for share {@code n}'s picture. */
+        default void preview(String room, String friendId, int n) {
+        }
+
+        /** SHARE-LIVE: where the launcher's preview answers are (null: no card). */
+        default VoiceState voiceState() {
+            return null;
+        }
+
         /** The row itself (a click, Enter): their conversation, or their menu under {@code dots} when none opens. */
         void primary(String friendId, PersonMenu.Anchor dots, boolean keys);
 
@@ -135,6 +147,8 @@ public final class FriendList extends PanelWidget {
         Face face;
         /** One of the player's favourites: the star after the name (OVL-UX2). */
         boolean fav;
+        /** SHARE-LIVE: they share their screen in a voice room: "YAYINDA" after the name (and its badge, star). */
+        boolean live;
         float nameW;
         float y;
         float joinWidth;
@@ -163,6 +177,9 @@ public final class FriendList extends PanelWidget {
     private OverlayState state;
     private final BadgeBubble bubble = new BadgeBubble();
     private final MarkTip markTip = new MarkTip();
+    // SHARE-LIVE: "YAYINDA" and the card the pointer opens on it.
+    private final LiveChip liveChip = new LiveChip();
+    private final LiveTip liveTip = new LiveTip();
     private final List<Row> rows = new ArrayList<>();
     private FormattedCharSequence joinLine = FormattedCharSequence.EMPTY;
     private FormattedCharSequence emptyLine = FormattedCharSequence.EMPTY;
@@ -531,8 +548,10 @@ public final class FriendList extends PanelWidget {
             row.chip = TagChip.of(badge, TagChip.ROW);
             row.fav = f.fav();
             row.marks = state.marks(f.marks());
+            row.live = state.live(f.id());
             String name = Texts.fit(strong, f.name().isEmpty() ? Texts.str("toast.someone") : f.name(),
-                Math.round(nameRoom - TagChip.room(row.chip) - Marks.room(row.marks) - (row.fav ? STAR_ROOM : 0)));
+                Math.round(nameRoom - TagChip.room(row.chip) - Marks.room(row.marks) - (row.fav ? STAR_ROOM : 0)
+                    - liveChip.room(row.live)));
             row.name = Texts.visual(name);
             row.nameW = strong.width(name);
             row.online = f.online();
@@ -567,6 +586,9 @@ public final class FriendList extends PanelWidget {
             String said = badge == null ? marked : Texts.str("row.badge", marked, badge.tag());
             if (row.fav) {
                 said += ", " + Texts.str("people.list.star");
+            }
+            if (row.live) {
+                said += ", " + Texts.str("share.live");
             }
             // The gold dot's meaning is said too (never colour alone).
             String heard = PresenceDot.spoken(row.presence);
@@ -693,6 +715,18 @@ public final class FriendList extends PanelWidget {
             if (!row.header && row.id.equals(friendId)) {
                 float y = getY() + row.y - scroll.value();
                 return new float[] {getX() + FACE + 8 + 30, y + ROW_H / 2f};
+            }
+        }
+        return null;
+    }
+
+    /** SHARE-LIVE: the middle of a friend's "YAYINDA" (the scenario driver points at it), or null without one. */
+    public float[] liveChipCenter(String friendId) {
+        for (Row row : rows) {
+            if (!row.header && row.live && row.id.equals(friendId)) {
+                float y = getY() + row.y - scroll.value();
+                float x = liveX(row, getX() + FACE + 8 + TagChip.room(row.chip));
+                return new float[] {x + liveChip.width() / 2f, y + (row.lone ? ROW_H / 2f : NAME_MID)};
             }
         }
         return null;
@@ -901,6 +935,8 @@ public final class FriendList extends PanelWidget {
             }
             bubble.track(null, false, now);
             markTip.track(null, null, 0f, 0f, now);
+            liveTip.track(actions.voiceState(), null, null, null, null, null, 0, null, 0L, 0f, 0f, 0f, now,
+                actions::preview);
             drawNote(g, now);
             return;
         }
@@ -908,6 +944,7 @@ public final class FriendList extends PanelWidget {
         trackBubble(mouseX, mouseY, top, now);
         trackDots(mouseX, mouseY, top, now);
         trackMarks(mouseX, mouseY, top, now);
+        trackLive(mouseX, mouseY, top, now);
         float dotsX = dotsX();
         g.enableScissor(x0 - 2, y0, x0 + w + 2, y0 + h);
         for (Row row : rows) {
@@ -971,6 +1008,9 @@ public final class FriendList extends PanelWidget {
                 Draw.icon(g, Icon.STAR_FILL, 8, Draw.snap(nameX + row.nameW + Marks.room(row.marks) + 3),
                     Draw.snap(y + nameMid - 4.5f), Theme.GOLD_300);
                 Draw.popAlpha();
+            }
+            if (row.live) {
+                liveChip.draw(g, liveX(row, nameX), y + nameMid);
             }
             if (!row.lone) {
                 Draw.text(g, small, row.where, tx, Fonts.centeredY(Fonts.Face.SMALL, y + 17), row.inGame
@@ -1056,6 +1096,72 @@ public final class FriendList extends PanelWidget {
             Draw.stratum(g);
             markTip.draw(g, now, x0 - 2, y0, x0 + w + 2);
         }
+        if (liveTip.active()) {
+            Draw.stratum(g);
+            liveTip.draw(g, now, x0 - 2, y0, x0 + w + 2, y0 + h);
+        }
+    }
+
+    /** SHARE-LIVE: where a row's "YAYINDA" starts (after the name, its badge and the star). */
+    private float liveX(Row row, float nameX) {
+        return nameX + row.nameW + Marks.room(row.marks) + (row.fav ? STAR_ROOM : 0) + LiveChip.GAP;
+    }
+
+    /**
+     * SHARE-LIVE: the pointer resting on a friend's "YAYINDA" opens their stream's card (only a row in view, and none
+     * while a friend's menu is open: one popover at a time).
+     */
+    private void trackLive(int mouseX, int mouseY, float top, long now) {
+        VoiceState voice = actions.voiceState();
+        if (voice != null && isHovered() && menuFor == null) {
+            float tx = getX() + FACE + 8;
+            for (Row row : rows) {
+                if (row.header || !row.live) {
+                    continue;
+                }
+                float y = getY() + row.y - top;
+                float mid = y + (row.lone ? ROW_H / 2f : NAME_MID);
+                float x = liveX(row, tx + TagChip.room(row.chip));
+                if (y >= getY() && y + ROW_H <= getY() + getHeight() && liveChip.contains(mouseX, mouseY, x, mid)) {
+                    trackFriend(voice, row, x, y, now);
+                    return;
+                }
+            }
+        }
+        liveTip.track(voice, null, null, null, null, null, 0, null, 0L, 0f, 0f, 0f, now, actions::preview);
+    }
+
+    /**
+     * A friend's card: in the player's room, the room's share (what it shows, who watches); in a crew room the player's
+     * crews show, that room ({@code n} 1; full: locked here); anywhere else a call of their own: locked, nothing asked.
+     */
+    private void trackFriend(VoiceState voice, Row row, float x, float y, long now) {
+        VoiceState.Room room = voice.room();
+        VoiceState.LiveShare share = voice.liveShare(row.id);
+        if (room != null && share != null && room.person(row.id) != null) {
+            String meta = Texts.str("share.kind." + share.kind());
+            if (share.watchers() > 0) {
+                meta = meta + ", " + Texts.str("share.watchers", share.watchers());
+            }
+            liveTip.track(voice, row.id, row.face, row.person, meta, room.id(), share.n(), null, share.th(), x, y + 1,
+                y + ROW_H - 1, now, actions::preview);
+            return;
+        }
+        String crewRoom = voice.crewLiveRoom(row.id);
+        VoiceState.CrewRoom found = crewRoom == null ? null : voice.crewRoom(crewRoom);
+        if (found != null && !found.full()) {
+            liveTip.track(voice, row.id, row.face, row.person,
+                found.general() || found.name() == null ? VoicePanel.WORDS.general() : found.name(),
+                crewRoom, 1, null, 0L, x, y + 1, y + ROW_H - 1, now, actions::preview);
+            return;
+        }
+        liveTip.track(voice, row.id, row.face, row.person, "", null, 0, found != null ? "full" : "private", 0L, x,
+            y + 1, y + ROW_H - 1, now, actions::preview);
+    }
+
+    /** SHARE-LIVE: the panel closed: its card and picture go. */
+    public void releaseLive() {
+        liveTip.release();
     }
 
     /**

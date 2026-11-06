@@ -7,8 +7,10 @@
 // on the friend opens their menu, as a row's does. Faces at 72 px (a multiple of 8: the pixel heads
 // stay square), their names clear of the ring that follows the voice.
 import { Menu } from "@pl/ui";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, type RefObject, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useRoomTargets } from "@/features/share/live";
+import { LiveAppear, LiveTagButton } from "@/features/share/live-card";
 import { WatchButton } from "@/features/share/panel";
 import { usePersonItems } from "@/features/social/person-menu";
 import { useSocialUi } from "@/features/social/store";
@@ -32,6 +34,7 @@ function Seat({
   line,
   marks,
   dim = false,
+  live,
   children,
 }: {
   face: VoiceFace;
@@ -39,6 +42,8 @@ function Seat({
   line?: string | null;
   marks?: ReactNode;
   dim?: boolean;
+  /** SHARE-LIVE: "YAYINDA" under the name (the seat is too narrow beside it). */
+  live?: ReactNode;
   /** The face as a button (the friend's menu), or plain. */
   children?: (face: ReactNode) => ReactNode;
 }) {
@@ -54,20 +59,45 @@ function Seat({
           {marks}
         </span>
         {line ? <span className="text-[12px] leading-[1.35] text-ash-400">{line}</span> : null}
+        {live}
       </div>
     </div>
   );
 }
 
+/** A seat's card beside the panel, level with the stage (as a row's card sits beside its row). */
+const SEAT_CARD = { side: "left", align: "center", sideOffset: 14 } as const;
+
 /** The friend, whose face opens their menu (their volume first) on a press or a right click. */
-function FriendSeat({ person, marks }: { person: VoicePerson; marks: ReactNode }) {
+function FriendSeat({
+  person,
+  marks,
+  stage,
+}: {
+  person: VoicePerson;
+  marks: ReactNode;
+  /** The stage: the live card sits beside the panel, level with it. */
+  stage: RefObject<HTMLElement | null>;
+}) {
   const { t } = useTranslation();
   const face = useFace(person.id);
   const [open, setOpen] = useState(false);
+  const live = useRoomTargets(person.id);
   const ref = { id: face.id, name: face.name, avatar: face.avatar, avatarUrl: face.avatarUrl };
   const items = usePersonItems(ref, { from: "list" });
   return (
-    <Seat face={face} line={roleWord(person.role, t)} marks={marks}>
+    <Seat
+      face={face}
+      line={roleWord(person.role, t)}
+      marks={marks}
+      live={
+        <LiveAppear show={live.length > 0}>
+          <span className="mt-1.5 flex">
+            <LiveTagButton targets={live} placement={{ ...SEAT_CARD, anchor: stage }} />
+          </span>
+        </LiveAppear>
+      }
+    >
       {(art) => (
         <Menu
           items={items}
@@ -124,6 +154,8 @@ export function CallStage({
   const since = useVoiceUi((s) => callStart(s.state));
   const friend = room.people[0];
   const friendFace = useFace(friend?.id ?? "");
+  const stageRef = useRef<HTMLElement>(null);
+  const own = useRoomTargets(room.me.id);
   const meFace: VoiceFace = {
     id: room.me.id,
     name: me?.name ?? t("voice.room.you"),
@@ -133,6 +165,7 @@ export function CallStage({
   };
   return (
     <section
+      ref={stageRef}
       aria-label={t("voice.title")}
       // In the middle of the panel, a little above it (the eye's middle).
       className="flex flex-1 flex-col items-center justify-center px-2 pt-4 pb-14"
@@ -140,11 +173,22 @@ export function CallStage({
     >
       <div className="flex items-start justify-center gap-6">
         {friend ? (
-          <FriendSeat person={friend} marks={marksOf(friend)} />
+          <FriendSeat person={friend} marks={marksOf(friend)} stage={stageRef} />
         ) : calling ? (
           <CallingSeat friend={calling.friend} />
         ) : null}
-        <Seat face={meFace} line={t("voice.room.you")} marks={marksOf(room.me)} />
+        <Seat
+          face={meFace}
+          line={t("voice.room.you")}
+          marks={marksOf(room.me)}
+          live={
+            <LiveAppear show={own.length > 0}>
+              <span className="mt-1.5 flex">
+                <LiveTagButton targets={own} placement={{ ...SEAT_CARD, anchor: stageRef }} />
+              </span>
+            </LiveAppear>
+          }
+        />
       </div>
       {/* SHARE: the friend shares: "İzle" under the two. */}
       {friend ? <WatchButton person={friend.id} name={friendFace.name} className="mt-4" /> : null}

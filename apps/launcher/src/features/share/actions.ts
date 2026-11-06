@@ -2,6 +2,7 @@
 // worked shows in the state (the panel's "Yayında", the stage).
 import { toast } from "@pl/ui";
 import { useSocialUi } from "@/features/social/store";
+import { joinCrewRoom } from "@/features/voice/actions";
 import { keptVoicePrefs, useVoicePrefs } from "@/features/voice/prefs";
 import { faceNow, useVoiceUi } from "@/features/voice/store";
 import { voiceApi } from "@/lib/api/voice-api";
@@ -119,6 +120,47 @@ export async function unwatchShare(person: string, n: number) {
   } catch {
     // Watching ends with the room anyway.
   }
+}
+
+/** How long "Katıl ve izle" waits in the room for the share to show before it lets go. */
+export const JOIN_WATCH_MS = 15_000;
+
+/**
+ * SHARE-LIVE: "Katıl ve izle" on a preview card: joins the crew room, then watches the person's
+ * share once the room lists it (once; not if the player ends up elsewhere, nor after 15 s).
+ */
+export async function joinAndWatch(
+  crew: string,
+  room: { id: string; general: boolean },
+  person: string,
+): Promise<void> {
+  const joined = await joinCrewRoom(crew, room.general ? null : room.id);
+  if (!joined) return;
+  let done = false;
+  let stop: () => void = () => {};
+  const timer = setTimeout(() => finish(), JOIN_WATCH_MS);
+  function finish() {
+    done = true;
+    stop();
+    clearTimeout(timer);
+  }
+  const check = () => {
+    if (done) return;
+    const { room: now, share } = useVoiceUi.getState().state;
+    if (now && now.id !== room.id) {
+      finish();
+      return;
+    }
+    if (now?.phase !== "live" || !share?.on) return;
+    const next = share.live.find(
+      (l) => l.person === person && !share.watching.some((w) => w.person === person && w.n === l.n),
+    );
+    if (!next) return;
+    finish();
+    void watchShare(person, next.n);
+  };
+  stop = useVoiceUi.subscribe(check);
+  check();
 }
 
 /** The player's share choices as voice chat keeps them. */

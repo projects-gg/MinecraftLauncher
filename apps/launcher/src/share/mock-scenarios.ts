@@ -18,15 +18,30 @@
 // - `shareWatchOnly`: GeceKurdu_ shares, this computer cannot share;
 // - `shareNotAllowed`: the room lets only its leader and moderators share;
 // - `shareBudget`: the month's budget allows no new share.
-import type { VoiceState } from "@/lib/api/voice-types";
-import type { ShareSources, VoiceLiveShare, VoiceShareView } from "./types";
+//
+// SHARE-LIVE ("YAYINDA" and the preview card; `thumb=none|locked|slow` changes every picture's
+// answer, `thumb=slow` answers after 1.5 s):
+// - `shareLiveRows`: GeceKurdu_ shares the game, KumFirtinasi a screen that has no picture yet;
+// - `shareCrewLive`: the crew page outside a room, KorAtesi shares in "Taş Ocağı" (2/4, "Katıl ve izle");
+// - `shareCrewLiveFull`: the same room full (4/4): the card is locked ("Oda dolu.");
+// - `shareFriendsLive`: the friends list, GeceKurdu_ live in "Taş Ocağı", ElmasKazma in a call of
+//   their own (locked).
+import type { VoiceCrewRooms, VoiceState } from "@/lib/api/voice-types";
+import type { ShareSources, ShareThumb, VoiceLiveShare, VoiceShareView } from "./types";
 
 const ME = "100";
 const nowSec = () => Math.floor(Date.now() / 1000);
 
 /** The voice scenario each share scenario starts from. */
 export function shareBase(scenario: string): string {
-  if (scenario === "shareCrewRooms") return "crewRooms";
+  if (
+    scenario === "shareCrewRooms" ||
+    scenario === "shareCrewLive" ||
+    scenario === "shareCrewLiveFull" ||
+    scenario === "shareFriendsLive"
+  ) {
+    return "crewRooms";
+  }
   return scenario === "shareCall" ? "call1" : "room";
 }
 
@@ -35,6 +50,7 @@ const live = (
   n: number,
   kind: VoiceLiveShare["kind"],
   watchers = 1,
+  th: number | null = nowSec() - 14,
 ): VoiceLiveShare => ({
   person,
   n,
@@ -44,6 +60,7 @@ const live = (
   fps: kind === "game" ? 60 : 30,
   watchers,
   since: nowSec() - 640,
+  th,
 });
 
 const NAMES: Record<string, string> = {
@@ -162,6 +179,8 @@ export function shareViewFor(scenario: string): VoiceShareView | null {
       };
     case "shareLiveRow":
       return { ...VIEW, live: [live("301", 1, "game", 2)] };
+    case "shareLiveRows":
+      return { ...VIEW, live: [live("301", 1, "game", 2), live("909", 1, "screen", 0, null)] };
     case "shareWatch":
       return {
         ...VIEW,
@@ -209,15 +228,87 @@ export function shareViewFor(scenario: string): VoiceShareView | null {
     // The crew page outside a room: "Taş Ocağı" lets only the leader and moderators share.
     case "shareCrewRooms":
       return { ...VIEW, on: false, crewMods: ["c00000000000000b2"] };
+    // Outside a room: nothing of sharing but who is live in the crew's rooms (`VoiceCrewRoom.live`).
+    case "shareCrewLive":
+    case "shareCrewLiveFull":
+    case "shareFriendsLive":
+      return { ...VIEW, on: false };
     default:
       return null;
   }
 }
 
+/** SHARE-LIVE: who is live in the crew's rooms, for the scenarios seen from outside. */
+function crewsFor(scenario: string, crews: VoiceCrewRooms[]): VoiceCrewRooms[] {
+  const stone = "c00000000000000b2";
+  const people =
+    scenario === "shareCrewLiveFull"
+      ? ["302", "703", "303", "911"]
+      : scenario === "shareFriendsLive"
+        ? ["302", "301", "703"]
+        : null;
+  const liveIn =
+    scenario === "shareCrewLive" || scenario === "shareCrewLiveFull"
+      ? ["302"]
+      : scenario === "shareFriendsLive"
+        ? ["301"]
+        : null;
+  if (!liveIn) return crews;
+  return crews.map((entry) => ({
+    ...entry,
+    rooms: entry.rooms.map((room) =>
+      room.id === stone ? { ...room, people: people ?? room.people, live: liveIn } : room,
+    ),
+  }));
+}
+
 /** A voice scenario dressed with a share scenario's part. */
 export function withShare(scenario: string, state: VoiceState): VoiceState {
   const share = shareViewFor(scenario);
-  return share ? { ...state, share } : state;
+  if (!share) return state;
+  return {
+    ...state,
+    share,
+    crews: crewsFor(scenario, state.crews),
+    // ElmasKazma's own call (no crew room of the player's has them).
+    ...(scenario === "shareFriendsLive"
+      ? { presence: { ...state.presence, "301": "in" as const, "303": "in" as const } }
+      : {}),
+  };
+}
+
+/** SHARE-LIVE: the friends a scenario has live (the friend list's `voiceLive`). */
+export function mockLiveFriends(scenario: string | null): string[] {
+  return scenario === "shareFriendsLive" ? ["301", "303"] : [];
+}
+
+/**
+ * SHARE-LIVE: the preview's picture as the launcher would answer (`share_thumb`): the player's own
+ * room shows the share's picture, a crew room the player may join too, a full one is locked, and a
+ * room the player cannot see answers nothing. `force` is the preview's `thumb=` (none, locked).
+ */
+export function mockThumb(
+  state: VoiceState,
+  room: string,
+  user: string,
+  force: string | null,
+): ShareThumb {
+  if (force === "none") return { kind: "none" };
+  if (force === "locked") return { kind: "locked" };
+  const picture: ShareThumb = { kind: "image", dataUrl: mockFrame(user) };
+  if (state.room?.id === room) {
+    const share = state.share?.live.find((l) => l.person === user);
+    const mine = user === state.room.me.id && (state.share?.mine.length ?? 0) > 0;
+    if (mine) return picture;
+    return share && share.th != null ? picture : { kind: "none" };
+  }
+  for (const entry of state.crews) {
+    const found = entry.rooms.find((r) => r.id === room);
+    if (!found?.live?.includes(user)) continue;
+    const top = Math.min(entry.crewMax, found.max ?? entry.crewMax);
+    return found.people.length >= top ? { kind: "locked" } : picture;
+  }
+  return { kind: "none" };
 }
 
 // --- the picker's list -------------------------------------------------------------------------

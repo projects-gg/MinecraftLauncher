@@ -102,7 +102,18 @@ final class VoicePanel {
         ringJoin.setIconInk(Theme.GOLD_300);
         ringDecline = new IconButton(Icon.PHONE_X, Texts.tr("voice.ring.decline"), () -> answer(false));
         ringDecline.setColors(Theme.FLARE_300, Theme.mix(Theme.FLARE_300, Theme.BONE_50, 0.35f));
-        list = new VoiceList(screen::openVoiceMenu);
+        list = new VoiceList(new VoiceList.Actions() {
+            @Override
+            public void menu(String id, String name, PersonMenu.Anchor anchor, boolean keys) {
+                screen.openVoiceMenu(id, name, anchor, keys);
+            }
+
+            @Override
+            public void preview(String room, String person, int n) {
+                // SHARE-LIVE: the card on someone's "YAYINDA" asks the launcher for their picture.
+                overlay.voiceThumb(room, person, n);
+            }
+        });
         pageMic = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("voice.room.mic"), Icon.MIC,
             this::toggleMic);
         pageDeaf = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("voice.room.deafen"), Icon.HEADPHONES,
@@ -525,6 +536,9 @@ final class VoicePanel {
         render(g, pageMic, mouseX, mouseY);
         render(g, pageDeaf, mouseX, mouseY);
         render(g, pageLeave, mouseX, mouseY);
+        // SHARE-LIVE: the live card last, over the page's lines and buttons.
+        list.drawLiveTip(g, now, list.getX() - 2, list.getY(), list.getX() + list.getWidth() + 2,
+            Math.max(list.getY() + list.getHeight(), pageLeave.getY() + pageLeave.getHeight()));
     }
 
     private static void render(GuiGraphicsExtractor g, AbstractWidget w, int mouseX, int mouseY) {

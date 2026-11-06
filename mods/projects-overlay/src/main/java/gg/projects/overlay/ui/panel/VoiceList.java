@@ -9,6 +9,8 @@ import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.ui.Avatars;
 import gg.projects.overlay.ui.Face;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.LiveChip;
+import gg.projects.overlay.ui.LiveTip;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
@@ -44,6 +46,10 @@ public final class VoiceList extends PanelWidget {
     /** Opens someone's menu. */
     public interface Actions {
         void menu(String id, String name, PersonMenu.Anchor anchor, boolean keys);
+
+        /** SHARE-LIVE: the card on someone's "YAYINDA" opened: asks the launcher for share {@code n}'s picture. */
+        default void preview(String room, String person, int n) {
+        }
     }
 
     static final int ROW_H = 22;
@@ -66,6 +72,9 @@ public final class VoiceList extends PanelWidget {
         final List<Integer> markInks = new ArrayList<>(4);
         /** Bars to fill of three (a weak connection: 2, a bad one: 1), 0 for none. */
         int bars;
+        /** SHARE-LIVE: they share their screen: "YAYINDA" after the name. */
+        boolean live;
+        float nameWidth;
         Component narration;
         float y;
         final Tween ring = new Tween(0f);
@@ -77,6 +86,10 @@ public final class VoiceList extends PanelWidget {
 
     private final Actions actions;
     private final List<Row> rows = new ArrayList<>();
+    // SHARE-LIVE: "YAYINDA" and the card the pointer opens on it.
+    private final LiveChip liveChip = new LiveChip();
+    private final LiveTip liveTip = new LiveTip();
+    private VoiceState voice;
     private final Spring scroll = Spring.snappy(0f);
     private String selected;
     private boolean reducedMotion;
@@ -115,9 +128,10 @@ public final class VoiceList extends PanelWidget {
 
     /**
      * As {@link #show(VoiceState.Room, String, VoiceState.Words, long)}; {@code voice} (OVL-SHARE) says who shares their
-     * screen, a jade sign first among the row's signs ("Yayında"), the player's own too.
+     * screen: SHARE-LIVE's "YAYINDA" right after their name (the player's own too), the one live sign of the row.
      */
     public void show(VoiceState.Room room, String meName, VoiceState.Words words, VoiceState voice, long now) {
+        this.voice = voice;
         Map<String, Row> old = new HashMap<>();
         for (Row r : rows) {
             old.put((r.ringing ? "~" : "") + r.id, r);
@@ -129,6 +143,7 @@ public final class VoiceList extends PanelWidget {
         VoiceState.Me me = room.me();
         Row mine = old.getOrDefault("#me", new Row("#me"));
         mine.me = true;
+        mine.live = voice != null && voice.live();
         String own = meName == null || meName.isEmpty() ? Texts.str("voice.room.you") : meName;
         // "Sen", and the player's role beside it ("Sen · Lider").
         String you = Texts.str("voice.room.you");
@@ -136,9 +151,6 @@ public final class VoiceList extends PanelWidget {
         fill(mine, own, Avatars.ME, role == null ? you : you + " · " + role, strong, small, textW);
         mine.marks.clear();
         mine.markInks.clear();
-        if (voice != null && voice.live()) {
-            mark(mine, Icon.SCREENCAST, Theme.JADE_400);
-        }
         voiceMarks(mine, me.mute(), me.deaf(), me.mutedByModerator());
         mine.bars = bars(me.quality());
         mine.narration = narration(own, state(mine, me.talking()));
@@ -146,13 +158,11 @@ public final class VoiceList extends PanelWidget {
         next.add(mine);
         for (VoiceState.Person p : room.people()) {
             Row row = old.getOrDefault(p.id(), new Row(p.id()));
+            row.live = voice != null && voice.sharing(p.id());
             String name = VoiceState.shown(p.name(), words);
             fill(row, name, p.id(), roleOr(p.role(), null), strong, small, textW);
             row.marks.clear();
             row.markInks.clear();
-            if (voice != null && voice.sharing(p.id())) {
-                mark(row, Icon.SCREENCAST, Theme.JADE_400);
-            }
             voiceMarks(row, p.mute(), p.deaf(), p.mutedByModerator());
             if (p.mutedForMe()) {
                 mark(row, Icon.MUTE_FOR_ME, Theme.ASH_300);
@@ -165,6 +175,7 @@ public final class VoiceList extends PanelWidget {
         for (VoiceState.Named ring : room.ringing()) {
             Row row = old.getOrDefault("~" + ring.id(), new Row(ring.id()));
             row.ringing = true;
+            row.live = false;
             String name = VoiceState.shown(ring.name(), words);
             fill(row, name, ring.id(), Texts.str("voice.ringing"), strong, small, textW);
             row.marks.clear();
@@ -211,10 +222,15 @@ public final class VoiceList extends PanelWidget {
         return state.isEmpty() ? Component.literal(name) : Texts.tr("voice.person.narration", name, state);
     }
 
-    /** A row's name, the line under it and the face of {@code person} (a user id; {@link Avatars#ME} the player). */
-    private static void fill(Row row, String label, String person, String sub, Font strong, Font small, int textW) {
+    /**
+     * A row's name (it gives way to "YAYINDA" after it), the line under it and the face of {@code person} (a user id;
+     * {@link Avatars#ME} the player).
+     */
+    private void fill(Row row, String label, String person, String sub, Font strong, Font small, int textW) {
         row.label = label;
-        row.name = Texts.visual(Texts.fit(strong, label, textW));
+        String fitted = Texts.fit(strong, label, Math.max(20, textW - (int) Math.ceil(liveChip.room(row.live))));
+        row.name = Texts.visual(fitted);
+        row.nameWidth = strong.width(fitted);
         row.sub = sub == null ? null : Texts.visual(Texts.fit(small, sub, textW));
         if (row.face == null || !row.face.is(label, person)) {
             row.face = Face.of(label, person);
@@ -257,16 +273,18 @@ public final class VoiceList extends PanelWidget {
         };
     }
 
-    /** What the narrator says after the name: speaking, then what is off. */
+    /** What the narrator says after the name: "Yayında", speaking, then what is off. */
     private static String state(Row row, boolean speaking) {
         List<String> parts = new ArrayList<>(4);
+        if (row.live) {
+            parts.add(Texts.str("share.live"));
+        }
         if (speaking) {
             parts.add(Texts.str("voice.person.speaking"));
         }
         for (int i = 0; i < row.marks.size(); i++) {
             Icon icon = row.marks.get(i);
-            parts.add(Texts.str(icon == Icon.SCREENCAST ? "share.live"
-                : icon == Icon.MIC_OFF
+            parts.add(Texts.str(icon == Icon.MIC_OFF
                 ? (row.markInks.get(i) == Theme.FLARE_300 ? "voice.person.muted_for_all" : "voice.person.mic_off")
                 : icon == Icon.DEAF ? "voice.person.deafened" : "voice.person.muted_for_me"));
         }
@@ -432,6 +450,9 @@ public final class VoiceList extends PanelWidget {
         Font strong = Fonts.strong();
         Font small = Fonts.small();
         float top = scroll.value();
+        Row onLive = null;
+        float onLiveX = 0f;
+        float onLiveY = 0f;
         g.enableScissor(x0 - 2, y0, x0 + w + 2, y0 + h);
         for (Row row : rows) {
             float y = y0 + row.y - top;
@@ -460,6 +481,17 @@ public final class VoiceList extends PanelWidget {
             float tx = fx + FACE + 7;
             float nameMid = row.sub == null ? y + ROW_H / 2f : y + 7f;
             Draw.text(g, strong, row.name, tx, Fonts.centeredY(Fonts.Face.STRONG, nameMid), Theme.BONE_100);
+            if (row.live) {
+                float chipX = tx + row.nameWidth + LiveChip.GAP;
+                liveChip.draw(g, chipX, nameMid);
+                // SHARE-LIVE: the pointer resting on someone else's "YAYINDA" opens their stream's card.
+                if (!row.me && !row.ringing && isHovered() && y >= y0 && y + ROW_H <= y0 + h
+                    && liveChip.contains(mouseX, mouseY, chipX, nameMid)) {
+                    onLive = row;
+                    onLiveX = chipX;
+                    onLiveY = y;
+                }
+            }
             if (row.sub != null) {
                 Draw.text(g, small, row.sub, tx, Fonts.centeredY(Fonts.Face.SMALL, y + 16f), Theme.ASH_300);
             }
@@ -488,6 +520,56 @@ public final class VoiceList extends PanelWidget {
         }
         g.disableScissor();
         drawNote(g, now);
+        trackLive(onLive, onLiveX, onLiveY, now);
+    }
+
+    /** SHARE-LIVE: what the pointer rests on this frame, for the live card (drawn last, over the page). */
+    private void trackLive(Row row, float x, float y, long now) {
+        if (row == null) {
+            liveTip.track(voice, null, null, null, null, null, 0, null, 0L, 0f, 0f, 0f, now, actions::preview);
+            return;
+        }
+        VoiceState.LiveShare share = voice == null ? null : voice.liveShare(row.id);
+        VoiceState.Room room = voice == null ? null : voice.room();
+        String meta = "";
+        long th = 0L;
+        int n = 1;
+        if (share != null) {
+            meta = Texts.str("share.kind." + share.kind());
+            if (share.watchers() > 0) {
+                meta = meta + ", " + Texts.str("share.watchers", share.watchers());
+            }
+            th = share.th();
+            n = share.n();
+        }
+        liveTip.track(voice, row.id, row.face, row.label, meta, room == null ? null : room.id(), n, null, th, x, y + 1,
+            y + ROW_H - 1, now, actions::preview);
+    }
+
+    /** SHARE-LIVE: the live card over the page ({@code left..right}, {@code top..bottom}: the room page's box). */
+    public void drawLiveTip(GuiGraphicsExtractor g, long now, float left, float top, float right, float bottom) {
+        if (liveTip.active()) {
+            // A layer of its own over the page (as a badge's tooltip), so placing it scans nothing else.
+            Draw.stratum(g);
+            liveTip.draw(g, now, left, top, right, bottom);
+        }
+    }
+
+    /** SHARE-LIVE: the panel closed: its card and picture go. */
+    public void releaseLive() {
+        liveTip.release();
+    }
+
+    /** SHARE-LIVE: the middle of someone's "YAYINDA" (the scenario driver points at it), or null without one. */
+    float[] liveChipCenter(String id) {
+        for (Row row : rows) {
+            if (row.live && !row.me && !row.ringing && row.id.equals(id)) {
+                float y = getY() + row.y - scroll.value();
+                float x = getX() + 1 + FACE + 7 + row.nameWidth + LiveChip.GAP;
+                return new float[] {x + liveChip.width() / 2f, row.sub == null ? y + ROW_H / 2f : y + 7f};
+            }
+        }
+        return null;
     }
 
     /** The server bars' look (docs/design.md §6): three rising bars, the filled ones amber (weak) or red (bad). */

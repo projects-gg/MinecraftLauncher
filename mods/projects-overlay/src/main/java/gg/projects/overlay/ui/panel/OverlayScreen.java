@@ -414,6 +414,17 @@ public final class OverlayScreen extends Screen {
             }
 
             @Override
+            public void preview(String room, String friendId, int n) {
+                // SHARE-LIVE: the card on a friend's "YAYINDA" asks the launcher for their stream's picture.
+                overlay.voiceThumb(room, friendId, n);
+            }
+
+            @Override
+            public VoiceState voiceState() {
+                return overlay.voice();
+            }
+
+            @Override
             public void requestMenu(String requestId, String name, PersonMenu.Anchor anchor, boolean keys) {
                 openRequestMenu(requestId, name, anchor, keys);
             }
@@ -1577,6 +1588,16 @@ public final class OverlayScreen extends Screen {
     /** Where a friend's row is on screen (the scenario driver points at it), or null. */
     public float[] friendRow(String friendId) {
         return friends.visible ? friends.rowCenter(friendId) : null;
+    }
+
+    /** SHARE-LIVE: where a friend's "YAYINDA" is (the scenario driver points at it), or null. */
+    public float[] friendLiveChip(String friendId) {
+        return friends.visible ? friends.liveChipCenter(friendId) : null;
+    }
+
+    /** SHARE-LIVE: where someone's "YAYINDA" is on the room page (the scenario driver points at it), or null. */
+    public float[] voiceLiveChip(String id) {
+        return voice.list.visible ? voice.list.liveChipCenter(id) : null;
     }
 
     /** Puts the keyboard on a friend's row (the scenario driver uses it). */
@@ -2939,6 +2960,9 @@ public final class OverlayScreen extends Screen {
     @Override
     public void removed() {
         closePickers();
+        // SHARE-LIVE: a live card's picture is not kept while the panel is away.
+        voice.list.releaseLive();
+        friends.releaseLive();
         overlay.panelClosed();
     }
 

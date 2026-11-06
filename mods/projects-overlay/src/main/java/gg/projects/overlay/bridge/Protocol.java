@@ -540,6 +540,20 @@ public final class Protocol {
         return o;
     }
 
+    /**
+     * SHARE-LIVE (a mod that says {@link #VOICE} and {@link #SHARE}): the live card on {@code u}'s "YAYINDA" opened: the
+     * still picture of share {@code n} in {@code room} (the player's room as {@code voice-share} lists it, or a crew room
+     * {@code voice-crews} shows {@code u} live in, {@code n} 1). The launcher answers {@code voice-thumb} (a small PNG,
+     * locked or none). Sent once per opening, and again only when the room's picture time moved while it stays open.
+     */
+    public static JsonObject voiceThumb(String room, String u, int n) {
+        JsonObject o = message("voice-thumb");
+        o.addProperty("room", room);
+        o.addProperty("u", u);
+        o.addProperty("n", n);
+        return o;
+    }
+
     /** "İsteği geri çek" on a request the player sent. */
     public static JsonObject cancelRequest(String id) {
         JsonObject o = message("cancel-request");

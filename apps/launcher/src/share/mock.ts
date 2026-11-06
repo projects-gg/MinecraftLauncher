@@ -5,12 +5,14 @@
 import { mockVoice, type VoiceMock } from "@/lib/api/voice-mock";
 import type { VoiceState } from "@/lib/api/voice-types";
 import type { ShareApi } from "./api";
-import { MOCK_SOURCES } from "./mock-scenarios";
+import { MOCK_SOURCES, mockThumb } from "./mock-scenarios";
+import { param } from "./param";
 import {
   HIDDEN_SHARE_VIEW,
   type ShareNotice,
   type ShareRefusal,
   type ShareSource,
+  type ShareThumb,
   type VoiceShareView,
 } from "./types";
 
@@ -115,6 +117,15 @@ export function createShareMock(
     unshare: async (person, n) => {
       change((s) => ({ ...s, live: s.live.filter((l) => !(l.person === person && l.n === n)) }));
       return true;
+    },
+    // SHARE-LIVE: as the launcher answers after its request (a moment; `thumb=slow` 1.5 s).
+    thumb: (room, user) => {
+      const force = param("thumb");
+      const answer = mockThumb(voice.current(), room, user, force);
+      if (!timers) return Promise.resolve(answer);
+      return new Promise<ShareThumb>((resolve) =>
+        setTimeout(() => resolve(answer), force === "slow" ? 1500 : 220),
+      );
     },
     onNotice: (listener) => {
       listeners.add(listener);

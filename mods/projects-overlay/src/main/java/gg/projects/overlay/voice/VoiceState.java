@@ -6,10 +6,13 @@ import com.google.gson.JsonObject;
 import gg.projects.overlay.bridge.Protocol;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -153,6 +156,29 @@ public final class VoiceState {
         }
     }
 
+    /**
+     * SHARE-LIVE: someone else's share in the room as {@code voice-share} lists it: its number (what {@code voice-thumb}
+     * names), what it shows ({@code game}, {@code window}, {@code screen}), how many watch and when the room last stored
+     * its picture (Unix seconds, {@code 0}: none yet), so an open card asks again when it moves.
+     */
+    public record LiveShare(String person, int n, String kind, int watchers, long th) {
+    }
+
+    /**
+     * SHARE-LIVE: the launcher's answer to {@code voice-thumb}: a picture ({@code image}, the PNG's bytes), none the
+     * player may see ({@code locked}: the room is there, joining it is not) or none yet ({@code none}). {@code at}
+     * counts answers, so a newer picture of the same person is told apart.
+     */
+    public record Thumb(String person, String kind, byte[] picture, int at) {
+        public boolean image() {
+            return "image".equals(kind) && picture != null && picture.length > 0;
+        }
+
+        public boolean locked() {
+            return "locked".equals(kind);
+        }
+    }
+
     /** What someone's menu offers of voice chat (the launcher's {@code callOffer}). */
     public enum Offer {
         NONE,
@@ -183,6 +209,11 @@ public final class VoiceState {
     private String shareWhy = "";
     private List<MyShare> myShares = List.of();
     private Set<String> sharing = Set.of();
+    // SHARE-LIVE: what each sharer shows, and the preview pictures the launcher answered.
+    private Map<String, LiveShare> liveShares = Map.of();
+    private final Map<String, Thumb> thumbs = new HashMap<>();
+    /** SHARE-LIVE: who is live in a crew room {@code voice-crews} shows, and that room. */
+    private Map<String, String> crewLive = Map.of();
 
     /**
      * Applies a launcher frame of voice chat's ({@code voice}, {@code voice-speaking}, {@code voice-notice},
@@ -209,8 +240,12 @@ public final class VoiceState {
             }
             case "voice-result" -> result = new Result(id(frame, "act"), Protocol.bool(frame, "ok", false),
                 id(frame, "reason"), id(frame, "who"));
-            case "voice-crews" -> crews = crewsOf(arr(frame, "crews"));
+            case "voice-crews" -> {
+                crews = crewsOf(arr(frame, "crews"));
+                crewLive = crewLiveOf(arr(frame, "crews"));
+            }
             case "voice-share" -> putShare(frame);
+            case "voice-thumb" -> putThumb(frame);
             default -> {
                 return false;
             }
@@ -229,6 +264,9 @@ public final class VoiceState {
         shareWhy = "";
         myShares = List.of();
         sharing = Set.of();
+        liveShares = Map.of();
+        thumbs.clear();
+        crewLive = Map.of();
         heard = false;
         on = false;
         room = null;
@@ -381,6 +419,40 @@ public final class VoiceState {
     /** Whether someone else in the room shares now ("Yayında" on their row). */
     public boolean sharing(String id) {
         return id != null && sharing.contains(id);
+    }
+
+    /** SHARE-LIVE: someone's share in the room (what it shows, who watches), or null. */
+    public LiveShare liveShare(String id) {
+        return id == null ? null : liveShares.get(id);
+    }
+
+    /** SHARE-LIVE: the crew room {@code person} shares in ({@code voice-crews}), or null. */
+    public String crewLiveRoom(String person) {
+        return person == null ? null : crewLive.get(person);
+    }
+
+    /** SHARE-LIVE: a crew room {@code voice-crews} shows, by id, or null. */
+    public CrewRoom crewRoom(String id) {
+        for (CrewRooms entry : crews) {
+            for (CrewRoom room : entry.rooms()) {
+                if (room.id().equals(id)) {
+                    return room;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** SHARE-LIVE: the launcher's last preview answer for {@code person}, or null before one came. */
+    public Thumb thumb(String person) {
+        return person == null ? null : thumbs.get(person);
+    }
+
+    /** SHARE-LIVE: a preview no longer shows: its picture is let go (nothing held while no card is open). */
+    public void dropThumb(String person) {
+        if (person != null) {
+            thumbs.remove(person);
+        }
     }
 
     /** The oldest notice not said yet, or null. */
@@ -605,18 +677,89 @@ public final class VoiceState {
         }
         myShares = Collections.unmodifiableList(mine);
         Set<String> live = new HashSet<>();
+        Map<String, LiveShare> shown = new HashMap<>();
         JsonArray others = arr(frame, "live");
         if (others != null) {
             for (JsonElement e : others) {
                 if (e.isJsonObject() && live.size() < MAX_PEOPLE) {
-                    String person = id(e.getAsJsonObject(), "person");
+                    JsonObject o = e.getAsJsonObject();
+                    String person = id(o, "person");
                     if (!person.isEmpty()) {
                         live.add(person);
+                        // SHARE-LIVE: the first share of each person (the card shows that one).
+                        int n = (int) Protocol.num(o, "n", 1);
+                        shown.putIfAbsent(person, new LiveShare(person, n > 0 && n < 256 ? n : 1,
+                            word(o, "kind", "window"), (int) Math.max(0, Math.min(999, Protocol.num(o, "watchers", 0))),
+                            Math.max(0L, Protocol.num(o, "th", 0L))));
                     }
                 }
             }
         }
         sharing = Collections.unmodifiableSet(live);
+        liveShares = Collections.unmodifiableMap(shown);
+    }
+
+    /** The PNG's base64 at most (320 px on its long side; the bridge's frames stay under 256 KB). */
+    static final int MAX_THUMB_CHARS = 240_000;
+    private int thumbAnswers;
+
+    /** SHARE-LIVE: {@code voice-thumb}, the launcher's answer to the card's request. */
+    private void putThumb(JsonObject frame) {
+        String person = id(frame, "u");
+        if (person.isEmpty()) {
+            return;
+        }
+        String kind = word(frame, "kind", "none");
+        byte[] picture = null;
+        if (kind.equals("image")) {
+            String data = Protocol.str(frame, "png", "");
+            if (data.isEmpty() || data.length() > MAX_THUMB_CHARS) {
+                kind = "none";
+            } else {
+                try {
+                    picture = Base64.getDecoder().decode(data);
+                } catch (IllegalArgumentException e) {
+                    kind = "none";
+                }
+            }
+        } else if (!kind.equals("locked")) {
+            kind = "none";
+        }
+        thumbs.put(person, new Thumb(person, kind, picture, ++thumbAnswers));
+    }
+
+    /** SHARE-LIVE: who is live in each crew room of {@code voice-crews} (their {@code live}), and that room. */
+    private static Map<String, String> crewLiveOf(JsonArray list) {
+        if (list == null) {
+            return Map.of();
+        }
+        Map<String, String> out = new HashMap<>();
+        for (JsonElement e : list) {
+            JsonArray rooms = e.isJsonObject() ? arr(e.getAsJsonObject(), "rooms") : null;
+            if (rooms == null) {
+                continue;
+            }
+            for (JsonElement r : rooms) {
+                if (!r.isJsonObject()) {
+                    continue;
+                }
+                String room = id(r.getAsJsonObject(), "id");
+                JsonArray who = arr(r.getAsJsonObject(), "people");
+                if (room.isEmpty() || who == null) {
+                    continue;
+                }
+                for (JsonElement p : who) {
+                    if (p.isJsonObject() && Protocol.bool(p.getAsJsonObject(), "live", false)
+                        && out.size() < MAX_PEOPLE) {
+                        String person = id(p.getAsJsonObject(), "id");
+                        if (!person.isEmpty()) {
+                            out.putIfAbsent(person, room);
+                        }
+                    }
+                }
+            }
+        }
+        return Collections.unmodifiableMap(out);
     }
 
     private void putSpeaking(JsonObject frame) {

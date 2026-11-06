@@ -45,6 +45,10 @@ describe("renderSound", () => {
       ended: 0.5,
       lost: 0.48,
       waiting: 3,
+      shareStart: 0.45,
+      shareStop: 0.45,
+      streamStart: 0.4,
+      streamEnd: 0.36,
     };
     expect([...SOUND_NAMES].sort()).toEqual(Object.keys(lengths).sort());
     for (const [name, seconds] of Object.entries(lengths) as [SoundName, number][]) {
@@ -76,6 +80,28 @@ describe("renderSound", () => {
     expect(centreOf(mic, 0, 0.13)).toBeLessThan(0.08);
   });
 
+  it("gives screen sharing its own chord: the player's stream high, others' lower and softer", () => {
+    const rises = (name: SoundName, split: number, end: number) => {
+      const samples = renderSound(name, RATE);
+      return pitchOf(samples, split, end) > pitchOf(samples, 0.005, split);
+    };
+    expect(rises("shareStart", 0.075, 0.3)).toBe(true);
+    expect(rises("shareStop", 0.085, 0.3)).toBe(false);
+    expect(rises("streamStart", 0.075, 0.3)).toBe(true);
+    expect(rises("streamEnd", 0.075, 0.25)).toBe(false);
+    // Someone else's stream sits below the player's own: the chord an octave lower.
+    const own = renderSound("shareStart", RATE);
+    const theirs = renderSound("streamStart", RATE);
+    expect(pitchOf(theirs, 0.1, 0.3)).toBeLessThan(pitchOf(own, 0.1, 0.3) * 0.8);
+    // The end of a watched stream is the softest of the four, and softer than someone leaving.
+    const peaks = (["shareStart", "shareStop", "streamStart"] as const).map((name) =>
+      peakOf(renderSound(name, RATE)),
+    );
+    const end = peakOf(renderSound("streamEnd", RATE));
+    for (const peak of peaks) expect(end).toBeLessThan(peak);
+    expect(end).toBeLessThan(peakOf(renderSound("leave", RATE)));
+  });
+
   it("loops only the caller's waiting tone, which is mostly quiet", () => {
     expect(loops("waiting")).toBe(true);
     expect(loops("join")).toBe(false);
@@ -95,10 +121,12 @@ describe("renderSound", () => {
       "ended",
       "lost",
       "stop",
+      "shareStart",
+      "shareStop",
     ]) {
       expect(playsWhileDeaf(own as SoundName | "stop")).toBe(true);
     }
-    for (const others of ["join", "leave", "waiting"] as const) {
+    for (const others of ["join", "leave", "waiting", "streamStart", "streamEnd"] as const) {
       expect(playsWhileDeaf(others)).toBe(false);
     }
   });

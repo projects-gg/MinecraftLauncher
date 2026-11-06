@@ -71,6 +71,19 @@ export const trShare = {
     watchLabel: "{{name}} yayınını izle",
     unshare: "Paylaşımı durdur",
   },
+  // SHARE-LIVE: yayındakinin adının yanındaki etiket (sahibinin sözü, tek büyük harfli etiket) ve
+  // üzerine gelince açılan kart.
+  tag: "YAYINDA",
+  preview: {
+    label_one: "{{names}} yayında",
+    label_other: "{{names}} yayında",
+    picture: "{{name}} yayınından son görüntü",
+    joinWatch: "Katıl ve izle",
+    watching: "İzliyorsun",
+    locked: "Bu odaya katılamazsın.",
+    private: "Yalnız aramadakiler izleyebilir.",
+    sharers: "Yayındakiler",
+  },
   stage: {
     label: "{{name}} yayını",
     connecting: "Bağlanıyor…",

@@ -103,6 +103,8 @@ export interface VoiceMyShare {
   watchers: string[];
   /** Unix seconds. */
   since: number;
+  /** SHARE-LIVE: when this computer last sent the share's small picture (Unix seconds; `th`). */
+  th?: number | null;
 }
 
 /** Someone else's share. */
@@ -116,7 +118,19 @@ export interface VoiceLiveShare {
   /** How many watch. */
   watchers: number;
   since: number;
+  /**
+   * SHARE-LIVE: when the room last stored the share's small picture (Unix seconds; `th`); an open
+   * preview asks again when it changes. None yet: no picture so far (or an older launcher).
+   */
+  th?: number | null;
 }
+
+/**
+ * SHARE-LIVE (`share_thumb(room, user, n)`): a share's last small picture for the preview card.
+ * `locked`: the player sees the room but may not join it (never a picture then); `none`: no picture
+ * yet, the share is gone, or there is nothing the player may see.
+ */
+export type ShareThumb = { kind: "image"; dataUrl: string } | { kind: "locked" } | { kind: "none" };
 
 export type ShareWatchPhase = "connecting" | "live" | "held";
 

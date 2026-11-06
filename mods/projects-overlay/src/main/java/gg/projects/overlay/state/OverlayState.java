@@ -409,6 +409,8 @@ public final class OverlayState {
     private final Set<String> discords = new HashSet<>();
     /** VOICE-O (V14): friends' voice chat, {@code ready} or {@code in}; absent: they cannot be called. */
     private final Map<String, String> voices = new HashMap<>();
+    /** SHARE-LIVE: friends who share their screen in a voice room ({@code live} beside {@code voice: in}). */
+    private final Set<String> lives = new HashSet<>();
     /** Direct conversations the panel opened before they had a message, and whose they are. */
     private final LinkedHashMap<String, Conversation> drafts = new LinkedHashMap<>();
     private final Map<String, String> draftFriends = new HashMap<>();
@@ -1177,6 +1179,12 @@ public final class OverlayState {
         } else {
             voices.remove(id);
         }
+        // SHARE-LIVE: they share their screen in a voice room ("YAYINDA" after their name).
+        if (voice.equals("in") && Protocol.bool(o, "live", false)) {
+            lives.add(id);
+        } else {
+            lives.remove(id);
+        }
         // OVL-SOC 2 (SOC-NEXT §3.6): the name the service knows, under the player's nickname for them.
         String real = name(o, "real");
         if (real.isEmpty()) {
@@ -1191,9 +1199,15 @@ public final class OverlayState {
         return friendId == null || !friends.containsKey(friendId) ? null : voices.get(friendId);
     }
 
+    /** SHARE-LIVE: a friend shares their screen in a voice room now. */
+    public boolean live(String friendId) {
+        return friendId != null && friends.containsKey(friendId) && lives.contains(friendId);
+    }
+
     /** Another account signed in: nothing of the previous one's menu stays. */
     private void forgetPeople() {
         voices.clear();
+        lives.clear();
         realNames.clear();
         answering.clear();
         requests = List.of();
