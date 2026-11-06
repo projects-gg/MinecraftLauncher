@@ -15,7 +15,7 @@ import { createVoiceMock } from "@/lib/api/voice-mock";
 import { HIDDEN_VOICE_STATE, VOICE_OK, type VoiceState } from "@/lib/api/voice-types";
 import { shareApi } from "@/share/api";
 import { forgetThumbs, type LiveTarget, liveTargetIn } from "./live";
-import { LiveTagButton } from "./live-card";
+import { LiveTag, LiveTagButton, useLivePreview } from "./live-card";
 
 // The card fades. happy-dom leaves a cancelled animation's `finished` rejection unhandled (a browser
 // marks it handled), so a fade cut short failed the run; here it is handled (rule-assist.test.tsx).
@@ -229,5 +229,39 @@ describe("the live tag's card", () => {
       vi.advanceTimersByTime(10);
     });
     expect(document.activeElement).toBe(tag);
+  });
+
+  it("goes into the card from a row with the right arrow", async () => {
+    vi.spyOn(shareApi, "thumb").mockResolvedValue({ kind: "none" });
+    const state = scenario("shareLiveRow");
+    const target = liveTargetIn(state, "301");
+    if (!target) throw new Error("no target");
+    function Row() {
+      const preview = useLivePreview([target as LiveTarget], PLACE);
+      return (
+        <div>
+          <button
+            type="button"
+            aria-label="GeceKurdu_"
+            onKeyDown={(event) => preview.keyIn(event)}
+            {...preview.focusProps}
+          >
+            <span {...preview.tagProps}>
+              <LiveTag />
+            </span>
+          </button>
+          {preview.card}
+        </div>
+      );
+    }
+    show(state, <Row />);
+    const row = screen.getByRole("button", { name: "GeceKurdu_" });
+    row.focus();
+    await act(async () => {
+      fireEvent.keyDown(row, { key: "ArrowRight" });
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("dialog", { name: "GeceKurdu_ yayında" })).toBeTruthy();
+    expect(document.activeElement?.textContent).toBe("İzle");
   });
 });

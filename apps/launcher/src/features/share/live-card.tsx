@@ -12,6 +12,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Popover } from "radix-ui";
 import {
   type FocusEvent,
+  type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
   type ReactNode,
@@ -153,6 +154,11 @@ export interface LivePreview {
   };
   /** A press on a tag of its own (a button): pins the card; from the keyboard the focus goes in. */
   press: (event: MouseEvent<HTMLElement>) => void;
+  /**
+   * On the row that carries the tag: → opens the card with the focus in it (its "İzle" or "Katıl ve izle"); true when
+   * it took the key. The row says so (`aria-keyshortcuts`).
+   */
+  keyIn: (event: KeyboardEvent<HTMLElement>) => boolean;
   /** Who is live, in words ("KorAtesi yayında"). */
   label: string;
   /** The card in its layer: render it anywhere beside the tag. */
@@ -233,6 +239,14 @@ export function useLivePreview(targets: LiveTarget[], placement: LivePlacement):
     },
   };
 
+  const keyIn = (event: KeyboardEvent<HTMLElement>) => {
+    if (!live || event.key !== "ArrowRight" || event.altKey || event.ctrlKey || event.metaKey)
+      return false;
+    event.preventDefault();
+    pressChip(id, true);
+    return true;
+  };
+
   const press = (event: MouseEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -306,7 +320,7 @@ export function useLivePreview(targets: LiveTarget[], placement: LivePlacement):
     </Popover.Root>
   );
 
-  return { tagProps, focusProps, press, label, card };
+  return { tagProps, focusProps, press, keyIn, label, card };
 }
 
 // --- the tag as a button of its own ------------------------------------------------------------------

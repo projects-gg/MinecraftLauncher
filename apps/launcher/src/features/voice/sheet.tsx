@@ -277,11 +277,14 @@ function PersonRow({ person }: { person: VoicePerson }) {
               setOpen(true);
             }}
             onKeyDown={(event) => {
+              // SHARE-LIVE: → takes the keyboard into the stream's card.
+              if (preview.keyIn(event)) return;
               if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
                 event.preventDefault();
                 setOpen(true);
               }
             }}
+            aria-keyshortcuts={live.length ? "ArrowRight" : undefined}
             className={cn(
               rowShape,
               "min-w-0 flex-1",

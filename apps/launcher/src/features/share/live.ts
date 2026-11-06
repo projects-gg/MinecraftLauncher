@@ -163,6 +163,7 @@ export function asksPicture(target: LiveTarget): boolean {
 // --- the tags' targets, from the voice state (stable slices, worked out once per change) ------------
 
 const NONE: LiveTarget[] = [];
+const NO_CREWS: VoiceState["crews"] = [];
 
 /** Someone in the player's room who shares (the player's own row: `person` is the player). */
 export function useRoomTargets(person: string): LiveTarget[] {
@@ -198,9 +199,10 @@ export function useCrewRoomTargets(
 /** A friend the friend list says is live (`Friend.voiceLive`). */
 export function useFriendTargets(friend: string, live: boolean): LiveTarget[] {
   const { t } = useTranslation();
-  const room = useVoiceUi((s) => s.state.room);
-  const share = useVoiceUi((s) => s.state.share);
-  const crews = useVoiceUi((s) => s.state.crews);
+  // Only a live friend's row follows voice chat's changes: the list's other rows never draw again for them.
+  const room = useVoiceUi((s) => (live ? s.state.room : null));
+  const share = useVoiceUi((s) => (live ? s.state.share : undefined));
+  const crews = useVoiceUi((s) => (live ? s.state.crews : NO_CREWS));
   return useMemo(
     () =>
       live ? [friendTarget({ room, share, crews }, friend, (each) => crewRoomName(each, t))] : NONE,

@@ -671,8 +671,11 @@ export function FriendRow({
               type="button"
               data-friend-row
               onKeyDown={(event) => {
+                // SHARE-LIVE: → takes the keyboard into the stream's card.
+                if (preview.keyIn(event)) return;
                 if (!openMenuFromKey(event)) onKeyDown?.(event);
               }}
+              aria-keyshortcuts={live.length ? "ArrowRight" : undefined}
               // A double click opens the card and leaves it open (its second click would close it).
               onClick={(event) => {
                 if (event.detail > 1 && open) event.preventDefault();
