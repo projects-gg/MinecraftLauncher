@@ -5,6 +5,11 @@
 // left (the same two down), the player got in (three up) or left (three down), the microphone (a
 // short high pair) and the sound (a low pair). A dropped connection leans out of the key on purpose.
 // "waiting" is one cycle of the caller's tone, played in a loop until someone comes.
+//
+// Screen sharing (SHARE-LIVE) lands on two notes at once, an open chord, which none of the others
+// do: the player's own stream high (a note up into the chord when it goes live, the chord down to the
+// note when it ends), someone else's an octave lower and softer (going live; the end of a stream the
+// player watched is the softest of all).
 
 export type SoundName =
   | "join"
@@ -16,7 +21,11 @@ export type SoundName =
   | "connected"
   | "ended"
   | "lost"
-  | "waiting";
+  | "waiting"
+  | "shareStart"
+  | "shareStop"
+  | "streamStart"
+  | "streamEnd";
 
 interface Note {
   /** Hz; two for a chord. */
@@ -122,6 +131,38 @@ const SOUNDS: Record<SoundName, { length: number; notes: Note[] }> = {
       { freqs: [A4, CS5], at: 0.45, length: 0.32, peak: 0.16, decay: 0 },
     ],
   },
+  // A note up into an open fifth, high: the player's stream is live.
+  shareStart: {
+    length: 0.45,
+    notes: [
+      { freqs: [E5], at: 0, length: 0.11, peak: 0.14, decay: 0.045 },
+      { freqs: [A5, E6], at: 0.075, length: 0.34, peak: 0.2, decay: 0.1 },
+    ],
+  },
+  // The fifth down to the note: the player's stream ended.
+  shareStop: {
+    length: 0.45,
+    notes: [
+      { freqs: [A5, E6], at: 0, length: 0.12, peak: 0.16, decay: 0.05 },
+      { freqs: [E5], at: 0.085, length: 0.3, peak: 0.16, decay: 0.09 },
+    ],
+  },
+  // An octave lower and softer: someone else in the room went live.
+  streamStart: {
+    length: 0.4,
+    notes: [
+      { freqs: [A4], at: 0, length: 0.11, peak: 0.13, decay: 0.045 },
+      { freqs: [E5, A5], at: 0.075, length: 0.3, peak: 0.17, decay: 0.09 },
+    ],
+  },
+  // The softest: the stream the player watched ended.
+  streamEnd: {
+    length: 0.36,
+    notes: [
+      { freqs: [E5, A5], at: 0, length: 0.1, peak: 0.12, decay: 0.04 },
+      { freqs: [A4], at: 0.075, length: 0.26, peak: 0.11, decay: 0.08 },
+    ],
+  },
 };
 
 const ATTACK_S = 0.006;
@@ -164,9 +205,16 @@ export function loops(name: SoundName): boolean {
 }
 
 /**
- * Sounds of the player's own state (VOICE-CALL): they play while deafened too; someone coming,
- * leaving and the caller's tone do not.
+ * Sounds of the player's own state (VOICE-CALL): they play while deafened too (the player's own
+ * stream going live and ending among them); someone coming, leaving, going live, the end of a
+ * stream they share and the caller's tone do not.
  */
 export function playsWhileDeaf(name: SoundName | "stop"): boolean {
-  return name !== "join" && name !== "leave" && name !== "waiting";
+  return (
+    name !== "join" &&
+    name !== "leave" &&
+    name !== "waiting" &&
+    name !== "streamStart" &&
+    name !== "streamEnd"
+  );
 }
