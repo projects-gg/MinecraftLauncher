@@ -548,7 +548,11 @@ public final class VoiceList extends PanelWidget {
 
     /** SHARE-LIVE: the live card over the page ({@code left..right}, {@code top..bottom}: the room page's box). */
     public void drawLiveTip(GuiGraphicsExtractor g, long now, float left, float top, float right, float bottom) {
-        liveTip.draw(g, now, left, top, right, bottom);
+        if (liveTip.active()) {
+            // A layer of its own over the page (as a badge's tooltip), so placing it scans nothing else.
+            Draw.stratum(g);
+            liveTip.draw(g, now, left, top, right, bottom);
+        }
     }
 
     /** SHARE-LIVE: the panel closed: its card and picture go. */
