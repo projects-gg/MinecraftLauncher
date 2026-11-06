@@ -17,7 +17,7 @@ import { openCrewPage, sayJoined } from "../badge-actions";
 import { swap, useSocialMotion } from "../motion";
 import { useSocialUi } from "../store";
 import { CrewMark, TeamTag } from "../team-emblem";
-import { dropFromListing } from "./listing";
+import { discoverOff, dropFromListing } from "./listing";
 
 /** A crew holds 30 (the service's limit). */
 const FULL = 30;
@@ -46,7 +46,7 @@ export function DiscoverCard({ crew, canAdd }: { crew: DiscoverCrew; canAdd: boo
   const join = async () => {
     if (busy) return;
     setBusy(true);
-    const result = await attempt(() => discoverApi.join(crew.id));
+    const result = await attempt(() => discoverApi.join(crew.id), discoverOff);
     setBusy(false);
     if (result === "joined") {
       sayJoined(t("teams.joined", { name: crew.name }), () => crew.id, {

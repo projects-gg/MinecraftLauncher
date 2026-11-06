@@ -2,8 +2,10 @@
 // page opens: kept until the next wave it names, asked again with its ETag (a quick "unchanged")
 // once it is a quarter of an hour old. Nothing polls. A card whose crew left the listing meanwhile
 // (`gone` from a join) goes from the kept copy at once.
+import { toast } from "@pl/ui";
 import { create } from "zustand";
 import { discoverApi } from "@/lib/api/discover-api";
+import i18n from "@/lib/i18n";
 import { freshness, type KeptListing } from "./model";
 
 export type ListingState = "idle" | "loading" | "ready" | "error" | "off";
@@ -25,6 +27,17 @@ function isOff(error: unknown): boolean {
     "code" in error &&
     (error as { code: unknown }).code === OFF_CODE
   );
+}
+
+/**
+ * For `attempt`: Studio's switch went off while the page was open. Not the player's failure, so a
+ * calm notice (no error mark), and the page says it is off; the next opening asks again.
+ */
+export function discoverOff(error: unknown): boolean {
+  if (!isOff(error)) return false;
+  toast(i18n.t("discover.off"));
+  useListing.setState({ kept: null, state: "off" });
+  return true;
 }
 
 let inFlight: Promise<void> | null = null;

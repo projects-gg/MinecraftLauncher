@@ -32,6 +32,7 @@ import type { SocialTeam } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
 import { attempt } from "../actions";
 import { rise, swap, useSocialMotion } from "../motion";
+import { discoverOff } from "./listing";
 import {
   checksHold,
   cleanText,
@@ -170,15 +171,19 @@ export function CrewDiscover({ team }: { team: SocialTeam }) {
   const [text, setText] = useState("");
   const [tags, setTags] = useState<DiscoverTag[]>([]);
 
+  // Asked again when the crew's size changes while the block is open (a newcomer can be the
+  // member the requirements were waiting for); nothing polls.
+  const memberCount = team.members.length;
   useEffect(() => {
     let live = true;
-    void attempt(() => discoverApi.status(team.id)).then((found) => {
+    void memberCount;
+    void attempt(() => discoverApi.status(team.id), discoverOff).then((found) => {
       if (live && found) setStatus(found);
     });
     return () => {
       live = false;
     };
-  }, [team.id]);
+  }, [team.id, memberCount]);
 
   const line = useStatusLine(status ?? EMPTY);
   if (!status) {
@@ -207,7 +212,7 @@ export function CrewDiscover({ team }: { team: SocialTeam }) {
   };
   const turnOff = async () => {
     setBusy(true);
-    const next = await attempt(() => discoverApi.off(team.id));
+    const next = await attempt(() => discoverApi.off(team.id), discoverOff);
     setBusy(false);
     setAsking(false);
     if (next === undefined) return;
@@ -231,7 +236,7 @@ export function CrewDiscover({ team }: { team: SocialTeam }) {
   const send = async () => {
     if (busy || !maySend(status, text, tags)) return;
     setBusy(true);
-    const next = await attempt(() => discoverApi.set(team.id, cleanText(text), tags));
+    const next = await attempt(() => discoverApi.set(team.id, cleanText(text), tags), discoverOff);
     setBusy(false);
     if (!next) return;
     setStatus(next);

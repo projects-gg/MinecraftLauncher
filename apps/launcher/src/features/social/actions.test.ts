@@ -57,6 +57,23 @@ describe("attempt", () => {
     expect(toastError).toHaveBeenCalledTimes(1);
     expect(toastError).toHaveBeenCalledWith("social.actions.failed");
   });
+
+  // "Ekip bul" switched off while the page is open: told calmly by the caller, no error toast.
+  it("leaves a failure the caller handles to it", async () => {
+    const off = Object.assign(new Error("off"), { code: "SOSYAL-KESIF-KAPALI" });
+    const handled = vi.fn((error: unknown) => error === off);
+    const done = await attempt(async () => {
+      throw off;
+    }, handled);
+    expect(done).toBeUndefined();
+    expect(handled).toHaveBeenCalledWith(off);
+    expect(toastError).not.toHaveBeenCalled();
+    // One it does not take still becomes the error toast.
+    await attempt(async () => {
+      throw new Error("team_not_permitted");
+    }, handled);
+    expect(toastError).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("notifyOutside", () => {
