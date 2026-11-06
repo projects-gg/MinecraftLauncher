@@ -1,6 +1,5 @@
 // Tauri implementation of `api.library`: maps the generated bindings onto the UI shapes.
 import { Channel, convertFileSrc } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import {
   type BackupProgress,
   type CmdError,
@@ -10,6 +9,7 @@ import {
   type TrashItemView,
   type WorldBackupView,
 } from "@/bindings";
+import { listen } from "@/lib/api/listen";
 import type { LibraryApi, LogLine, TrashItem, WorldBackup, WorldMode } from "./library-types";
 
 /** A failed library command: friendly `message`, plus `code`/`details` for "copy details". */

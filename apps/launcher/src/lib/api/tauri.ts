@@ -1,5 +1,4 @@
 import { Channel, convertFileSrc } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import heroFallback from "@/assets/art/hero-dragon-1.webp";
@@ -20,6 +19,7 @@ import {
   type InstanceView,
   type LaunchEventView,
 } from "@/bindings";
+import { listen } from "@/lib/api/listen";
 import i18n from "@/lib/i18n";
 import { highlights, newsHighlights } from "@/lib/news";
 import { fileNameOf } from "@/lib/paths";

@@ -650,7 +650,10 @@ impl Shared {
             if permission {
                 let next = match self.create_permission(address, deadline).await {
                     Ok(()) => now + self.timers.permission_refresh,
-                    Err(_) => now + PEER_RETRY,
+                    Err(error) => {
+                        self.suspect_on(&error);
+                        now + PEER_RETRY
+                    }
                 };
                 if let Some(peer) = write(&self.peers).by_address.get_mut(&address) {
                     peer.permission_due = next;
@@ -659,7 +662,10 @@ impl Shared {
             if bind {
                 let next = match self.channel_bind(channel, address, deadline).await {
                     Ok(()) => now + self.timers.channel_refresh,
-                    Err(_) => now + PEER_RETRY,
+                    Err(error) => {
+                        self.suspect_on(&error);
+                        now + PEER_RETRY
+                    }
                 };
                 if let Some(peer) = write(&self.peers).by_address.get_mut(&address) {
                     peer.channel_due = next;
@@ -667,10 +673,26 @@ impl Shared {
             }
         }
     }
+
+    /// Checks the allocation now rather than at its next refresh.
+    fn suspect(&self) {
+        self.probe.store(true, Ordering::Release);
+        self.wake.notify_one();
+    }
+
+    /// A request that got no answer may mean the allocation went without a word (Cloudflare
+    /// revokes silently: no answer, no 401; HOST1-E): it is checked at once.
+    fn suspect_on(&self, error: &Fail) {
+        if matches!(error, Fail::Timeout) {
+            self.suspect();
+        }
+    }
 }
 
 /// Keeps the allocation alive: refreshes before its lifetime runs out, and keeps every admitted
-/// peer's permission and channel. A refresh the server refuses ends the allocation.
+/// peer's permission and channel. A refresh the server refuses ends the allocation, and so does a
+/// check (after a connection over it timed out or a request got no answer) that gets no answer:
+/// the path is lost in seconds instead of being offered until its lifetime ends.
 async fn maintain(shared: Arc<Shared>, granted: Duration) {
     let timers = shared.timers;
     let mut expires = Instant::now() + granted;
@@ -687,7 +709,8 @@ async fn maintain(shared: Arc<Shared>, granted: Duration) {
             return;
         }
         let now = Instant::now();
-        if now >= refresh_at || shared.probe.swap(false, Ordering::AcqRel) {
+        let probed = shared.probe.swap(false, Ordering::AcqRel);
+        if now >= refresh_at || probed {
             match shared.refresh(timers.lifetime).await {
                 Ok(lifetime) => {
                     expires = now + lifetime;
@@ -698,6 +721,9 @@ async fn maintain(shared: Arc<Shared>, granted: Duration) {
                 }
                 Err(Fail::Code(437) | Fail::Closed) => {
                     return shared.die(fail(Step::Alloc, "turn_alloc_error"));
+                }
+                Err(Fail::Timeout) if probed => {
+                    return shared.die(fail(Step::Alloc, "turn_alloc_timeout"));
                 }
                 Err(_) if now + REFRESH_RETRY >= expires => {
                     return shared.die(fail(Step::Alloc, "turn_alloc_timeout"));
@@ -970,8 +996,16 @@ impl Allocation {
         let shared = &self.shared;
         let deadline = Instant::now() + shared.timers.request_timeout;
         let channel = shared.channel_for(peer);
-        shared.create_permission(peer, deadline).await?;
-        shared.channel_bind(channel, peer, deadline).await?;
+        let granted = match shared.create_permission(peer, deadline).await {
+            Ok(()) => shared.channel_bind(channel, peer, deadline).await,
+            Err(error) => Err(error),
+        };
+        if let Err(error) = granted {
+            // HOST1-E: a host whose allocation went silently kept offering it for minutes while
+            // each guest gave up; a permission without an answer checks it now.
+            shared.suspect_on(&error);
+            return Err(error);
+        }
         let now = Instant::now();
         {
             let mut peers = write(&shared.peers);
@@ -1015,8 +1049,7 @@ impl Allocation {
 
     /// Checks the allocation now (after a QUIC connection over it timed out).
     pub(crate) fn probe(&self) {
-        self.shared.probe.store(true, Ordering::Release);
-        self.shared.wake.notify_one();
+        self.shared.suspect();
     }
 
     pub(crate) async fn close(&self) {

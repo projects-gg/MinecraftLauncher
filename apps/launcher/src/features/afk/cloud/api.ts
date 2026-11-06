@@ -3,7 +3,6 @@
 // live socket runs only while a console is watched. Browser previews use the mock (mock.ts).
 import type { DialogPress } from "@pl/ui/console";
 import type { InvOp } from "@pl/ui/inventory";
-import { listen } from "@tauri-apps/api/event";
 import {
   type CloudAccount_Serialize,
   type CloudConsoleFile,
@@ -29,6 +28,7 @@ import {
   type PatternSuggestion,
   type CloudPage as SitePage,
 } from "@/bindings";
+import { listen } from "@/lib/api/listen";
 import { CommandError } from "@/lib/api/tauri";
 import { isTauri } from "@/lib/platform";
 import { mockCloudApi } from "./mock";

@@ -1,4 +1,3 @@
-import { listen } from "@tauri-apps/api/event";
 import {
   commands,
   type OverlayConfig,
@@ -6,6 +5,7 @@ import {
   type OverlayStatus,
   type PeopleChange,
 } from "@/bindings";
+import { listen } from "@/lib/api/listen";
 import { isTauri } from "@/lib/platform";
 import { mockOverlay } from "./mock";
 

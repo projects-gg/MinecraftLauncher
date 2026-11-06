@@ -2,7 +2,6 @@
 // `src-tauri/src/commands/projects_skin.rs` over `pl_social::ProjectsSkins`. The views match
 // projects-skin-types.ts field for field; only the optional details the backend sends as `null`
 // (a refusal's or a result's `name`, a refusal's `retryAfter`) become `undefined` here.
-import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   type ProjectsSkinChange as ChangeBinding,
@@ -13,6 +12,7 @@ import {
   type ProjectsSkinRefusal as RefusalBinding,
   type ProjectsSkinView as ViewBinding,
 } from "@/bindings";
+import { listen } from "@/lib/api/listen";
 import type {
   ProjectsSkinApi,
   ProjectsSkinChange,

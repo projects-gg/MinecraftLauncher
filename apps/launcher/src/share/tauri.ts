@@ -2,7 +2,7 @@
 // event. Called by name (the "Yayın" window has no generated bindings of its own to load, and the
 // commands answer plain data); a refusal is an answer, a failed command rejects.
 import { Channel, invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { listen } from "@/lib/api/listen";
 import type { ShareApi } from "./api";
 import type { ShareNotice, ShareRefusal, ShareSources, ShareThumb, WatchCmd } from "./types";
 

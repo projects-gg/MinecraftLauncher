@@ -1,7 +1,7 @@
 // Tauri implementation of `api.cleanup`: maps the generated bindings onto the UI shapes.
 import { Channel } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { type CleanupProgressView, type CmdError, commands } from "@/bindings";
+import { listen } from "@/lib/api/listen";
 import type { CleanupApi, SharedItem } from "./cleanup-types";
 import { DataCommandError } from "./data-tauri";
 
