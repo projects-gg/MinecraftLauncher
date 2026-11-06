@@ -343,6 +343,15 @@ pub struct RoomWire {
     /// SHARE: "Kim paylaşabilir" (only to `share1` sockets: present, the room shares).
     #[serde(default, rename = "shareBy")]
     pub share_by: Option<crate::share::ShareBy>,
+    /// OVL-NEXT: push-to-talk only (`ptt: true`; absent or anything else: no).
+    #[serde(default, deserialize_with = "only_true")]
+    pub ptt: bool,
+}
+
+/// OVL-NEXT: `true` reads as yes; absent, `null` or anything else as no.
+fn only_true<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    Ok(Option::<serde_json::Value>::deserialize(deserializer)?
+        == Some(serde_json::Value::Bool(true)))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
@@ -490,6 +499,9 @@ pub enum FromRoom {
         /// SHARE: "Kim paylaşabilir" (only to `share1` sockets).
         #[serde(default, rename = "shareBy")]
         share_by: Option<crate::share::ShareBy>,
+        /// OVL-NEXT: push-to-talk only (a service from before it never says so).
+        #[serde(default, deserialize_with = "only_true")]
+        ptt: bool,
     },
     /// The player's role changed.
     Me {
@@ -895,6 +907,7 @@ mod tests {
                 mods: vec!["u2".into()],
                 max: None,
                 share_by: None,
+                ptt: false,
             }
         );
         // VOICE-ROOMS: a crew room's limit the crew changed.
@@ -906,6 +919,19 @@ mod tests {
                 mods: Vec::new(),
                 max: Some(4),
                 share_by: None,
+                ptt: false,
+            }
+        );
+        // OVL-NEXT: the crew made it push-to-talk only.
+        assert_eq!(
+            FromRoom::parse(r#"{"t":"room","name":"Gece","leader":"u1","mods":[],"ptt":true}"#),
+            FromRoom::Room {
+                name: Some("Gece".into()),
+                leader: Some("u1".into()),
+                mods: Vec::new(),
+                max: None,
+                share_by: None,
+                ptt: true,
             }
         );
         assert_eq!(

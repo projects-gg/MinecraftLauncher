@@ -330,6 +330,7 @@ fn service_voice(status: pl_social::VoiceStatus) -> ServiceVoice {
         idle_minutes: status.idle_minutes,
         kbps: status.kbps,
         manage: status.manage,
+        ptt: status.ptt,
     }
 }
 
@@ -348,6 +349,7 @@ fn crew_rooms(rooms: pl_social::VoiceCrewRooms) -> (String, Vec<CrewRoom>) {
                 share_mods: room.share_mods,
                 // SHARE-LIVE: who shares there now.
                 live: room.live,
+                ptt: room.ptt,
             })
             .collect(),
     )
@@ -362,12 +364,14 @@ fn crew_change_of(op: VoiceCrewOp) -> pl_social::VoiceCrewChange {
             name,
             max,
             share_by,
+            ptt,
         } => pl_social::VoiceCrewChange::Edit {
             crew,
             room,
             name: Some(name.trim().to_owned()),
             max: Some(max),
             share_mods: share_by.map(|by| by == pl_voice::share::ShareBy::Mods),
+            ptt,
         },
         VoiceCrewOp::Order { crew, rooms } => pl_social::VoiceCrewChange::Order { crew, rooms },
         VoiceCrewOp::Remove { crew, room, empty } => {

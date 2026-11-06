@@ -99,6 +99,7 @@ public final class Protocol {
             features.add(PLANS);
             features.add(CHAT3);
             features.add(CARDS2);
+            features.add(MATES);
             features.add(SHARE);
         }
         features.add(LANG);
@@ -521,6 +522,8 @@ public final class Protocol {
      * ({@link #cards}) and the launcher's notification switches ({@code prefs}, {@link #notifySet}).
      */
     public static final String CARDS2 = "cards2";
+    /** OVL-NEXT: crewmates who are not friends carry their presence dot to crew chat ({@code lists}' {@code mates}). */
+    public static final String MATES = "mates";
 
     /**
      * OVL-SHARE: the hello feature of a mod that shows screen sharing in voice rooms beside {@link #VOICE}: it hears

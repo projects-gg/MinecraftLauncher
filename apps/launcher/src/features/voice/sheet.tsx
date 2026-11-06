@@ -12,6 +12,7 @@ import {
   CaretLeft,
   GearSix,
   Headphones,
+  Keyboard,
   Microphone,
   MicrophoneSlash,
   PencilSimple,
@@ -83,6 +84,8 @@ import {
   crewRoomList,
   crewRoomName,
   invitables,
+  keyLabel,
+  micClosedLabel,
   NO_ROOM_POWERS,
   presenceOf,
   roleWord,
@@ -406,6 +409,9 @@ function Notices({ room }: { room: VoiceRoomView }) {
   const { t } = useTranslation();
   const { reduce } = useMotionPrefs();
   const mic = useVoiceUi((s) => s.state.mic);
+  const settings = useVoicePrefs((s) => s.settings);
+  const navigate = useNavigate();
+  const closePanel = useVoiceUi((s) => s.closePanel);
   const notices: Array<{
     key: string;
     icon: ReactNode;
@@ -425,6 +431,30 @@ function Notices({ room }: { room: VoiceRoomView }) {
       icon: <MicrophoneSlash size={16} weight="bold" className="text-flare-400" />,
       text: t("voice.mutedByMod"),
     });
+  }
+  // OVL-NEXT: a push-to-talk-only room. Without a key the microphone stays closed: the settings
+  // give one. With one, a player who talks hands-free hears once which key opens it here.
+  if (room.ptt && !room.me.mutedByModerator) {
+    if (room.me.needsKey) {
+      notices.push({
+        key: "ptt",
+        icon: <Warning size={16} weight="fill" className="text-gold-400" />,
+        text: t("voice.ptt.needsKey"),
+        action: {
+          label: t("voice.ptt.pick"),
+          onClick: () => {
+            closePanel();
+            void navigate({ to: "/settings", search: { section: "voice" } });
+          },
+        },
+      });
+    } else if (settings && settings.mode !== "pushToTalk" && settings.pushToTalkKey) {
+      notices.push({
+        key: "ptt",
+        icon: <Keyboard size={16} weight="bold" className="text-ash-300" />,
+        text: t("voice.ptt.hold", { key: keyLabel(settings.pushToTalkKey, t) }),
+      });
+    }
   }
   if (mic === "denied") {
     notices.push({
@@ -824,12 +854,10 @@ function useOutputVolumeItem(): MenuItem[] {
 function RoomFooter({ room }: { room: VoiceRoomView }) {
   const { t } = useTranslation();
   const { me } = room;
-  const micOff = me.mute || me.deaf || me.mutedByModerator;
-  const micLabel = me.mutedByModerator
-    ? t("voice.mutedByMod")
-    : micOff
-      ? t("voice.room.unmuteMic")
-      : t("voice.room.muteMic");
+  // OVL-NEXT: no push-to-talk key in a push-to-talk-only room keeps it closed too.
+  const closed = micClosedLabel(me, t);
+  const micOff = me.mute || me.deaf || closed !== null;
+  const micLabel = closed ?? (micOff ? t("voice.room.unmuteMic") : t("voice.room.muteMic"));
   const deafLabel = me.deaf ? t("voice.room.deafenOff") : t("voice.room.deafenOn");
   const volume = useOutputVolumeItem();
   const threshold = useVoicePrefs((s) => meterThreshold(s.settings));
@@ -848,8 +876,8 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
             size="lg"
             variant="secondary"
             aria-label={micLabel}
-            aria-disabled={me.mutedByModerator || undefined}
-            className={cn("w-full px-2", me.mutedByModerator && "opacity-60")}
+            aria-disabled={closed !== null || undefined}
+            className={cn("w-full px-2", closed !== null && "opacity-60")}
             icon={
               micOff ? (
                 <MicrophoneSlash size={17} weight="bold" className="text-flare-400" />
@@ -861,7 +889,7 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
             iconRight={
               <VoiceMeter threshold={threshold} className={cn("ml-0.5", micOff && "opacity-60")} />
             }
-            onClick={me.mutedByModerator ? undefined : () => void toggleMute()}
+            onClick={closed !== null ? undefined : () => void toggleMute()}
           >
             {t("voice.room.mic")}
           </Button>

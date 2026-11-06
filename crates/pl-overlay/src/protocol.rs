@@ -572,6 +572,9 @@ pub const FEATURE_PLANS: &str = "plans";
 /// OVL-SOC2: the `hello` feature of a mod that edits and deletes the player's own messages (`edit`,
 /// `delete`); the `welcome` feature that says chat is on.
 pub const FEATURE_CHAT3: &str = "chat3";
+/// OVL-NEXT: the `hello` feature of a mod that shows crewmates' presence dots in crew chat
+/// (`lists`' `mates`).
+pub const FEATURE_MATES: &str = "mates";
 /// OVL-SOC2: the `hello` feature of a mod with the new cards (`request`, `friend`, `online`,
 /// `projects`, `crew-invite`, `crew-ask`, `crew-in`, `plan`, `missed`), the player's card kinds
 /// (`cards`) and the launcher's notification switches (`prefs`, `notify-set`); the `welcome`
@@ -1072,6 +1075,11 @@ pub struct ListsExtra {
     pub planners: Vec<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub notes: bool,
+    /// OVL-NEXT: crewmates who are not friends and are online, by user id: `game`, `launcher` or
+    /// `dnd` (their presence dot over their group in crew chat, as a friend's; offline and blocked
+    /// ones are left out). Only to a mod that said `mates`.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub mates: BTreeMap<String, &'static str>,
 }
 
 /// OVL-SOC2: a crew invite waiting for the player (`lists`' `invites`).
@@ -1757,6 +1765,10 @@ pub struct VoiceMeShown {
     /// `weak` or `bad`; absent while good.
     #[serde(skip_serializing_if = "is_good")]
     pub quality: pl_voice::view::VoiceQuality,
+    /// OVL-NEXT: the room takes push-to-talk only and the player has no push-to-talk key: the
+    /// microphone stays closed (the launcher's voice settings give it one).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub needs_key: bool,
 }
 
 /// Someone else in the room (V2).

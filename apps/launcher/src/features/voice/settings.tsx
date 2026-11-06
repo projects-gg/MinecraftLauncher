@@ -416,6 +416,8 @@ export function VoiceSettingsSection() {
   const devices = useVoiceUi((s) => s.state.devices);
   // "Ses seviyesi" stops at the engine's top (200 %, or 100 % through `<audio>`).
   const volumeMax = useVoiceUi((s) => s.state.volumeMax ?? 200);
+  // OVL-NEXT: in a push-to-talk-only room the push-to-talk key matters in "Konuşunca" too.
+  const pttRoom = useVoiceUi((s) => s.state.room?.ptt === true);
   // SHARE: "Ekran paylaşımı" only while the service offers sharing and this computer can share.
   const shareOffered = useVoiceUi((s) =>
     Boolean(s.state.share?.service && s.state.share?.canShare),
@@ -505,7 +507,7 @@ export function VoiceSettingsSection() {
                   ]}
                 />
               </Row>
-              {settings.mode === "pushToTalk" ? (
+              {settings.mode === "pushToTalk" || pttRoom ? (
                 <KeyRow
                   title={t("voice.settings.pttKey")}
                   shortcut="pushToTalk"

@@ -208,6 +208,9 @@ pub struct VoiceRoomView {
     /// What the player may do to the room itself.
     pub can_rename: bool,
     pub can_close: bool,
+    /// OVL-NEXT: the crew made it push-to-talk only: the microphone opens only while the player
+    /// holds their push-to-talk key, whatever "Mikrofon ne zaman açık" says.
+    pub ptt: bool,
 }
 
 impl VoiceRoomView {
@@ -261,6 +264,9 @@ pub struct VoiceMe {
     /// The microphone sends now (push-to-talk held, or speech in "Konuşunca"; false while muted).
     pub talking: bool,
     pub quality: VoiceQuality,
+    /// OVL-NEXT: the room takes push-to-talk only and the player has no push-to-talk key: their
+    /// microphone stays closed ("Bu odada bas-konuş gerekiyor." with "Tuş seç").
+    pub needs_key: bool,
 }
 
 /// Someone else in the room.
@@ -357,6 +363,9 @@ pub struct VoiceCrewRooms {
     pub manage: bool,
     /// VOICE-ROOMS: people at most in a crew room (Studio's): a room's own limit is below it.
     pub crew_max: u16,
+    /// OVL-NEXT: the friends service lets the crew's leader and moderators make a room push-to-talk
+    /// only (Studio's "Yalnız bas-konuş odalar"): the room form offers "Yalnız bas-konuş".
+    pub ptt: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -376,6 +385,8 @@ pub struct VoiceCrewRoom {
     /// SHARE-LIVE: who of `people` shares their screen now ("YAYINDA" beside them, for people
     /// outside the room too).
     pub live: Vec<String>,
+    /// OVL-NEXT: push-to-talk only ("Yalnız bas-konuş"; only while the service allows it).
+    pub ptt: bool,
 }
 
 impl VoiceCrewRoom {
@@ -406,6 +417,9 @@ pub enum VoiceCrewOp {
         /// SHARE-S: "Kim paylaşabilir" in it (none: as it is).
         #[serde(default, rename = "shareBy")]
         share_by: Option<crate::share::ShareBy>,
+        /// OVL-NEXT: "Yalnız bas-konuş" (none: as it is; only the crew's leader and moderators).
+        #[serde(default)]
+        ptt: Option<bool>,
     },
     /// The crew's rooms ("Genel" aside) in this order (a drag, "Yukarı taşı", "Aşağı taşı").
     Order { crew: String, rooms: Vec<String> },
@@ -584,6 +598,8 @@ pub enum VoiceRefusal {
     InvalidName,
     /// The name filter refused it.
     NameRejected,
+    /// OVL-NEXT: that player's launcher is too old for a push-to-talk-only room (a move there).
+    OldLauncher,
     /// The voice service did not answer: "Bağlanamadı." with "Tekrar dene".
     Failed,
     /// Nothing to do that on (not in a room, no such ring).
@@ -636,6 +652,8 @@ impl VoiceAnswer {
             "not_found" => VoiceRefusal::NotFound,
             "invalid_name" => VoiceRefusal::InvalidName,
             "name_rejected" => VoiceRefusal::NameRejected,
+            // OVL-NEXT: moving someone whose launcher cannot keep push-to-talk into such a room.
+            "ptt_unsupported" => VoiceRefusal::OldLauncher,
             // VOICE-ROOMS: a delete that waited for its "Geri al" found someone in the room: it was
             // not deleted, nothing was done (the page says so).
             "room_not_empty" => VoiceRefusal::Nothing,
@@ -844,11 +862,13 @@ mod tests {
                 muted_by_moderator: false,
                 talking: false,
                 quality: VoiceQuality::Good,
+                needs_key: false,
             },
             people: Vec::new(),
             ringing: Vec::new(),
             can_rename: false,
             can_close: false,
+            ptt: false,
         };
         assert_eq!(
             room(Some("Genel"), true).shown_name(true).as_deref(),
@@ -881,6 +901,7 @@ mod tests {
             max: None,
             own: false,
             live: Vec::new(),
+            ptt: false,
         };
         assert_eq!(crew_room("Genel", true).shown_name(true), "General");
         assert_eq!(crew_room("Genel", true).shown_name(false), "Genel");
@@ -899,6 +920,7 @@ mod tests {
                 name: "Antrenman".into(),
                 max: None,
                 share_by: None,
+                ptt: None,
             }
         );
         let order: VoiceCrewOp = serde_json::from_value(

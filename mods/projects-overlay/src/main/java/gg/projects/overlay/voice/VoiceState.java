@@ -66,12 +66,20 @@ public final class VoiceState {
         }
     }
 
-    /** The player in the room. */
+    /**
+     * The player in the room. {@code needsKey} (OVL-NEXT): the room takes push-to-talk only and the player has no
+     * push-to-talk key, so the microphone stays closed until they pick one in the launcher.
+     */
     public record Me(String role, boolean mute, boolean deaf, boolean mutedByModerator, boolean talking,
-        String quality) {
-        /** Nothing of the player's goes out: muted, deafened or muted by a moderator. */
+        String quality, boolean needsKey) {
+        /** Nothing of the player's goes out: muted, deafened, muted by a moderator, or no key for the room. */
         public boolean micOff() {
-            return mute || deaf || mutedByModerator;
+            return mute || deaf || closed();
+        }
+
+        /** The microphone stays closed whatever the player presses here: a moderator's mute, or no key. */
+        public boolean closed() {
+            return mutedByModerator || needsKey;
         }
 
         public boolean weak() {
@@ -79,7 +87,7 @@ public final class VoiceState {
         }
 
         Me talking(boolean now) {
-            return now == talking ? this : new Me(role, mute, deaf, mutedByModerator, now, quality);
+            return now == talking ? this : new Me(role, mute, deaf, mutedByModerator, now, quality, needsKey);
         }
     }
 
@@ -611,10 +619,10 @@ public final class VoiceState {
 
     private static Room roomOf(JsonObject r) {
         JsonObject m = obj(r, "me");
-        Me me = m == null ? new Me("member", false, false, false, false, "good")
+        Me me = m == null ? new Me("member", false, false, false, false, "good", false)
             : new Me(word(m, "role", "member"), Protocol.bool(m, "mute", false), Protocol.bool(m, "deaf", false),
                 Protocol.bool(m, "mutedByModerator", false), Protocol.bool(m, "talking", false),
-                word(m, "quality", "good"));
+                word(m, "quality", "good"), Protocol.bool(m, "needsKey", false));
         List<Person> people = new ArrayList<>();
         JsonArray list = arr(r, "people");
         if (list != null) {

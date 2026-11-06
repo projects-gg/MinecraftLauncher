@@ -565,6 +565,31 @@ export function mayMovePerson(
   return standing.moderator && member.role !== "founder" && !member.moderator;
 }
 
+/**
+ * OVL-NEXT: whether the room form offers "Yalnız bas-konuş": the service allows push-to-talk-only
+ * rooms (with "Oda yönetimi") and the player leads or moderates the crew ("Genel" never).
+ */
+export function mayMakePushToTalk(
+  standing: CrewStanding,
+  entry: Pick<VoiceCrewRooms, "manage" | "ptt"> | undefined,
+): boolean {
+  return Boolean(entry?.manage && entry.ptt) && moderates(standing);
+}
+
+/**
+ * Why the player's microphone stays closed whatever they press, in words (the microphone button's
+ * name), or null: a moderator muted them, or (OVL-NEXT) the room takes push-to-talk only and they
+ * have no key for it.
+ */
+export function micClosedLabel(
+  me: Pick<VoiceRoomView["me"], "mutedByModerator" | "needsKey">,
+  t: TFunction,
+): string | null {
+  if (me.mutedByModerator) return t("voice.mutedByMod");
+  if (me.needsKey) return t("voice.ptt.needsKey");
+  return null;
+}
+
 /** The rooms' order (no "Genel") with `id` one step up (-1) or down (1); null at an end. */
 export function moveRoom(order: readonly string[], id: string, step: -1 | 1): string[] | null {
   const at = order.indexOf(id);

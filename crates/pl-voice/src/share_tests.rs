@@ -92,6 +92,7 @@ fn hello(people: Vec<PersonWire>, share: Option<ShareBy>, sdp: bool) -> FromRoom
             mods: Vec::new(),
             max: 10,
             share_by: share,
+            ptt: false,
         },
         me: MeWire {
             role: if share == Some(ShareBy::Mods) {
@@ -1158,6 +1159,7 @@ fn who_may_share_is_the_rooms_and_its_leaders_to_change() {
             mods: Vec::new(),
             max: None,
             share_by: Some(ShareBy::Mods),
+            ptt: false,
         },
         2_100,
         UNIX,

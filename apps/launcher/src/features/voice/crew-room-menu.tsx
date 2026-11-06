@@ -14,7 +14,7 @@ import {
   SignOut,
   Trash,
 } from "@phosphor-icons/react";
-import { Button, Input, type MenuItem, Select } from "@pl/ui";
+import { Button, Input, type MenuItem, Select, Switch } from "@pl/ui";
 import { type FormEvent, type RefObject, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCrewShareBy } from "@/features/share/store";
@@ -142,16 +142,20 @@ function useEscape(within: RefObject<HTMLElement | null>, onEscape: () => void) 
  * not sent, so an English "Room 2" never renames the crew's "Oda 2") and its people at most, from
  * 2 to the crew room maximum (the maximum itself: no limit of its own). SHARE: while the service
  * shares screens, "Kim paylaşabilir" too ("Genel" is never edited: everyone shares there).
+ * OVL-NEXT: "Yalnız bas-konuş" for the crew's leader and moderators (`pttOffered`), while the
+ * service allows such rooms.
  */
 export function RoomEditForm({
   crew,
   crewMax,
   room,
+  pttOffered = false,
   onDone,
 }: {
   crew: string;
   crewMax: number;
   room: VoiceCrewRoom;
+  pttOffered?: boolean;
   onDone: () => void;
 }) {
   const { t } = useTranslation();
@@ -161,6 +165,7 @@ export function RoomEditForm({
   const [limit, setLimit] = useState(String(Math.min(room.max ?? crewMax, crewMax)));
   const sharing = useCrewShareBy(room.id);
   const [shareBy, setShareBy] = useState<ShareBy>(sharing.by);
+  const [ptt, setPtt] = useState(room.ptt === true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const box = useRef<HTMLFormElement>(null);
@@ -178,7 +183,8 @@ export function RoomEditForm({
     const nameChanged = name.trim() !== shownName;
     const max = Number(limit) >= crewMax ? null : Number(limit);
     const shareChanged = sharing.offered && shareBy !== sharing.by;
-    if (!nameChanged && max === room.max && !shareChanged) {
+    const pttChanged = pttOffered && ptt !== (room.ptt === true);
+    if (!nameChanged && max === room.max && !shareChanged && !pttChanged) {
       onDone();
       return;
     }
@@ -193,6 +199,7 @@ export function RoomEditForm({
       nameChanged ? name : room.name,
       max,
       shareChanged ? shareBy : undefined,
+      pttChanged ? ptt : undefined,
     );
     setBusy(false);
     if (refused) setError(refused);
@@ -241,6 +248,14 @@ export function RoomEditForm({
             className="h-8 w-[196px] shrink-0"
           />
         </div>
+      ) : null}
+      {pttOffered ? (
+        <Switch
+          checked={ptt}
+          onCheckedChange={setPtt}
+          label={t("voice.ptt.only")}
+          className="text-[12.5px]"
+        />
       ) : null}
       <div className="flex items-center gap-2">
         <p

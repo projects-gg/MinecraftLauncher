@@ -12,7 +12,9 @@ import {
   crewRoomList,
   facesThatFit,
   limitChoices,
+  mayMakePushToTalk,
   mayMovePerson,
+  micClosedLabel,
   moveRoom,
   roomNameFits,
   roomPowers,
@@ -221,5 +223,30 @@ describe("the room's menu", () => {
         ),
       ),
     ).toEqual(["Katıl", "—", "Odayı düzenle", "—", "Odayı sil"]);
+  });
+});
+
+// OVL-NEXT: push-to-talk-only rooms.
+describe("Yalnız bas-konuş", () => {
+  it("is the leader's and moderators' to set, only while the service allows it", () => {
+    const allowed = { manage: true, ptt: true };
+    expect(mayMakePushToTalk(leader, allowed)).toBe(true);
+    expect(mayMakePushToTalk(moderator, allowed)).toBe(true);
+    expect(mayMakePushToTalk(member, allowed)).toBe(false);
+    expect(mayMakePushToTalk(leader, { manage: true, ptt: false })).toBe(false);
+    expect(mayMakePushToTalk(leader, { manage: false, ptt: true })).toBe(false);
+    expect(mayMakePushToTalk(leader, { manage: true })).toBe(false);
+    expect(mayMakePushToTalk(leader, undefined)).toBe(false);
+  });
+
+  it("names why the microphone stays closed: a moderator first, then a missing key", () => {
+    expect(micClosedLabel({ mutedByModerator: false }, t)).toBeNull();
+    expect(micClosedLabel({ mutedByModerator: false, needsKey: false }, t)).toBeNull();
+    expect(micClosedLabel({ mutedByModerator: false, needsKey: true }, t)).toBe(
+      "Bu odada yalnız bas-konuş var, henüz tuşun yok.",
+    );
+    expect(micClosedLabel({ mutedByModerator: true, needsKey: true }, t)).toBe(
+      "Bir moderatör seni susturdu.",
+    );
   });
 });

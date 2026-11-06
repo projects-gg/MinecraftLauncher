@@ -95,6 +95,7 @@ fn hello(people: Vec<PersonWire>, role: Role, sdp: bool) -> FromRoom {
             mods: Vec::new(),
             max: 10,
             share_by: None,
+            ptt: false,
         },
         me: MeWire { role, watch: None },
         people,
@@ -969,6 +970,7 @@ fn powers_follow_the_roles() {
             mods: vec!["mod".into()],
             max: None,
             share_by: None,
+            ptt: false,
         },
         5,
         UNIX,
@@ -997,6 +999,7 @@ fn powers_follow_the_roles() {
             mods: vec!["me".into()],
             max: None,
             share_by: None,
+            ptt: false,
         },
         6,
         UNIX,
@@ -1338,6 +1341,7 @@ fn crew_rooms_list_genel_first_in_the_crews_order() {
                 own: true,
                 share_mods: false,
                 live: Vec::new(),
+                ptt: false,
             },
             CrewRoom {
                 id: "c00000000000000aa".into(),
@@ -2149,4 +2153,152 @@ fn asking_before_a_call_and_the_master_volume_are_settings() {
         2_000,
     );
     assert_eq!(configured(&effects), Some(100));
+}
+
+/// OVL-NEXT: a crew made the room push-to-talk only: the microphone follows the player's
+/// push-to-talk key even in "Konuşunca", stays closed without a key, and the service's switch
+/// decides whether the room's word counts at all.
+#[test]
+fn a_push_to_talk_only_room_keeps_the_microphone_to_the_key() {
+    let ptt_hello = |people: Vec<PersonWire>| match hello(people, Role::Member, true) {
+        FromRoom::Hello {
+            mut room,
+            me,
+            people,
+            rings,
+            sdp,
+            resume,
+            now,
+        } => {
+            room.ptt = true;
+            FromRoom::Hello {
+                room,
+                me,
+                people,
+                rings,
+                sdp,
+                resume,
+                now,
+            }
+        }
+        _ => unreachable!(),
+    };
+    let start = |machine: &mut Machine| {
+        let effects = machine.join(
+            StayStart {
+                room: ROOM.into(),
+                ticket: Ticket::new("v1.join.mac"),
+                calling: None,
+                opened_by_me: false,
+            },
+            1_000,
+            UNIX,
+        );
+        let generation = connect_generation(&effects);
+        machine.page_attached();
+        machine.socket_open(generation, 1_100);
+        let effects = machine.socket_message(
+            generation,
+            ptt_hello(vec![person("me", 1), person("friend", 2)]),
+            1_300,
+            UNIX,
+        );
+        (generation, effects)
+    };
+    let allowed = ServiceVoice {
+        manage: true,
+        ptt: true,
+        ..on()
+    };
+    let key = VoiceKey::keyboard("KeyB", "B");
+
+    // "Konuşunca" with a key kept from before: the room watches it and the gate waits for it.
+    let mut machine = ready();
+    machine.hub_settings(allowed);
+    machine.save_settings(
+        VoiceSettings {
+            push_to_talk_key: Some(key.clone()),
+            ..VoiceSettings::default()
+        },
+        0,
+    );
+    let (generation, effects) = start(&mut machine);
+    assert!(effects.contains(&Effect::Input(Some(vec![(
+        VoiceShortcut::PushToTalk,
+        key.clone()
+    )]))));
+    assert!(engine(&effects).contains(&&talk(false, false)));
+    let room = machine.view(1_400, UNIX).room.unwrap();
+    assert!(room.ptt && !room.me.needs_key);
+    let effects = machine.key(KeyChange {
+        shortcut: VoiceShortcut::PushToTalk,
+        down: true,
+    });
+    assert!(engine(&effects).contains(&&talk(true, false)));
+    // The crew lets it go: back to the player's own "Konuşunca", the watch stops.
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::Room {
+            name: None,
+            leader: None,
+            mods: Vec::new(),
+            max: None,
+            share_by: None,
+            ptt: false,
+        },
+        1_500,
+        UNIX,
+    );
+    assert!(effects.contains(&Effect::Input(None)));
+    assert!(engine(&effects).contains(&&talk(true, false)));
+    assert!(!machine.view(1_500, UNIX).room.unwrap().ptt);
+
+    // No key at all: the microphone stays closed and the page asks for one.
+    let mut machine = ready();
+    machine.hub_settings(allowed);
+    let (_, effects) = start(&mut machine);
+    assert!(!effects.iter().any(|e| matches!(e, Effect::Input(Some(_)))));
+    assert!(engine(&effects).contains(&&talk(false, false)));
+    let room = machine.view(1_400, UNIX).room.unwrap();
+    assert!(room.ptt && room.me.needs_key);
+    // A key chosen now opens it while held.
+    let (_, effects) = machine.save_settings(
+        VoiceSettings {
+            push_to_talk_key: Some(key.clone()),
+            ..VoiceSettings::default()
+        },
+        1_500,
+    );
+    assert!(effects.contains(&Effect::Input(Some(vec![(
+        VoiceShortcut::PushToTalk,
+        key.clone()
+    )]))));
+    assert!(!machine.view(1_500, UNIX).room.unwrap().me.needs_key);
+
+    // The service does not allow such rooms (Studio's switch off): the room's word counts not.
+    let mut machine = ready();
+    machine.save_settings(
+        VoiceSettings {
+            push_to_talk_key: Some(key.clone()),
+            ..VoiceSettings::default()
+        },
+        0,
+    );
+    let (_, effects) = start(&mut machine);
+    assert!(!effects.iter().any(|e| matches!(e, Effect::Input(Some(_)))));
+    assert!(engine(&effects).contains(&&talk(true, false)));
+    assert!(!machine.view(1_400, UNIX).room.unwrap().ptt);
+    // Switched on mid-stay: the room takes push-to-talk at once.
+    let effects = machine.hub_settings(allowed);
+    assert!(effects.contains(&Effect::Input(Some(vec![(VoiceShortcut::PushToTalk, key)]))));
+    assert!(engine(&effects).contains(&&talk(false, false)));
+}
+
+/// OVL-NEXT: the friends service's refusal of a move into a push-to-talk-only room.
+#[test]
+fn an_old_launcher_cannot_be_moved_into_a_push_to_talk_room() {
+    assert_eq!(
+        VoiceAnswer::from_code("ptt_unsupported", None, None).refused,
+        Some(VoiceRefusal::OldLauncher)
+    );
 }

@@ -227,7 +227,7 @@ final class VoicePanel {
 
     private void toggleMic() {
         VoiceState.Room room = voice().room();
-        if (room != null && !room.me().mutedByModerator()) {
+        if (room != null && !room.me().closed()) {
             // Opening the microphone ends deafening too (the launcher's rule, as Discord's).
             overlay.voiceMute(!room.me().micOff());
         }
@@ -259,20 +259,22 @@ final class VoicePanel {
     private void dressButtons(VoiceState.Me me) {
         boolean micOff = me.micOff();
         Component micWords = me.mutedByModerator() ? Texts.tr("voice.muted_by_mod")
+            // OVL-NEXT: a push-to-talk-only room and no key: the launcher's voice settings give one.
+            : me.needsKey() ? Texts.tr("voice.ptt_needs_key")
             : Texts.tr(micOff ? "voice.room.unmute_mic" : "voice.room.mute_mic");
         int off = Theme.FLARE_300;
         int offLit = Theme.mix(Theme.FLARE_300, Theme.BONE_50, 0.35f);
         mic.setIcon(micOff ? Icon.MIC_OFF : Icon.MIC);
         mic.setColors(micOff ? off : Theme.ASH_300, micOff ? offLit : Theme.BONE_100);
         mic.setMessage(micWords);
-        mic.active = !me.mutedByModerator();
+        mic.active = !me.closed();
         deaf.setIcon(me.deaf() ? Icon.DEAF : Icon.HEADPHONES);
         deaf.setColors(me.deaf() ? off : Theme.ASH_300, me.deaf() ? offLit : Theme.BONE_100);
         deaf.setMessage(Texts.tr(me.deaf() ? "voice.room.deafen_off" : "voice.room.deafen"));
         pageMic.setIcon(micOff ? Icon.MIC_OFF : Icon.MIC);
         pageMic.setIconInk(micOff ? off : 0);
         pageMic.setMessage(micWords);
-        pageMic.active = !me.mutedByModerator();
+        pageMic.active = !me.closed();
         pageDeaf.setIcon(me.deaf() ? Icon.DEAF : Icon.HEADPHONES);
         pageDeaf.setIconInk(me.deaf() ? off : 0);
         pageDeaf.setMessage(Texts.tr(me.deaf() ? "voice.room.deafen_off" : "voice.room.deafen"));

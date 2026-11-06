@@ -65,6 +65,9 @@ pub struct Room {
     pub my_sm: bool,
     /// The player's own invites that ring: person → until (Unix seconds).
     pub ringing: BTreeMap<String, i64>,
+    /// OVL-NEXT: the crew made it push-to-talk only (the launcher applies it while the friends
+    /// service allows such rooms).
+    pub ptt: bool,
 }
 
 impl Room {
@@ -97,6 +100,7 @@ impl Room {
             my_role: role,
             people: others,
             my_sm,
+            ptt: room.ptt,
             ringing: rings
                 .into_iter()
                 .map(|ring| (ring.to, ring.until))
@@ -184,9 +188,12 @@ impl Room {
                 leader,
                 mods,
                 max,
+                ptt,
                 ..
             } => {
                 self.name = name.clone();
+                // OVL-NEXT: "Yalnız bas-konuş" went on or off.
+                self.ptt = *ptt;
                 self.leader = leader.clone();
                 self.mods = mods.clone();
                 // VOICE-ROOMS: the crew changed the room's limit ("Oda dolu." follows it).
@@ -259,6 +266,7 @@ mod tests {
                 mods: vec!["b".into()],
                 max: 10,
                 share_by: None,
+                ptt: false,
             },
             Role::Leader,
             vec![person("me", 1), person("b", 3), person("a", 2)],
@@ -366,6 +374,7 @@ mod tests {
             mods: vec![],
             max: None,
             share_by: None,
+            ptt: false,
         });
         assert_eq!(room.role_of("a"), Role::Leader);
         assert_eq!(room.name.as_deref(), Some("Gece"));
@@ -377,8 +386,10 @@ mod tests {
             mods: vec![],
             max: Some(4),
             share_by: None,
+            ptt: true,
         });
         assert_eq!(room.max, 4);
+        assert!(room.ptt, "OVL-NEXT: the crew made it push-to-talk only");
     }
 
     #[test]

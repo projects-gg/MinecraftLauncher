@@ -765,6 +765,7 @@ mod crew_op_tests {
             name: name.into(),
             max,
             share_by: None,
+            ptt: None,
         };
         assert_eq!(crew_op_refusal(&edit(ROOM, "Antrenman", Some(4))), None);
         assert_eq!(crew_op_refusal(&edit(ROOM, "  Taş Ocağı ", None)), None);
