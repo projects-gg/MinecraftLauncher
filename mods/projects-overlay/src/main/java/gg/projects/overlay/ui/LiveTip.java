@@ -200,10 +200,13 @@ public final class LiveTip {
         if (texture != null) {
             drawCovered(g, texture, ix, iy, imageW, imageH);
         } else {
-            // The face large and dimmed: no picture yet, or none the player may see.
-            Draw.pushAlpha(locked ? 0.2f : 0.32f);
-            face.draw(g, Math.min(imageH - 10, 48), ix + imageW / 2f, iy + imageH / 2f);
+            // No picture yet, or none the player may see: the face so large its pixels are tiles, dimmed (the game's
+            // own way of hiding a picture; a real blur in the game costs a pass of its own every frame).
+            g.enableScissor(Math.round(ix), Math.round(iy), Math.round(ix + imageW), Math.round(iy + imageH));
+            Draw.pushAlpha(locked ? 0.24f : 0.34f);
+            face.draw(g, imageW, ix + imageW / 2f, iy + imageH / 2f);
             Draw.popAlpha();
+            g.disableScissor();
             if (locked && lockLine != null) {
                 float mid = iy + imageH / 2f;
                 Draw.icon(g, Icon.LOCK, 12, ix + (imageW - 12) / 2f, mid - 12f, Theme.BONE_100);
