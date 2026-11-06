@@ -52,4 +52,4 @@ pub use server::{
 };
 pub use session::{CONNECT_WAIT, ConnectOutcome, Manage, Managed, PeopleChange, SocialActions};
 pub use token::SessionToken;
-pub use voice::{VoiceAct, VoiceFuture};
+pub use voice::{ThumbFuture, VoiceAct, VoiceFuture};

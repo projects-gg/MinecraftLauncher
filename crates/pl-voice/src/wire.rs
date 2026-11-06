@@ -237,6 +237,12 @@ pub enum ToRoom {
     Wanswer {
         sdp: Sdp,
     },
+    /// SHARE-LIVE (`live1`): the still picture of one of the player's live shares (base64 JPEG);
+    /// never answered (the room drops what comes too often or does not read).
+    ShareThumb {
+        n: u8,
+        jpg: String,
+    },
 }
 
 impl fmt::Debug for ToRoom {
@@ -266,6 +272,7 @@ impl ToRoom {
             Self::Layer { .. } => "layer",
             Self::Unwatch { .. } => "unwatch",
             Self::Wanswer { .. } => "wanswer",
+            Self::ShareThumb { .. } => "share_thumb",
         }
     }
 
@@ -725,6 +732,25 @@ mod tests {
         assert_eq!(value(&ToRoom::Leave), json!({"t":"leave"}));
         assert_eq!(ToRoom::Turn { rid: 9 }.rid(), Some(9));
         assert_eq!(ToRoom::Leave.rid(), None);
+        // SHARE-LIVE: a still picture, never answered, never in a log line.
+        let thumb = ToRoom::ShareThumb {
+            n: 1,
+            jpg: "/9j/4AAQ".into(),
+        };
+        assert_eq!(
+            value(&thumb),
+            json!({"t":"share_thumb","n":1,"jpg":"/9j/4AAQ"})
+        );
+        assert_eq!(
+            (thumb.rid(), format!("{thumb:?}")),
+            (None, "share_thumb".into())
+        );
+        // The largest picture's frame stays within the room's ordinary frame limit.
+        let largest = ToRoom::ShareThumb {
+            n: 9,
+            jpg: "A".repeat(crate::share::THUMB_MAX_BYTES.div_ceil(3) * 4),
+        };
+        assert!(largest.text().len() <= limits::MAX_FRAME_CHARS);
     }
 
     #[test]

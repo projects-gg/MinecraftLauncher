@@ -164,7 +164,7 @@ fn main() {
                     .CopySubresourceRegion(&frame, 0, 0, 0, 0, &source, 0, Some(&b));
             }
             let out = match scaler.convert(&frame, (1920, 1080)) {
-                Ok(out) => out,
+                Ok((out, _)) => out,
                 Err(e) => {
                     println!("convert failed: {e}");
                     break;

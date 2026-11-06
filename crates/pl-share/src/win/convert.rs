@@ -147,12 +147,13 @@ impl Scaler {
     }
 
     /// Converts the `content` part of `src` (a capture texture, possibly larger than its content)
-    /// into the next ring texture, letterboxed. Returns that texture.
+    /// into the next ring texture, letterboxed. Returns that texture and where the picture sits in
+    /// it (the still picture of SHARE-LIVE is cut from there).
     pub fn convert(
         &mut self,
         src: &ID3D11Texture2D,
         content: (u32, u32),
-    ) -> Result<ID3D11Texture2D> {
+    ) -> Result<(ID3D11Texture2D, RECT)> {
         let mut desc = D3D11_TEXTURE2D_DESC::default();
         // SAFETY: a live texture.
         unsafe { src.GetDesc(&mut desc) };
@@ -233,7 +234,7 @@ impl Scaler {
         // SAFETY: taken once; the view's reference is released here.
         unsafe { ManuallyDrop::drop(&mut stream.pInputSurface) };
         result.map_err(at("blt"))?;
-        Ok(target)
+        Ok((target, dest))
     }
 }
 

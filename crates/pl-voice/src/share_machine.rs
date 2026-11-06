@@ -16,14 +16,17 @@
 
 use std::collections::BTreeMap;
 
+use base64::Engine as _;
+
 use super::{Effect, Machine, Pending};
+use crate::engine::EngineSound;
 use crate::share::{
-    ALONE_STOP_MS, HIDDEN_GRACE_MS, PAUSE_AFTER_MS, STILL_ANSWER_MS, STILL_ASK_MS, ServiceShare,
-    ShareBy, ShareClosedWhy, ShareCmd, ShareEvent, ShareKind, ShareLayer, ShareLostWhy,
-    ShareMinePhase, ShareNotice, ShareOpts, SharePreset, ShareRefusal, ShareSource, ShareSurface,
-    ShareWatchPhase, ShareWire, VoiceLiveShare, VoiceMyShare, VoiceShareView, VoiceStreamVolume,
-    VoiceWatch, WATCH_LOSSES_MAX, WATCH_MAX, WATCH_OFFER_WAIT_MS, WatchCmd, WatchMid, WatchReport,
-    WatchWire,
+    ALONE_STOP_MS, HIDDEN_GRACE_MS, PAUSE_AFTER_MS, SOUND_GAP_MS, STILL_ANSWER_MS, STILL_ASK_MS,
+    ServiceShare, ShareBy, ShareClosedWhy, ShareCmd, ShareEvent, ShareKind, ShareLayer,
+    ShareLostWhy, ShareMinePhase, ShareNotice, ShareOpts, SharePreset, ShareRefusal, ShareSource,
+    ShareSurface, ShareWatchPhase, ShareWire, THUMB_MAX_BYTES, VoiceLiveShare, VoiceMyShare,
+    VoiceShareView, VoiceStreamVolume, VoiceWatch, WATCH_LOSSES_MAX, WATCH_MAX,
+    WATCH_OFFER_WAIT_MS, WatchCmd, WatchMid, WatchReport, WatchWire,
 };
 use crate::view::{VoiceAnswer, VoiceRefusal};
 use crate::wire::{FromRoom, ModAct, ToRoom};
@@ -50,6 +53,8 @@ struct Mine {
     /// Since when nobody watches (live shares only).
     alone_since: Option<u64>,
     since: i64,
+    /// SHARE-LIVE: when the room took its last still picture (the room's `th`).
+    th: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -146,6 +151,8 @@ pub(super) struct Shares {
     privacy: (bool, bool),
     /// The "Yayın" window is open (or opening).
     popout: bool,
+    /// SHARE-LIVE: when each of sharing's sounds last played ([`Machine::share_sound`]).
+    sounded: [Option<u64>; 4],
 }
 
 impl Default for Shares {
@@ -173,6 +180,7 @@ impl Default for Shares {
             asking_since: None,
             privacy: (false, false),
             popout: false,
+            sounded: [None; 4],
         }
     }
 }
@@ -197,7 +205,27 @@ impl Machine {
 
     /// The capabilities the room socket asks for.
     pub(super) fn caps() -> Vec<String> {
-        vec![crate::share::CAP.to_owned()]
+        vec![
+            crate::share::CAP.to_owned(),
+            crate::share::LIVE_CAP.to_owned(),
+        ]
+    }
+
+    /// SHARE-LIVE: one of sharing's sounds (the voice page plays it, as "Sesli sohbet sesleri"
+    /// allows), at most once a [`SOUND_GAP_MS`]: two shares that start or end together sound once.
+    fn share_sound(&mut self, sound: EngineSound, now: u64, out: &mut Vec<Effect>) {
+        let slot = match sound {
+            EngineSound::ShareStart => 0,
+            EngineSound::ShareStop => 1,
+            EngineSound::StreamStart => 2,
+            EngineSound::StreamEnd => 3,
+            _ => return,
+        };
+        if self.share.sounded[slot].is_some_and(|at| now.saturating_sub(at) < SOUND_GAP_MS) {
+            return;
+        }
+        self.share.sounded[slot] = Some(now);
+        self.cue(sound, out);
     }
 
     /// Sharing works in the room now.
@@ -254,7 +282,12 @@ impl Machine {
             for n in ns {
                 self.close_mine(n, Some(ShareClosedWhy::Limit), true, now, &mut out);
             }
+            // SHARE-LIVE: what the player watched ended (Studio's switch, the month's budget).
+            let watched = self.share.watching.iter().any(|watch| watch.u != self.me);
             self.stop_watching(None, &mut out);
+            if watched {
+                self.share_sound(EngineSound::StreamEnd, now, &mut out);
+            }
         }
         out
     }
@@ -359,6 +392,7 @@ impl Machine {
             watchers: Vec::new(),
             alone_since: None,
             since: unix,
+            th: None,
         });
         let mut out = vec![Effect::Share(ShareCmd::Prepare { n, source, opts })];
         self.sync_privacy(&mut out);
@@ -415,6 +449,11 @@ impl Machine {
                 why,
                 src: mine.kind,
             }));
+        }
+        // SHARE-LIVE: a share that was live ended, whatever the reason (one that never started
+        // made no sound to answer).
+        if mine.phase == MinePhase::Live {
+            self.share_sound(EngineSound::ShareStop, now, out);
         }
         self.sync_privacy(out);
         self.share_touch_idle(now);
@@ -477,6 +516,28 @@ impl Machine {
                     mine.opts.audio = false;
                     out.push(Effect::ShareNotice(ShareNotice::AudioOff));
                     out.push(Effect::Changed);
+                }
+            }
+            // SHARE-LIVE: a live share's still picture goes to the room (a `live1` room keeps it
+            // for member lists; an older one answers `bad_request`, which nobody waits for).
+            ShareEvent::Thumb { n, jpg } => {
+                let live = self
+                    .share
+                    .mine
+                    .iter()
+                    .any(|mine| mine.n == n && mine.phase == MinePhase::Live);
+                let jpeg = jpg.0.len() <= THUMB_MAX_BYTES && jpg.0.starts_with(&[0xFF, 0xD8, 0xFF]);
+                if live
+                    && jpeg
+                    && let Some(generation) = self.open_generation()
+                {
+                    out.push(Effect::Send {
+                        generation,
+                        frame: ToRoom::ShareThumb {
+                            n,
+                            jpg: base64::engine::general_purpose::STANDARD.encode(&jpg.0),
+                        },
+                    });
                 }
             }
         }
@@ -591,6 +652,8 @@ impl Machine {
                                     let opts = mine.opts;
                                     out.push(Effect::Share(ShareCmd::Update { n, opts }));
                                 }
+                                // SHARE-LIVE: the room took it: the player is live.
+                                self.share_sound(EngineSound::ShareStart, now, out);
                                 out.push(Effect::Changed);
                             }
                         }
@@ -671,9 +734,11 @@ impl Machine {
                     self.stop_watching(None, out);
                 } else if again {
                     self.resume_sharing(&mine_listed, now, out);
-                    self.prune_watches(out);
+                    // SHARE-LIVE: catching up with the room says nothing (no sounds).
+                    self.prune_watches(false, now, out);
                     self.resume_watching(watch.unwrap_or_default(), out);
                 }
+                self.mine_pictures(&mine_listed);
                 out.push(Effect::Changed);
             }
             Seen::ShareBy(by) => {
@@ -684,14 +749,31 @@ impl Machine {
             }
             Seen::Person(u, sh) => {
                 if u == self.me {
+                    // SHARE-LIVE: the room's time of the player's own pictures.
+                    if self.mine_pictures(&sh) {
+                        out.push(Effect::Changed);
+                    }
                     return;
                 }
+                // SHARE-LIVE: a share the room did not list for them before (a new `n`, or the
+                // same `n` begun anew) is someone starting to share.
+                let started = {
+                    let before = self.share.remote.get(&u);
+                    sh.iter().any(|share| {
+                        !before.is_some_and(|old| {
+                            old.iter().any(|was| was.n == share.n && was.at == share.at)
+                        })
+                    })
+                };
                 if sh.is_empty() {
                     self.share.remote.remove(&u);
                 } else {
                     self.share.remote.insert(u, sh);
                 }
-                self.prune_watches(out);
+                if started {
+                    self.share_sound(EngineSound::StreamStart, now, out);
+                }
+                self.prune_watches(true, now, out);
                 out.push(Effect::Changed);
             }
             Seen::Left(u) => {
@@ -699,10 +781,27 @@ impl Machine {
                 for mine in &mut self.share.mine {
                     mine.watchers.retain(|id| *id != u);
                 }
-                self.prune_watches(out);
+                self.prune_watches(true, now, out);
                 out.push(Effect::Changed);
             }
         }
+    }
+
+    /// SHARE-LIVE: the room's `th` of the player's own shares (`listed`); whether one changed.
+    fn mine_pictures(&mut self, listed: &[ShareWire]) -> bool {
+        let mut changed = false;
+        for mine in &mut self.share.mine {
+            if let Some(th) = listed
+                .iter()
+                .find(|share| share.n == mine.n)
+                .and_then(|share| share.th)
+                && mine.th != Some(th)
+            {
+                mine.th = Some(th);
+                changed = true;
+            }
+        }
+        changed
     }
 
     /// Back on a new socket, the player's shares against the room's list of them (`listed`, with
@@ -814,8 +913,10 @@ impl Machine {
         }
     }
 
-    /// Watches of shares the room no longer lists go (the room closed them already).
-    fn prune_watches(&mut self, out: &mut Vec<Effect>) {
+    /// Watches of shares the room no longer lists go (the room closed them already). `sound`
+    /// (SHARE-LIVE): the room's news, not a catch-up: someone else's watched share that ended
+    /// plays its sound.
+    fn prune_watches(&mut self, sound: bool, now: u64, out: &mut Vec<Effect>) {
         let me = self.me.clone();
         let gone: Vec<(String, u8)> = self
             .share
@@ -838,8 +939,12 @@ impl Machine {
             })
             .map(|watch| (watch.u.clone(), watch.n))
             .collect();
+        let others = gone.iter().any(|(u, _)| *u != me);
         for (u, n) in gone {
             self.drop_watch(&u, n, false, out);
+        }
+        if sound && others {
+            self.share_sound(EngineSound::StreamEnd, now, out);
         }
     }
 
@@ -1519,6 +1624,7 @@ impl Machine {
                     fps: share.fps,
                     watchers: share.w,
                     since: share.at,
+                    th: share.th,
                 })
             })
             .collect();
@@ -1565,6 +1671,7 @@ impl Machine {
                     fps: mine.opts.fps,
                     watchers: mine.watchers.clone(),
                     since: mine.since,
+                    th: mine.th,
                 })
                 .collect(),
             live,

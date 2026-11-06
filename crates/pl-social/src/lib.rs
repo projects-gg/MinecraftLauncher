@@ -189,6 +189,8 @@ pub use voice::{
 };
 // SHARE-S: `hello.voice.share`.
 pub use voice::{SharePreset, VoiceShareStatus};
+// SHARE-LIVE: a live share's still picture.
+pub use voice::VoiceThumb;
 pub use world::{
     E4mcHint, Hidden, TurnIce, WORLDS_CAP, WorldAck, WorldAnswer, WorldError, WorldEvent,
     WorldFrame, WorldInvite, WorldRole, WorldSink, WorldsStatus,

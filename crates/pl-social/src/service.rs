@@ -3337,6 +3337,21 @@ impl SocialService {
         session.voice_crew_change(change).await
     }
 
+    /// SHARE-LIVE: a live share's still picture (the member lists' hover card).
+    pub async fn voice_thumb(
+        &self,
+        room: &str,
+        user: &str,
+        n: u8,
+    ) -> Result<crate::voice::VoiceThumb> {
+        let session = self
+            .lock()
+            .session
+            .clone()
+            .ok_or(SocialError::Unauthorized)?;
+        session.voice_thumb(room, user, n).await
+    }
+
     /// Where the room socket goes and as whom (VOICE): the service's address, the session's
     /// token, the user agent; None while signed out.
     pub fn voice_socket(&self) -> Option<(Url, String, String)> {

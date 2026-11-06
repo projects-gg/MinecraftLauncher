@@ -1262,6 +1262,10 @@ pub struct FriendView {
     /// Voice chat (VOICE): `ready` offers "Ara", `in` is in a room ("Sesli sohbette"; "Ara" still
     /// rings); None: no "Ara".
     pub voice: Option<crate::voice::PresenceVoice>,
+    /// SHARE-LIVE: they share their screen in a voice room now ("YAYINDA" beside their name).
+    /// Always sent; optional for the page's types, whose older views (and tests) never had it.
+    #[specta(optional)]
+    pub live: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]

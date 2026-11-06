@@ -775,6 +775,11 @@ const VOICE_BURST: usize = 12;
 const VOICE_WINDOW: Duration = Duration::from_secs(10);
 /// ... within this long (a person picks slower; anything faster is a stuck key or a bad mod).
 const PEOPLE_WINDOW: Duration = Duration::from_secs(10);
+/// SHARE-LIVE: the hover card's still pictures the launcher asks for at most ...
+const THUMB_BURST: usize = 6;
+/// ... within this long (each one is kept 20 s; a pointer sweeping a list asks for more than a
+/// reader).
+const THUMB_WINDOW: Duration = Duration::from_secs(20);
 /// "Discord'dan mesaj at" for the same friend again within this long opens nothing more (a double
 /// click, as the launcher's own button).
 const DISCORD_REPEAT: Duration = Duration::from_secs(2);
@@ -857,6 +862,11 @@ pub(crate) type EmojiFn = Arc<dyn Fn(bool) + Send + Sync>;
 /// VOICE-O: hands a press to the launcher's voice chat (none: the app did not wire it).
 pub(crate) type VoiceActFn = Arc<dyn Fn(VoiceAct) -> Option<VoiceFuture> + Send + Sync>;
 
+/// SHARE-LIVE: asks the launcher for a share's still picture (room, sharer, share; none: the app
+/// did not wire it).
+pub(crate) type ThumbFn =
+    Arc<dyn Fn(String, String, u8) -> Option<crate::voice::ThumbFuture> + Send + Sync>;
+
 /// VOICE-O: a session's ties to the launcher's voice chat.
 pub(crate) struct VoiceHooks {
     /// Voice chat's newest state and whether a ring rings in the game; none while voice chat
@@ -870,6 +880,8 @@ pub(crate) struct VoiceHooks {
     pub(crate) shown: ConnectedFn,
     /// OVL-SHARE: the player shares and hides notifications while sharing.
     pub(crate) quiet: Arc<AtomicBool>,
+    /// SHARE-LIVE: where the game's hover card gets a share's still picture.
+    pub(crate) thumb: ThumbFn,
 }
 
 /// Whom a person menu frame may be about (OVL-UX2): the friend list's people for most rows; crew
@@ -1107,6 +1119,9 @@ pub(crate) struct Session<S> {
     recent_voice: VecDeque<Instant>,
     /// OVL-SHARE: the player shares and hides notifications while sharing (the hub's flag).
     share_quiet: Arc<AtomicBool>,
+    /// SHARE-LIVE: where still pictures come from, and the ones asked for lately.
+    voice_thumb: ThumbFn,
+    recent_thumbs: VecDeque<Instant>,
     /// OVL-AVATARS: the prepared pictures every session shares, and the people this mod asked about with the
     /// version it was answered with (`-`: the letter), to tell it again when theirs changes.
     pictures: Arc<Pictures>,
@@ -1297,6 +1312,8 @@ impl<S: SocialActions> Session<S> {
             voice_shown: voice.shown,
             recent_voice: VecDeque::new(),
             share_quiet: voice.quiet,
+            voice_thumb: voice.thumb,
+            recent_thumbs: VecDeque::new(),
             pictures,
             told: HashMap::new(),
             told_order: VecDeque::new(),
@@ -1774,6 +1791,53 @@ impl<S: SocialActions> Session<S> {
         tokio::spawn(async move {
             let answer = doing.await;
             if let Some(frame) = voice::result_of(&act, &answer) {
+                let _ = control.send(Control::Send {
+                    conn,
+                    frames: vec![frame],
+                });
+            }
+        });
+    }
+
+    /// SHARE-LIVE: the hover card's still picture of share `n` of `u` in `room`, from a mod that
+    /// shows sharing. Only for a share the state shows (the player's room, or someone live in a
+    /// crew room the mod was shown) and a few a minute; anything else is answered `none` without
+    /// asking. The picture is made a PNG off the session's task.
+    fn on_voice_thumb(&mut self, room: String, u: String, n: u8) {
+        let Some(conn) = self
+            .live
+            .as_ref()
+            .filter(|live| live.voice && live.share)
+            .map(|live| live.conn)
+        else {
+            return;
+        };
+        let allowed = self
+            .voice
+            .as_ref()
+            .is_some_and(|(state, _)| voice::thumb_allowed(state, &room, &u, n));
+        let now = Instant::now();
+        let asking = if allowed && !full(&mut self.recent_thumbs, now, THUMB_WINDOW, THUMB_BURST) {
+            (self.voice_thumb)(room.clone(), u.clone(), n)
+        } else {
+            None
+        };
+        let Some(asking) = asking else {
+            self.send(vec![voice::thumb_frame(
+                room,
+                u,
+                n,
+                &pl_social::VoiceThumb::None,
+            )]);
+            return;
+        };
+        self.recent_thumbs.push_back(now);
+        let control = self.control.clone();
+        tokio::spawn(async move {
+            let answer = asking.await;
+            let frame =
+                tokio::task::spawn_blocking(move || voice::thumb_frame(room, u, n, &answer)).await;
+            if let Ok(frame) = frame {
                 let _ = control.send(Control::Send {
                     conn,
                     frames: vec![frame],
@@ -2429,6 +2493,8 @@ impl<S: SocialActions> Session<S> {
             | FromGame::VoiceJoin { .. }
             | FromGame::VoiceShareGame {}
             | FromGame::VoiceShareStop { .. }) => self.on_voice_press(&frame),
+            // SHARE-LIVE: a share's still picture for the hover card.
+            FromGame::VoiceThumb { room, u, n } => self.on_voice_thumb(room, u, n),
             // OVL-SOC 2: the status switcher and the friend requests.
             FromGame::Status { status, preset } => self.on_status(&status, preset.as_deref()),
             FromGame::Request { id, accept } => self.on_request(id, accept),

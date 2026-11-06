@@ -934,6 +934,8 @@ impl Scene {
                     // OVL-SOC: the launcher's do-not-disturb dot; an offline friend has no dot.
                     dnd: friend.dnd && place != Place::Offline,
                     real: None,
+                    // SHARE-LIVE: "YAYINDA" beside a friend who shares in a voice room.
+                    live: friend.live && place != Place::Offline,
                 }
             })
             .collect();
@@ -2588,6 +2590,7 @@ pub(crate) mod tests {
             badge: None,
             marks: Vec::new(),
             voice: None,
+            live: false,
         }
     }
 

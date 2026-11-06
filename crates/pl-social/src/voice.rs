@@ -136,11 +136,40 @@ pub struct VoiceCrewRoom {
     /// everyone).
     #[serde(default, rename = "shareBy", deserialize_with = "mods_only")]
     pub share_mods: bool,
+    /// SHARE-LIVE: who of `ids` shares their screen now (the player's blocks left out; absent from
+    /// an older service and while sharing is off). An entry that is no text is dropped.
+    #[serde(default, deserialize_with = "texts")]
+    pub live: Vec<String>,
 }
 
 fn mods_only<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
     let value = Option::<serde_json::Value>::deserialize(deserializer)?;
     Ok(value.as_ref().and_then(serde_json::Value::as_str) == Some("mods"))
+}
+
+/// A list of texts where anything else is dropped (and a list that is no list is empty).
+fn texts<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<String>, D::Error> {
+    Ok(
+        match Option::<serde_json::Value>::deserialize(deserializer)? {
+            Some(serde_json::Value::Array(items)) => items
+                .into_iter()
+                .filter_map(|item| match item {
+                    serde_json::Value::String(text) => Some(text),
+                    _ => None,
+                })
+                .take(64)
+                .collect(),
+            _ => Vec::new(),
+        },
+    )
+}
+
+/// SHARE-LIVE: `true` reads as yes; absent, `null` or anything else as no.
+pub(crate) fn only_true<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<bool, D::Error> {
+    Ok(Option::<serde_json::Value>::deserialize(deserializer)?
+        == Some(serde_json::Value::Bool(true)))
 }
 
 /// VOICE-ROOMS: a change of the crew's rooms from the crew page (README "Voice (VOICE-ROOMS)").
@@ -244,6 +273,44 @@ pub struct VoiceRing {
 pub enum PresenceVoice {
     Ready,
     In,
+}
+
+/// SHARE-LIVE: a live share's still picture as the friends service hands it out
+/// (`GET /v1/voice/thumb`, [`crate::Session::voice_thumb`]).
+#[derive(Clone, PartialEq, Eq)]
+pub enum VoiceThumb {
+    /// The JPEG.
+    Image(Vec<u8>),
+    /// The player sees the room but may not join it: no picture ("a blurred lock").
+    Locked,
+    /// Nothing to show: no such share, no picture yet, or nothing the player may see.
+    None,
+}
+
+impl VoiceThumb {
+    /// The service's pictures are at most this long (the room keeps none larger).
+    pub const MAX_BYTES: usize = 24 * 1024;
+
+    /// A JPEG (`FF D8 FF`) of at most [`Self::MAX_BYTES`].
+    pub fn is_picture(bytes: &[u8]) -> bool {
+        bytes.len() > 3 && bytes.len() <= Self::MAX_BYTES && bytes.starts_with(&[0xFF, 0xD8, 0xFF])
+    }
+}
+
+impl fmt::Debug for VoiceThumb {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Image(jpg) => write!(f, "Image(<{} bytes>)", jpg.len()),
+            Self::Locked => f.write_str("Locked"),
+            Self::None => f.write_str("None"),
+        }
+    }
+}
+
+/// A 403 body that says `{"locked": true}`.
+pub(crate) fn says_locked(body: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(body)
+        .is_ok_and(|value| value.get("locked") == Some(&serde_json::Value::Bool(true)))
 }
 
 /// A client → hub voice frame.
@@ -531,6 +598,48 @@ mod tests {
         hub.deliver(VoiceEvent::Down);
         assert!(!hub.taken());
         assert_eq!(heard.lock().unwrap().len(), 2);
+    }
+
+    /// SHARE-LIVE: who shares, in a crew room's list and a friend's presence, read leniently (an
+    /// older service says nothing); the picture's answers.
+    #[test]
+    fn who_shares_reads_leniently() {
+        let rooms: VoiceCrewRooms = serde_json::from_str(
+            r#"{"crew":"0123456789abcdef","rooms":[
+                {"id":"g0123456789abcdef","ids":["7","8"],"live":["8",9,null]},
+                {"id":"c0123456789abcdef","ids":["9"],"live":"9"},
+                {"id":"c0123456789abcdee","ids":["9"]}]}"#,
+        )
+        .unwrap();
+        assert_eq!(rooms.rooms[0].live, ["8"]);
+        assert!(rooms.rooms[1].live.is_empty() && rooms.rooms[2].live.is_empty());
+        let presence = |extra: &str| -> crate::protocol::Presence {
+            serde_json::from_str(&format!(
+                r#"{{"id":"7","state":"launcher","voice":"in"{extra}}}"#
+            ))
+            .unwrap()
+        };
+        assert!(presence(r#","live":true"#).live);
+        for odd in [
+            "",
+            r#","live":false"#,
+            r#","live":"yes""#,
+            r#","live":1"#,
+            r#","live":null"#,
+        ] {
+            assert!(!presence(odd).live, "{odd}");
+        }
+        assert!(says_locked(br#"{"locked":true}"#));
+        assert!(!says_locked(br#"{"error":"forbidden"}"#) && !says_locked(b"locked"));
+        assert!(VoiceThumb::is_picture(&[0xFF, 0xD8, 0xFF, 0xE0]));
+        assert!(!VoiceThumb::is_picture(b"\x89PNG"));
+        let mut huge = vec![0xFF, 0xD8, 0xFF];
+        huge.resize(VoiceThumb::MAX_BYTES + 1, 0);
+        assert!(!VoiceThumb::is_picture(&huge));
+        assert_eq!(
+            format!("{:?}", VoiceThumb::Image(vec![0; 9])),
+            "Image(<9 bytes>)"
+        );
     }
 
     /// SHARE-S: a crew room's "Kim paylaşabilir" (`shareBy`), everyone unless it says "mods".

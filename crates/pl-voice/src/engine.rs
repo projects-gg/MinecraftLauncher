@@ -97,6 +97,17 @@ pub enum EngineSound {
     /// The caller's waiting tone, until [`EngineSound::Stop`] or someone comes.
     Waiting,
     Stop,
+    /// SHARE-LIVE: the player's share went live (the room took it).
+    ShareStart,
+    /// SHARE-LIVE: one of the player's live shares ended, whatever the reason (not with the stay's
+    /// own end, which says [`EngineSound::Ended`]).
+    ShareStop,
+    /// SHARE-LIVE: someone else in the room started sharing (never for what the room's `hello`
+    /// lists, the first or after a reconnect).
+    StreamStart,
+    /// SHARE-LIVE: a share the player watches ended (its sharer stopped or left, a moderator, the
+    /// month's budget); never for the player's own "İzlemeyi bırak".
+    StreamEnd,
 }
 
 /// Launcher → page.

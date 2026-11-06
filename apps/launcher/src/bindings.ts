@@ -517,6 +517,13 @@ export const commands = {
 	/**  "Kim paylaşabilir" in a friend room (its leader; the room checks). */
 	shareSetSharers: (who: ShareBy) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("share_set_sharers", { who })),
 	/**
+	 *  SHARE-LIVE: the hover card's still picture of share `n` of `user` in `room` (the player's own
+	 *  from this computer): `image` (a `data:` URL), `locked` (the player may not join that room:
+	 *  no picture) or `none`. Kept 20 s; a newer picture in the player's room (`th`) is asked at once.
+	 *  Someone outside the player's room has one share as far as the list knows: `n` 1.
+	 */
+	shareThumb: (room: string, user: string, n: number) => typedError<ShareThumb, CmdError>(__TAURI_INVOKE("share_thumb", { room, user, n })),
+	/**
 	 *  Server List Ping. Never fails: an unreachable server is reported as offline. Without a name
 	 *  and address it pings the featured server Studio published (else `play.projects.gg`).
 	 */
@@ -5053,7 +5060,24 @@ export type EngineSound =
 /**  The connection dropped ("Yeniden bağlanıyor…" shows). */
 "lost" | 
 /**  The caller's waiting tone, until [`EngineSound::Stop`] or someone comes. */
-"waiting" | "stop";
+"waiting" | "stop" | 
+/**  SHARE-LIVE: the player's share went live (the room took it). */
+"shareStart" | 
+/**
+ *  SHARE-LIVE: one of the player's live shares ended, whatever the reason (not with the stay's
+ *  own end, which says [`EngineSound::Ended`]).
+ */
+"shareStop" | 
+/**
+ *  SHARE-LIVE: someone else in the room started sharing (never for what the room's `hello`
+ *  lists, the first or after a reconnect).
+ */
+"streamStart" | 
+/**
+ *  SHARE-LIVE: a share the player watches ended (its sharer stopped or left, a moderator, the
+ *  month's budget); never for the player's own "İzlemeyi bırak".
+ */
+"streamEnd";
 
 export type EventView = {
 	id: string,
@@ -5240,6 +5264,11 @@ export type FriendView_Deserialize = {
 	 *  rings); None: no "Ara".
 	 */
 	voice: PresenceVoice | null,
+	/**
+	 *  SHARE-LIVE: they share their screen in a voice room now ("YAYINDA" beside their name).
+	 *  Always sent; optional for the page's types, whose older views (and tests) never had it.
+	 */
+	live?: boolean,
 };
 
 export type FriendView_Serialize = {
@@ -5270,6 +5299,11 @@ export type FriendView_Serialize = {
 	 *  rings); None: no "Ara".
 	 */
 	voice: PresenceVoice | null,
+	/**
+	 *  SHARE-LIVE: they share their screen in a voice room now ("YAYINDA" beside their name).
+	 *  Always sent; optional for the page's types, whose older views (and tests) never had it.
+	 */
+	live?: boolean,
 };
 
 export type Game = Game_Serialize | Game_Deserialize;
@@ -10483,6 +10517,15 @@ export type ShareSources = {
 /**  Where the player watches: the launcher's window, or its own "Yayın" window. */
 export type ShareSurface = "main" | "popout";
 
+/**  What the hover card shows (`share_thumb`). */
+export type ShareThumb = 
+/**  The picture, `data:image/jpeg;base64,…`. */
+{ kind: "image"; dataUrl: string } | 
+/**  The player may not join that room: a blurred lock, no picture. */
+{ kind: "locked" } | 
+/**  No picture yet, or nothing to show. */
+{ kind: "none" };
+
 /**  Where one watched share is. */
 export type ShareWatchPhase = 
 /**  Asked for, the picture on its way. */
@@ -11969,6 +12012,11 @@ export type VoiceCrewRoom = {
 	max: number | null,
 	/**  VOICE-ROOMS: the player opened it (they may change and delete it). */
 	own: boolean,
+	/**
+	 *  SHARE-LIVE: who of `people` shares their screen now ("YAYINDA" beside them, for people
+	 *  outside the room too).
+	 */
+	live: string[],
 };
 
 /**
@@ -12133,6 +12181,11 @@ export type VoiceLiveShare = {
 	watchers: number,
 	/**  Unix seconds. */
 	since: number,
+	/**
+	 *  SHARE-LIVE: when its last still picture came (Unix seconds); none before the first (or in a
+	 *  room from before SHARE-LIVE). The hover card's `share_thumb` keeps its answer by it.
+	 */
+	th: number | null,
 };
 
 /**  The player in the room. */
@@ -12218,6 +12271,11 @@ export type VoiceMyShare = {
 	watchers: string[],
 	/**  Unix seconds. */
 	since: number,
+	/**
+	 *  SHARE-LIVE: when the room took this share's last still picture (Unix seconds, the room's
+	 *  clock); none before the first. `share_thumb` answers the player's own from this computer.
+	 */
+	th: number | null,
 };
 
 /**

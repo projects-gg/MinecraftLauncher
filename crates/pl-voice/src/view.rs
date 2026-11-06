@@ -373,6 +373,9 @@ pub struct VoiceCrewRoom {
     pub max: Option<u16>,
     /// VOICE-ROOMS: the player opened it (they may change and delete it).
     pub own: bool,
+    /// SHARE-LIVE: who of `people` shares their screen now ("YAYINDA" beside them, for people
+    /// outside the room too).
+    pub live: Vec<String>,
 }
 
 impl VoiceCrewRoom {
@@ -877,6 +880,7 @@ mod tests {
             people: Vec::new(),
             max: None,
             own: false,
+            live: Vec::new(),
         };
         assert_eq!(crew_room("Genel", true).shown_name(true), "General");
         assert_eq!(crew_room("Genel", true).shown_name(false), "Genel");

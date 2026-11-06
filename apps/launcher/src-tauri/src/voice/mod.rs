@@ -17,10 +17,14 @@
 //! removals and a moderator's mute, as its toasts do for messages.
 
 pub(crate) mod input;
+/// SHARE-LIVE: the taskbar's live mark and the tray's "Yayındasın".
+pub(crate) mod live;
 mod probe;
 /// SHARE: screen sharing's publisher, watching pages, "Yayın" window and privacy.
 pub(crate) mod share;
 mod share_native;
+/// SHARE-LIVE: a live share's still picture for the hover cards.
+pub(crate) mod thumb;
 mod window;
 
 use std::collections::HashMap;
@@ -84,6 +88,12 @@ pub fn create(
     let _ = platform.voice.set(voice.clone());
     share::install(app, &voice);
     wire_overlay(&overlay, &voice);
+    // SHARE-LIVE: the game's hover card gets the same still pictures as the launcher's.
+    let (pictures, watching) = (social.clone(), voice.clone());
+    overlay.on_thumb(move |room, user, n| -> pl_overlay::ThumbFuture {
+        let (social, voice) = (pictures.clone(), watching.clone());
+        Box::pin(async move { thumb::fetch(&social, &voice, &room, &user, n).await })
+    });
     let _ = platform.overlay.set(overlay);
     let hears = voice.clone();
     social.on_voice(move |event| on_hub(&hears, event));
@@ -255,6 +265,14 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+/// The signed-in player's id as voice chat knows it (empty while signed out).
+pub(crate) fn my_id() -> String {
+    PLATFORM
+        .get()
+        .map(|platform| lock(&platform.me).clone())
+        .unwrap_or_default()
+}
+
 /// The hub's voice messages, as the machine takes them.
 fn on_hub(voice: &Voice, event: VoiceEvent) {
     match event {
@@ -328,6 +346,8 @@ fn crew_rooms(rooms: pl_social::VoiceCrewRooms) -> (String, Vec<CrewRoom>) {
                 max: room.max,
                 own: room.own,
                 share_mods: room.share_mods,
+                // SHARE-LIVE: who shares there now.
+                live: room.live,
             })
             .collect(),
     )
@@ -844,6 +864,8 @@ impl AppPlatform {
     /// SHARE: names for the "Yayın" window (sharers, watchers), and the tray's "Paylaşımı
     /// durdur" while the player shares.
     fn name_sharers(&self, state: &mut VoiceState) {
+        // SHARE-LIVE: the taskbar's live mark and the tray's "Yayındasın" (changes only).
+        live::set(&self.app, state.share.live_now());
         #[cfg(desktop)]
         {
             crate::shell::set_tray_sharing(&self.app, !state.share.mine.is_empty());
