@@ -24,6 +24,9 @@ use url::Url;
 
 use crate::wire::{FromRoom, Ticket, ToRoom, limits};
 
+/// OVL-NEXT: the room socket's capability of launchers that keep push-to-talk-only rooms.
+pub const PTT_CAP: &str = "ptt1";
+
 pub const KEEPALIVE: Duration = Duration::from_secs(45);
 pub const PONG_TIMEOUT: Duration = Duration::from_secs(20);
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -99,7 +102,11 @@ async fn run(
     events: EventSink,
 ) {
     let mut url = target.url.clone();
-    url.query_pairs_mut().append_pair("ticket", ticket.expose());
+    url.query_pairs_mut()
+        .append_pair("ticket", ticket.expose())
+        // OVL-NEXT: this launcher keeps a push-to-talk-only room's rule (a room refuses a
+        // launcher that does not say so).
+        .append_pair("caps", PTT_CAP);
     let Ok(mut request) = url.as_str().into_client_request() else {
         events(SocketEvent::Refused {
             status: None,

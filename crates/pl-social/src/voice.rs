@@ -53,6 +53,9 @@ pub struct VoiceStatus {
     /// VOICE-ROOMS: crews arrange their rooms (Studio's "Oda yönetimi"): rooms stay until deleted
     /// and the crew page changes them ([`VoiceCrewChange`]). Absent (an older service): no.
     pub manage: bool,
+    /// OVL-NEXT: a crew's leader and moderators may make a kept room push-to-talk only (Studio's
+    /// "Yalnız bas-konuş odalar", only with "Oda yönetimi"). Absent (an older service): no.
+    pub ptt: bool,
     /// SHARE-S: screen sharing in voice rooms, only while Studio has it on (`hello.voice.share`,
     /// `voice_state.voice.share`). None: no sharing (an older service, or switched off).
     pub share: Option<VoiceShareStatus>,
@@ -112,6 +115,7 @@ impl Default for VoiceStatus {
             idle_minutes: 30,
             kbps: 24,
             manage: false,
+            ptt: false,
             share: None,
         }
     }
@@ -136,6 +140,9 @@ pub struct VoiceCrewRoom {
     /// everyone).
     #[serde(default, rename = "shareBy", deserialize_with = "mods_only")]
     pub share_mods: bool,
+    /// OVL-NEXT: only push-to-talk in it (`ptt: true`; absent or anything else: no).
+    #[serde(default, deserialize_with = "only_true")]
+    pub ptt: bool,
     /// SHARE-LIVE: who of `ids` shares their screen now (the player's blocks left out; absent from
     /// an older service and while sharing is off). An entry that is no text is dropped.
     #[serde(default, deserialize_with = "texts")]
@@ -176,13 +183,15 @@ pub(crate) fn only_true<'de, D: serde::Deserializer<'de>>(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VoiceCrewChange {
     /// A room's name and people at most (`Some(None)`: the crew room maximum again); SHARE-S:
-    /// who may share in it (`Some(true)`: its leader and moderators, `Some(false)`: everyone).
+    /// who may share in it (`Some(true)`: its leader and moderators, `Some(false)`: everyone);
+    /// OVL-NEXT: push-to-talk only (`None`: as it is).
     Edit {
         crew: String,
         room: String,
         name: Option<String>,
         max: Option<Option<u16>>,
         share_mods: Option<bool>,
+        ptt: Option<bool>,
     },
     /// The crew's rooms ("Genel" aside) in this order.
     Order { crew: String, rooms: Vec<String> },
@@ -210,6 +219,7 @@ impl VoiceCrewChange {
                 name,
                 max,
                 share_mods,
+                ptt,
             } => {
                 let mut body = serde_json::json!({ "crew": crew, "room": room });
                 if let Some(name) = name {
@@ -220,6 +230,9 @@ impl VoiceCrewChange {
                 }
                 if let Some(mods) = share_mods {
                     body["shareBy"] = if *mods { "mods" } else { "all" }.into();
+                }
+                if let Some(ptt) = ptt {
+                    body["ptt"] = (*ptt).into();
                 }
                 ("v1/voice/crew/room", body)
             }
@@ -497,6 +510,10 @@ mod tests {
         let status: VoiceStatus = serde_json::from_str(r#"{"on":true,"manage":true}"#).unwrap();
         assert!(status.manage);
         assert!(!VoiceStatus::default().manage);
+        // OVL-NEXT: push-to-talk-only rooms, off unless the service says so.
+        let status: VoiceStatus = serde_json::from_str(r#"{"on":true,"ptt":true}"#).unwrap();
+        assert!(status.ptt);
+        assert!(!VoiceStatus::default().ptt);
         let rooms: VoiceCrewRooms = serde_json::from_str(
             r#"{"crew":"0123456789abcdef","rooms":[{"id":"g0123456789abcdef","name":"Genel","ids":[]},
                 {"id":"c0123456789abcdef","name":"Taş Ocağı","ids":["7"],"max":4,"own":true}]}"#,
@@ -516,6 +533,7 @@ mod tests {
                     name: Some("Antrenman".into()),
                     max: Some(None),
                     share_mods: None,
+                    ptt: None,
                 },
                 "v1/voice/crew/room",
                 serde_json::json!({"crew": crew, "room": room, "name": "Antrenman", "max": null}),
@@ -527,6 +545,7 @@ mod tests {
                     name: None,
                     max: Some(Some(6)),
                     share_mods: None,
+                    ptt: None,
                 },
                 "v1/voice/crew/room",
                 serde_json::json!({"crew": crew, "room": room, "max": 6}),
@@ -539,9 +558,23 @@ mod tests {
                     name: None,
                     max: None,
                     share_mods: Some(true),
+                    ptt: None,
                 },
                 "v1/voice/crew/room",
                 serde_json::json!({"crew": crew, "room": room, "shareBy": "mods"}),
+            ),
+            // OVL-NEXT: push-to-talk only.
+            (
+                VoiceCrewChange::Edit {
+                    crew: crew.clone(),
+                    room: room.clone(),
+                    name: None,
+                    max: None,
+                    share_mods: None,
+                    ptt: Some(false),
+                },
+                "v1/voice/crew/room",
+                serde_json::json!({"crew": crew, "room": room, "ptt": false}),
             ),
             (
                 VoiceCrewChange::Order {
@@ -653,5 +686,23 @@ mod tests {
         assert!(!room(serde_json::json!({"id": id, "shareBy": 3})).share_mods);
         assert!(!room(serde_json::json!({"id": id, "shareBy": null})).share_mods);
         assert!(!room(serde_json::json!({"id": id})).share_mods);
+    }
+
+    /// OVL-NEXT: a crew room is push-to-talk only when it says `ptt: true`, nothing else.
+    #[test]
+    fn crew_rooms_say_push_to_talk_only() {
+        let room =
+            |json: serde_json::Value| -> VoiceCrewRoom { serde_json::from_value(json).unwrap() };
+        let id = "c0123456789abcdef";
+        assert!(room(serde_json::json!({"id": id, "ptt": true})).ptt);
+        for odd in [
+            serde_json::json!({"id": id, "ptt": false}),
+            serde_json::json!({"id": id, "ptt": 1}),
+            serde_json::json!({"id": id, "ptt": "true"}),
+            serde_json::json!({"id": id, "ptt": null}),
+            serde_json::json!({"id": id}),
+        ] {
+            assert!(!room(odd.clone()).ptt, "{odd}");
+        }
     }
 }

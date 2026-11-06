@@ -11987,7 +11987,9 @@ export type VoiceCrewOp =
  */
 { op: "edit"; crew: string; room: string; name: string; max: number | null; 
 /**  SHARE-S: "Kim paylaşabilir" in it (none: as it is). */
-shareBy?: ShareBy | null } | 
+shareBy?: ShareBy | null; 
+/**  OVL-NEXT: "Yalnız bas-konuş" (none: as it is; only the crew's leader and moderators). */
+ptt?: boolean | null } | 
 /**  The crew's rooms ("Genel" aside) in this order (a drag, "Yukarı taşı", "Aşağı taşı"). */
 { op: "order"; crew: string; rooms: string[] } | 
 /**
@@ -12017,6 +12019,8 @@ export type VoiceCrewRoom = {
 	 *  outside the room too).
 	 */
 	live: string[],
+	/**  OVL-NEXT: push-to-talk only ("Yalnız bas-konuş"; only while the service allows it). */
+	ptt: boolean,
 };
 
 /**
@@ -12035,6 +12039,11 @@ export type VoiceCrewRooms = {
 	manage: boolean,
 	/**  VOICE-ROOMS: people at most in a crew room (Studio's): a room's own limit is below it. */
 	crewMax: number,
+	/**
+	 *  OVL-NEXT: the friends service lets the crew's leader and moderators make a room push-to-talk
+	 *  only (Studio's "Yalnız bas-konuş odalar"): the room form offers "Yalnız bas-konuş".
+	 */
+	ptt: boolean,
 };
 
 /**  An audio device; `id` is what the settings keep (none there: the system's default). */
@@ -12204,6 +12213,11 @@ export type VoiceMe = {
 	/**  The microphone sends now (push-to-talk held, or speech in "Konuşunca"; false while muted). */
 	talking: boolean,
 	quality: VoiceQuality,
+	/**
+	 *  OVL-NEXT: the room takes push-to-talk only and the player has no push-to-talk key: their
+	 *  microphone stays closed ("Bu odada bas-konuş gerekiyor." with "Tuş seç").
+	 */
+	needsKey: boolean,
 };
 
 /**  The microphone as the voice engine saw it last. */
@@ -12444,6 +12458,8 @@ export type VoiceRefusal =
 "invalidName" | 
 /**  The name filter refused it. */
 "nameRejected" | 
+/**  OVL-NEXT: that player's launcher is too old for a push-to-talk-only room (a move there). */
+"oldLauncher" | 
 /**  The voice service did not answer: "Bağlanamadı." with "Tekrar dene". */
 "failed" | 
 /**  Nothing to do that on (not in a room, no such ring). */
@@ -12489,6 +12505,11 @@ export type VoiceRoomView = {
 	/**  What the player may do to the room itself. */
 	canRename: boolean,
 	canClose: boolean,
+	/**
+	 *  OVL-NEXT: the crew made it push-to-talk only: the microphone opens only while the player
+	 *  holds their push-to-talk key, whatever "Mikrofon ne zaman açık" says.
+	 */
+	ptt: boolean,
 };
 
 /**  Settings → Sesli sohbet. */

@@ -147,4 +147,23 @@ class OverlayStateSoc2Test {
         assertEquals(0, online.at());
         assertEquals("f-ayse", online.by());
     }
+
+    /** OVL-NEXT: crewmates who are not friends carry their presence dot to crew chat ({@code mates}). */
+    @Test
+    void crewmatesPresenceComesWithTheLists() {
+        assertTrue(Protocol.hello("t", "1", "26.1.2", "tr_tr").toString().contains("\"mates\""));
+        welcome(ALL);
+        apply("{\"t\":\"lists\",\"groups\":[],\"crews\":[],\"mates\":{\"u-cem\":\"launcher\",\"u-ece\":\"game\","
+            + "\"u-dnd\":\"dnd\",\"u-odd\":\"away\",\"u-num\":3}}", 1_000);
+        assertEquals(Presence.LAUNCHER, state.presenceOf("u-cem"));
+        assertEquals(Presence.PLAYING, state.presenceOf("u-ece"));
+        assertEquals(Presence.DND, state.presenceOf("u-dnd"));
+        assertEquals(Presence.OFFLINE, state.presenceOf("u-odd"), "a state this build does not know draws no dot");
+        assertEquals(Presence.OFFLINE, state.presenceOf("u-num"));
+        assertEquals(Presence.OFFLINE, state.presenceOf("u-nobody"));
+        assertEquals(Presence.OFFLINE, state.presenceOf(null));
+        // The next lists without them: no dots.
+        apply("{\"t\":\"lists\",\"groups\":[],\"crews\":[]}", 1_000);
+        assertEquals(Presence.OFFLINE, state.presenceOf("u-cem"));
+    }
 }

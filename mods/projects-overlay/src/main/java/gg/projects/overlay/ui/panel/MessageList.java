@@ -9,12 +9,14 @@ import gg.projects.overlay.emoji.EmojiCatalog;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.state.Presence;
 import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.stickers.StickerMotion;
 import gg.projects.overlay.stickers.StickerSet;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.MarkTip;
 import gg.projects.overlay.ui.Marks;
+import gg.projects.overlay.ui.PresenceDot;
 import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
@@ -27,6 +29,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.narration.NarratedElementType;
@@ -82,6 +85,11 @@ public final class MessageList extends PanelWidget {
     private static final int BUBBLE_PAD_Y = 4;
     private static final int LINE_H = 10;
     private static final int SMALL_H = 9;
+    /**
+     * OVL-NEXT: the column before a sender's name over a group in crew chat where their presence dot stands (the
+     * conversation chips' room); kept whether or not they are online, so a name never moves when the dot comes or goes.
+     */
+    private static final int DOT_LEAD = PresenceDot.DOT + 4;
     private static final int GROUP_GAP = 7;
     private static final int ROW_GAP = 2;
     private static final int DIVIDER_H = 16;
@@ -192,6 +200,8 @@ public final class MessageList extends PanelWidget {
         float nameW;
         /** TEAM6: the tag the sender wears, before their name over a group in crew chat. */
         TagChip chip;
+        /** OVL-NEXT: the room before the tag and name for the sender's presence dot (crew chat's groups). */
+        int lead;
         /**
          * BADGES-UI: the sender's profile badges the catalogue knows (someone else's message in crew chat); the first
          * is drawn right of their name over a group, every one is said with the message.
@@ -276,6 +286,8 @@ public final class MessageList extends PanelWidget {
     private final BadgeBubble bubble = new BadgeBubble();
     /** BADGES-UI: the tooltip of the badge right of a sender's name (the pointer only, as the tag's bubble). */
     private final MarkTip markTip = new MarkTip();
+    /** OVL-NEXT: whose presence dot a sender's name carries (the state's, as of the last refresh). */
+    private Function<String, Presence> presenceOf = id -> Presence.OFFLINE;
     private String conversation;
     private boolean crew;
     private int laidOutRevision = -1;
@@ -499,6 +511,7 @@ public final class MessageList extends PanelWidget {
 
     /** Lays out again when the conversation's lines, the width or a waiting message's time changed. */
     public void refresh(OverlayState state, long now) {
+        presenceOf = state::presenceOf;
         OverlayState.Conversation conv = state.conversation(conversation);
         boolean writable = conv != null && conv.writable() && state.online() && state.has("chat");
         canReply = writable && state.has("replies");
@@ -743,7 +756,9 @@ public final class MessageList extends PanelWidget {
                 // "[GK] Mert": the tag they wear before the name (TEAM6), their first badge after it (BADGES-UI); the
                 // name gives way, the chip and the badge do not.
                 row.chip = TagChip.of(state.badge(line.badge), TagChip.CHAT);
-                String fitted = Texts.fit(small, line.from, Math.round(maxBubble - TagChip.room(row.chip)
+                // OVL-NEXT: their presence dot before it all, as a conversation chip's.
+                row.lead = DOT_LEAD;
+                String fitted = Texts.fit(small, line.from, Math.round(maxBubble - row.lead - TagChip.room(row.chip)
                     - Marks.room(row.marks)));
                 row.name = Texts.visual(fitted);
                 row.nameW = small.width(fitted);
@@ -1351,7 +1366,7 @@ public final class MessageList extends PanelWidget {
                 continue;
             }
             float nameTop = row.y + (row.divider ? DIVIDER_H : 0);
-            float nameRight = getX() + 1 + TagChip.room(row.chip) + row.nameW + Marks.room(row.marks);
+            float nameRight = getX() + 1 + row.lead + TagChip.room(row.chip) + row.nameW + Marks.room(row.marks);
             if (cy >= nameTop && cy < nameTop + SMALL_H && mx >= getX() && mx < nameRight + 2) {
                 closeStrip();
                 actions.person(row.line.by, row.line.from, row.line.badge, PersonMenu.Anchor.at(mx, my), false);
@@ -1368,7 +1383,7 @@ public final class MessageList extends PanelWidget {
                 if (y < getY() || y > getY() + getHeight()) {
                     return null;
                 }
-                return new float[] {getX() + 1 + TagChip.room(row.chip) + row.nameW / 2f, y};
+                return new float[] {getX() + 1 + row.lead + TagChip.room(row.chip) + row.nameW / 2f, y};
             }
         }
         return null;
@@ -1999,7 +2014,7 @@ public final class MessageList extends PanelWidget {
             hoverLink = linkAt(row, mouseX, local) != null;
             if (row.chip != null && stripRow < 0) {
                 float chipY = row.chip.top(getY() + row.y - top + (row.divider ? DIVIDER_H : 0) + SMALL_H / 2f);
-                float chipX = getX() + 1;
+                float chipX = getX() + 1 + row.lead;
                 if (mouseX >= chipX && mouseX < chipX + row.chip.width && mouseY >= chipY
                     && mouseY < chipY + row.chip.height) {
                     float groupTop = getY() + row.y - top;
@@ -2011,7 +2026,7 @@ public final class MessageList extends PanelWidget {
             if (row.name != null && !row.marks.isEmpty() && stripRow < 0 && tag == null) {
                 // The badge right of the sender's name names all of theirs (BADGES-UI).
                 float nameMid = getY() + row.y - top + (row.divider ? DIVIDER_H : 0) + SMALL_H / 2f;
-                float markX = Marks.left(getX() + 1 + TagChip.room(row.chip) + row.nameW);
+                float markX = Marks.left(getX() + 1 + row.lead + TagChip.room(row.chip) + row.nameW);
                 float markY = Marks.top(nameMid);
                 if (Marks.over(mouseX, mouseY, markX, markY)) {
                     onMark = true;
@@ -2146,10 +2161,14 @@ public final class MessageList extends PanelWidget {
         }
         if (row.name != null) {
             float ny = rowTop + (row.divider ? DIVIDER_H : 0);
-            if (row.chip != null) {
-                row.chip.draw(g, x0 + 1, ny + SMALL_H / 2f);
+            if (row.lead > 0) {
+                // OVL-NEXT: the sender's presence dot, as of now (nothing offline).
+                PresenceDot.dot(g, presenceOf.apply(row.line.by), x0 + 1 + PresenceDot.DOT / 2f, ny + SMALL_H / 2f);
             }
-            float nameX = x0 + 1 + TagChip.room(row.chip);
+            if (row.chip != null) {
+                row.chip.draw(g, x0 + 1 + row.lead, ny + SMALL_H / 2f);
+            }
+            float nameX = x0 + 1 + row.lead + TagChip.room(row.chip);
             Draw.text(g, small, row.name, nameX, Fonts.centeredY(Fonts.Face.SMALL, ny + SMALL_H / 2f), Theme.ASH_300);
             Marks.draw(g, row.marks, nameX + row.nameW, ny + SMALL_H / 2f);
         }

@@ -386,6 +386,7 @@ pub fn refusal_name(why: VoiceRefusal) -> &'static str {
         VoiceRefusal::NotFound => "not-found",
         VoiceRefusal::InvalidName => "invalid-name",
         VoiceRefusal::NameRejected => "name-rejected",
+        VoiceRefusal::OldLauncher => "old-launcher",
         VoiceRefusal::Failed => "failed",
         VoiceRefusal::Nothing => "nothing",
     }
@@ -465,6 +466,7 @@ pub fn view_of(
             muted_by_moderator: room.me.muted_by_moderator,
             talking: speaking.map_or(room.me.talking, |now| now.me),
             quality: room.me.quality,
+            needs_key: room.me.needs_key,
         },
         people: room
             .people
@@ -931,6 +933,7 @@ mod tests {
                     muted_by_moderator: false,
                     talking: false,
                     quality: VoiceQuality::Good,
+                    needs_key: false,
                 },
                 people: vec![kaan, stranger],
                 ringing: vec![VoiceOutRing {
@@ -939,6 +942,7 @@ mod tests {
                 }],
                 can_rename: false,
                 can_close: false,
+                ptt: false,
             }),
             calling: Some(VoiceCalling {
                 friend: "f-can".into(),
@@ -1392,6 +1396,7 @@ mod tests {
                     max: None,
                     own: false,
                     live: Vec::new(),
+                    ptt: false,
                 },
                 VoiceCrewRoom {
                     id: "c1111111111111111".into(),
@@ -1401,11 +1406,13 @@ mod tests {
                     max: None,
                     own: false,
                     live: Vec::new(),
+                    ptt: false,
                 },
             ],
             can_add: true,
             manage: false,
             crew_max: 15,
+            ptt: false,
         }];
         state
     }

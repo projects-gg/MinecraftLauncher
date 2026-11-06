@@ -153,6 +153,8 @@ export const trVoice = {
     notFound: "Bu oyuncu artık odada değil.",
     invalidName: "Oda adı 3 ile 24 karakter arasında olmalı.",
     nameRejected: "Bu ad kullanılamaz.",
+    // OVL-NEXT: eski launcher'lı oyuncuyu yalnız bas-konuş odasına taşımak.
+    oldLauncher: "Bu oyuncunun launcher'ı güncel değil, bu odaya taşınamaz.",
     failed: "Bağlanamadı.",
     // BAN-TYPES: a voice chat ban, with its end.
     staffMutedUntil: "Sesli sohbet kullanman {{until}} kısıtlandı.",
@@ -279,5 +281,15 @@ export const trVoice = {
     moved: "{{name}} başka odaya taşındı.",
     dragging: "{{name}} taşınıyor",
     ordered: "Odalar yeniden sıralandı.",
+  },
+  // OVL-NEXT: yalnız bas-konuş odalar. Oda satırında sessiz etiket, düzenleme satırında anahtar
+  // (lider ve moderatörler), odada tuşla ilgili tek cümle.
+  ptt: {
+    only: "Yalnız bas-konuş",
+    tag: "Bas-konuş",
+    tagLabel: "Bu odada yalnız bas-konuş",
+    hold: "Bu odada yalnız bas-konuş: konuşurken {{key}} tuşunu basılı tut.",
+    needsKey: "Bu odada yalnız bas-konuş var, henüz tuşun yok.",
+    pick: "Tuş seç",
   },
 };

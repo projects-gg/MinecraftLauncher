@@ -2321,11 +2321,13 @@ fn voice_room() -> pl_voice::view::VoiceState {
                 muted_by_moderator: false,
                 talking: false,
                 quality: VoiceQuality::Good,
+                needs_key: false,
             },
             people: vec![person("f-ayse"), person("u-cem"), person("u-zz")],
             ringing: Vec::new(),
             can_rename: true,
             can_close: true,
+            ptt: false,
         }),
         rings: vec![VoiceRing {
             room: "c0123456789abcdef".into(),
@@ -2568,10 +2570,12 @@ async fn the_crews_rooms_reach_a_mod_that_shows_them_and_its_joins_reach_the_lau
             max: None,
             own: false,
             live: Vec::new(),
+            ptt: false,
         }],
         can_add: false,
         manage: false,
         crew_max: 15,
+        ptt: false,
     }];
     overlay.set_voice(&state, false);
     let endpoint = overlay.start(social, "t").await.unwrap();

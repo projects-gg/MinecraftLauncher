@@ -32,7 +32,7 @@ import { QualityBars, SpeakingFace } from "./faces";
 import { HeadphonesSlash } from "./icons";
 import { VoiceMeter } from "./meter";
 import { meterThreshold, useVoicePrefs } from "./prefs";
-import { faceMark, pillPeople, roomTitle } from "./rules";
+import { faceMark, micClosedLabel, pillPeople, roomTitle } from "./rules";
 import { useFace, useFaces, useVoiceUi, voiceOn } from "./store";
 
 /** How long the pill keeps an ended stay ("Cevap yok", "Bağlanamadı"). */
@@ -175,12 +175,10 @@ function Pill() {
   const me = room?.me;
   // The microphone's buttons (and its meter) show in the room itself, not while a call rings.
   const metered = Boolean(me) && mode !== "calling" && mode !== "noAnswer" && mode !== "failed";
-  const micOff = Boolean(me && (me.mute || me.deaf || me.mutedByModerator));
-  const micLabel = me?.mutedByModerator
-    ? t("voice.mutedByMod")
-    : micOff
-      ? t("voice.room.unmuteMic")
-      : t("voice.room.muteMic");
+  // OVL-NEXT: no push-to-talk key in a push-to-talk-only room keeps it closed too.
+  const closed = me ? micClosedLabel(me, t) : null;
+  const micOff = Boolean(me && (me.mute || me.deaf || closed !== null));
+  const micLabel = closed ?? (micOff ? t("voice.room.unmuteMic") : t("voice.room.muteMic"));
   const open = () => openPanel({ from: trigger.current });
 
   return (
@@ -331,7 +329,7 @@ function Pill() {
             <RoundButton
               label={micLabel}
               tone={micOff ? "off" : "quiet"}
-              disabled={me.mutedByModerator}
+              disabled={closed !== null}
               onClick={() => void toggleMute()}
             >
               {micOff ? (

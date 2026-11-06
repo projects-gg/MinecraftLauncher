@@ -65,6 +65,8 @@ pub struct ServiceVoice {
     pub kbps: u16,
     /// VOICE-ROOMS: crews arrange their rooms (Studio's "Oda yönetimi").
     pub manage: bool,
+    /// OVL-NEXT: rooms may be push-to-talk only (Studio's "Yalnız bas-konuş odalar").
+    pub ptt: bool,
 }
 
 impl Default for ServiceVoice {
@@ -78,6 +80,7 @@ impl Default for ServiceVoice {
             idle_minutes: crate::idle::DEFAULT_MINUTES,
             kbps: DEFAULT_KBPS,
             manage: false,
+            ptt: false,
         }
     }
 }
@@ -119,6 +122,8 @@ pub struct CrewRoom {
     /// SHARE-LIVE: who of `ids` shares their screen now (the hub's `live`; empty from an older
     /// service or while sharing is off).
     pub live: Vec<String>,
+    /// OVL-NEXT: push-to-talk only ("Yalnız bas-konuş").
+    pub ptt: bool,
 }
 
 /// How a stay begins.
@@ -481,6 +486,7 @@ impl Machine {
         service: Option<ServiceVoice>,
         rooms: Vec<(String, Vec<CrewRoom>)>,
     ) -> Vec<Effect> {
+        let ptt_before = self.room_ptt();
         self.hub_up = taken;
         self.service = if taken { service } else { None };
         self.crews = rooms.into_iter().filter(|(_, r)| !r.is_empty()).collect();
@@ -490,6 +496,7 @@ impl Machine {
             out.push(Effect::HubSwitch { on: false });
         }
         self.apply_service(&mut out);
+        self.ptt_changed(ptt_before, &mut out);
         out
     }
 
@@ -498,9 +505,11 @@ impl Machine {
         if self.service.is_none() {
             return Vec::new();
         }
+        let ptt_before = self.room_ptt();
         self.service = Some(service);
         let mut out = vec![Effect::Changed];
         self.apply_service(&mut out);
+        self.ptt_changed(ptt_before, &mut out);
         out
     }
 
@@ -560,19 +569,72 @@ impl Machine {
         if self.page.attached {
             out.push(Effect::Engine(self.configure()));
         }
-        if before.watched_keys() != after.watched_keys() || before.mode != after.mode {
-            if let Some(stay) = &mut self.stay {
-                stay.ptt_down = false;
-            }
-            // The watch takes the new keys (or stops).
-            let keys = after.watched_keys();
-            let wanted = crate::input::needs_input(self.stay.is_some(), keys.len());
-            if wanted || self.input_on {
-                self.input_on = wanted;
-                out.push(Effect::Input(wanted.then_some(keys)));
-            }
-            self.talk(out);
+        if before.watched_keys() != after.watched_keys()
+            || before.mode != after.mode
+            || before.push_to_talk_key != after.push_to_talk_key
+        {
+            self.watch_keys(out);
         }
+    }
+
+    /// OVL-NEXT: the player's room is push-to-talk only (the service allows such rooms and the
+    /// crew made this one so).
+    fn room_ptt(&self) -> bool {
+        self.service().ptt
+            && self
+                .stay
+                .as_ref()
+                .and_then(|stay| stay.room.as_ref())
+                .is_some_and(|room| room.ptt)
+    }
+
+    /// The microphone opens only while the push-to-talk key is held: the player chose
+    /// "Bas-konuş" (with a key), or the room takes push-to-talk only (OVL-NEXT: without a key the
+    /// microphone stays closed).
+    fn ptt_on(&self) -> bool {
+        self.room_ptt() || self.store.settings().push_to_talk().is_some()
+    }
+
+    /// The keys to watch now: the settings' own, and in a push-to-talk-only room the player's
+    /// push-to-talk key whatever "Mikrofon ne zaman açık" says.
+    fn watched_keys(&self) -> Vec<(VoiceShortcut, VoiceKey)> {
+        let settings = self.store.settings();
+        let mut keys = settings.watched_keys();
+        if self.room_ptt()
+            && settings.push_to_talk().is_none()
+            && let Some(key) = &settings.push_to_talk_key
+        {
+            keys.insert(0, (VoiceShortcut::PushToTalk, key.clone()));
+        }
+        keys
+    }
+
+    /// The watch takes the keys in effect now (or stops); a key held for the old ones counts as
+    /// let go.
+    fn watch_keys(&mut self, out: &mut Vec<Effect>) {
+        if let Some(stay) = &mut self.stay {
+            stay.ptt_down = false;
+        }
+        let keys = self.watched_keys();
+        let wanted = crate::input::needs_input(self.stay.is_some(), keys.len());
+        if wanted || self.input_on {
+            self.input_on = wanted;
+            out.push(Effect::Input(wanted.then_some(keys)));
+        }
+        self.talk(out);
+    }
+
+    /// OVL-NEXT: a room's "Yalnız bas-konuş" (or the service's switch) changed what the player's
+    /// microphone follows: the engine, the watched keys and the gate take it, the page shows it.
+    fn ptt_changed(&mut self, before: bool, out: &mut Vec<Effect>) {
+        if self.room_ptt() == before {
+            return;
+        }
+        if self.page.attached {
+            out.push(Effect::Engine(self.configure()));
+        }
+        self.watch_keys(out);
+        out.push(Effect::Changed);
     }
 
     fn configure(&self) -> EngineCommand {
@@ -586,7 +648,7 @@ impl Machine {
                 auto_gain: settings.auto_gain,
                 sensitivity: settings.sensitivity,
                 mic_volume: settings.mic_volume,
-                push_to_talk: settings.push_to_talk().is_some(),
+                push_to_talk: self.ptt_on(),
                 kbps: self.service().kbps,
                 sounds: settings.sounds,
                 // VOICE-CALL: everyone at once, held to the path's top as a person's volume is.
@@ -1265,6 +1327,7 @@ impl Machine {
                 ..
             } => {
                 let my_id = self.me.clone();
+                let ptt_before = self.room_ptt();
                 let Some(stay) = self.stay.as_mut() else {
                     return;
                 };
@@ -1342,7 +1405,12 @@ impl Machine {
                     self.cue(EngineSound::Join, out);
                 }
                 out.extend(self.playback());
-                self.talk(out);
+                if self.room_ptt() == ptt_before {
+                    self.talk(out);
+                } else {
+                    // OVL-NEXT: in a push-to-talk-only room (or out of one).
+                    self.ptt_changed(ptt_before, out);
+                }
                 self.sync_meters(out);
                 out.push(Effect::Changed);
             }
@@ -1464,6 +1532,7 @@ impl Machine {
             other => {
                 let attached = self.page.attached;
                 let mic_chosen = !self.mute && !self.deaf;
+                let ptt_before = self.room_ptt();
                 let Some(stay) = self.stay.as_mut() else {
                     return;
                 };
@@ -1520,6 +1589,8 @@ impl Machine {
                 if cut != cut_before {
                     self.sync_meters(out);
                 }
+                // OVL-NEXT: the crew made the room push-to-talk only (or no longer).
+                self.ptt_changed(ptt_before, out);
                 if applied.changed {
                     out.push(Effect::Changed);
                 }
@@ -1697,7 +1768,7 @@ impl Machine {
         // VOICE-CALL: nobody else in the room hears it, so nothing goes out until someone comes
         // (no packets for the SFU, no work for the noise suppressor; a caller waiting alone).
         let alone = stay.room.as_ref().is_none_or(|room| room.people.is_empty());
-        let push_to_talk = self.store.settings().push_to_talk().is_some();
+        let push_to_talk = self.ptt_on();
         !self.mute && !self.deaf && !muted_for_all && !alone && (!push_to_talk || stay.ptt_down)
     }
 
@@ -1822,7 +1893,7 @@ impl Machine {
     }
 
     fn sync_input(&mut self, out: &mut Vec<Effect>) {
-        let keys = self.store.settings().watched_keys();
+        let keys = self.watched_keys();
         let wanted = crate::input::needs_input(self.stay.is_some(), keys.len());
         if wanted != self.input_on {
             self.input_on = wanted;
@@ -2411,6 +2482,8 @@ impl Machine {
             muted_by_moderator: sm,
             talking: stay.talking,
             quality: VoiceQuality::from_wire(stay.quality),
+            // OVL-NEXT: a push-to-talk-only room and no key to hold.
+            needs_key: self.room_ptt() && self.store.settings().push_to_talk_key.is_none(),
         };
         let Some(room) = &stay.room else {
             return Some(VoiceRoomView {
@@ -2426,6 +2499,7 @@ impl Machine {
                 ringing: Vec::new(),
                 can_rename: false,
                 can_close: false,
+                ptt: false,
             });
         };
         let my_role = role_view(room.my_role);
@@ -2504,6 +2578,7 @@ impl Machine {
                     }
                 },
             can_close: !general && room.my_role == Role::Leader,
+            ptt: self.room_ptt(),
         })
     }
 }
@@ -2530,7 +2605,10 @@ fn crew_rooms_view(crew: &str, rooms: &[CrewRoom], service: ServiceVoice) -> Voi
             name: "Genel".to_owned(),
             ..CrewRoom::default()
         });
+    let ptt = service.ptt && service.manage;
     let view = |room: &CrewRoom| VoiceCrewRoom {
+        // OVL-NEXT: only while the service allows push-to-talk-only rooms.
+        ptt: ptt && room.ptt && !room.id.starts_with('g'),
         id: room.id.clone(),
         name: room.name.clone(),
         general: room.id.starts_with('g'),
@@ -2554,6 +2632,7 @@ fn crew_rooms_view(crew: &str, rooms: &[CrewRoom], service: ServiceVoice) -> Voi
         rooms,
         manage: service.manage,
         crew_max: service.crew_max,
+        ptt,
     }
 }
 

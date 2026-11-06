@@ -18,7 +18,9 @@
 //   connection); `modMuted`, `muted`, `deaf`; VOICE-ROOMS: `crewRooms`, `crewRoomsIn`,
 //   `crewRoomsOld`, `crewRoomsBusy` (`keptRooms`; `&change=<refusal>` refuses the crew page's
 //   changes); BAN-TYPES: `restricted` the crew's "Genel", left a moment later for a voice chat ban
-//   (two days, on the hour; `staffMuted` refusals carry the same end).
+//   (two days, on the hour; `staffMuted` refusals carry the same end). OVL-NEXT: `crewRoomsPtt`
+//   the kept rooms with "Taş Ocağı" push-to-talk only; `pttRoom` the player in it without a
+//   push-to-talk key (`&voiceKeys=ptt`: with one, while they talk hands-free).
 // - `speaking=<ids>|none`: who speaks (the scenario's own otherwise); `talking=1`: the player too.
 // - `call=answer|noAnswer|<refusal>`: what "Ara" gets (answered after 2.5 s by default).
 // - `join=ok|<refusal>`: what "Katıl" gets.
@@ -229,7 +231,8 @@ function crewRooms(full: boolean, inGeneral: boolean): VoiceCrewRooms {
  * `crewRoomsBusy` fills them (six in "Genel", "Taş Ocağı" at its 4) and adds a room with a long name.
  */
 function keptRooms(scenario: string): VoiceCrewRooms {
-  const inside = scenario === "crewRoomsIn";
+  const ptt = scenario === "crewRoomsPtt" || scenario === "pttRoom";
+  const inside = scenario === "crewRoomsIn" || scenario === "pttRoom";
   const busy = scenario === "crewRoomsBusy";
   const rooms = [
     {
@@ -251,6 +254,7 @@ function keptRooms(scenario: string): VoiceCrewRooms {
       people: busy ? ["302", "703", "303", "911"] : inside ? ["302", "703", ME] : ["302", "703"],
       max: 4,
       own: false,
+      ...(ptt ? { ptt: true } : {}),
     },
     {
       id: "c00000000000000b3",
@@ -279,6 +283,7 @@ function keptRooms(scenario: string): VoiceCrewRooms {
     canAdd: false,
     manage: scenario !== "crewRoomsOld",
     crewMax: 15,
+    ...(ptt ? { ptt: true } : {}),
   };
 }
 
@@ -365,7 +370,9 @@ function stateFor(scenario: string): VoiceState {
     case "crewRooms":
     case "crewRoomsOld":
     case "crewRoomsBusy":
+    case "crewRoomsPtt":
       return { ...base, crews: [keptRooms(scenario)] };
+    case "pttRoom":
     case "crewRoomsIn":
       return {
         ...base,
@@ -379,6 +386,13 @@ function stateFor(scenario: string): VoiceState {
             person("302", { role: "moderator", joinedAt: nowSec() - 900 }),
             person("703", { joinedAt: nowSec() - 600, speaking: true }),
           ],
+          // OVL-NEXT: push-to-talk only, and (without `voiceKeys=ptt`) no key to hold.
+          ...(scenario === "pttRoom"
+            ? {
+                ptt: true,
+                me: { ...crewRoom(crewRole()).me, needsKey: param("voiceKeys") !== "ptt" },
+              }
+            : {}),
         },
         crews: [keptRooms(scenario)],
       };
@@ -573,6 +587,8 @@ function discordFor(preset: string | null | undefined): VoiceDiscordOffer | null
 
 /** The settings a `voiceKeys=` preview starts with. */
 function keysFor(preset: string | null | undefined): Partial<VoiceSettings> {
+  // OVL-NEXT: a push-to-talk key kept while the player talks hands-free.
+  if (preset === "ptt") return { pushToTalkKey: { kind: "keyboard", code: "KeyV", label: "V" } };
   if (preset !== "combo") return {};
   return {
     mode: "pushToTalk",
@@ -878,9 +894,23 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
       switch (op.op) {
         case "edit":
           rooms = entry.rooms.map((r) =>
-            r.id === op.room ? { ...r, name: op.name.trim(), max: op.max } : r,
+            r.id === op.room
+              ? {
+                  ...r,
+                  name: op.name.trim(),
+                  max: op.max,
+                  ...(op.ptt === undefined ? {} : { ptt: op.ptt }),
+                }
+              : r,
           );
-          if (room?.id === op.room) room = { ...room, name: op.name.trim(), max: op.max ?? 15 };
+          if (room?.id === op.room) {
+            room = {
+              ...room,
+              name: op.name.trim(),
+              max: op.max ?? 15,
+              ...(op.ptt === undefined ? {} : { ptt: op.ptt }),
+            };
+          }
           break;
         case "order": {
           const sorted = op.rooms

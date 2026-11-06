@@ -198,6 +198,7 @@ export async function editCrewRoom(
   name: string,
   max: number | null,
   shareBy?: ShareBy,
+  ptt?: boolean,
 ): Promise<string | null> {
   try {
     const answer = await voiceApi.crewChange({
@@ -207,6 +208,8 @@ export async function editCrewRoom(
       name: name.trim(),
       max,
       ...(shareBy ? { shareBy } : {}),
+      // OVL-NEXT: "Yalnız bas-konuş", only when it changed.
+      ...(ptt === undefined ? {} : { ptt }),
     });
     if (answer.refused === null) return null;
     return refusalText(answer, i18n.t) ?? i18n.t("voice.refused.failed");

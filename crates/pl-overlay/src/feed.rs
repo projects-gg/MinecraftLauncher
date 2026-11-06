@@ -35,7 +35,7 @@ use crate::policy::{self, CrewMute, CrewSettings, Moment, Mute, Notice, NotifyPr
 use crate::protocol::{
     AnswerCounts, BadgeView, CallAnswer, CallView, CardView, ConvKind, ConvView, CrewAskItem,
     CrewInviteItem, CrewItem, CrewPlace, CrewRoles, FEATURE_CARDS2, FEATURE_CHAT3, FEATURE_CREWS2,
-    FEATURE_INVITE, FEATURE_NEXT, FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_PEOPLE3,
+    FEATURE_INVITE, FEATURE_MATES, FEATURE_NEXT, FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_PEOPLE3,
     FEATURE_PEOPLE4, FEATURE_PEOPLE5, FEATURE_PLANS, FEATURE_STREAMER, FEATURE_TAGS, FriendView,
     GroupItem, LinkView, ListsExtra, MAX_HISTORY, MAX_LAUNCHER_FRAME, MAX_QUOTE_CHARS, MateRights,
     Me, MsgView, NoteKind, PROTO, Place, PlanItem, PrefsView, ReactionView, ReplyView, RequestItem,
@@ -357,6 +357,8 @@ pub struct Said {
     pub plans: bool,
     pub chat3: bool,
     pub cards2: bool,
+    /// OVL-NEXT: crewmates' presence in crew chat (`lists`' `mates`).
+    pub mates: bool,
 }
 
 impl Said {
@@ -368,6 +370,7 @@ impl Said {
             plans: has(FEATURE_PLANS),
             chat3: has(FEATURE_CHAT3),
             cards2: has(FEATURE_CARDS2),
+            mates: has(FEATURE_MATES),
         }
     }
 
@@ -401,6 +404,20 @@ impl Said {
             extra.planners.clear();
             extra.notes = false;
         }
+        if !self.mates {
+            extra.mates.clear();
+        }
+    }
+}
+
+/// OVL-NEXT: a crewmate's presence dot as `lists`' `mates` names it (the friends' rule: "Rahatsız
+/// etmeyin" over where they are); none offline.
+fn mate_presence(mate: &pl_social::TeamMemberView) -> Option<&'static str> {
+    match mate.state {
+        pl_social::PresenceState::Offline => None,
+        _ if mate.dnd => Some("dnd"),
+        pl_social::PresenceState::Playing => Some("game"),
+        pl_social::PresenceState::Launcher => Some("launcher"),
     }
 }
 
@@ -851,6 +868,13 @@ impl Scene {
                 Vec::new()
             },
             notes: plans_on && team_feature(pl_social::TEAM_FEATURE_PLAN_NOTES),
+            // OVL-NEXT: the presence dot over a crewmate's group in crew chat (friends' come with
+            // the friends).
+            mates: mates
+                .iter()
+                .filter(|mate| !mate.blocked && !blocked_ids.contains(mate.id.as_str()))
+                .filter_map(|mate| Some((mate.id.clone(), mate_presence(mate)?)))
+                .collect(),
         };
         let lists = PeopleLists {
             groups: groups.clone(),
@@ -4510,6 +4534,64 @@ pub(crate) mod tests {
         v.crews[0].members[1].game = projects();
         let frames = mirror.update(&Scene::from_view(&v, &prefs, NOW), "2.0.0", false);
         assert!(matches!(&frames[..], [ToGame::Lists { projects, .. }] if projects == &["u-cem"]));
+    }
+
+    /// OVL-NEXT: crewmates who are not friends carry their presence dot to crew chat (`mates`),
+    /// online only, never a blocked one, and only to a mod that said `mates`.
+    #[test]
+    fn crewmates_presence_reaches_crew_chat() {
+        let prefs = NotifyPrefs::default();
+        let mut v = view();
+        v.crews[0].members[1].state = PresenceState::Launcher;
+        let scene = Scene::from_view(&v, &prefs, NOW);
+        assert_eq!(
+            scene.lists.extra.mates,
+            BTreeMap::from([("u-cem".to_owned(), "launcher")])
+        );
+        v.crews[0].members[1].state = PresenceState::Playing;
+        assert_eq!(
+            Scene::from_view(&v, &prefs, NOW).lists.extra.mates["u-cem"],
+            "game"
+        );
+        v.crews[0].members[1].dnd = true;
+        assert_eq!(
+            Scene::from_view(&v, &prefs, NOW).lists.extra.mates["u-cem"],
+            "dnd"
+        );
+        // Blocked or offline: no dot. A friend in the crew comes with the friends.
+        v.crews[0].members[1].blocked = true;
+        assert!(
+            Scene::from_view(&v, &prefs, NOW)
+                .lists
+                .extra
+                .mates
+                .is_empty()
+        );
+        v.crews[0].members[1].blocked = false;
+        v.crews[0].members[1].state = PresenceState::Offline;
+        assert!(
+            Scene::from_view(&v, &prefs, NOW)
+                .lists
+                .extra
+                .mates
+                .is_empty()
+        );
+        v.crews[0].members[1].state = PresenceState::Launcher;
+        let mut friend_too = v.crews[0].members[1].clone();
+        friend_too.id = v.friends[0].id.clone();
+        v.crews[0].members.push(friend_too);
+        let scene = Scene::from_view(&v, &prefs, NOW);
+        assert_eq!(
+            scene.lists.extra.mates.keys().collect::<Vec<_>>(),
+            ["u-cem"]
+        );
+        // Only a mod that said `mates` hears it.
+        let mut extra = scene.lists.extra.clone();
+        Said::default().trim(&mut extra);
+        assert!(extra.mates.is_empty());
+        let mut extra = scene.lists.extra.clone();
+        Said::from_hello(&["mates".to_owned()]).trim(&mut extra);
+        assert_eq!(extra.mates.len(), 1);
     }
 
     #[test]

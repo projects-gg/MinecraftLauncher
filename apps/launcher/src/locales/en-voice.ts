@@ -150,6 +150,7 @@ export const enVoice = {
     notFound: "This player isn't in the room any more.",
     invalidName: "Room names are 3 to 24 characters long.",
     nameRejected: "That name can't be used.",
+    oldLauncher: "Their launcher is out of date, so they can't be moved here.",
     failed: "Couldn't connect.",
     // BAN-TYPES: a voice chat ban, with its end.
     staffMutedUntil: "Your voice chat is restricted {{until}}.",
@@ -276,5 +277,13 @@ export const enVoice = {
     moved: "{{name}} was moved to another room.",
     dragging: "Moving {{name}}",
     ordered: "Rooms reordered.",
+  },
+  ptt: {
+    only: "Push-to-talk only",
+    tag: "Push-to-talk",
+    tagLabel: "Push-to-talk only in this room",
+    hold: "Push-to-talk only here: hold {{key}} while you talk.",
+    needsKey: "This room is push-to-talk only and you have no key yet.",
+    pick: "Pick a key",
   },
 };

@@ -42,6 +42,11 @@ export interface VoiceMe {
   /** The microphone sends now. */
   talking: boolean;
   quality: VoiceQuality;
+  /**
+   * OVL-NEXT: the room takes push-to-talk only and the player has no push-to-talk key: the
+   * microphone stays closed until they pick one.
+   */
+  needsKey?: boolean;
 }
 
 /** A leader's or moderator's actions on one person (the menu shows only these). */
@@ -103,6 +108,11 @@ export interface VoiceRoomView {
   ringing: VoiceOutRing[];
   canRename: boolean;
   canClose: boolean;
+  /**
+   * OVL-NEXT: the crew made it push-to-talk only: the microphone opens only while the player holds
+   * their push-to-talk key, whatever "Mikrofon ne zaman açık" says.
+   */
+  ptt?: boolean;
 }
 
 /** The call the player started, ringing at the friend while the player waits in the room. */
@@ -149,6 +159,8 @@ export interface VoiceCrewRoom {
    * sharing is off), so people outside the room see "YAYINDA" too.
    */
   live?: string[];
+  /** OVL-NEXT: push-to-talk only ("Yalnız bas-konuş"; only while the service allows it). */
+  ptt?: boolean;
 }
 
 /** One crew's rooms, "Genel" first, then the crew's own order. */
@@ -161,6 +173,11 @@ export interface VoiceCrewRooms {
   manage: boolean;
   /** VOICE-ROOMS: people at most in a crew room (a room's own limit is below it). */
   crewMax: number;
+  /**
+   * OVL-NEXT: the crew's leader and moderators may make a room push-to-talk only (Studio's
+   * "Yalnız bas-konuş odalar"): the room form offers "Yalnız bas-konuş".
+   */
+  ptt?: boolean;
 }
 
 /**
@@ -177,6 +194,8 @@ export type VoiceCrewOp =
       max: number | null;
       /** SHARE: "Kim paylaşabilir" in it (none: as it is). */
       shareBy?: ShareBy;
+      /** OVL-NEXT: "Yalnız bas-konuş" (none: as it is; the leader's and moderators' only). */
+      ptt?: boolean;
     }
   /** The crew's rooms ("Genel" aside) in this order. */
   | { op: "order"; crew: string; rooms: string[] }
@@ -344,6 +363,8 @@ export type VoiceRefusal =
   | "notFound"
   | "invalidName"
   | "nameRejected"
+  /** OVL-NEXT: that player's launcher is too old for a push-to-talk-only room (a move there). */
+  | "oldLauncher"
   | "failed"
   | "nothing";
 

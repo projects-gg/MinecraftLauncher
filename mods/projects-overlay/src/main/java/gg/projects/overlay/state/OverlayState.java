@@ -435,6 +435,8 @@ public final class OverlayState {
     private final Set<String> matesHere = new HashSet<>();
     /** Q15: crewmates who are not friends, whose Discord profile is known ("Discord'dan mesaj at"). */
     private final Set<String> matesDiscord = new HashSet<>();
+    /** OVL-NEXT: crewmates who are not friends and are online, with their presence dot (crew chat's names). */
+    private final Map<String, Presence> matesPresence = new HashMap<>();
     // ---- OVL-SOC 2: friend requests, the status switcher, SOC-NEXT's nicknames ----
     /** Who asked the player to be friends ("İstekler"), in the launcher's order. */
     private List<Request> requests = List.of();
@@ -829,6 +831,18 @@ public final class OverlayState {
 
     public Friend friend(String id) {
         return friends.get(id);
+    }
+
+    /**
+     * OVL-NEXT: someone's presence dot over their messages in crew chat: a friend's from the friend list, a crewmate's
+     * from the launcher's {@code lists} ({@code mates}); offline (no dot) for anyone else.
+     */
+    public Presence presenceOf(String id) {
+        if (id == null) {
+            return Presence.OFFLINE;
+        }
+        Friend friend = friends.get(id);
+        return friend != null ? friend.presence() : matesPresence.getOrDefault(id, Presence.OFFLINE);
     }
 
     /** Newest activity first; a direct conversation the panel just opened for a friend (OVL-UX) before them. */
@@ -1226,6 +1240,7 @@ public final class OverlayState {
         asking.clear();
         matesHere.clear();
         matesDiscord.clear();
+        matesPresence.clear();
         outgoing = List.of();
         blockedPeople = List.of();
         myCode = "";
@@ -1850,6 +1865,26 @@ public final class OverlayState {
         matesDiscord.clear();
         putIds(arr(frame, "projects"), matesHere);
         putIds(arr(frame, "discord"), matesDiscord);
+        // OVL-NEXT: their presence dots in crew chat (at most 300, anything unknown skipped).
+        matesPresence.clear();
+        JsonObject mates = obj(frame, "mates");
+        if (mates != null) {
+            for (Map.Entry<String, JsonElement> e : mates.entrySet()) {
+                if (matesPresence.size() >= 300 || e.getKey().isEmpty() || e.getKey().length() > 64
+                    || !e.getValue().isJsonPrimitive()) {
+                    continue;
+                }
+                Presence presence = switch (e.getValue().getAsString()) {
+                    case "game" -> Presence.PLAYING;
+                    case "launcher" -> Presence.LAUNCHER;
+                    case "dnd" -> Presence.DND;
+                    default -> null;
+                };
+                if (presence != null) {
+                    matesPresence.put(e.getKey(), presence);
+                }
+            }
+        }
         // OVL-SOC 2: "İstekler" (at most 50, as the launcher sends them).
         List<Request> nextRequests = new ArrayList<>();
         forEach(frame, "requests", r -> {

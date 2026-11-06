@@ -52,6 +52,7 @@ import {
   crewRoomList,
   crewRoomName,
   facesThatFit,
+  mayMakePushToTalk,
   mayMovePerson,
   moveRoom,
   namesLine,
@@ -188,6 +189,8 @@ interface RowProps {
   standing: CrewStanding;
   manage: boolean;
   crewMax: number;
+  /** OVL-NEXT: the room form offers "Yalnız bas-konuş" (the service allows it, the player may). */
+  pttOffered: boolean;
   /** The rooms' order ("Genel" aside), for the menu and Alt+↑/↓. */
   order: readonly string[];
   /** The room, its form or the question before deleting it (one row at a time, the list's). */
@@ -208,6 +211,7 @@ function RoomRow({
   standing,
   manage,
   crewMax,
+  pttOffered,
   order,
   mode,
   onMode,
@@ -357,7 +361,13 @@ function RoomRow({
         <AnimatePresence mode="popLayout" initial={false}>
           {mode === "edit" ? (
             <motion.div key="edit" className="relative" {...rise(reduce, 3, 0.2)}>
-              <RoomEditForm crew={team.id} crewMax={crewMax} room={room} onDone={close} />
+              <RoomEditForm
+                crew={team.id}
+                crewMax={crewMax}
+                room={room}
+                pttOffered={pttOffered}
+                onDone={close}
+              />
             </motion.div>
           ) : mode === "remove" ? (
             <motion.div
@@ -395,8 +405,20 @@ function RoomRow({
                 // SHARE-LIVE: someone shares in it (seen from outside too): "YAYINDA" after the count, so
                 // nothing before it moves when it comes or goes.
                 count={
-                  limited || live.length ? (
+                  limited || live.length || room.ptt ? (
                     <span className="flex items-center gap-1.5">
+                      {/* OVL-NEXT: a quiet word, as the limit: the room takes push-to-talk only. */}
+                      {room.ptt ? (
+                        <Tooltip content={t("voice.ptt.tagLabel")}>
+                          <span
+                            className="text-[12px] font-semibold whitespace-nowrap text-ash-400"
+                            role="img"
+                            aria-label={t("voice.ptt.tagLabel")}
+                          >
+                            {t("voice.ptt.tag")}
+                          </span>
+                        </Tooltip>
+                      ) : null}
                       {limited ? (
                         <span
                           className="font-display text-[12px] font-semibold text-ash-400 tabular-nums"
@@ -550,6 +572,8 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
   const crewMax = entry?.crewMax ?? 15;
   const standing: CrewStanding = { role: team.role, moderator: team.moderator };
   const canAdd = entry ? entry.canAdd : max > 1;
+  // OVL-NEXT: "Yalnız bas-konuş" is the leader's and moderators' (as "Kim paylaşabilir").
+  const pttMay = mayMakePushToTalk(standing, entry);
   const reorders = others.some((room) => roomPowers(standing, room, manage).order);
 
   const row = (room: VoiceCrewRoom, extra: Partial<RowProps> = {}) => (
@@ -562,6 +586,7 @@ export function CrewVoice({ team }: { team: SocialTeam }) {
       standing={standing}
       manage={manage}
       crewMax={crewMax}
+      pttOffered={pttMay && !room.general}
       order={order}
       mode={editing?.room === room.id ? editing.mode : "view"}
       onMode={(next) => setEditing(next === "view" ? null : { room: room.id, mode: next })}
