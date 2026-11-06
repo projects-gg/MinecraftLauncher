@@ -103,6 +103,8 @@ export interface VoiceMyShare {
   watchers: string[];
   /** Unix seconds. */
   since: number;
+  /** SHARE-LIVE: when this computer last sent the share's small picture (Unix seconds; `th`). */
+  th?: number | null;
 }
 
 /** Someone else's share. */

@@ -58,7 +58,7 @@ export function liveTargetIn(state: RoomState, person: string): LiveTarget | nul
       n: mine.n,
       kind: mine.kind,
       watchers: mine.watchers.length,
-      th: null,
+      th: mine.th ?? null,
       offer: "own",
     };
   }
