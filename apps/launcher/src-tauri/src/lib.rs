@@ -80,6 +80,13 @@ pub fn run() {
                     api.prevent_close();
                     shell::close_requested(window.app_handle());
                 }
+                // SHARE-LIVE: a main window back in front may have a new taskbar button (from the
+                // tray, after Explorer restarted): the live mark again while the player is live.
+                if let tauri::WindowEvent::Focused(true) = event
+                    && window.label() == "main"
+                {
+                    voice::live::refresh(window.app_handle());
+                }
                 // The hidden voice window went without the launcher closing it: as a crash
                 // (VOICE: a call opens it again).
                 if let tauri::WindowEvent::Destroyed = event
@@ -407,6 +414,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::share::share_stream_volume,
             commands::share::share_unshare,
             commands::share::share_set_sharers,
+            commands::share::share_thumb,
             commands::server::server_status,
             commands::troubleshoot::troubleshoot_run,
             commands::troubleshoot::troubleshoot_crash,

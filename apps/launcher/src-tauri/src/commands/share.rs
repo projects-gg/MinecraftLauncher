@@ -195,3 +195,18 @@ pub async fn share_unshare(
 ) -> CmdResult<VoiceAnswer> {
     Ok(state.voice.share_unshare(person, n).await)
 }
+
+/// SHARE-LIVE: the hover card's still picture of share `n` of `user` in `room` (the player's own
+/// from this computer): `image` (a `data:` URL), `locked` (the player may not join that room:
+/// no picture) or `none`. Kept 20 s; a newer picture in the player's room (`th`) is asked at once.
+/// Someone outside the player's room has one share as far as the list knows: `n` 1.
+#[tauri::command]
+#[specta::specta]
+pub async fn share_thumb(
+    state: State<'_, AppState>,
+    room: String,
+    user: String,
+    n: u8,
+) -> CmdResult<crate::voice::thumb::ShareThumb> {
+    Ok(crate::voice::thumb::for_page(&state.social, &state.voice, &room, &user, n).await)
+}

@@ -21,6 +21,8 @@
 //!   launcher's name and picture for it.
 //! - [`tcp`]: which process owns a loopback connection (the local endpoint of a friend's world
 //!   takes only the game's).
+//! - [`taskbar`]: the taskbar button's overlay badge (Windows), e.g. the live mark while the
+//!   player shares their screen.
 
 pub mod close;
 #[cfg(windows)]
@@ -34,6 +36,7 @@ pub mod identity;
 pub mod link;
 pub mod process;
 pub mod shortcut;
+pub mod taskbar;
 pub mod tcp;
 #[cfg(test)]
 mod test_support;
