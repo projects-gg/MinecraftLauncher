@@ -7,6 +7,7 @@ pub mod d3d;
 pub mod encoder;
 pub mod session;
 pub mod sources;
+pub mod thumb;
 
 use std::sync::OnceLock;
 

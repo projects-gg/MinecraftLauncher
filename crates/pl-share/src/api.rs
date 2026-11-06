@@ -278,4 +278,12 @@ pub enum ShareEvent {
     Stopped {
         n: ShareNo,
     },
+    /// SHARE-LIVE: the live share's still picture for people who do not watch it (a JPEG of at
+    /// most [`crate::thumb::MAX_BYTES`], [`crate::thumb::SIDE`] px on its long side): about 3 s
+    /// after `Started`, then once a minute, also while encoding rests. The launcher sends it to the
+    /// room (`share_thumb`) and keeps nothing on disk.
+    Thumb {
+        n: ShareNo,
+        jpg: Vec<u8>,
+    },
 }
