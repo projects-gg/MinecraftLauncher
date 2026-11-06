@@ -80,6 +80,31 @@ describe("whom a tag stands for", () => {
     expect(friendTarget(state, "303", roomName)).toMatchObject({ room: null, offer: "private" });
     // In the player's own room it is the room's share itself.
     expect(friendTarget(scenario("shareLiveRow"), "301", roomName).offer).toBe("watch");
+    // In the player's own room before its share is in the state: the waiting card, never a lock.
+    expect(friendTarget(scenario("room"), "301", roomName)).toMatchObject({
+      room: "f00000000000000a1",
+      n: null,
+      offer: "watch",
+    });
+  });
+
+  it("in the player's own crew room: their own share too, and the list's word until the room's", () => {
+    const outside = scenario("shareCrewLive");
+    const { entry, room } = stone(outside);
+    const inside = scenario("shareLive");
+    const roomView = inside.room;
+    if (!roomView) throw new Error("no room");
+    const here = {
+      ...inside,
+      room: { ...roomView, id: STONE, kind: "crew" as const, crew: entry.crew },
+    };
+    const targets = crewRoomTargets(here, entry.crew, room, entry.crewMax, "Taş Ocağı");
+    expect(targets[0]).toMatchObject({ offer: "own", room: STONE });
+    // Just in, the room's share state not there yet: who the list says is live, waiting.
+    const justIn = { ...here, share: undefined };
+    expect(crewRoomTargets(justIn, entry.crew, room, entry.crewMax, "Taş Ocağı")).toEqual([
+      expect.objectContaining({ person: "302", offer: "watch", n: null }),
+    ]);
   });
 
   it("never asks for a picture where the player may not go", () => {

@@ -125,6 +125,9 @@ export async function unwatchShare(person: string, n: number) {
 /** How long "Katıl ve izle" waits in the room for the share to show before it lets go. */
 export const JOIN_WATCH_MS = 15_000;
 
+/** The "Katıl ve izle" under way (its room and person), so a second press starts nothing. */
+let joinWatching: string | null = null;
+
 /**
  * SHARE-LIVE: "Katıl ve izle" on a preview card: joins the crew room, then watches the person's
  * share once the room lists it (once; not if the player ends up elsewhere, nor after 15 s).
@@ -134,8 +137,14 @@ export async function joinAndWatch(
   room: { id: string; general: boolean },
   person: string,
 ): Promise<void> {
+  const asked = `${room.id}|${person}`;
+  if (joinWatching === asked) return;
+  joinWatching = asked;
   const joined = await joinCrewRoom(crew, room.general ? null : room.id);
-  if (!joined) return;
+  if (!joined) {
+    joinWatching = null;
+    return;
+  }
   let done = false;
   let stop: () => void = () => {};
   const timer = setTimeout(() => finish(), JOIN_WATCH_MS);
@@ -143,6 +152,7 @@ export async function joinAndWatch(
     done = true;
     stop();
     clearTimeout(timer);
+    if (joinWatching === asked) joinWatching = null;
   }
   const check = () => {
     if (done) return;

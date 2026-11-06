@@ -4,14 +4,17 @@
 // turned off under it, and the call's time under the two. While the player's call rings the
 // friend's face waits faded with "Aranıyor…" ("Başka bir odada" when they are in another room:
 // §3.2); the one way out is the footer's button, which says "İptal" then. A press or a right click
-// on the friend opens their menu, as a row's does. Faces at 72 px (a multiple of 8: the pixel heads
+// on the friend opens their menu, as a row's does. SHARE-LIVE: a friend who shares has "YAYINDA" and
+// "İzle" under their name (the stage glides to its new middle). Faces at 72 px (a multiple of 8: the pixel heads
 // stay square), their names clear of the ring that follows the voice.
-import { Menu } from "@pl/ui";
+import { Menu, useMotionPrefs } from "@pl/ui";
+import { motion } from "motion/react";
 import { type ReactNode, type RefObject, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useRoomTargets } from "@/features/share/live";
 import { LiveAppear, LiveTagButton } from "@/features/share/live-card";
 import { WatchButton } from "@/features/share/panel";
+import { glide } from "@/features/social/motion";
 import { usePersonItems } from "@/features/social/person-menu";
 import { useSocialUi } from "@/features/social/store";
 import type { VoicePerson, VoiceRoomView, VoiceState } from "@/lib/api/voice-types";
@@ -91,9 +94,11 @@ function FriendSeat({
       line={roleWord(person.role, t)}
       marks={marks}
       live={
+        // SHARE-LIVE: "YAYINDA" under the name, and "İzle" under it: both the friend's.
         <LiveAppear show={live.length > 0}>
-          <span className="mt-1.5 flex">
+          <span className="mt-1.5 flex flex-col items-center gap-2.5">
             <LiveTagButton targets={live} placement={{ ...SEAT_CARD, anchor: stage }} />
+            <WatchButton person={person.id} name={face.name} />
           </span>
         </LiveAppear>
       }
@@ -153,8 +158,10 @@ export function CallStage({
   const calling = useVoiceUi((s) => s.state.calling);
   const since = useVoiceUi((s) => callStart(s.state));
   const friend = room.people[0];
-  const friendFace = useFace(friend?.id ?? "");
   const stageRef = useRef<HTMLElement>(null);
+  // What comes and goes under a seat ("YAYINDA", "İzle") moves the stage's middle: it glides there.
+  const { layout } = useMotionPrefs();
+  const moves = { layout: layout ? ("position" as const) : false, transition: { layout: glide } };
   const own = useRoomTargets(room.me.id);
   const meFace: VoiceFace = {
     id: room.me.id,
@@ -171,7 +178,7 @@ export function CallStage({
       className="flex flex-1 flex-col items-center justify-center px-2 pt-4 pb-14"
       data-voice-stage=""
     >
-      <div className="flex items-start justify-center gap-6">
+      <motion.div {...moves} className="flex items-start justify-center gap-6">
         {friend ? (
           <FriendSeat person={friend} marks={marksOf(friend)} stage={stageRef} />
         ) : calling ? (
@@ -189,15 +196,13 @@ export function CallStage({
             </LiveAppear>
           }
         />
-      </div>
-      {/* SHARE: the friend shares: "İzle" under the two. */}
-      {friend ? <WatchButton person={friend.id} name={friendFace.name} className="mt-4" /> : null}
+      </motion.div>
       {/* The call's time; its room is kept while the call still rings, so nothing moves on an answer. */}
-      <div className="mt-5 flex h-8 items-center">
+      <motion.div {...moves} className="mt-5 flex h-8 items-center">
         {since !== null ? (
           <CallTime since={since} className="text-[15px] font-semibold text-ash-300" />
         ) : null}
-      </div>
+      </motion.div>
     </section>
   );
 }

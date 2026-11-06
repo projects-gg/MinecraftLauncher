@@ -98,8 +98,8 @@ function useWidthOf(): [(node: HTMLElement | null) => void, number | null] {
 /** The flex gap between the last face (or "+N") and a limit's count. */
 const COUNT_GAP = 4;
 
-/** A room's live card opens under its "YAYINDA", as a crew tag's card does under the tag. */
-const LIVE_CARD = { side: "bottom", align: "start", sideOffset: 6 } as const;
+/** A room's live card opens beside the panel, level with the row (as every live card does). */
+const LIVE_CARD = { side: "left", align: "center", sideOffset: 14 } as const;
 
 function Faces({
   team,
@@ -385,10 +385,6 @@ function RoomRow({
                   {shown}
                 </span>
               </OverflowTooltip>
-              {/* SHARE-LIVE: someone shares in it (seen from outside too): its card under the tag. */}
-              <LiveAppear show={live.length > 0}>
-                <LiveTagButton targets={live} placement={LIVE_CARD} />
-              </LiveAppear>
               <Faces
                 team={team}
                 room={room}
@@ -396,17 +392,29 @@ function RoomRow({
                 crewMax={crewMax}
                 standing={standing}
                 manage={manage}
+                // SHARE-LIVE: someone shares in it (seen from outside too): "YAYINDA" after the count, so
+                // nothing before it moves when it comes or goes.
                 count={
-                  limited ? (
-                    <span
-                      className="font-display text-[12px] font-semibold text-ash-400 tabular-nums"
-                      role="img"
-                      aria-label={t("voice.rooms.countLabel", {
-                        count: room.people.length,
-                        max: room.max,
-                      })}
-                    >
-                      {t("voice.rooms.count", { count: room.people.length, max: room.max })}
+                  limited || live.length ? (
+                    <span className="flex items-center gap-1.5">
+                      {limited ? (
+                        <span
+                          className="font-display text-[12px] font-semibold text-ash-400 tabular-nums"
+                          role="img"
+                          aria-label={t("voice.rooms.countLabel", {
+                            count: room.people.length,
+                            max: room.max,
+                          })}
+                        >
+                          {t("voice.rooms.count", { count: room.people.length, max: room.max })}
+                        </span>
+                      ) : null}
+                      <LiveAppear show={live.length > 0}>
+                        <LiveTagButton
+                          targets={live}
+                          placement={{ ...LIVE_CARD, anchor: rowRef }}
+                        />
+                      </LiveAppear>
                     </span>
                   ) : null
                 }
