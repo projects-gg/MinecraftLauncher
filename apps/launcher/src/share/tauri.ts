@@ -4,7 +4,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { ShareApi } from "./api";
-import type { ShareNotice, ShareRefusal, ShareSources, WatchCmd } from "./types";
+import type { ShareNotice, ShareRefusal, ShareSources, ShareThumb, WatchCmd } from "./types";
 
 const quiet = () => {
   // The launcher closed meanwhile, or the page is going away.
@@ -37,6 +37,12 @@ export const tauriShare: ShareApi = {
     const answer = await invoke<{ refused: string | null }>("share_unshare", { person, n });
     return answer.refused === null;
   },
+  // SHARE-LIVE: the launcher asks the friends service (the page never sees its token) and keeps
+  // an answer 20 s; a launcher without the command answers nothing.
+  thumb: (room, user, n) =>
+    invoke<ShareThumb>("share_thumb", { room, user, n }).catch(
+      (): ShareThumb => ({ kind: "none" }),
+    ),
   onNotice: (listener) => {
     let stop: (() => void) | null = null;
     let gone = false;

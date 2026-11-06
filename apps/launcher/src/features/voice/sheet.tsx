@@ -50,8 +50,10 @@ import { AnimatePresence, motion } from "motion/react";
 import { Dialog } from "radix-ui";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useRoomTargets } from "@/features/share/live";
+import { LiveAppear, LiveTag, LiveTagButton, useLivePreview } from "@/features/share/live-card";
 import { useUnshareItem } from "@/features/share/menu";
-import { ShareFooterRow, ShareMark, WatchButton } from "@/features/share/panel";
+import { ShareFooterRow, WatchButton } from "@/features/share/panel";
 import { openMenuFromKey } from "@/features/social/menu-key";
 import { enter, glide, leave, pageVariants, rise } from "@/features/social/motion";
 import { usePersonItems } from "@/features/social/person-menu";
@@ -170,11 +172,23 @@ function Marks({ marks }: { marks: Mark[] }) {
 const rowShape =
   "flex w-full items-center gap-3 rounded-[var(--radius-panel)] py-1.5 pr-2 pl-2 text-left outline-none";
 
-function NameBlock({ name, second }: { name: string; second?: string | null }) {
+/** The name, then (SHARE-LIVE) "YAYINDA" right after it; the name truncates, the tag never does. */
+function NameBlock({
+  name,
+  second,
+  tag,
+}: {
+  name: string;
+  second?: string | null;
+  tag?: ReactNode;
+}) {
   return (
     <span className="min-w-0 flex-1">
-      <span className="block truncate text-[14px] leading-[1.25] font-semibold text-bone-50">
-        {name}
+      <span className="flex min-w-0 items-center gap-[6px]">
+        <span className="truncate text-[14px] leading-[1.25] font-semibold text-bone-50">
+          {name}
+        </span>
+        {tag}
       </span>
       {second ? (
         <span className="block truncate text-[12px] leading-[1.35] text-ash-400">{second}</span>
@@ -183,9 +197,15 @@ function NameBlock({ name, second }: { name: string; second?: string | null }) {
   );
 }
 
+/** Where a row's card sits: beside the panel, level with the row (as a friend's card does). */
+const ROW_CARD = { side: "left", align: "center", sideOffset: 14 } as const;
+
 function MeRow({ room }: { room: VoiceRoomView }) {
   const { t } = useTranslation();
   const me = useSocialUi((s) => s.view.me);
+  const rowRef = useRef<HTMLDivElement>(null);
+  // SHARE-LIVE: the player's own stream, as the others see it.
+  const live = useRoomTargets(room.me.id);
   const face: VoiceFace = {
     id: room.me.id,
     name: me?.name ?? t("voice.room.you"),
@@ -197,9 +217,17 @@ function MeRow({ room }: { room: VoiceRoomView }) {
   const role = room.people.length ? roleWord(room.me.role, t) : null;
   const marks = marksOf(room.me, t);
   return (
-    <div className={rowShape}>
+    <div ref={rowRef} className={rowShape}>
       <SpeakingFace face={face} size={36} />
-      <NameBlock name={face.name} second={role} />
+      <NameBlock
+        name={face.name}
+        second={role}
+        tag={
+          <LiveAppear show={live.length > 0}>
+            <LiveTagButton targets={live} placement={{ ...ROW_CARD, anchor: rowRef }} />
+          </LiveAppear>
+        }
+      />
       <Marks marks={marks} />
       {/* At the row's end, as the crew's member list marks the player. */}
       <span className="shrink-0 text-[12.5px] text-ash-400">{t("voice.room.you")}</span>
@@ -211,15 +239,28 @@ function PersonRow({ person }: { person: VoicePerson }) {
   const { t } = useTranslation();
   const face = useFace(person.id);
   const [open, setOpen] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
   const ref = { id: face.id, name: face.name, avatar: face.avatar, avatarUrl: face.avatarUrl };
   // SHARE: a leader's or moderator's "Paylaşımı durdur" on someone who shares.
   const items = [...usePersonItems(ref, { from: "list" }), ...useUnshareItem(person)];
+  // SHARE-LIVE: "YAYINDA" after the name; resting on it (or the row's keyboard focus) opens the
+  // stream's card beside the panel.
+  const live = useRoomTargets(person.id);
+  const preview = useLivePreview(live, { ...ROW_CARD, anchor: rowRef });
+  const kind = live[0]?.kind;
   const role = roleWord(person.role, t);
   const marks = marksOf(person, t);
-  const label = [face.name, role, ...marks.map((m) => m.label)].filter(Boolean).join(", ");
+  const label = [
+    face.name,
+    kind ? t("share.row.mark", { kind: t(`share.kind.${kind}`) }) : null,
+    role,
+    ...marks.map((m) => m.label),
+  ]
+    .filter(Boolean)
+    .join(", ");
   return (
     // SHARE: "İzle" beside the row, outside its menu button.
-    <div className="flex items-center gap-1">
+    <div ref={rowRef} className="flex items-center gap-1">
       <Menu
         items={items}
         align="start"
@@ -229,6 +270,7 @@ function PersonRow({ person }: { person: VoicePerson }) {
           <button
             type="button"
             aria-label={label}
+            {...preview.focusProps}
             // A right click, Shift+F10 or the menu key open the same menu (FIX2: one menu per person).
             onContextMenu={(event) => {
               event.preventDefault();
@@ -247,13 +289,23 @@ function PersonRow({ person }: { person: VoicePerson }) {
             )}
           >
             <SpeakingFace face={face} size={36} />
-            <NameBlock name={face.name} second={role} />
-            <ShareMark person={person.id} />
+            <NameBlock
+              name={face.name}
+              second={role}
+              tag={
+                <LiveAppear show={live.length > 0}>
+                  <span {...preview.tagProps} data-live-tag className="flex shrink-0">
+                    <LiveTag />
+                  </span>
+                </LiveAppear>
+              }
+            />
             <Marks marks={marks} />
           </button>
         }
       />
       <WatchButton person={person.id} name={face.name} className="shrink-0" />
+      {preview.card}
     </div>
   );
 }

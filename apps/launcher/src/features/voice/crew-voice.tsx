@@ -28,6 +28,8 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useCalm } from "@/features/accounts/calm";
+import { useCrewRoomTargets } from "@/features/share/live";
+import { LiveAppear, LiveTagButton } from "@/features/share/live-card";
 import { openMenuFromKey } from "@/features/social/menu-key";
 import { enter, glide, leave, rise, useSocialMotion } from "@/features/social/motion";
 import { SocialFace } from "@/features/social/social-face";
@@ -95,6 +97,9 @@ function useWidthOf(): [(node: HTMLElement | null) => void, number | null] {
 
 /** The flex gap between the last face (or "+N") and a limit's count. */
 const COUNT_GAP = 4;
+
+/** A room's live card opens under its "YAYINDA", as a crew tag's card does under the tag. */
+const LIVE_CARD = { side: "bottom", align: "start", sideOffset: 6 } as const;
 
 function Faces({
   team,
@@ -285,6 +290,7 @@ function RoomRow({
   const more = hasRoomPowers(powers);
   const limited = room.max !== null && room.max < crewMax;
   const full = !here && crewRoomFull(room, crewMax);
+  const live = useCrewRoomTargets(team.id, room, crewMax);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (mode !== "view") return;
@@ -379,6 +385,10 @@ function RoomRow({
                   {shown}
                 </span>
               </OverflowTooltip>
+              {/* SHARE-LIVE: someone shares in it (seen from outside too): its card under the tag. */}
+              <LiveAppear show={live.length > 0}>
+                <LiveTagButton targets={live} placement={LIVE_CARD} />
+              </LiveAppear>
               <Faces
                 team={team}
                 room={room}

@@ -70,6 +70,17 @@ export const enShare = {
     watchLabel: "Watch {{name}}'s stream",
     unshare: "Stop their share",
   },
+  tag: "LIVE",
+  preview: {
+    label_one: "{{names}} is live",
+    label_other: "{{names}} are live",
+    picture: "Latest picture from {{name}}'s stream",
+    joinWatch: "Join and watch",
+    watching: "You're watching",
+    locked: "You can't join this room.",
+    private: "Only people in the call can watch.",
+    sharers: "Live now",
+  },
   stage: {
     label: "{{name}}'s stream",
     connecting: "Connecting…",

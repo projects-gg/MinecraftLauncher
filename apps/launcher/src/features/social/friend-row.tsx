@@ -35,13 +35,20 @@ import {
 } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu, Popover } from "radix-ui";
-import { type KeyboardEvent, type PointerEvent as ReactPointerEvent, useState } from "react";
+import {
+  type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useCalm } from "@/features/accounts/calm";
 import { announce } from "@/features/accounts/use-accounts";
 import { PeopleCount, WorldJoinButton } from "@/features/host/parts";
 import { inviteFrom, invitePeople } from "@/features/host/rules";
 import { useHostUi } from "@/features/host/store";
+import { useFriendTargets } from "@/features/share/live";
+import { LiveAppear, LiveTag, useLivePreview } from "@/features/share/live-card";
 import {
   FriendCallButton,
   InVoiceMark,
@@ -619,6 +626,16 @@ export function FriendRow({
     inVoice && !voiceLine ? `${shownLine}, ${t("voice.presence.inVoice")}` : shownLine;
   const badge = useShownBadge(friend.badge);
   const marks = useMarks(friend.marks);
+  // SHARE-LIVE: "YAYINDA" after the name while they share in a voice room; resting on it (or the
+  // row's keyboard focus) opens the stream's card beside the panel, where the friend's card opens.
+  const rowRef = useRef<HTMLDivElement>(null);
+  const live = useFriendTargets(friend.id, friend.voiceLive === true);
+  const preview = useLivePreview(live, {
+    side: "left",
+    align: "start",
+    sideOffset: 14,
+    anchor: rowRef,
+  });
 
   // Remove and block ask first, in the card: it opens at the question once the menu is gone.
   const openAt = (question: Confirm) =>
@@ -638,6 +655,7 @@ export function FriendRow({
   return (
     <ContextMenu items={items}>
       <div
+        ref={rowRef}
         onPointerDown={onPress}
         className="group/friend flex items-center gap-2 rounded-[var(--radius-panel)] pr-2 transition-colors duration-150 hover:bg-white/[0.045] data-[state=open]:bg-white/[0.06] has-[[data-state=open]]:bg-white/[0.06]"
       >
@@ -659,8 +677,9 @@ export function FriendRow({
               onClick={(event) => {
                 if (event.detail > 1 && open) event.preventDefault();
               }}
-              aria-label={`${badgeRowLabel(friend.name, badge, t, marks)}${friend.realName ? `, ${t("socNext.nick.real", { name: friend.realName })}` : ""}, ${spokenLine}`}
+              aria-label={`${badgeRowLabel(friend.name, badge, t, marks)}${friend.realName ? `, ${t("socNext.nick.real", { name: friend.realName })}` : ""}${live.length ? `, ${t("share.live.on")}` : ""}, ${spokenLine}`}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+              {...preview.focusProps}
             >
               <SocialAvatar source={friend} size={36} state={friend.state} dnd={friend.dnd} />
               <span className="min-w-0 flex-1">
@@ -684,6 +703,11 @@ export function FriendRow({
                     />
                   ) : null}
                   {missed && !missedLine ? <MissedMark /> : null}
+                  <LiveAppear show={live.length > 0}>
+                    <span {...preview.tagProps} data-live-tag className="flex shrink-0">
+                      <LiveTag />
+                    </span>
+                  </LiveAppear>
                 </BadgedName>
                 <span className="relative block h-[18px] overflow-hidden">
                   <AnimatePresence mode="popLayout" initial={false}>
@@ -789,6 +813,7 @@ export function FriendRow({
             }
           />
         </span>
+        {preview.card}
       </div>
     </ContextMenu>
   );

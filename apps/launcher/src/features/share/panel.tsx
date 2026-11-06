@@ -1,7 +1,7 @@
 // Screen sharing on the room panel (SHARE; share.md §3): above the panel's three buttons,
 // "Ekranını paylaş" while the player shares nothing; while they share, each share's line says
 // "Yayında" calmly (no red, no light), what it shows, who watches (their faces; their names on the
-// pointer) and "Durdur". Beside each person who shares, their mark and "İzle".
+// pointer) and "Durdur". Beside each person who shares, "İzle" (their "YAYINDA" is live-card.tsx's).
 import { CaretDown, Check, Monitor, Screencast } from "@phosphor-icons/react";
 import { Button, cn, Menu, type MenuItem, Tooltip, toast, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -171,24 +171,8 @@ function unwatched(shares: VoiceLiveShare[], watching: { person: string; n: numb
   return shares.find((s) => !watching.some((w) => w.person === s.person && w.n === s.n)) ?? null;
 }
 
-/** Beside a person who shares: the mark (its kind on the pointer). */
-export function ShareMark({ person }: { person: string }) {
-  const { t } = useTranslation();
-  const share = useShare();
-  const theirs = share.live.filter((l) => l.person === person);
-  const first = theirs[0];
-  if (!first) return null;
-  const label = t("share.row.mark", { kind: t(`share.kind.${first.kind}`) });
-  return (
-    <Tooltip content={label}>
-      <span className="flex shrink-0" role="img" aria-label={label}>
-        <Screencast size={15} weight="bold" className="text-jade-400" />
-      </span>
-    </Tooltip>
-  );
-}
-
-/** "İzle" beside a person who shares something the player does not watch. */
+/** "İzle" beside a person who shares something the player does not watch. (Who shares is said by
+ * "YAYINDA" after their name: live-card.tsx; SHARE-LIVE merged the small mark into it.) */
 export function WatchButton({
   person,
   name,

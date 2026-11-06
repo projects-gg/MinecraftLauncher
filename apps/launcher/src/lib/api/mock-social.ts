@@ -52,6 +52,7 @@
 // - the ways into the account (SOC-ID: Microsoft, "Bağlı hesaplar", the name step):
 //   mock-identity.ts (`signedOutMicrosoft`, `microsoftOnly`, `linkedBoth`…).
 import { BUILTIN_MARK_DEFS } from "@/features/social/marks";
+import { mockLiveFriends } from "@/share/mock-scenarios";
 import { CHAT_SCENARIOS, mockChat } from "./mock-chat";
 import { CALM_SCENARIOS, calmApi, calmSnapshot, startCalm } from "./mock-chat-calm";
 import { BADGE_SCENARIOS, badgesApi, badgesSnapshot, startBadges } from "./mock-crew-badges";
@@ -225,7 +226,13 @@ const QR_ROTATED = {
 };
 
 function friendsList(): Friend[] {
-  return friendsBase().map((friend) => ({ ...friend, ...markOf(friend.id) }));
+  // SHARE-LIVE: `voice=shareFriendsLive` has friends sharing their screen in a voice room.
+  const live = mockLiveFriends(searchParam("voice"));
+  return friendsBase().map((friend) => ({
+    ...friend,
+    ...markOf(friend.id),
+    ...(live.includes(friend.id) ? { voice: "in" as const, voiceLive: true } : {}),
+  }));
 }
 
 function friendsBase(): Friend[] {

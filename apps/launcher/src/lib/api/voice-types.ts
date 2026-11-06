@@ -144,6 +144,11 @@ export interface VoiceCrewRoom {
   max: number | null;
   /** VOICE-ROOMS: the player opened it (they may change and delete it). */
   own: boolean;
+  /**
+   * SHARE-LIVE: who in it shares now (the player's blocks left out; absent or empty while screen
+   * sharing is off), so people outside the room see "YAYINDA" too.
+   */
+  live?: string[];
 }
 
 /** One crew's rooms, "Genel" first, then the crew's own order. */

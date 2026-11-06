@@ -11,6 +11,7 @@ import type {
   ShareRefusal,
   ShareSource,
   ShareSources,
+  ShareThumb,
   VoiceShareView,
   WatchCmd,
   WatchReport,
@@ -43,6 +44,11 @@ export interface ShareApi {
   setSharers(who: ShareBy): Promise<boolean>;
   /** A leader's or moderator's "Paylaşımı durdur" on someone else's share; true when done. */
   unshare(person: string, n: number): Promise<boolean>;
+  /**
+   * SHARE-LIVE: a share's last small picture for the preview card (asked only while a card is
+   * open). `n` null: the player cannot know it from outside the room (the sharer's first share).
+   */
+  thumb(room: string, user: string, n: number | null): Promise<ShareThumb>;
   onNotice(listener: (notice: ShareNotice) => void): () => void;
 }
 
