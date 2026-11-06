@@ -116,6 +116,9 @@ pub struct CrewRoom {
     pub own: bool,
     /// SHARE-S: only the crew's leader and moderators may share in it ("Kim paylaşabilir").
     pub share_mods: bool,
+    /// SHARE-LIVE: who of `ids` shares their screen now (the hub's `live`; empty from an older
+    /// service or while sharing is off).
+    pub live: Vec<String>,
 }
 
 /// How a stay begins.
@@ -2534,6 +2537,13 @@ fn crew_rooms_view(crew: &str, rooms: &[CrewRoom], service: ServiceVoice) -> Voi
         people: room.ids.clone(),
         max: room.max,
         own: room.own,
+        // SHARE-LIVE: only people the list shows (the hub leaves the player's blocks out of both).
+        live: room
+            .live
+            .iter()
+            .filter(|id| room.ids.contains(id))
+            .cloned()
+            .collect(),
     };
     let rooms: Vec<VoiceCrewRoom> = std::iter::once(view(&general))
         .chain(rooms.iter().filter(|room| room.id != general_id).map(view))

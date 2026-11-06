@@ -1337,6 +1337,7 @@ fn crew_rooms_list_genel_first_in_the_crews_order() {
                 max: Some(4),
                 own: true,
                 share_mods: false,
+                live: Vec::new(),
             },
             CrewRoom {
                 id: "c00000000000000aa".into(),

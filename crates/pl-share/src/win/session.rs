@@ -15,6 +15,7 @@ use super::capture::{self, Capture};
 use super::convert::Scaler;
 use super::d3d::Gpu;
 use super::encoder::{self, EncEvent, EncIn, EncoderConfig, EncoderHandle};
+use super::thumb::{Host, Latest, ThumbHandle, Thumbs};
 use super::{SendCom, sources};
 use crate::api::{
     AudioScope, AudioWhy, LostWhy, ShareCmd, ShareEnv, ShareEvent, ShareNo, ShareOpts, ShareStats,
@@ -260,6 +261,8 @@ impl Shared {
 struct FrameSink {
     scalers: [Scaler; 2],
     gates: [FrameGate; 2],
+    /// The full layer's newest encoder input (SHARE-LIVE's still picture is cut from it).
+    latest: Option<Latest>,
 }
 
 // One per share and never copied: the size difference does not matter.
@@ -278,6 +281,8 @@ struct Live {
     layers: [LayerSpec; 2],
     profile: H264Profile,
     epoch: Instant,
+    /// SHARE-LIVE: the still picture's worker (none when its thread could not start).
+    _thumbs: Option<ThumbHandle>,
 }
 
 pub struct Session {
@@ -435,9 +440,16 @@ impl Session {
             info.software = !encoders[0].hardware;
         }
         self.install_sink(&layers)?;
-        let capture = self.start_capture()?;
+        let (thumbs, thumb_handle) = match self.start_thumbs() {
+            Ok((thumbs, handle)) => (Some(thumbs), Some(handle)),
+            Err(e) => {
+                warn!("share thumb thread: {e}");
+                (None, None)
+            }
+        };
+        let capture = self.start_capture(thumbs.clone())?;
         let audio = self.start_audio(&negotiated, epoch, &handle);
-        let ctl = self.transport_ctl();
+        let ctl = self.transport_ctl(thumbs);
         negotiated
             .start(inbox, full, small, self.opts.tuning, ctl)
             .map_err(|_| Fail::Lost(LostWhy::Internal))?;
@@ -449,8 +461,30 @@ impl Session {
             layers,
             profile,
             epoch,
+            _thumbs: thumb_handle,
         });
         Ok(())
+    }
+
+    /// SHARE-LIVE: the still picture's worker, fed from the full layer's encoder input (or, while
+    /// encoding rests, from the next captured frame).
+    fn start_thumbs(&self) -> std::io::Result<(Arc<Thumbs>, ThumbHandle)> {
+        let paused = self.shared.clone();
+        let latest = self.shared.clone();
+        let emit = self.shared.clone();
+        Thumbs::start(
+            self.gpu.clone(),
+            self.shared.n,
+            Host {
+                paused: Box::new(move || paused.paused.load(Ordering::Relaxed)),
+                latest: Box::new(move || {
+                    let sink = latest.sink.lock().ok()?;
+                    let (texture, picture, at) = sink.as_ref()?.latest.as_ref()?;
+                    Some((SendCom(texture.0.clone()), *picture, *at))
+                }),
+                emit: Box::new(move |jpg| emit.emit(ShareEvent::Thumb { n: emit.n, jpg })),
+            },
+        )
     }
 
     /// Both layers' encoders; a hardware failure falls back to software (720p30) for both.
@@ -529,6 +563,7 @@ impl Session {
         let sink = FrameSink {
             scalers: [scaler(&specs[0])?, scaler(&specs[1])?],
             gates: [FrameGate::new(specs[0].fps), FrameGate::new(specs[1].fps)],
+            latest: None,
         };
         if let Ok(mut slot) = self.shared.sink.lock() {
             *slot = Some(sink);
@@ -536,14 +571,21 @@ impl Session {
         Ok(())
     }
 
-    fn start_capture(&mut self) -> Result<Capture, Fail> {
+    fn start_capture(&mut self, thumbs: Option<Arc<Thumbs>>) -> Result<Capture, Fail> {
         let item = self.item.take().ok_or(Fail::Lost(LostWhy::Internal))?.0;
         let shared = self.shared.clone();
         let on_frame = Box::new(
             move |texture: &windows::Win32::Graphics::Direct3D11::ID3D11Texture2D,
                   content: (u32, u32),
                   now: Instant| {
-                if shared.paused.load(Ordering::Relaxed) || shared.stopped.load(Ordering::Relaxed) {
+                if shared.stopped.load(Ordering::Relaxed) {
+                    return;
+                }
+                // SHARE-LIVE: every frame counts for the still picture, resting or not.
+                if let Some(thumbs) = &thumbs {
+                    thumbs.frame(texture, content, now);
+                }
+                if shared.paused.load(Ordering::Relaxed) {
                     return;
                 }
                 let Ok(mut sink) = shared.sink.lock() else {
@@ -558,13 +600,18 @@ impl Session {
                         continue;
                     }
                     match sink.scalers[i].convert(texture, content) {
-                        Ok(out) => shared.to_encoder(
-                            layer,
-                            EncIn::Frame {
-                                texture: SendCom(out),
-                                at: now,
-                            },
-                        ),
+                        Ok((out, picture)) => {
+                            if layer == Layer::Full {
+                                sink.latest = Some((SendCom(out.clone()), picture, now));
+                            }
+                            shared.to_encoder(
+                                layer,
+                                EncIn::Frame {
+                                    texture: SendCom(out),
+                                    at: now,
+                                },
+                            );
+                        }
                         Err(e) => warn!("share convert: {e}"),
                     }
                 }
@@ -613,7 +660,7 @@ impl Session {
         .ok()
     }
 
-    fn transport_ctl(&self) -> Box<dyn FnMut(MediaCtl) + Send> {
+    fn transport_ctl(&self, thumbs: Option<Arc<Thumbs>>) -> Box<dyn FnMut(MediaCtl) + Send> {
         let shared = self.shared.clone();
         Box::new(move |msg| match msg {
             MediaCtl::KeyFrame(layer) => shared.to_encoder(layer, EncIn::KeyFrame),
@@ -640,7 +687,12 @@ impl Session {
                     sink.gates[Layer::Small.index()].set_fps(small_fps.min(plan.full_fps));
                 }
             }
-            MediaCtl::Connected => shared.emit(ShareEvent::Started { n: shared.n }),
+            MediaCtl::Connected => {
+                shared.emit(ShareEvent::Started { n: shared.n });
+                if let Some(thumbs) = &thumbs {
+                    thumbs.started();
+                }
+            }
             MediaCtl::Stats {
                 kbps,
                 full_fps,

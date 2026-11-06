@@ -18,6 +18,7 @@ pub mod opus;
 pub mod preset;
 pub mod rate;
 pub mod sources;
+pub mod thumb;
 pub mod transport;
 #[cfg(windows)]
 pub mod win;

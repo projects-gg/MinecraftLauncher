@@ -2077,6 +2077,8 @@ fn friend_view(
         badge,
         marks: profile.shown_marks(),
         voice: online.and_then(|p| p.voice),
+        // SHARE-LIVE: only while they are in a voice room (an old presence says nothing more).
+        live: online.is_some_and(|p| p.live && p.voice == Some(crate::voice::PresenceVoice::In)),
     }
 }
 
@@ -2295,6 +2297,7 @@ mod tests {
             last_seen: None,
             voice: None,
             note: None,
+            live: false,
         }
     }
 
@@ -2314,6 +2317,26 @@ mod tests {
 
     fn by_id<'a>(friends: &'a [FriendView], id: &str) -> &'a FriendView {
         friends.iter().find(|f| f.id == id).unwrap()
+    }
+
+    /// SHARE-LIVE: a friend's "YAYINDA" only while they share in a voice room.
+    #[test]
+    fn a_friend_sharing_in_a_voice_room_is_live() {
+        let mut state = loaded();
+        let mut sharing = presence("2", PresenceState::Launcher, None);
+        sharing.voice = Some(crate::voice::PresenceVoice::In);
+        sharing.live = true;
+        state.apply(&PresenceEvent::Presence(sharing.clone()), NOW);
+        assert!(by_id(&state.friends(), "2").live);
+        assert!(!by_id(&state.friends(), "1").live);
+        // Out of the room (an odd presence) or offline: no.
+        sharing.voice = Some(crate::voice::PresenceVoice::Ready);
+        state.apply(&PresenceEvent::Presence(sharing.clone()), NOW);
+        assert!(!by_id(&state.friends(), "2").live);
+        sharing.voice = Some(crate::voice::PresenceVoice::In);
+        sharing.state = PresenceState::Offline;
+        state.apply(&PresenceEvent::Presence(sharing), NOW);
+        assert!(!by_id(&state.friends(), "2").live);
     }
 
     #[test]

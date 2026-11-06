@@ -20,19 +20,22 @@ use windows::Win32::Graphics::Imaging::{
     IWICImagingFactory, WICBitmapEncoderNoCache,
 };
 use windows::Win32::Storage::Xps::{PRINT_WINDOW_FLAGS, PrintWindow};
-use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
+use windows::Win32::System::Com::StructuredStorage::{
+    CreateStreamOnHGlobal, IPropertyBag2, PROPBAG2,
+};
 use windows::Win32::System::Com::{
     CLSCTX_INPROC_SERVER, CoCreateInstance, STATFLAG_NONAME, STREAM_SEEK_SET,
 };
 use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
+use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GW_OWNER, GWL_EXSTYLE, GetClassNameW, GetWindow, GetWindowLongPtrW,
     GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindow, IsWindowVisible,
     MONITORINFOF_PRIMARY, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
 };
-use windows::core::{BOOL, PWSTR};
+use windows::core::{BOOL, PWSTR, w};
 
 use crate::api::{ShareCaps, SourceId, SourceInfo, SourceKind};
 use crate::sources::{WindowFacts, game_window, keep_window, order};
@@ -354,7 +357,7 @@ impl Dib {
                 bgr[d..d + 3].copy_from_slice(&src[s..s + 3]);
             }
         }
-        encode_jpeg(&bgr, w as u32, h as u32, stride as u32)
+        encode_jpeg(&bgr, w as u32, h as u32, stride as u32, None)
     }
 }
 
@@ -368,8 +371,17 @@ impl Drop for Dib {
     }
 }
 
-fn encode_jpeg(bgr: &[u8], w: u32, h: u32, stride: u32) -> Option<Vec<u8>> {
-    // SAFETY: WIC calls on live objects; the stream is read back with its reported size.
+/// 24-bit BGR rows as a JPEG in memory; `quality` 0–1 (none: WIC's default). Nothing touches the
+/// disk.
+pub(super) fn encode_jpeg(
+    bgr: &[u8],
+    w: u32,
+    h: u32,
+    stride: u32,
+    quality: Option<f32>,
+) -> Option<Vec<u8>> {
+    // SAFETY: WIC calls on live objects; the property's name and value outlive the write; the
+    // stream is read back with its reported size.
     unsafe {
         let factory: IWICImagingFactory =
             CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER).ok()?;
@@ -379,11 +391,19 @@ fn encode_jpeg(bgr: &[u8], w: u32, h: u32, stride: u32) -> Option<Vec<u8>> {
             .ok()?;
         encoder.Initialize(&stream, WICBitmapEncoderNoCache).ok()?;
         let mut frame = None;
-        encoder
-            .CreateNewFrame(&mut frame, std::ptr::null_mut())
-            .ok()?;
+        let mut options: Option<IPropertyBag2> = None;
+        encoder.CreateNewFrame(&mut frame, &mut options).ok()?;
         let frame = frame?;
-        frame.Initialize(None).ok()?;
+        if let (Some(quality), Some(options)) = (quality, options.as_ref()) {
+            let name = PROPBAG2 {
+                pstrName: PWSTR(w!("ImageQuality").0.cast_mut()),
+                ..Default::default()
+            };
+            options
+                .Write(1, &name, &VARIANT::from(quality.clamp(0.0, 1.0)))
+                .ok()?;
+        }
+        frame.Initialize(options.as_ref()).ok()?;
         frame.SetSize(w, h).ok()?;
         let mut format = GUID_WICPixelFormat24bppBGR;
         frame.SetPixelFormat(&mut format).ok()?;

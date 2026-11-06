@@ -2567,6 +2567,7 @@ async fn the_crews_rooms_reach_a_mod_that_shows_them_and_its_joins_reach_the_lau
             people: vec!["u-cem".into()],
             max: None,
             own: false,
+            live: Vec::new(),
         }],
         can_add: false,
         manage: false,

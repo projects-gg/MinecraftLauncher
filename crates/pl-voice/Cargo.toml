@@ -10,6 +10,8 @@ publish = false
 [dependencies]
 # Backoff with jitter and the TLS of the friends service's sockets.
 pl-social = { workspace = true }
+# SHARE-LIVE: a share's still picture on the room socket (`share_thumb.jpg`).
+base64 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 url = { workspace = true }

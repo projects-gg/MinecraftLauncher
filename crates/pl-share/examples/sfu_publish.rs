@@ -157,6 +157,9 @@ async fn main() {
                         stats_lines += 1;
                         println!("[{:>5.1}s] stats {:?}", t0.elapsed().as_secs_f64(), stats);
                     }
+                    ShareEvent::Thumb { n, jpg } => {
+                        println!("[{:>5.1}s] thumb {n}: {} bytes", t0.elapsed().as_secs_f64(), jpg.len());
+                    }
                     other => println!("[{:>5.1}s] {other:?}", t0.elapsed().as_secs_f64()),
                 }
             }

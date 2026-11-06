@@ -4,17 +4,19 @@ use std::time::Duration;
 
 use pl_social::BackoffPolicy;
 
-use crate::engine::PageReport;
-use crate::machine::{Effect, Machine, ServiceVoice, StayStart};
-use crate::settings::Store;
+use crate::engine::{EngineCommand, EngineSound, PageReport};
+use crate::machine::{CrewRoom, Effect, Machine, ServiceVoice, StayStart};
+use crate::settings::{Store, VoiceSettings};
 use crate::share::{
     ALONE_STOP_MS, HIDDEN_GRACE_MS, PAUSE_AFTER_MS, STILL_ANSWER_MS, STILL_ASK_MS, ServiceShare,
     ShareBy, ShareClosedWhy, ShareCmd, ShareEvent, ShareKind, ShareLayer, ShareMinePhase,
     ShareNotice, SharePreset, ShareRefusal, ShareSource, ShareSurface, ShareWatchPhase, ShareWire,
-    WatchCmd, WatchMidWire, WatchReport,
+    THUMB_MAX_BYTES, ThumbJpeg, WatchCmd, WatchMidWire, WatchReport,
 };
 use crate::view::VoiceLeftReason;
-use crate::wire::{FromRoom, MeWire, PersonWire, Role, RoomKind, RoomWire, Sdp, Ticket, ToRoom};
+use crate::wire::{
+    FromRoom, LeftWhy, MeWire, PersonWire, Role, RoomKind, RoomWire, Sdp, Ticket, ToRoom,
+};
 
 const ROOM: &str = "f0123456789abcdef";
 const UNIX: i64 = 1_800_000_000;
@@ -73,6 +75,7 @@ fn shared(n: u8) -> ShareWire {
         w: 0,
         at: UNIX,
         paused: false,
+        th: None,
     }
 }
 
@@ -289,13 +292,14 @@ fn the_room_socket_asks_for_share1() {
         },
         1_200,
     );
+    // SHARE-LIVE: `live1` with it (still pictures, their times in the share state).
     assert!(matches!(
         sent(&effects)[..],
-        [ToRoom::Join { caps, .. }] if caps == &vec!["share1".to_owned()]
+        [ToRoom::Join { caps, .. }] if caps == &vec!["share1".to_owned(), "live1".to_owned()]
     ));
     assert_eq!(
         sent(&effects)[0].text(),
-        r#"{"t":"join","sdp":"v=0","caps":["share1"]}"#
+        r#"{"t":"join","sdp":"v=0","caps":["share1","live1"]}"#
     );
 }
 
@@ -581,7 +585,7 @@ fn sharing_off_or_a_lost_share_on_return_ends_it() {
         })
         .unwrap();
     let effects = machine.socket_open(generation, 4_100);
-    assert!(matches!(sent(&effects)[..], [ToRoom::Sync { caps }] if caps.len() == 1));
+    assert!(matches!(sent(&effects)[..], [ToRoom::Sync { caps }] if caps.len() == 2));
     let effects = machine.socket_message(
         generation,
         hello(
@@ -1350,4 +1354,266 @@ fn the_crew_room_form_knows_who_may_share() {
     assert_eq!(share.crew_mods, ["c0123456789abcdef"]);
     machine.set_share_service(None, 0);
     assert!(!machine.view(0, UNIX).share.service);
+}
+
+// --- SHARE-LIVE (the lead's contract share-live.md §1, §2) ---------------------------------------
+
+/// The voice page's sounds among the effects, in order.
+fn sounds(effects: &[Effect]) -> Vec<EngineSound> {
+    effects
+        .iter()
+        .filter_map(|effect| match effect {
+            Effect::Engine(EngineCommand::Sound { sound }) => Some(*sound),
+            _ => None,
+        })
+        .collect()
+}
+
+/// `u`'s whole list of live shares, as the room tells it.
+fn state(u: &str, sh: Vec<ShareWire>) -> FromRoom {
+    FromRoom::State {
+        u: u.into(),
+        mute: None,
+        deaf: None,
+        sm: None,
+        q: None,
+        sh: Some(sh),
+    }
+}
+
+fn ack(rid: u32, n: u8) -> FromRoom {
+    FromRoom::Ack {
+        rid: Some(rid),
+        ice: None,
+        until: None,
+        sdp: Some(Sdp::new("v=0 sfu")),
+        n: Some(n),
+        preset: None,
+    }
+}
+
+/// The player's share of `source` (number `n`), taken by the room at `now`; its effects.
+fn share_live(
+    machine: &mut Machine,
+    generation: u64,
+    source: ShareSource,
+    n: u8,
+    now: u64,
+) -> Vec<Effect> {
+    machine.share_start(source, "Notlar", now, UNIX).unwrap();
+    let effects = machine.share_event(
+        ShareEvent::Offer {
+            n,
+            sdp: Sdp::new("v=0 publisher"),
+        },
+        now,
+    );
+    assert!(sounds(&effects).is_empty());
+    machine.socket_message(generation, ack(open_rid(&effects), n), now + 100, UNIX)
+}
+
+fn with_th(n: u8, th: i64) -> ShareWire {
+    ShareWire {
+        th: Some(th),
+        ..shared(n)
+    }
+}
+
+#[test]
+fn sharing_sounds_follow_the_room() {
+    let mut machine = ready();
+    // `a` shares already when the player comes in: the room's `hello` says nothing.
+    let generation = live(&mut machine, vec![shared(1)], share_on());
+    // The player's own share sounds when the room takes it.
+    let effects = share_live(&mut machine, generation, ShareSource::Game, 1, 2_000);
+    assert_eq!(sounds(&effects), [EngineSound::ShareStart]);
+    assert!(machine.view(2_200, UNIX).share.live_now());
+    // Someone else starts another: once; a picture's time on a known share is no start.
+    let effects = machine.socket_message(
+        generation,
+        state("a", vec![shared(1), shared(2)]),
+        3_000,
+        UNIX,
+    );
+    assert_eq!(sounds(&effects), [EngineSound::StreamStart]);
+    let effects = machine.socket_message(
+        generation,
+        state("a", vec![with_th(1, UNIX + 60), shared(2)]),
+        3_500,
+        UNIX,
+    );
+    assert!(sounds(&effects).is_empty());
+    // A watched share that ends sounds; one the player lets go of does not.
+    machine.share_watch("a", 1, 4_000).unwrap();
+    machine.share_watch("a", 2, 4_000).unwrap();
+    let effects = machine.socket_message(generation, state("a", vec![shared(2)]), 5_000, UNIX);
+    assert_eq!(sounds(&effects), [EngineSound::StreamEnd]);
+    assert!(sounds(&machine.share_unwatch("a", 2, 6_000)).is_empty());
+    // A share nobody here watched ends quietly.
+    let effects = machine.socket_message(generation, state("a", Vec::new()), 7_000, UNIX);
+    assert!(sounds(&effects).is_empty());
+    // A watched sharer who leaves: the leaving and the stream's end.
+    let effects = machine.socket_message(generation, state("a", vec![shared(3)]), 8_000, UNIX);
+    assert_eq!(sounds(&effects), [EngineSound::StreamStart]);
+    machine.share_watch("a", 3, 8_100).unwrap();
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::Left {
+            u: "a".into(),
+            why: LeftWhy::Left,
+        },
+        9_000,
+        UNIX,
+    );
+    assert!(sounds(&effects).contains(&EngineSound::StreamEnd));
+    // The player's live share ends: its sound; one that never went live says nothing.
+    assert_eq!(
+        sounds(&machine.share_stop(1, 10_000)),
+        [EngineSound::ShareStop]
+    );
+    assert!(!machine.view(10_000, UNIX).share.live_now());
+    machine
+        .share_start(ShareSource::Game, "", 11_000, UNIX)
+        .unwrap();
+    assert!(sounds(&machine.share_stop(1, 11_500)).is_empty());
+}
+
+#[test]
+fn sharing_sounds_once_together_and_never_on_a_catch_up() {
+    let mut machine = ready();
+    let generation = live(&mut machine, Vec::new(), share_on());
+    share_live(&mut machine, generation, ShareSource::Game, 1, 2_000);
+    // Two shares that start within a second sound once.
+    let window = || ShareSource::Window { id: "0x1f".into() };
+    let effects = share_live(&mut machine, generation, window(), 2, 2_500);
+    assert!(sounds(&effects).is_empty());
+    // Both end together (Studio's switch): one sound.
+    let effects = machine.set_share_service(None, 5_000);
+    assert_eq!(sounds(&effects), [EngineSound::ShareStop]);
+    machine.set_share_service(
+        Some(ServiceShare {
+            per_user: 2,
+            max_preset: SharePreset::High,
+            open: true,
+            watch: true,
+        }),
+        5_100,
+    );
+    // Someone's share that the room's `hello` lists after a reconnect is no start.
+    let generation = come_back(&mut machine, generation, 6_000);
+    let effects = machine.socket_message(
+        generation,
+        hello_watching(
+            vec![person("me", Vec::new()), person("a", vec![shared(1)])],
+            &[],
+        ),
+        7_200,
+        UNIX,
+    );
+    assert!(sounds(&effects).is_empty());
+    // Studio's switch off ends what the player watches: its sound.
+    machine.share_watch("a", 1, 8_000).unwrap();
+    let effects = machine.set_share_service(None, 9_000);
+    assert_eq!(sounds(&effects), [EngineSound::StreamEnd]);
+}
+
+#[test]
+fn sharing_sounds_keep_voice_chat_sounds_off() {
+    let mut machine = ready();
+    machine.save_settings(
+        VoiceSettings {
+            sounds: false,
+            ..VoiceSettings::default()
+        },
+        0,
+    );
+    let generation = live(&mut machine, Vec::new(), share_on());
+    let effects = share_live(&mut machine, generation, ShareSource::Game, 1, 2_000);
+    assert!(sounds(&effects).is_empty());
+    let effects = machine.socket_message(generation, state("a", vec![shared(1)]), 3_000, UNIX);
+    assert!(sounds(&effects).is_empty());
+    assert!(sounds(&machine.share_stop(1, 4_000)).is_empty());
+}
+
+#[test]
+fn a_live_shares_still_picture_goes_to_the_room() {
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1)], share_on());
+    let jpeg = |len: usize| {
+        let mut bytes = vec![0xFF, 0xD8, 0xFF, 0xE0];
+        bytes.resize(len, 7);
+        ThumbJpeg(bytes)
+    };
+    machine
+        .share_start(ShareSource::Game, "", 2_000, UNIX)
+        .unwrap();
+    // Before the room took the share: nothing goes.
+    let effects = machine.share_event(
+        ShareEvent::Thumb {
+            n: 1,
+            jpg: jpeg(100),
+        },
+        2_000,
+    );
+    assert!(sent(&effects).is_empty());
+    let effects = machine.share_event(
+        ShareEvent::Offer {
+            n: 1,
+            sdp: Sdp::new("v=0 publisher"),
+        },
+        2_000,
+    );
+    machine.socket_message(generation, ack(open_rid(&effects), 1), 2_100, UNIX);
+    let effects = machine.share_event(ShareEvent::Thumb { n: 1, jpg: jpeg(6) }, 5_000);
+    assert_eq!(
+        sent(&effects),
+        [&ToRoom::ShareThumb {
+            n: 1,
+            jpg: "/9j/4AcH".into()
+        }]
+    );
+    // Not a JPEG, too large, or no such share: nothing.
+    for (n, jpg) in [
+        (1, ThumbJpeg(b"\x89PNG\r\n".to_vec())),
+        (1, jpeg(THUMB_MAX_BYTES + 1)),
+        (2, jpeg(100)),
+    ] {
+        assert!(sent(&machine.share_event(ShareEvent::Thumb { n, jpg }, 5_100)).is_empty());
+    }
+    // The room's times of the pictures: the player's own and someone else's.
+    machine.socket_message(
+        generation,
+        state("me", vec![with_th(1, UNIX + 5)]),
+        6_000,
+        UNIX,
+    );
+    machine.socket_message(
+        generation,
+        state("a", vec![with_th(1, UNIX + 30)]),
+        6_100,
+        UNIX,
+    );
+    let view = machine.view(6_200, UNIX).share;
+    assert_eq!(view.mine[0].th, Some(UNIX + 5));
+    assert_eq!(view.live[0].th, Some(UNIX + 30));
+    // The bytes never show in a log line.
+    assert_eq!(format!("{:?}", jpeg(6)), "<jpeg 6 bytes>");
+}
+
+#[test]
+fn crew_rooms_say_who_is_live() {
+    let mut machine = ready();
+    machine.crew_rooms(
+        "0123456789abcdef",
+        vec![CrewRoom {
+            id: "g0123456789abcdef".into(),
+            name: "Genel".into(),
+            ids: vec!["a".into(), "b".into()],
+            // Someone the list does not show is not told.
+            live: vec!["b".into(), "c".into()],
+            ..CrewRoom::default()
+        }],
+    );
+    let crews = machine.view(0, UNIX).crews;
+    assert_eq!(crews[0].rooms[0].live, ["b"]);
 }

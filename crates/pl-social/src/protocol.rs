@@ -230,6 +230,14 @@ pub struct Presence {
     /// SOC-NOTE (only to a connection that took `note1`, from a mutual friend): their status note.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<StatusNote>,
+    /// SHARE-LIVE (beside `voice`, only to friends, only while screen sharing is on): they share
+    /// their screen in a voice room now. Absent, or anything but `true`: no.
+    #[serde(
+        default,
+        skip_serializing_if = "std::ops::Not::not",
+        deserialize_with = "crate::voice::only_true"
+    )]
+    pub live: bool,
 }
 
 /// A field that may be absent (None), `null` (`Some(None)`) or a value: the outer `Option` says

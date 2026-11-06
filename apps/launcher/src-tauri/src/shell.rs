@@ -533,6 +533,10 @@ static TRAY_VOICE: Mutex<Option<(String, bool)>> = Mutex::new(None);
 #[cfg(desktop)]
 static TRAY_SHARING: AtomicBool = AtomicBool::new(false);
 
+/// SHARE-LIVE: the player is live (a share the room took): the tooltip says "Yayındasın".
+#[cfg(desktop)]
+static TRAY_LIVE: AtomicBool = AtomicBool::new(false);
+
 /// The tray menu in the interface's language (rebuilt when it changes, [`retitle_tray`]).
 #[cfg(desktop)]
 fn tray_menu<R: tauri::Runtime, M: Manager<R>>(
@@ -628,6 +632,16 @@ pub fn set_tray_sharing(app: &AppHandle, sharing: bool) {
     }
 }
 
+/// SHARE-LIVE: the player went live or stopped (`crate::voice::live`): the tooltip's "Yayındasın"
+/// follows. Waits for the main thread only when it changed (never on it).
+#[cfg(desktop)]
+pub fn set_tray_live(app: &AppHandle, live: bool) {
+    if TRAY_LIVE.swap(live, Ordering::Relaxed) != live {
+        let app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || refresh_afk_tray(&app));
+    }
+}
+
 /// The interface's language changed (`commands::app::app_set_language`): the tray menu and its
 /// tooltip follow. Waits for the main thread, so it must not run on it.
 #[cfg(desktop)]
@@ -710,6 +724,11 @@ pub fn refresh_afk_tray(app: &AppHandle) {
                 format!("Voice chat: {room}"),
             )
         });
+    }
+    // SHARE-LIVE: sharing the screen in it.
+    if TRAY_LIVE.load(Ordering::Relaxed) {
+        text.push('\n');
+        text.push_str(lang.pick("Yayındasın", "You're live"));
     }
     if *shown == text {
         return;

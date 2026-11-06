@@ -141,6 +141,15 @@ impl Native {
                 tracing::debug!(n, ?why, "share: no sound for a share");
                 self.voice.share_event(ShareEvent::AudioUnavailable { n });
             }
+            // SHARE-LIVE: the share's still picture: to the room, and kept here for the player's
+            // own hover card.
+            E::Thumb { n, jpg } => {
+                super::thumb::keep_own(n, &jpg);
+                self.voice.share_event(ShareEvent::Thumb {
+                    n,
+                    jpg: pl_voice::share::ThumbJpeg(jpg),
+                });
+            }
             // The panel shows the room's state, not the encoder's numbers; a stop is the machine's.
             E::Stats { .. } | E::Stopped { .. } => {}
         }
@@ -278,7 +287,11 @@ impl Publisher for Native {
                 n,
                 opts: opts(chosen),
             },
-            ShareCmd::Stop { n } => C::Stop { n },
+            ShareCmd::Stop { n } => {
+                // SHARE-LIVE: its still picture goes with it.
+                super::thumb::forget_own(n);
+                C::Stop { n }
+            }
         };
         self.controller.send(cmd);
     }

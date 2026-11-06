@@ -33,7 +33,7 @@ use crate::protocol::{ByeReason, ToGame};
 use crate::server::{Bridge, Endpoint};
 use crate::session::{
     CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, EmojiFn, KindsFn, LangFn, Msg,
-    PeopleChange, PeopleFn, Session, SocialActions, VoiceActFn, VoiceHooks,
+    PeopleChange, PeopleFn, Session, SocialActions, ThumbFn, VoiceActFn, VoiceHooks,
 };
 use crate::voice::{VoiceAct, VoiceFuture};
 
@@ -155,6 +155,10 @@ type EmojiSink = Arc<dyn Fn(bool) + Send + Sync>;
 /// returns, so two quick ones never change places; the future answers how it went.
 type VoiceSink = Arc<dyn Fn(VoiceAct) -> VoiceFuture + Send + Sync>;
 
+/// SHARE-LIVE: the launcher's still pictures of live shares (room, sharer, share), for the game's
+/// hover card.
+type ThumbSink = Arc<dyn Fn(String, String, u8) -> crate::voice::ThumbFuture + Send + Sync>;
+
 struct Running {
     id: u64,
     /// The bridge's port: names the session for [`Overlay::stop_for`].
@@ -240,6 +244,8 @@ struct Shared {
     emoji: Mutex<Option<EmojiSink>>,
     /// The launcher's voice chat, for the game's presses (VOICE-O).
     voice: Mutex<Option<VoiceSink>>,
+    /// SHARE-LIVE: the launcher's still pictures, for the game's hover card.
+    thumb: Mutex<Option<ThumbSink>>,
     /// A game's mod shows voice chat now (VOICE-O).
     voice_shown: AtomicBool,
     /// OVL-SHARE: the player shares and hides notifications while sharing ("Paylaşırken
@@ -290,6 +296,7 @@ impl Overlay {
                 lang: Mutex::new(None),
                 emoji: Mutex::new(None),
                 voice: Mutex::new(None),
+                thumb: Mutex::new(None),
                 voice_shown: AtomicBool::new(false),
                 share_quiet: Arc::new(AtomicBool::new(false)),
                 missed_shown: AtomicBool::new(false),
@@ -601,6 +608,8 @@ impl Overlay {
         let hub = self.clone();
         let act: VoiceActFn = Arc::new(move |press| hub.voice_act(press));
         let hub = self.clone();
+        let thumb: ThumbFn = Arc::new(move |room, user, n| hub.voice_thumb(room, user, n));
+        let hub = self.clone();
         let shown: ConnectedFn = Arc::new(move |on| hub.voice_report(id, on));
         let hub = self.clone();
         let kinds: KindsFn = Arc::new(move |kinds| hub.kinds_report(id, kinds));
@@ -623,6 +632,7 @@ impl Overlay {
                 act,
                 shown,
                 quiet: Arc::clone(&self.shared.share_quiet),
+                thumb,
             },
             Arc::clone(&self.shared.pictures),
         )
@@ -1049,6 +1059,30 @@ impl Overlay {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clone();
         sink.map(|sink| sink(act))
+    }
+
+    /// SHARE-LIVE: the launcher's still pictures for the game's hover card: `sink` answers one
+    /// for share `n` of a sharer in a room (the same as the launcher's own `share_thumb`).
+    pub fn on_thumb(
+        &self,
+        sink: impl Fn(String, String, u8) -> crate::voice::ThumbFuture + Send + Sync + 'static,
+    ) {
+        *self
+            .shared
+            .thumb
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
+    }
+
+    /// Asks the launcher for a still picture; none while the app did not wire it.
+    fn voice_thumb(&self, room: String, user: String, n: u8) -> Option<crate::voice::ThumbFuture> {
+        let sink = self
+            .shared
+            .thumb
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        sink.map(|sink| sink(room, user, n))
     }
 
     /// A session says whether its mod shows voice chat (a session already gone cannot).
