@@ -312,6 +312,19 @@ pub enum FromGame {
         #[serde(default)]
         n: u8,
     },
+    /// SHARE-LIVE (from a mod whose hello lists `voice` and `share`): the still picture of a live
+    /// share for the hover card: in the player's room (`room` the room's id, `u`/`n` as
+    /// `voice-share` listed it; the player's own share as `u` `@me`), or a crew room `voice-crews`
+    /// showed with `u` live in it (`n` 1). Answered with `voice-thumb` (`none` at once for anything
+    /// else); the launcher keeps an answer for 20 s, and asks for at most six in 20 s.
+    VoiceThumb {
+        #[serde(default)]
+        room: String,
+        #[serde(default)]
+        u: String,
+        #[serde(default)]
+        n: u8,
+    },
     /// OVL-SOC 2 (from a mod whose hello lists `people4`): the status switcher in the panel's
     /// header picked `status` (`online`, `dnd` or `invisible`); with SOC-NEXT on (`next` among
     /// the welcome's features) `dnd` and `invisible` come `for` one of the crew mute's durations
@@ -615,6 +628,7 @@ impl FromGame {
                 | Self::VoiceJoin { .. }
                 | Self::VoiceShareGame {}
                 | Self::VoiceShareStop { .. }
+                | Self::VoiceThumb { .. }
         )
     }
 
@@ -927,6 +941,17 @@ pub enum ToGame {
     /// it changes (an empty one once there is nothing more to show). Only to a mod that said
     /// `voice` and `share`.
     VoiceShare(VoiceShareShown),
+    /// SHARE-LIVE: the answer to `voice-thumb`, by the share it named: `kind` `image` with `png`
+    /// (the picture, at most 320 px on its long side, base64), `locked` (the player may not join
+    /// that room: a blurred lock, no picture) or `none` (no picture yet, or nothing to show).
+    VoiceThumb {
+        room: String,
+        u: String,
+        n: u8,
+        kind: &'static str,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        png: Option<String>,
+    },
     /// OVL-AVATARS: a person's picture for their face, the answer to `avatar-want` and again when it changes:
     /// `v` its version (the mod keeps a picture by person and this; `-` for none), `n` this connection's count of
     /// them (pictures are prepared side by side: an older one after a newer one is dropped), `png` the picture
@@ -1224,6 +1249,11 @@ pub struct FriendView {
     /// player's nickname for them (their menu says it; mentions use it).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub real: Option<String>,
+    /// SHARE-LIVE: they share their screen in a voice room now ("YAYINDA" beside the name; the
+    /// room is theirs to say, so the card shows no picture unless they are in the player's room or
+    /// a crew room `voice-crews` showed).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub live: bool,
 }
 
 /// Someone who asked the player to be friends (OVL-SOC 2, `lists`' `requests`).
@@ -1758,6 +1788,9 @@ pub struct VoicePersonShown {
     /// What the player's role may do to them (the person menu shows only these rows).
     #[serde(skip_serializing_if = "VoiceCan::is_none")]
     pub can: VoiceCan,
+    /// SHARE-LIVE: they share their screen now ("YAYINDA"; `voice-share` has the share).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub live: bool,
 }
 
 /// A leader's or moderator's rows on someone (V2). "Taşı" stays in the launcher.
@@ -1787,6 +1820,10 @@ pub struct VoicePersonRef {
     /// Absent for someone the lists do not know.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub name: String,
+    /// SHARE-LIVE (a crew room in `voice-crews`): they share their screen now ("YAYINDA"; the
+    /// hover card asks `voice-thumb` with the room and `n` 1).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub live: bool,
 }
 
 /// A call or invite ringing for the player (V2).
@@ -1903,6 +1940,10 @@ pub struct VoiceMyShareShown {
     /// How many watch.
     #[serde(skip_serializing_if = "is_zero")]
     pub watchers: u16,
+    /// SHARE-LIVE: when its last still picture went to the room (Unix seconds); absent before
+    /// the first. `voice-thumb` answers the player's own from the launcher.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub th: Option<i64>,
 }
 
 fn is_zero(value: &u16) -> bool {
@@ -1915,6 +1956,15 @@ pub struct VoiceLiveShown {
     pub person: String,
     /// `game`, `window` or `screen`.
     pub kind: &'static str,
+    /// SHARE-LIVE: the share's number (what `voice-thumb` names).
+    pub n: u8,
+    /// SHARE-LIVE: how many watch (the hover card's count).
+    #[serde(skip_serializing_if = "is_zero")]
+    pub watchers: u16,
+    /// SHARE-LIVE: when its last still picture came (Unix seconds); absent before the first. A
+    /// newer one than the card's asks `voice-thumb` again.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub th: Option<i64>,
 }
 
 fn is_good(quality: &pl_voice::view::VoiceQuality) -> bool {
@@ -2571,6 +2621,7 @@ mod tests {
             voice: None,
             dnd: true,
             real: None,
+            live: false,
         })
         .unwrap();
         assert_eq!(marked["marks"], serde_json::json!(["admin", "premium"]));
@@ -2659,6 +2710,7 @@ mod tests {
             voice: None,
             dnd: false,
             real: None,
+            live: false,
         }))
         .unwrap();
         assert_eq!(friend["where"], "projects");
@@ -2706,6 +2758,7 @@ mod tests {
             voice: None,
             dnd: false,
             real: None,
+            live: false,
         }))
         .unwrap();
         assert_eq!(inviting["world"], serde_json::json!({"guests":1,"max":7}));

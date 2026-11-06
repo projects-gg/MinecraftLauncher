@@ -39,6 +39,10 @@ pub const MAX_VOLUME: u16 = 200;
 /// What the app's voice chat answers a press with.
 pub type VoiceFuture = Pin<Box<dyn Future<Output = VoiceAnswer> + Send>>;
 
+/// SHARE-LIVE: what the app answers a still picture request with (the launcher's own
+/// `share_thumb`: its 20 s keep, the player's own pictures from this computer).
+pub type ThumbFuture = Pin<Box<dyn Future<Output = pl_social::VoiceThumb> + Send>>;
+
 /// A press in the game's voice chat, for the launcher's (the page's commands of the same name).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VoiceAct {
@@ -312,9 +316,10 @@ pub fn crews_of<'a>(
     if !(state.available && state.enabled) {
         return Vec::new();
     }
-    let person = |id: &String| VoicePersonRef {
+    let person = |id: &String, live: bool| VoicePersonRef {
         id: id.clone(),
         name: name_of(id).unwrap_or_default(),
+        live,
     };
     crews
         .into_iter()
@@ -334,7 +339,12 @@ pub fn crews_of<'a>(
                             id: room.id.clone(),
                             name: (!room.general).then(|| shown_room_name(&room.name, english)),
                             general: room.general,
-                            people: room.people.iter().map(person).collect(),
+                            // SHARE-LIVE: who shares there now.
+                            people: room
+                                .people
+                                .iter()
+                                .map(|id| person(id, room.live.contains(id)))
+                                .collect(),
                             max: room.max.filter(|max| *max < entry.crew_max),
                             full: limit > 0 && room.people.len() >= usize::from(limit),
                         }
@@ -434,6 +444,8 @@ pub fn view_of(
             .unwrap_or_default()
     };
     let top = volume_top(Some(state));
+    // SHARE-LIVE: who shares in the room now (only while the room shares).
+    let live = |id: &str| state.share.on && state.share.live.iter().any(|share| share.person == id);
     let room = state.room.as_ref().map(|room| VoiceRoomShown {
         id: room.id.clone(),
         kind: room.kind,
@@ -473,6 +485,7 @@ pub fn view_of(
                     kick: person.can.kick,
                     moderator: person.can.moderator,
                 },
+                live: live(&person.id),
             })
             .collect(),
         ringing: room
@@ -481,6 +494,7 @@ pub fn view_of(
             .map(|ring| VoicePersonRef {
                 id: ring.to.clone(),
                 name: name(&ring.to),
+                live: false,
             })
             .collect(),
     });
@@ -490,6 +504,7 @@ pub fn view_of(
         calling: state.calling.as_ref().map(|calling| VoicePersonRef {
             id: calling.friend.clone(),
             name: name(&calling.friend),
+            live: false,
         }),
         rings: state
             .rings
@@ -575,6 +590,7 @@ pub fn share_of(state: &VoiceState) -> VoiceShareShown {
             kind: kind_name(mine.kind),
             live: mine.phase != ShareMinePhase::Starting,
             watchers: u16::try_from(mine.watchers.len()).unwrap_or(u16::MAX),
+            th: mine.th,
         })
         .collect();
     let game_shared = share.mine.iter().any(|mine| mine.kind == ShareKind::Game);
@@ -602,9 +618,92 @@ pub fn share_of(state: &VoiceState) -> VoiceShareShown {
             .map(|live| VoiceLiveShown {
                 person: live.person.clone(),
                 kind: kind_name(live.kind),
+                n: live.n,
+                watchers: live.watchers,
+                th: live.th,
             })
             .collect(),
     }
+}
+
+/// SHARE-LIVE: the player in `voice-thumb` (as in `avatar-want`).
+pub const ME: &str = "@me";
+
+/// SHARE-LIVE: whether the game may ask for the still picture of share `n` of `u` in `room`: a
+/// share in the player's own room (`voice-share` listed it; the player's own as [`ME`]), or
+/// someone live in one of the crews' rooms `voice-crews` showed. Anything else is asked of nobody.
+pub fn thumb_allowed(state: &VoiceState, room: &str, u: &str, n: u8) -> bool {
+    if !(state.available && state.enabled) || n == 0 {
+        return false;
+    }
+    let in_room = state.room.as_ref().is_some_and(|mine| mine.id == room)
+        && state.share.on
+        && if u == ME {
+            state.share.mine.iter().any(|share| share.n == n)
+        } else {
+            state
+                .share
+                .live
+                .iter()
+                .any(|share| share.person == u && share.n == n)
+        };
+    let in_crew_room = state
+        .crews
+        .iter()
+        .flat_map(|crew| crew.rooms.iter())
+        .any(|crew_room| crew_room.id == room && crew_room.live.iter().any(|id| id == u));
+    in_room || in_crew_room
+}
+
+/// SHARE-LIVE: the answer to `voice-thumb` (a picture becomes a PNG the mod can draw: Minecraft's
+/// own image reader takes PNG only; one that does not read is none).
+pub fn thumb_frame(room: String, u: String, n: u8, answer: &pl_social::VoiceThumb) -> ToGame {
+    use base64::Engine as _;
+    let (kind, png) = match answer {
+        pl_social::VoiceThumb::Image(jpg) => match png_of(jpg) {
+            Some(png) => (
+                "image",
+                Some(base64::engine::general_purpose::STANDARD.encode(png)),
+            ),
+            None => ("none", None),
+        },
+        pl_social::VoiceThumb::Locked => ("locked", None),
+        pl_social::VoiceThumb::None => ("none", None),
+    };
+    ToGame::VoiceThumb {
+        room,
+        u,
+        n,
+        kind,
+        png,
+    }
+}
+
+/// A still picture (JPEG, at most 24 KB and 320 px on its long side) as PNG; none when it does
+/// not read or is larger than a picture the room keeps.
+fn png_of(jpg: &[u8]) -> Option<Vec<u8>> {
+    use image::ImageEncoder as _;
+    if !pl_social::VoiceThumb::is_picture(jpg) {
+        return None;
+    }
+    let mut reader =
+        image::ImageReader::with_format(std::io::Cursor::new(jpg), image::ImageFormat::Jpeg);
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(640);
+    limits.max_image_height = Some(640);
+    limits.max_alloc = Some(4 << 20);
+    reader.limits(limits);
+    let picture = reader.decode().ok()?.into_rgb8();
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png)
+        .write_image(
+            picture.as_raw(),
+            picture.width(),
+            picture.height(),
+            image::ExtendedColorType::Rgb8,
+        )
+        .ok()?;
+    Some(png)
 }
 
 /// Cards keep their words to themselves now (OVL-SHARE): the player shares the game or a whole
@@ -1292,6 +1391,7 @@ mod tests {
                     people: vec!["u-kaan".into(), "u-x".into()],
                     max: None,
                     own: false,
+                    live: Vec::new(),
                 },
                 VoiceCrewRoom {
                     id: "c1111111111111111".into(),
@@ -1300,6 +1400,7 @@ mod tests {
                     people: vec!["f-ayse".into()],
                     max: None,
                     own: false,
+                    live: Vec::new(),
                 },
             ],
             can_add: true,
@@ -1494,6 +1595,7 @@ mod tests {
             fps: 30,
             watchers: 1,
             since: 1_800_000_000,
+            th: Some(1_800_000_060),
         }];
         state
     }
@@ -1514,23 +1616,114 @@ mod tests {
             fps: 30,
             watchers: (0..watchers).map(|i| format!("u-{i}")).collect(),
             since: 1_800_000_000,
+            th: None,
         }
+    }
+
+    /// SHARE-LIVE: who shares shows on the room's and the crew rooms' rows; the hover card's
+    /// picture is asked for only for a share the state shows, and comes as a PNG.
+    #[test]
+    fn live_rows_and_the_hover_cards_picture() {
+        use base64::Engine as _;
+        let mut state = sharing_state();
+        let view = view_of(&state, false, None, false, names, |_| None);
+        let room = view.room.unwrap();
+        assert!(room.people.iter().all(|p| p.live == (p.id == "u-kaan")));
+        let row = |id: &str| {
+            serde_json::to_value(room.people.iter().find(|p| p.id == id).unwrap()).unwrap()
+        };
+        assert_eq!(row("u-kaan")["live"], json!(true));
+        assert!(row("u-x").get("live").is_none());
+        // Crew rooms: their live lists' people.
+        state.crews = crew_state().crews;
+        state.crews[0].rooms[1].live = vec!["f-ayse".into()];
+        let crews = crews_of(&state, ["t-gk"], false, names);
+        assert!(crews[0].rooms[1].people[0].live);
+        assert!(crews[0].rooms[0].people.iter().all(|p| !p.live));
+        // The picture: a share in the player's room (theirs as `@me`), or someone live in a crew
+        // room the game was shown.
+        let room_id = state.room.as_ref().unwrap().id.clone();
+        assert!(thumb_allowed(&state, &room_id, "u-kaan", 1));
+        assert!(!thumb_allowed(&state, &room_id, "u-kaan", 2));
+        assert!(!thumb_allowed(&state, &room_id, "u-x", 1));
+        assert!(!thumb_allowed(&state, &room_id, ME, 1));
+        state.share.mine = vec![my_share(1, ShareKind::Game, ShareMinePhase::Live, 0)];
+        assert!(thumb_allowed(&state, &room_id, ME, 1));
+        assert!(thumb_allowed(&state, "c1111111111111111", "f-ayse", 1));
+        assert!(!thumb_allowed(&state, "c0123456789abcdef", "f-ayse", 1));
+        state.share.on = false;
+        assert!(!thumb_allowed(&state, &room_id, "u-kaan", 1));
+        // The answer: a PNG the game can draw, the lock, or nothing.
+        let mut jpg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpg, 70)
+            .encode(&[90u8; 32 * 18 * 3], 32, 18, image::ExtendedColorType::Rgb8)
+            .unwrap();
+        let asked: FromGame =
+            serde_json::from_value(json!({"t": "voice-thumb", "room": "r", "u": "u-kaan", "n": 1}))
+                .unwrap();
+        assert_eq!(
+            asked,
+            FromGame::VoiceThumb {
+                room: "r".into(),
+                u: "u-kaan".into(),
+                n: 1
+            }
+        );
+        let frame = serde_json::to_value(thumb_frame(
+            "r".into(),
+            "u-kaan".into(),
+            1,
+            &pl_social::VoiceThumb::Image(jpg),
+        ))
+        .unwrap();
+        assert_eq!(
+            (frame["t"].as_str(), frame["kind"].as_str()),
+            (Some("voice-thumb"), Some("image"))
+        );
+        let png = base64::engine::general_purpose::STANDARD
+            .decode(frame["png"].as_str().unwrap())
+            .unwrap();
+        let picture = image::load_from_memory_with_format(&png, image::ImageFormat::Png).unwrap();
+        assert_eq!((picture.width(), picture.height()), (32, 18));
+        assert_eq!(
+            serde_json::to_value(thumb_frame(
+                "r".into(),
+                "u".into(),
+                1,
+                &pl_social::VoiceThumb::Locked
+            ))
+            .unwrap(),
+            json!({"t": "voice-thumb", "room": "r", "u": "u", "n": 1, "kind": "locked"})
+        );
+        // Something that is no picture is none.
+        let broken = thumb_frame(
+            "r".into(),
+            "u".into(),
+            1,
+            &pl_social::VoiceThumb::Image(vec![0xFF, 0xD8, 0xFF, 0]),
+        );
+        assert_eq!(serde_json::to_value(broken).unwrap()["kind"], "none");
     }
 
     #[test]
     fn sharing_shows_who_is_live_the_game_button_and_the_players_own_shares() {
         let mut state = sharing_state();
+        // SHARE-LIVE: with the share's number, its watchers and its picture's time.
         assert_eq!(
             serde_json::to_value(ToGame::VoiceShare(share_of(&state))).unwrap(),
             json!({"t": "voice-share", "game": "ready",
-                   "live": [{"person": "u-kaan", "kind": "window"}]})
+                   "live": [{"person": "u-kaan", "kind": "window", "n": 1, "watchers": 1,
+                             "th": 1_800_000_060_i64}]})
         );
         // The game shared: no "Oyunu paylaş", the share with how many watch.
         state.share.mine = vec![my_share(1, ShareKind::Game, ShareMinePhase::Live, 2)];
+        state.share.mine[0].th = Some(1_800_000_030);
         assert_eq!(
             serde_json::to_value(share_of(&state)).unwrap(),
-            json!({"mine": [{"n": 1, "kind": "game", "live": true, "watchers": 2}],
-                   "live": [{"person": "u-kaan", "kind": "window"}]})
+            json!({"mine": [{"n": 1, "kind": "game", "live": true, "watchers": 2,
+                             "th": 1_800_000_030_i64}],
+                   "live": [{"person": "u-kaan", "kind": "window", "n": 1, "watchers": 1,
+                             "th": 1_800_000_060_i64}]})
         );
         // A window from the launcher's picker: the game may still go, while one more may.
         state.share.mine = vec![my_share(2, ShareKind::Window, ShareMinePhase::Starting, 0)];
