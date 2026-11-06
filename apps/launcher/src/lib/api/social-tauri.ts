@@ -1,5 +1,4 @@
 // Tauri implementation of `api.social`: maps the generated bindings onto the UI shapes.
-import { listen } from "@tauri-apps/api/event";
 import {
   type AfkNotice_Serialize,
   type ChatCardView,
@@ -31,6 +30,7 @@ import {
   type TeamRequestView,
   type TeamView,
 } from "@/bindings";
+import { listen } from "@/lib/api/listen";
 import type {
   ChatCard,
   ChatChange,

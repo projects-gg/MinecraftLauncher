@@ -7,7 +7,6 @@
 // (`enabled: false`) until the signed config's `features.worlds` and the friends service's
 // `worlds` are both on. A failed command rejects with a `HostCommandError` (`message` in the
 // player's language; `code` and `details` for "Ayrıntıları kopyala").
-import { listen } from "@tauri-apps/api/event";
 import {
   type HostNotice as BindingNotice,
   type HostPlace as BindingPlace,
@@ -15,6 +14,7 @@ import {
   type CmdError,
   commands,
 } from "@/bindings";
+import { listen } from "@/lib/api/listen";
 import type { HostApi, HostNotice, HostPlace, HostView } from "./host-types";
 
 /** A failed command: friendly `message`, plus `code`/`details` for "copy details". */

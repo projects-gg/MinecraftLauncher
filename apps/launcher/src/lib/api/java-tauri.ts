@@ -1,5 +1,4 @@
 // Tauri implementation of `api.java`: maps the generated bindings onto the UI shapes.
-import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   type CmdError,
@@ -8,6 +7,7 @@ import {
   type JavaPromptView,
   type JavaRuntimeView,
 } from "@/bindings";
+import { listen } from "@/lib/api/listen";
 import { detectOs } from "@/lib/platform";
 import type { JavaApi, JavaPrompt, JavaRuntime } from "./java-types";
 import { ModCenterCommandError } from "./modcenter-tauri";
