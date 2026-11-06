@@ -68,6 +68,7 @@ export const enShare = {
     mark: "Live: {{kind}}",
     watch: "Watch",
     watchLabel: "Watch {{name}}'s stream",
+    watchItem: "Watch stream",
     unshare: "Stop their share",
   },
   tag: "LIVE",

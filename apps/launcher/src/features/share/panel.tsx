@@ -167,7 +167,7 @@ function WhoCanShare() {
 }
 
 /** A person's first share the player does not watch yet. */
-function unwatched(shares: VoiceLiveShare[], watching: { person: string; n: number }[]) {
+export function unwatched(shares: VoiceLiveShare[], watching: { person: string; n: number }[]) {
   return shares.find((s) => !watching.some((w) => w.person === s.person && w.n === s.n)) ?? null;
 }
 
