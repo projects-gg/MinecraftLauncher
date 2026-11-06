@@ -86,8 +86,10 @@ async function rest(tag: HTMLElement) {
   await act(async () => {
     vi.advanceTimersByTime(360);
   });
+  // The picture's answer passes a few promises (asked, decoded, kept): let them all settle, however
+  // busy the machine is.
   await act(async () => {
-    await Promise.resolve();
+    for (let turn = 0; turn < 8; turn++) await Promise.resolve();
   });
 }
 
