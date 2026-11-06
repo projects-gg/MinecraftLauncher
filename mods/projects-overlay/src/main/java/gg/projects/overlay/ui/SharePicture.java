@@ -33,6 +33,8 @@ final class SharePicture {
     private static int serial;
 
     private int decodingAt = -1;
+    /** The answer that did not decode: not tried again until a newer one comes. */
+    private int failedAt = -1;
     private CompletableFuture<NativeImage> pending;
     private int shownAt = -1;
     private Identifier shown;
@@ -41,7 +43,8 @@ final class SharePicture {
 
     /** The picture for {@code thumb} (the last one while a newer decodes), or null: none yet, none at all. */
     Identifier texture(VoiceState.Thumb thumb) {
-        if (thumb != null && thumb.image() && thumb.at() != shownAt && thumb.at() != decodingAt) {
+        if (thumb != null && thumb.image() && thumb.at() != shownAt && thumb.at() != decodingAt
+            && thumb.at() != failedAt) {
             cancel();
             decodingAt = thumb.at();
             byte[] picture = thumb.picture();
@@ -52,7 +55,9 @@ final class SharePicture {
             int at = decodingAt;
             pending = null;
             decodingAt = -1;
-            if (image != null) {
+            if (image == null) {
+                failedAt = at;
+            } else {
                 release();
                 Identifier id = Identifier.fromNamespaceAndPath(OverlayClient.MOD_ID, "share-preview/" + (++serial));
                 width = image.getWidth();

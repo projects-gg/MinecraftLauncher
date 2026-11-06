@@ -695,7 +695,7 @@
   "projects_overlay.share.kind.window": "Window",
   "projects_overlay.share.kind.screen": "Screen",
   "projects_overlay.share.preview.locked": "You can't join this room.",
-  "projects_overlay.share.preview.private": "Only people in the call can watch.",
+  "projects_overlay.share.preview.private": "Only people in the room can watch.",
   "projects_overlay.share.preview.full": "The room is full.",
   "projects_overlay.share.note.off": "Screen sharing isn't available right now.",
   "projects_overlay.share.note.unsupported": "This computer can't share.",
