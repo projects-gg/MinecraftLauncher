@@ -100,7 +100,6 @@ public final class Protocol {
             features.add(CHAT3);
             features.add(CARDS2);
             features.add(SHARE);
-            features.add(LIVE);
         }
         features.add(LANG);
         features.add(EMOJI);
@@ -542,20 +541,16 @@ public final class Protocol {
     }
 
     /**
-     * SHARE-LIVE: the hello feature of a mod that shows "YAYINDA" and its preview beside {@link #SHARE}: it hears
-     * {@code live} on people's rows, {@code w}/{@code th} on {@code voice-share}'s shares and {@code voice-share-thumb},
-     * and sends {@link #voiceShareThumb}.
+     * SHARE-LIVE (a mod that says {@link #VOICE} and {@link #SHARE}): the live card on {@code u}'s "YAYINDA" opened: the
+     * still picture of share {@code n} in {@code room} (the player's room as {@code voice-share} lists it, or a crew room
+     * {@code voice-crews} shows {@code u} live in, {@code n} 1). The launcher answers {@code voice-thumb} (a small PNG,
+     * locked or none). Sent once per opening, and again only when the room's picture time moved while it stays open.
      */
-    public static final String LIVE = "live";
-
-    /**
-     * SHARE-LIVE: the preview card opened on {@code person}'s "YAYINDA": the launcher finds their room and share itself
-     * and answers {@code voice-share-thumb} (a small JPEG, locked or none). Sent once per opening, and again only when
-     * the room's picture time moved while it stays open.
-     */
-    public static JsonObject voiceShareThumb(String person) {
-        JsonObject o = message("voice-share-thumb");
-        o.addProperty("person", person);
+    public static JsonObject voiceThumb(String room, String u, int n) {
+        JsonObject o = message("voice-thumb");
+        o.addProperty("room", room);
+        o.addProperty("u", u);
+        o.addProperty("n", n);
         return o;
     }
 

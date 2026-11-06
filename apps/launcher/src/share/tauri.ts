@@ -38,9 +38,10 @@ export const tauriShare: ShareApi = {
     return answer.refused === null;
   },
   // SHARE-LIVE: the launcher asks the friends service (the page never sees its token) and keeps
-  // an answer 20 s; a launcher without the command answers nothing.
+  // an answer 20 s; a launcher without the command answers nothing. Someone outside the player's
+  // room has one share as far as the lists know: the first (LIVE-R's `share_thumb` takes `n` 1).
   thumb: (room, user, n) =>
-    invoke<ShareThumb>("share_thumb", { room, user, n }).catch(
+    invoke<ShareThumb>("share_thumb", { room, user, n: n ?? 1 }).catch(
       (): ShareThumb => ({ kind: "none" }),
     ),
   onNotice: (listener) => {

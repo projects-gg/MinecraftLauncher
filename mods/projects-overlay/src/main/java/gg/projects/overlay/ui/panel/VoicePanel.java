@@ -109,9 +109,9 @@ final class VoicePanel {
             }
 
             @Override
-            public void preview(String person) {
+            public void preview(String room, String person, int n) {
                 // SHARE-LIVE: the card on someone's "YAYINDA" asks the launcher for their picture.
-                overlay.voiceShareThumb(person);
+                overlay.voiceThumb(room, person, n);
             }
         });
         pageMic = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("voice.room.mic"), Icon.MIC,

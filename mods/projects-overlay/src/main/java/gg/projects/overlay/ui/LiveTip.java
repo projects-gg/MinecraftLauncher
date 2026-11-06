@@ -38,9 +38,9 @@ public final class LiveTip {
     private static final int GAP = 2;
     private static final int FACE = 12;
 
-    /** Asks the launcher for someone's picture ({@code voice-share-thumb}). */
+    /** Asks the launcher for share {@code n} of {@code u} in {@code room} ({@code voice-thumb}). */
     public interface Asker {
-        void ask(String person);
+        void ask(String room, String u, int n);
     }
 
     private String person;
@@ -55,6 +55,8 @@ public final class LiveTip {
     private long closedAt = Long.MIN_VALUE / 2;
     private boolean asked;
     private long askedTh;
+    /** Why the card is locked without asking (a friend's own call: {@code private}), or null. */
+    private String lockedHere;
     private VoiceState voice;
     private final SharePicture picture = new SharePicture();
     // Laid out for one width, name, line and language.
@@ -70,11 +72,12 @@ public final class LiveTip {
 
     /**
      * Follows what the pointer rests on this frame: {@code person}'s "YAYINDA" drawn at {@code x} on the row from
-     * {@code top} to {@code bottom} ({@code name}, their {@code face}, {@code meta}: what they share and how many watch,
-     * {@code th}: the room's picture time, 0 when not known), or nothing ({@code person} null).
+     * {@code top} to {@code bottom} ({@code name}, their {@code face}, {@code meta}: what they share and how many watch;
+     * their share {@code n} in {@code room}, null when the player may not know it, then {@code lockedWhy} says why the
+     * card is locked; {@code th}: the room's picture time, 0 when not known), or nothing ({@code person} null).
      */
-    public void track(VoiceState voice, String person, Face face, String name, String meta, long th, float x,
-        float top, float bottom, long now, Asker asker) {
+    public void track(VoiceState voice, String person, Face face, String name, String meta, String room, int n,
+        String lockedWhy, long th, float x, float top, float bottom, long now, Asker asker) {
         if (now - trackedAt > STALE_MS && this.person != null) {
             // The list was away (the panel closed, another page): the card went with it.
             close(now);
@@ -102,10 +105,11 @@ public final class LiveTip {
         this.face = face;
         this.name = name == null ? "" : name;
         this.meta = meta == null ? "" : meta;
-        if (now - since >= DELAY_MS && (!asked || (th > 0 && th != askedTh))) {
+        this.lockedHere = room == null ? (lockedWhy == null ? "private" : lockedWhy) : null;
+        if (room != null && now - since >= DELAY_MS && (!asked || (th > 0 && th != askedTh))) {
             asked = true;
             askedTh = th;
-            asker.ask(person);
+            asker.ask(room, person, n);
         }
     }
 
@@ -173,8 +177,8 @@ public final class LiveTip {
         if (!open(now) || face == null) {
             return;
         }
-        VoiceState.Thumb thumb = voice == null ? null : voice.thumb(person);
-        boolean locked = thumb != null && thumb.locked();
+        VoiceState.Thumb thumb = voice == null || lockedHere != null ? null : voice.thumb(person);
+        boolean locked = lockedHere != null || thumb != null && thumb.locked();
         int imageW = (int) Math.min(IMAGE_W, Math.max(80, right - left - 2 * PAD));
         int imageH = Math.round(imageW * 9f / 16f);
         float w = imageW + 2 * PAD;
@@ -189,7 +193,7 @@ public final class LiveTip {
         }
         x = Draw.snap(x);
         y = Draw.snap(y);
-        layout(imageW, locked ? (thumb.why().isEmpty() ? "locked" : thumb.why()) : null);
+        layout(imageW, locked ? (lockedHere != null ? lockedHere : "locked") : null);
         float t = Math.min(1f, (now - since - DELAY_MS) / (float) FADE_MS);
         Draw.pushAlpha(Ease.OUT.at(t));
         Draw.frame(g, Frames.POPOVER, x, y, w, h);

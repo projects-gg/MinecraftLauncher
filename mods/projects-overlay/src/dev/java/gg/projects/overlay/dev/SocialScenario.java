@@ -529,8 +529,8 @@ public final class SocialScenario implements ClientModInitializer {
 
     /**
      * SHARE-LIVE ({@code -Dprojects.overlay.dev.script=live}, the mock's {@code --voice --people --people2 --share
-     * --thumb <jpeg>}): "YAYINDA" after PixelAvci's name on the room page and the card the driver's pointer opens on it
-     * (the stream's picture, "Oyun, 2 kişi izliyor"), then KorAtesi's in the friend list, live in a call of their own:
+     * --thumb <png>}): "YAYINDA" after PixelAvci's name on the room page and the card the driver's pointer opens on it
+     * (the stream picture, "Oyun, 2 kişi izliyor"), then NetherKral in the friend list, live in a call of their own:
      * the card locked ({@code live-NN-<name>.png}).
      */
     private void script8() {
@@ -551,7 +551,7 @@ public final class SocialScenario implements ClientModInitializer {
             need(mc).showPage(OverlayScreen.Page.FRIENDS);
         });
         step(0.9, "shot friends", mc -> shot(mc, "friends-tag"));
-        step(0.1, "point at the friend's tag", mc -> livePoint(need(mc).friendLiveChip("f-can")));
+        step(0.1, "point at the friend's tag", mc -> livePoint(need(mc).friendLiveChip("f-mert")));
         step(1.4, "shot friend card", mc -> shot(mc, "friends-card"));
         step(0.1, "close", mc -> {
             PanelInput.clearPointer();

@@ -414,9 +414,9 @@ public final class OverlayScreen extends Screen {
             }
 
             @Override
-            public void preview(String friendId) {
+            public void preview(String room, String friendId, int n) {
                 // SHARE-LIVE: the card on a friend's "YAYINDA" asks the launcher for their stream's picture.
-                overlay.voiceShareThumb(friendId);
+                overlay.voiceThumb(room, friendId, n);
             }
 
             @Override

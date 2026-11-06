@@ -47,8 +47,8 @@ public final class VoiceList extends PanelWidget {
     public interface Actions {
         void menu(String id, String name, PersonMenu.Anchor anchor, boolean keys);
 
-        /** SHARE-LIVE: the preview card on someone's "YAYINDA" opened: asks the launcher for their picture. */
-        default void preview(String person) {
+        /** SHARE-LIVE: the card on someone's "YAYINDA" opened: asks the launcher for share {@code n}'s picture. */
+        default void preview(String room, String person, int n) {
         }
     }
 
@@ -526,20 +526,24 @@ public final class VoiceList extends PanelWidget {
     /** SHARE-LIVE: what the pointer rests on this frame, for the live card (drawn last, over the page). */
     private void trackLive(Row row, float x, float y, long now) {
         if (row == null) {
-            liveTip.track(voice, null, null, null, null, 0L, 0f, 0f, 0f, now, actions::preview);
+            liveTip.track(voice, null, null, null, null, null, 0, null, 0L, 0f, 0f, 0f, now, actions::preview);
             return;
         }
         VoiceState.LiveShare share = voice == null ? null : voice.liveShare(row.id);
+        VoiceState.Room room = voice == null ? null : voice.room();
         String meta = "";
         long th = 0L;
+        int n = 1;
         if (share != null) {
             meta = Texts.str("share.kind." + share.kind());
             if (share.watchers() > 0) {
                 meta = meta + ", " + Texts.str("share.watchers", share.watchers());
             }
             th = share.th();
+            n = share.n();
         }
-        liveTip.track(voice, row.id, row.face, row.label, meta, th, x, y + 1, y + ROW_H - 1, now, actions::preview);
+        liveTip.track(voice, row.id, row.face, row.label, meta, room == null ? null : room.id(), n, null, th, x, y + 1,
+            y + ROW_H - 1, now, actions::preview);
     }
 
     /** SHARE-LIVE: the live card over the page ({@code left..right}, {@code top..bottom}: the room page's box). */

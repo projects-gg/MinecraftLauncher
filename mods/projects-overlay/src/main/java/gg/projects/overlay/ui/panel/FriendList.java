@@ -92,8 +92,8 @@ public final class FriendList extends PanelWidget {
         /** "Katıl" on a friend. */
         void join(String friendId);
 
-        /** SHARE-LIVE: the card on a friend's "YAYINDA" opened: asks the launcher for their stream's picture. */
-        default void preview(String friendId) {
+        /** SHARE-LIVE: the card on a friend's "YAYINDA" opened: asks the launcher for share {@code n}'s picture. */
+        default void preview(String room, String friendId, int n) {
         }
 
         /** SHARE-LIVE: where the launcher's preview answers are (null: no card). */
@@ -935,7 +935,8 @@ public final class FriendList extends PanelWidget {
             }
             bubble.track(null, false, now);
             markTip.track(null, null, 0f, 0f, now);
-            liveTip.track(actions.voiceState(), null, null, null, null, 0L, 0f, 0f, 0f, now, actions::preview);
+            liveTip.track(actions.voiceState(), null, null, null, null, null, 0, null, 0L, 0f, 0f, 0f, now,
+                actions::preview);
             drawNote(g, now);
             return;
         }
@@ -1122,13 +1123,40 @@ public final class FriendList extends PanelWidget {
                 float mid = y + (row.lone ? ROW_H / 2f : NAME_MID);
                 float x = liveX(row, tx + TagChip.room(row.chip));
                 if (y >= getY() && y + ROW_H <= getY() + getHeight() && liveChip.contains(mouseX, mouseY, x, mid)) {
-                    liveTip.track(voice, row.id, row.face, row.person, "", 0L, x, y + 1, y + ROW_H - 1, now,
-                        actions::preview);
+                    trackFriend(voice, row, x, y, now);
                     return;
                 }
             }
         }
-        liveTip.track(voice, null, null, null, null, 0L, 0f, 0f, 0f, now, actions::preview);
+        liveTip.track(voice, null, null, null, null, null, 0, null, 0L, 0f, 0f, 0f, now, actions::preview);
+    }
+
+    /**
+     * A friend's card: in the player's room, the room's share (what it shows, who watches); in a crew room the player's
+     * crews show, that room ({@code n} 1; full: locked here); anywhere else a call of their own: locked, nothing asked.
+     */
+    private void trackFriend(VoiceState voice, Row row, float x, float y, long now) {
+        VoiceState.Room room = voice.room();
+        VoiceState.LiveShare share = voice.liveShare(row.id);
+        if (room != null && share != null && room.person(row.id) != null) {
+            String meta = Texts.str("share.kind." + share.kind());
+            if (share.watchers() > 0) {
+                meta = meta + ", " + Texts.str("share.watchers", share.watchers());
+            }
+            liveTip.track(voice, row.id, row.face, row.person, meta, room.id(), share.n(), null, share.th(), x, y + 1,
+                y + ROW_H - 1, now, actions::preview);
+            return;
+        }
+        String crewRoom = voice.crewLiveRoom(row.id);
+        VoiceState.CrewRoom found = crewRoom == null ? null : voice.crewRoom(crewRoom);
+        if (found != null && !found.full()) {
+            liveTip.track(voice, row.id, row.face, row.person,
+                found.general() || found.name() == null ? VoicePanel.WORDS.general() : found.name(),
+                crewRoom, 1, null, 0L, x, y + 1, y + ROW_H - 1, now, actions::preview);
+            return;
+        }
+        liveTip.track(voice, row.id, row.face, row.person, "", null, 0, found != null ? "full" : "private", 0L, x,
+            y + 1, y + ROW_H - 1, now, actions::preview);
     }
 
     /** SHARE-LIVE: the panel closed: its card and picture go. */
