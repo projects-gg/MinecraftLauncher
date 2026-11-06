@@ -243,7 +243,7 @@ describe("Yalnız bas-konuş", () => {
     expect(micClosedLabel({ mutedByModerator: false }, t)).toBeNull();
     expect(micClosedLabel({ mutedByModerator: false, needsKey: false }, t)).toBeNull();
     expect(micClosedLabel({ mutedByModerator: false, needsKey: true }, t)).toBe(
-      "Bu odada yalnız bas-konuş var, henüz tuşun yok.",
+      "Bu oda yalnız bas-konuş, konuşmak için bir tuş gerekiyor.",
     );
     expect(micClosedLabel({ mutedByModerator: true, needsKey: true }, t)).toBe(
       "Bir moderatör seni susturdu.",

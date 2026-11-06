@@ -444,7 +444,7 @@
   "projects_overlay.voice.person.speaking": "Speaking",
   "projects_overlay.voice.person.narration": "%s, %s",
   "projects_overlay.voice.muted_by_mod": "A moderator muted you.",
-  "projects_overlay.voice.ptt_needs_key": "This room is push-to-talk only. Pick a key in the launcher.",
+  "projects_overlay.voice.ptt_needs_key": "Push-to-talk only here. Pick a key in the launcher.",
   "projects_overlay.voice.moved": "You were moved to another room.",
   "projects_overlay.voice.left.closed": "The leader closed the room.",
   "projects_overlay.voice.left.alone": "Nobody else is here.",

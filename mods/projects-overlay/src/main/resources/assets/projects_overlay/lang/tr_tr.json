@@ -444,7 +444,7 @@
   "projects_overlay.voice.person.speaking": "Konuşuyor",
   "projects_overlay.voice.person.narration": "%s, %s",
   "projects_overlay.voice.muted_by_mod": "Bir moderatör seni susturdu.",
-  "projects_overlay.voice.ptt_needs_key": "Bu odada yalnız bas-konuş var. Launcher'da bir tuş seç.",
+  "projects_overlay.voice.ptt_needs_key": "Bu oda yalnız bas-konuş. Launcher'da bir tuş seç.",
   "projects_overlay.voice.moved": "Başka bir odaya taşındın.",
   "projects_overlay.voice.left.closed": "Lider odayı kapattı.",
   "projects_overlay.voice.left.alone": "Odada kimse kalmadı.",

@@ -282,8 +282,8 @@ export const enVoice = {
     only: "Push-to-talk only",
     tag: "Push-to-talk",
     tagLabel: "Push-to-talk only in this room",
-    hold: "Push-to-talk only here: hold {{key}} while you talk.",
-    needsKey: "This room is push-to-talk only and you have no key yet.",
+    hold: "Push-to-talk room: hold {{key}} while you talk.",
+    needsKey: "Push-to-talk only here. You need a key to talk.",
     pick: "Pick a key",
   },
 };

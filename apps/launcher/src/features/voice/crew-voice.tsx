@@ -411,7 +411,7 @@ function RoomRow({
                       {room.ptt ? (
                         <Tooltip content={t("voice.ptt.tagLabel")}>
                           <span
-                            className="text-[12px] font-semibold whitespace-nowrap text-ash-400"
+                            className="mr-1 text-[12px] font-semibold whitespace-nowrap text-ash-400"
                             role="img"
                             aria-label={t("voice.ptt.tagLabel")}
                           >
