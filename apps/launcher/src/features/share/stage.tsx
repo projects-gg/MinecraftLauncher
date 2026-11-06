@@ -385,7 +385,8 @@ function CornerStage({ watch }: { watch: VoiceWatch }) {
         onClick={() => setSmall(false)}
         className="absolute inset-0 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:ring-inset"
       >
-        <ShareVideo person={watch.person} n={watch.n} volume={volume} muted={muted} fit="cover" />
+        {/* Whole, never cropped: a shared window's edges matter; the box's obsidian letterboxes it. */}
+        <ShareVideo person={watch.person} n={watch.n} volume={volume} muted={muted} fit="contain" />
       </button>
       <span className="pointer-events-none absolute bottom-1.5 left-1.5 max-w-[60%] truncate rounded-[6px] bg-obsidian-950/70 px-2 py-1 text-[12px] leading-[1.3] font-semibold text-bone-50">
         {name}

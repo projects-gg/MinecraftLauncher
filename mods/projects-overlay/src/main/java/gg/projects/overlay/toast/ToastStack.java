@@ -15,7 +15,8 @@ import java.util.function.UnaryOperator;
  * one after another ({@link #STAGGER_MS} apart), so the stack always reads top to bottom as newest to
  * oldest; a toast whose time is up waits for the ones below it. More than {@link #MAX_VISIBLE} at once
  * push the oldest out straight away. A toast for a conversation or call already on screen updates in
- * place ("Ayşe (3)") and starts its time again.
+ * place ("Ayşe (3)") and starts its time again. Nor more than its corner has room for ({@link #setRoom}: the
+ * screen's height, a minimap in the corner): a new toast pushes the oldest out then too, the newest always shows.
  *
  * <p>Coordinates are GUI pixels relative to the stack's anchor, y downwards: anchored at the bottom the
  * oldest toast ends at 0 and the others sit above it (negative); anchored at the top the newest starts
@@ -115,6 +116,7 @@ public final class ToastStack<T> {
     private final List<Entry<T>> entries = new ArrayList<>();
     private boolean anchoredAtTop;
     private boolean reducedMotion;
+    private float room = Float.MAX_VALUE;
     private long lastLeave = Long.MIN_VALUE / 2;
     private long lastUpdate = Long.MIN_VALUE;
 
@@ -150,6 +152,24 @@ public final class ToastStack<T> {
 
     public void setAnchoredAtTop(boolean top) {
         anchoredAtTop = top;
+    }
+
+    /** How tall the stack may grow from its anchor, GUI pixels (taken into account by the next {@link #push}). */
+    public void setRoom(float room) {
+        this.room = room;
+    }
+
+    /** The stack's height as laid out: the toasts not leaving, with the gaps between them. */
+    float laidOutHeight() {
+        float height = 0f;
+        int n = 0;
+        for (Entry<T> e : entries) {
+            if (!e.leaving) {
+                height += e.height;
+                n++;
+            }
+        }
+        return n == 0 ? 0f : height + GAP * (n - 1);
     }
 
     /**
@@ -204,6 +224,15 @@ public final class ToastStack<T> {
         while (visible > MAX_VISIBLE) {
             Entry<T> oldest = bottomUnpinned();
             if (oldest == null) {
+                break;
+            }
+            leave(oldest, now, FADE_OUT_MS, true);
+            visible--;
+        }
+        // Past the corner's room the oldest goes as well (the newest always shows; a ring is never pushed out).
+        while (visible > 1 && laidOutHeight() > room) {
+            Entry<T> oldest = bottomUnpinned();
+            if (oldest == null || oldest == e) {
                 break;
             }
             leave(oldest, now, FADE_OUT_MS, true);

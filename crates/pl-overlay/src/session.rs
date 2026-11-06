@@ -1442,7 +1442,27 @@ impl<S: SocialActions> Session<S> {
             || scene.next_differs(&self.scene);
         self.scene = scene;
         self.view = view;
+        self.warm_pictures();
         senders_changed
+    }
+
+    /// OVL-AVATARS (REL-209): the player's and their friends' pictures are prepared as soon as a mod that draws them
+    /// is connected, so the first card a friend brings has the picture, not the letter. The shared cache keeps them
+    /// for every game; only ones not kept yet are fetched, and nothing while no such mod is connected.
+    fn warm_pictures(&self) {
+        if !self.live.as_ref().is_some_and(|live| live.avatars) || !self.scene.signed_in {
+            return;
+        }
+        let me = std::iter::once(self.scene.me_id.as_str());
+        let friends = self.scene.friends.iter().map(|friend| friend.id.as_str());
+        let pictures: Vec<Picture> = me
+            .chain(friends)
+            .filter_map(|id| self.scene.picture(id).flatten().cloned())
+            .take(crate::avatar::WARM)
+            .collect();
+        if !pictures.is_empty() {
+            self.pictures.warm(pictures);
+        }
     }
 
     /// Someone took off their crew tag or wears another (TEAM6-O), or their badges changed
@@ -2300,9 +2320,10 @@ impl<S: SocialActions> Session<S> {
                     cards_off: HashSet::new(),
                     cards_known: false,
                 }));
-                // A new connection keeps no pictures: it asks again.
+                // A new connection keeps no pictures: it asks again (the launcher has them ready).
                 self.told.clear();
                 self.told_order.clear();
+                self.warm_pictures();
                 self.send(frames);
                 self.send_emojis();
                 self.refresh_voice();

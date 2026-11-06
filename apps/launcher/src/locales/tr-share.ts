@@ -69,6 +69,7 @@ export const trShare = {
     mark: "Yayında: {{kind}}",
     watch: "İzle",
     watchLabel: "{{name}} yayınını izle",
+    watchItem: "Yayını izle",
     unshare: "Paylaşımı durdur",
   },
   // SHARE-LIVE: yayındakinin adının yanındaki etiket (sahibinin sözü, tek büyük harfli etiket) ve

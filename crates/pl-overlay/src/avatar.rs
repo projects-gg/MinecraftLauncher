@@ -9,7 +9,7 @@
 //! mod decodes off its render thread, uploads once and keeps by person and version. The mod never goes to the
 //! network.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::future::Future;
 use std::io::Cursor;
 use std::pin::Pin;
@@ -37,6 +37,8 @@ const FETCHES: usize = 6;
 const DECODES: usize = 2;
 /// Prepared pictures kept, by version (a few hundred kilobytes).
 const CACHE: usize = 256;
+/// Pictures prepared ahead at most per call (friends first: half the cache, so the faces on screen keep theirs).
+pub const WARM: usize = CACHE / 2;
 /// A picture that could not be had is not asked for again this long (offline, refused).
 const FAILED_FOR: Duration = Duration::from_secs(600);
 /// Discord's stand-in for an account without a picture: its logo, not the player's face (`own-photo.ts`).
@@ -356,6 +358,38 @@ impl Pictures {
         png.get_or_init(|| self.load(picture, fetch)).await.clone()
     }
 
+    /// Prepares `pictures` ahead, in the background (REL-209: a friend's first card came with the letter while their
+    /// picture was still on its way): the ones neither kept nor on their way yet, at most [`WARM`] a call, fetched
+    /// [`FETCHES`] at a time like any other. Nothing before the launcher says how to fetch.
+    pub fn warm(self: &Arc<Self>, pictures: impl IntoIterator<Item = Picture>) {
+        if self
+            .fetch
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_none()
+        {
+            return;
+        }
+        let missing: Vec<Picture> = {
+            let cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+            let mut seen = HashSet::new();
+            pictures
+                .into_iter()
+                .filter(|picture| {
+                    let version = picture.version();
+                    !cache.0.contains_key(&version) && seen.insert(version)
+                })
+                .take(WARM)
+                .collect()
+        };
+        for picture in missing {
+            let pictures = Arc::clone(self);
+            tokio::spawn(async move {
+                pictures.prepared(&picture).await;
+            });
+        }
+    }
+
     /// Fetches (only from the launcher's picture hosts, only up to [`MAX_SOURCE`], [`FETCHES`] at a time) and
     /// prepares one picture ([`DECODES`] at a time, off the async threads).
     async fn load(&self, picture: &Picture, fetch: Option<FetchFn>) -> Option<Arc<Vec<u8>>> {
@@ -612,6 +646,37 @@ mod tests {
                 .is_some()
         );
         assert_eq!(calls.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn pictures_warmed_ahead_are_ready_without_another_fetch() {
+        let pictures = Arc::new(Pictures::default());
+        let a = Picture::Skin("d".repeat(64));
+        let b = Picture::Skin("e".repeat(64));
+        // Before the launcher says how to fetch: nothing starts.
+        pictures.warm([a.clone()]);
+        tokio::task::yield_now().await;
+        assert!(pictures.cache.lock().unwrap().0.is_empty());
+        let calls = Arc::new(Mutex::new(0_u32));
+        let seen = Arc::clone(&calls);
+        let skin = skin_png();
+        pictures.set_fetch(fetch_fn(move |_url: String| {
+            *seen.lock().unwrap() += 1;
+            let bytes = skin.clone();
+            async move { Some(bytes) }
+        }));
+        // The same picture twice in one call, and again in the next: one fetch each.
+        pictures.warm([a.clone(), b.clone(), a.clone()]);
+        for _ in 0..50 {
+            if *calls.lock().unwrap() == 2 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        pictures.warm([a.clone(), b.clone()]);
+        assert!(pictures.prepared(&a).await.is_some());
+        assert!(pictures.prepared(&b).await.is_some());
+        assert_eq!(*calls.lock().unwrap(), 2);
     }
 
     #[tokio::test]

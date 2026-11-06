@@ -17,14 +17,20 @@ export const INVITE_COOLDOWN_MS = 5 * 60_000;
 
 /**
  * Runs a friends call; a failure becomes a toast and gives undefined. A call that answers nothing
- * gives null when it went through, so `done !== undefined` always means it worked.
+ * gives null when it went through, so `done !== undefined` always means it worked. `handled` may
+ * take a failure that is not the player's (true: it told it its own way, no error toast).
  */
-export async function attempt<T>(work: () => Promise<T>): Promise<T | undefined> {
+export async function attempt<T>(
+  work: () => Promise<T>,
+  handled?: (error: unknown) => boolean,
+): Promise<T | undefined> {
   try {
     const value = await work();
     return (value === undefined ? null : value) as T;
   } catch (error) {
-    toast.error(friendlyError(error, i18n.t("social.actions.failed")).message);
+    if (!handled?.(error)) {
+      toast.error(friendlyError(error, i18n.t("social.actions.failed")).message);
+    }
     return undefined;
   }
 }
