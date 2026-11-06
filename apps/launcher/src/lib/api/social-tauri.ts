@@ -147,8 +147,7 @@ function friend(v: FriendView): Friend {
     // VOICE: whether they may be called ("Sesli arama başlat"); without it no friend ever could be.
     voice: opt(v.voice),
     // SHARE-LIVE: they share their screen in a room ("YAYINDA" beside their name; `presence.live`).
-    // Read by name until the launcher's bindings carry it (LIVE-R): an older launcher sends nothing.
-    voiceLive: (v as FriendView & { live?: boolean }).live === true || undefined,
+    voiceLive: v.live === true || undefined,
   };
 }
 
