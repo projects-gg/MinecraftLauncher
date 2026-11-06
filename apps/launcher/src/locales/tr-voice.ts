@@ -288,8 +288,8 @@ export const trVoice = {
     only: "Yalnız bas-konuş",
     tag: "Bas-konuş",
     tagLabel: "Bu odada yalnız bas-konuş",
-    hold: "Bu odada yalnız bas-konuş: konuşurken {{key}} tuşunu basılı tut.",
-    needsKey: "Bu odada yalnız bas-konuş var, henüz tuşun yok.",
+    hold: "Bas-konuş odası: konuşurken {{key}} tuşunu basılı tut.",
+    needsKey: "Bu oda yalnız bas-konuş, konuşmak için bir tuş gerekiyor.",
     pick: "Tuş seç",
   },
 };
