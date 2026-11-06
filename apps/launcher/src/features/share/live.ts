@@ -93,10 +93,28 @@ export function crewRoomTargets(
   crewMax: number,
   roomName: string,
 ): LiveTarget[] {
+  if (state.room?.id === room.id && state.share?.on) {
+    // The player is in it: the room's own state knows more (what is shared, who watches), and the
+    // player's own share is there too.
+    const people = [...new Set(state.share.live.map((l) => l.person))];
+    const own = ownTarget(state);
+    const others = people.flatMap((person) => liveTargetIn(state, person) ?? []);
+    return own ? [own, ...others] : others;
+  }
   if (state.room?.id === room.id) {
-    // The player is in it: the room's own state knows more (what is shared, who watches).
-    const people = [...new Set(state.share?.on ? state.share.live.map((l) => l.person) : [])];
-    return people.flatMap((person) => liveTargetIn(state, person) ?? []);
+    // Just in, the room's own state on its way: the list's word holds, the card waits.
+    return (room.live ?? []).map((person) => ({
+      person,
+      room: room.id,
+      crew,
+      general: room.general,
+      roomName,
+      n: null,
+      kind: null,
+      watchers: null,
+      th: null,
+      offer: "watch" as const,
+    }));
   }
   const full = crewRoomFull(room, crewMax);
   return (room.live ?? []).map((person) => ({
@@ -125,6 +143,22 @@ export function friendTarget(
 ): LiveTarget {
   const here = liveTargetIn(state, friend);
   if (here) return here;
+  const room = state.room;
+  if (room?.people.some((p) => p.id === friend)) {
+    // In the player's own room, its share on its way: the waiting card, never a lock.
+    return {
+      person: friend,
+      room: room.id,
+      crew: room.crew,
+      general: room.general,
+      roomName: null,
+      n: null,
+      kind: null,
+      watchers: null,
+      th: null,
+      offer: "watch",
+    };
+  }
   for (const entry of state.crews) {
     const room = entry.rooms.find((r) => r.people.includes(friend));
     if (!room || state.room?.id === room.id) continue;
@@ -319,6 +353,11 @@ export function useShareThumb(target: LiveTarget | null, open: boolean): ShownTh
       gone = true;
     };
   }, [key]);
-  if (!share || shown?.share !== share) return { thumb: null, key: null };
+  if (!share) return { thumb: null, key: null };
+  if (shown?.share !== share) {
+    // Not answered in this card yet: a kept answer shows from its first frame.
+    const hit = key ? keptThumb(key, Date.now()) : null;
+    return hit ? { thumb: hit, key } : { thumb: null, key: null };
+  }
   return { thumb: shown.thumb, key: shown.key };
 }

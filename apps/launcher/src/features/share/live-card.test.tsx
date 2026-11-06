@@ -14,7 +14,7 @@ import { voiceApi } from "@/lib/api/voice-api";
 import { createVoiceMock } from "@/lib/api/voice-mock";
 import { HIDDEN_VOICE_STATE, VOICE_OK, type VoiceState } from "@/lib/api/voice-types";
 import { shareApi } from "@/share/api";
-import { forgetThumbs, type LiveTarget, liveTargetIn } from "./live";
+import { forgetThumbs, type LiveTarget, liveTargetIn, ownTarget } from "./live";
 import { LiveTag, LiveTagButton, useLivePreview } from "./live-card";
 
 // The card fades. happy-dom leaves a cancelled animation's `finished` rejection unhandled (a browser
@@ -86,8 +86,10 @@ async function rest(tag: HTMLElement) {
   await act(async () => {
     vi.advanceTimersByTime(360);
   });
+  // The picture's answer passes a few promises (asked, decoded, kept): let them all settle, however
+  // busy the machine is.
   await act(async () => {
-    await Promise.resolve();
+    for (let turn = 0; turn < 8; turn++) await Promise.resolve();
   });
 }
 
@@ -154,7 +156,7 @@ describe("the live tag's card", () => {
     const call: LiveTarget = { ...crewTarget(state), room: null, crew: null, offer: "private" };
     show(state, <LiveTagButton targets={[call]} placement={PLACE} />);
     await rest(screen.getByRole("button", { name: "KorAtesi yayında" }));
-    expect(screen.getByText("Yalnız aramadakiler izleyebilir.")).toBeTruthy();
+    expect(screen.getByText("Yalnız odadakiler izleyebilir.")).toBeTruthy();
     expect(thumb).not.toHaveBeenCalled();
   });
 
@@ -199,6 +201,76 @@ describe("the live tag's card", () => {
     expect(watch).toHaveBeenCalledWith("302", 2);
     act(() => useVoiceUi.getState().setState({ ...useVoiceUi.getState().state }));
     expect(watch).toHaveBeenCalledTimes(1);
+  });
+
+  it("says what is shared in one line, lower case after the comma", async () => {
+    vi.spyOn(shareApi, "thumb").mockResolvedValue({ kind: "none" });
+    const watching = scenario("shareWatch");
+    const watched = liveTargetIn(watching, "301");
+    if (!watched) throw new Error("no target");
+    show(watching, <LiveTagButton targets={[watched]} placement={PLACE} />);
+    await rest(screen.getByRole("button", { name: "GeceKurdu_ yayında" }));
+    expect(screen.getByText("Oyun, izliyorsun")).toBeTruthy();
+    // Already watched: no "İzle".
+    expect(screen.queryByRole("button", { name: "GeceKurdu_ yayınını izle" })).toBeNull();
+    cleanup();
+    resetBadgeIntent();
+    const resting = scenario("shareRest");
+    const own = ownTarget(resting);
+    if (!own) throw new Error("no own share");
+    show(resting, <LiveTagButton targets={[own]} placement={PLACE} />);
+    await rest(screen.getByRole("button", { name: /yayında/ }));
+    expect(screen.getByText("Pencere, kimse izlemiyor")).toBeTruthy();
+  });
+
+  it("opens and closes with a press on its own tag, and a press on a row's tag is the tag's", async () => {
+    vi.spyOn(shareApi, "thumb").mockResolvedValue({ kind: "none" });
+    const state = scenario("shareLiveRow");
+    const target = liveTargetIn(state, "301");
+    if (!target) throw new Error("no target");
+    show(state, <LiveTagButton targets={[target]} placement={PLACE} />);
+    const tag = screen.getByRole("button", { name: "GeceKurdu_ yayında" });
+    await act(async () => {
+      fireEvent.pointerDown(tag, { pointerType: "mouse", button: 0 });
+      fireEvent.click(tag, { detail: 1 });
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(tag.getAttribute("aria-expanded")).toBe("true");
+    await act(async () => {
+      fireEvent.pointerDown(tag, { pointerType: "mouse", button: 0 });
+      fireEvent.click(tag, { detail: 1 });
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    cleanup();
+    resetBadgeIntent();
+    // In a row: the row's own press (its menu) never hears a press on the tag.
+    const rowPress = vi.fn();
+    function Row() {
+      const preview = useLivePreview([target as LiveTarget], PLACE);
+      return (
+        <div>
+          <button type="button" aria-label="GeceKurdu_" onPointerDown={rowPress} onClick={rowPress}>
+            <span {...preview.tagProps} data-testid="tag">
+              <LiveTag />
+            </span>
+          </button>
+          {preview.card}
+        </div>
+      );
+    }
+    show(state, <Row />);
+    const inRow = screen.getByTestId("tag");
+    await act(async () => {
+      fireEvent.pointerDown(inRow, { pointerType: "mouse", button: 0 });
+      fireEvent.click(inRow, { detail: 1 });
+      await Promise.resolve();
+    });
+    expect(rowPress).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
   it("takes the focus into the card from the keyboard", async () => {

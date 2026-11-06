@@ -695,7 +695,7 @@
   "projects_overlay.share.kind.window": "Pencere",
   "projects_overlay.share.kind.screen": "Ekran",
   "projects_overlay.share.preview.locked": "Bu odaya katılamazsın.",
-  "projects_overlay.share.preview.private": "Yalnız aramadakiler izleyebilir.",
+  "projects_overlay.share.preview.private": "Yalnız odadakiler izleyebilir.",
   "projects_overlay.share.preview.full": "Oda dolu.",
   "projects_overlay.share.note.off": "Ekran paylaşımı şu an kullanılamıyor.",
   "projects_overlay.share.note.unsupported": "Bu bilgisayardan paylaşılamıyor.",

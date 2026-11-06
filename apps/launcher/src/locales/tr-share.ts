@@ -79,9 +79,11 @@ export const trShare = {
     label_other: "{{names}} yayında",
     picture: "{{name}} yayınından son görüntü",
     joinWatch: "Katıl ve izle",
-    watching: "İzliyorsun",
+    // Satırın ortasında, virgülden sonra: küçük harfle.
+    watching: "izliyorsun",
+    nobody: "kimse izlemiyor",
     locked: "Bu odaya katılamazsın.",
-    private: "Yalnız aramadakiler izleyebilir.",
+    private: "Yalnız odadakiler izleyebilir.",
     sharers: "Yayındakiler",
   },
   stage: {

@@ -6,6 +6,8 @@ import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
 import gg.projects.overlay.voice.VoiceState;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -67,8 +69,9 @@ public final class LiveTip {
     private String laidOutWhy;
     private FormattedCharSequence nameLine;
     private FormattedCharSequence metaLine;
-    private FormattedCharSequence lockLine;
-    private float lockWidth;
+    /** The lock's sentence on at most two lines, and each line's width. */
+    private final List<FormattedCharSequence> lockLines = new ArrayList<>(2);
+    private final List<Float> lockWidths = new ArrayList<>(2);
 
     /**
      * Follows what the pointer rests on this frame: {@code person}'s "YAYINDA" drawn at {@code x} on the row from
@@ -107,6 +110,10 @@ public final class LiveTip {
         this.meta = meta == null ? "" : meta;
         this.lockedHere = room == null ? (lockedWhy == null ? "private" : lockedWhy) : null;
         if (room != null && now - since >= DELAY_MS && (!asked || (th > 0 && th != askedTh))) {
+            if (!asked && voice != null) {
+                // A new opening never shows an answer kept from an earlier one (it may be minutes old).
+                voice.dropThumb(person);
+            }
             asked = true;
             askedTh = th;
             asker.ask(room, person, n);
@@ -156,17 +163,40 @@ public final class LiveTip {
         int textW = width - FACE - 5;
         nameLine = Texts.visual(Texts.fit(Fonts.strong(), name, textW));
         metaLine = meta.isEmpty() ? null : Texts.visual(Texts.fit(Fonts.small(), meta, textW));
-        if (why == null) {
-            lockLine = null;
-        } else {
-            String line = Texts.fit(Fonts.small(), Texts.str(switch (why) {
+        lockLines.clear();
+        lockWidths.clear();
+        if (why != null) {
+            String sentence = Texts.str(switch (why) {
                 case "full" -> "share.preview.full";
                 case "private" -> "share.preview.private";
                 default -> "share.preview.locked";
-            }), width - 8);
-            lockLine = Texts.visual(line);
-            lockWidth = Fonts.small().width(line);
+            });
+            for (String line : wrap(Fonts.small(), sentence, width - 12)) {
+                lockLines.add(Texts.visual(line));
+                lockWidths.add((float) Fonts.small().width(line));
+            }
         }
+    }
+
+    /** A sentence on at most two lines of {@code width}, broken between words (the second cut short if need be). */
+    static List<String> wrap(Font font, String text, int width) {
+        String[] words = text.split(" ");
+        StringBuilder first = new StringBuilder();
+        int i = 0;
+        for (; i < words.length; i++) {
+            String next = first.length() == 0 ? words[i] : first + " " + words[i];
+            if (first.length() > 0 && font.width(next) > width) {
+                break;
+            }
+            first.setLength(0);
+            first.append(next);
+        }
+        List<String> out = new ArrayList<>(2);
+        out.add(Texts.fit(font, first.toString(), width));
+        if (i < words.length) {
+            out.add(Texts.fit(font, String.join(" ", java.util.Arrays.copyOfRange(words, i, words.length)), width));
+        }
+        return out;
     }
 
     /**
@@ -211,11 +241,15 @@ public final class LiveTip {
             face.draw(g, imageW, ix + imageW / 2f, iy + imageH / 2f);
             Draw.popAlpha();
             g.disableScissor();
-            if (locked && lockLine != null) {
-                float mid = iy + imageH / 2f;
-                Draw.icon(g, Icon.LOCK, 12, ix + (imageW - 12) / 2f, mid - 12f, Theme.BONE_100);
-                Draw.text(g, Fonts.small(), lockLine, ix + (imageW - lockWidth) / 2f,
-                    Fonts.centeredY(Fonts.Face.SMALL, mid + 7f), Theme.BONE_100);
+            if (locked && !lockLines.isEmpty()) {
+                // The lock and its sentence, one block in the middle.
+                int lines = lockLines.size();
+                float blockTop = iy + imageH / 2f - (12 + 4 + lines * 9) / 2f;
+                Draw.icon(g, Icon.LOCK, 12, ix + (imageW - 12) / 2f, blockTop, Theme.BONE_100);
+                for (int i = 0; i < lines; i++) {
+                    Draw.text(g, Fonts.small(), lockLines.get(i), ix + (imageW - lockWidths.get(i)) / 2f,
+                        Fonts.centeredY(Fonts.Face.SMALL, blockTop + 12 + 4 + i * 9 + 4.5f), Theme.BONE_100);
+                }
             }
         }
         float ty = iy + imageH + 3;

@@ -630,12 +630,11 @@ export function FriendRow({
   // row's keyboard focus) opens the stream's card beside the panel, where the friend's card opens.
   const rowRef = useRef<HTMLDivElement>(null);
   const live = useFriendTargets(friend.id, friend.voiceLive === true);
-  const preview = useLivePreview(live, {
-    side: "left",
-    align: "start",
-    sideOffset: 14,
-    anchor: rowRef,
-  });
+  const preview = useLivePreview(
+    live,
+    { side: "left", align: "center", sideOffset: 14, anchor: rowRef },
+    { suppress: open },
+  );
 
   // Remove and block ask first, in the card: it opens at the question once the menu is gone.
   const openAt = (question: Confirm) =>

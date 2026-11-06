@@ -159,6 +159,8 @@ export interface LivePreview {
    * it took the key. The row says so (`aria-keyshortcuts`).
    */
   keyIn: (event: KeyboardEvent<HTMLElement>) => boolean;
+  /** The card is open. */
+  open: boolean;
   /** Who is live, in words ("KorAtesi yayında"). */
   label: string;
   /** The card in its layer: render it anywhere beside the tag. */
@@ -182,52 +184,60 @@ function useLiveFaces(targets: LiveTarget[]): VoiceFace[] {
   );
 }
 
-/** The tag's card for `targets` (none: no card, an open one closes). */
-export function useLivePreview(targets: LiveTarget[], placement: LivePlacement): LivePreview {
+/**
+ * The tag's card for `targets` (none: no card, an open one closes). `suppress`: another layer of the
+ * row is open (a friend's card): no live card meanwhile.
+ */
+export function useLivePreview(
+  targets: LiveTarget[],
+  placement: LivePlacement,
+  { suppress = false }: { suppress?: boolean } = {},
+): LivePreview {
   const { t } = useTranslation();
   const id = useId();
   const { reduce } = useMotionPrefs();
-  const status = useBadgeIntent((s) =>
-    s.open === id ? (s.instant ? "instant" : "open") : s.open === null ? "closed" : "other",
-  );
+  // Only this card's own state is followed: another card opening draws no row again.
+  const mine = useBadgeIntent((s) => s.open === id);
+  const instant = useBadgeIntent((s) => s.open === id && s.instant);
   const focusAsk = useBadgeIntent((s) => (s.focus?.id === id ? s.focus.n : null));
   const live = targets.length > 0;
-  const open = live && (status === "open" || status === "instant");
+  const open = live && mine;
+  // A card replaced by another one's leaves at once (read when it closes).
+  const swapped = !mine && useBadgeIntent.getState().open !== null;
   const tagRef = useRef<HTMLSpanElement>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const touched = useRef(false);
   const faces = useLiveFaces(targets);
+  const quiet = suppress || !live;
 
-  // The stream ended or the row went: its card goes with it.
+  // The stream ended, the row went or another layer of the row opened: its card goes.
   useEffect(() => {
-    if (!live) closeCard(id);
-  }, [live, id]);
+    if (quiet) closeCard(id);
+  }, [quiet, id]);
   useEffect(() => () => closeCard(id), [id]);
 
   const tagProps: LivePreview["tagProps"] = {
     ref: tagRef,
     onPointerEnter: (event) => {
-      if (event.pointerType === "mouse") hoverChip(id);
+      if (event.pointerType === "mouse" && !quiet) hoverChip(id);
     },
     onPointerLeave: (event) => {
       if (event.pointerType === "mouse") leaveChip(id, { x: event.clientX, y: event.clientY });
     },
+    // A press on the tag is the tag's own (it pins its card, again it closes it), never the row's
+    // menu or card: the same on every surface, mouse or touch.
     onPointerDown: (event) => {
-      touched.current = event.pointerType !== "mouse";
-      if (touched.current) event.stopPropagation();
+      if (event.button === 0) event.stopPropagation();
     },
     onClick: (event) => {
-      if (!touched.current) return;
-      touched.current = false;
       event.preventDefault();
       event.stopPropagation();
-      pressChip(id, false);
+      if (!quiet) pressChip(id, event.detail === 0);
     },
   };
 
   const focusProps: LivePreview["focusProps"] = {
     onFocus: (event) => {
-      if (live && event.currentTarget.matches(":focus-visible")) focusChip(id);
+      if (!quiet && event.currentTarget.matches(":focus-visible")) focusChip(id);
     },
     onBlur: (event) => {
       blurChip(id);
@@ -240,8 +250,9 @@ export function useLivePreview(targets: LiveTarget[], placement: LivePlacement):
   };
 
   const keyIn = (event: KeyboardEvent<HTMLElement>) => {
-    if (!live || event.key !== "ArrowRight" || event.altKey || event.ctrlKey || event.metaKey)
-      return false;
+    // → or ←: the card opens beside the panel, on its left.
+    const arrow = event.key === "ArrowRight" || event.key === "ArrowLeft";
+    if (quiet || !arrow || event.altKey || event.ctrlKey || event.metaKey) return false;
     event.preventDefault();
     pressChip(id, true);
     return true;
@@ -250,7 +261,7 @@ export function useLivePreview(targets: LiveTarget[], placement: LivePlacement):
   const press = (event: MouseEvent<HTMLElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    pressChip(id, event.detail === 0);
+    if (!quiet) pressChip(id, event.detail === 0);
   };
 
   const names = faces.map((face) => face.name);
@@ -264,7 +275,7 @@ export function useLivePreview(targets: LiveTarget[], placement: LivePlacement):
       }}
     >
       <Popover.Anchor virtualRef={placement.anchor ?? tagRef} />
-      <AnimatePresence custom={status === "other"}>
+      <AnimatePresence custom={swapped}>
         {open ? (
           <Popover.Portal forceMount>
             <Popover.Content
@@ -283,6 +294,13 @@ export function useLivePreview(targets: LiveTarget[], placement: LivePlacement):
                 const back = tagRef.current?.closest<HTMLElement>("button, [tabindex]");
                 if (back?.isConnected) back.focus({ preventScroll: true });
               }}
+              // A press on its own tag is the tag's (it closes or pins the card), not a press outside.
+              onInteractOutside={(event) => {
+                const tag = tagRef.current?.closest("[data-live-tag]") ?? tagRef.current;
+                if (tag && event.target instanceof Node && tag.contains(event.target)) {
+                  event.preventDefault();
+                }
+              }}
             >
               <motion.div
                 ref={(element: HTMLDivElement | null) => {
@@ -291,11 +309,12 @@ export function useLivePreview(targets: LiveTarget[], placement: LivePlacement):
                 }}
                 tabIndex={-1}
                 data-live-card
-                className="z-50 w-[296px] overflow-hidden rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900/96 p-[6px] shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_24px_60px_rgb(34_6_6/0.55)] backdrop-blur-xl outline-none [html[data-perf=on]_&]:bg-obsidian-900 [html[data-perf=on]_&]:backdrop-blur-none"
+                // Near solid: a glass blur under it would redraw the art behind every frame for nothing.
+                className="z-50 w-[296px] overflow-hidden rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900/98 p-[6px] shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_24px_60px_rgb(34_6_6/0.55)] outline-none"
                 style={{ transformOrigin: "var(--radix-popover-content-transform-origin)" }}
                 variants={cardVariants(reduce)}
                 custom={false}
-                initial={status === "instant" ? false : "hidden"}
+                initial={instant ? false : "hidden"}
                 animate="shown"
                 exit="gone"
                 onPointerEnter={(event) => {
@@ -320,7 +339,7 @@ export function useLivePreview(targets: LiveTarget[], placement: LivePlacement):
     </Popover.Root>
   );
 
-  return { tagProps, focusProps, press, keyIn, label, card };
+  return { tagProps, focusProps, press, keyIn, open, label, card };
 }
 
 // --- the tag as a button of its own ------------------------------------------------------------------
@@ -348,6 +367,8 @@ export function LiveTagButton({
         type="button"
         data-live-tag
         aria-label={preview.label}
+        aria-haspopup="dialog"
+        aria-expanded={preview.open}
         className={cn(
           "group/live relative inline-flex shrink-0 cursor-pointer outline-none transition-[transform,scale] duration-150 ease-out active:scale-[0.94]",
           className,
@@ -386,7 +407,7 @@ function metaLine(
     return `${what}, ${
       target.watchers
         ? t("share.live.watchers", { count: target.watchers })
-        : t("share.live.resting")
+        : t("share.preview.nobody")
     }`;
   }
   return target.watchers
@@ -394,17 +415,29 @@ function metaLine(
     : what;
 }
 
-/** The blurred face behind the picture: the placeholder, and the locked card's whole backdrop. */
+/** A face with a picture of its own (a preset, a skin's head, a photo); else its letter. */
+function hasPicture(face: VoiceFace): boolean {
+  return (
+    Boolean(face.avatarUrl) ||
+    (face.avatar !== undefined && face.avatar !== "" && face.avatar !== "discord")
+  );
+}
+
+/**
+ * Behind the picture: the sharer's face blurred (the owner's "blurlu"), quiet (no colour boost) and
+ * veiled; a letter face blurs into a glow, so it stays a plain plate. The placeholder, and the locked
+ * card's whole backdrop.
+ */
 function Backdrop({ face, locked }: { face: VoiceFace | undefined; locked: boolean }) {
   return (
     <div aria-hidden className="absolute inset-0">
-      {face ? (
-        <span className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 scale-[1.25] blur-[18px] saturate-[1.15]">
+      {face && hasPicture(face) ? (
+        <span className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 scale-[1.15] blur-[16px]">
           <SocialFace source={face} size={296} />
         </span>
       ) : null}
       <span
-        className={cn("absolute inset-0", locked ? "bg-obsidian-950/60" : "bg-obsidian-950/35")}
+        className={cn("absolute inset-0", locked ? "bg-obsidian-950/72" : "bg-obsidian-950/45")}
       />
     </div>
   );
@@ -436,7 +469,11 @@ function LiveCard({
     const root = rootRef.current;
     const card = root?.closest<HTMLElement>("[data-live-card]");
     if (!root || !card) return;
-    focusPanel(root.querySelector<HTMLElement>("button:not([disabled])") ?? card);
+    focusPanel(
+      root.querySelector<HTMLElement>("[data-live-action]") ??
+        root.querySelector<HTMLElement>("button:not([disabled])") ??
+        card,
+    );
   }, [focusAsk]);
   if (!target) return null;
   const name = face?.name ?? "";
@@ -455,6 +492,7 @@ function LiveCard({
       <Button
         size="sm"
         variant="secondary"
+        data-live-action
         aria-label={t("share.row.watchLabel", { name })}
         onClick={() => {
           if (target.n !== null) void watchShare(target.person, target.n);
@@ -467,6 +505,7 @@ function LiveCard({
       <Button
         size="sm"
         variant="secondary"
+        data-live-action
         onClick={() => {
           if (target.crew && target.room) {
             void joinAndWatch(
