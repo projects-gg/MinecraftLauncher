@@ -78,7 +78,9 @@ export function Dialog({
             <RadixDialog.Portal forceMount>
               <RadixDialog.Overlay asChild forceMount>
                 <GatedMotion.div
-                  // Performance mode: a flat scrim, no blur (docs/design.md §5).
+                  // Performance mode: a flat scrim, no blur (docs/design.md §5). `data-dialog-scrim`:
+                  // an app may keep it flat always (Studio's styles.css).
+                  data-dialog-scrim=""
                   className="fixed inset-0 z-40 bg-obsidian-950/70 backdrop-blur-sm [html[data-perf=on]_&]:bg-obsidian-950/80 [html[data-perf=on]_&]:backdrop-blur-none"
                   {...scrimMotion(reduce)}
                 />
