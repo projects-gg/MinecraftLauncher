@@ -18,6 +18,7 @@ import {
   editDraft,
   emptyLimit,
   giftReplies,
+  handoffReason,
   type LimitField,
   limitProblems,
   limitReason,
@@ -428,6 +429,17 @@ describe("Sınırlara git: the limit a line is about", () => {
     expect(limitReason([])).toBeNull();
   });
 
+  it("names why a handoff is the player's trade", () => {
+    // The player's own choice is no stop; every other reason is.
+    expect(handoffReason(["owner_order"])).toEqual({ code: "owner_order", stopped: false });
+    expect(handoffReason(["halted"])).toEqual({ code: "halted", stopped: true });
+    expect(handoffReason(["pay"])).toEqual({ code: "pay", stopped: true });
+    // An older agent's empty list, or a code this launcher does not know, names nothing.
+    expect(handoffReason([])).toBeNull();
+    expect(handoffReason(["constructor"])).toBeNull();
+    expect(handoffReason(["later_code", "cap"])).toEqual({ code: "cap", stopped: true });
+  });
+
   it("goes from buying that waits for the spending limits to the first one missing", () => {
     expect(spendingField({ perDealMax: null, totalBudget: null })).toBe("perDealMax");
     expect(spendingField({ perDealMax: 50_000, totalBudget: null })).toBe("totalBudget");
@@ -582,6 +594,9 @@ describe("the AI's state", () => {
     );
     expect(tradeNoteKey(ai({ trade: { on: false, off: "profile", by: "owner", buy: "on" } }))).toBe(
       "tradeOwner",
+    );
+    expect(tradeNoteKey(ai({ trade: { on: false, off: "halted", by: "bot", buy: "on" } }))).toBe(
+      "tradeHalted",
     );
     expect(tradeNoteKey(ai({ trade: { on: true, off: null, by: "bot", buy: "notify" } }))).toBe(
       "notifyOnly",

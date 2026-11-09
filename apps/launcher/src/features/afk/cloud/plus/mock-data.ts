@@ -23,6 +23,9 @@
 //   stopped, `empty` no active order, `pending` the item names not known yet (never in game), `old`
 //   an older service (no plan: the switch as before).
 //   Without it the switch is off and the plan still comes, as from the newest service.
+// - `&handoff=<why>`: why the handoff is the player's trade (`owner_order` by default, as its order
+//   says; `halted`, `place`, `server`, `pay`, `cap`, `window`, `other`, or `none` as from an older
+//   agent). `halted` also stops the account's trading (the rail's note).
 // With `?cloud=intro` (no cloud account) `&plus=on` shows the AFK+ card beside 7/24 Bulut's.
 // The item data here is a small stand-in written for previews (the real file comes from our CDN).
 import { type InvFrame, type InvItem, SAMPLE_INVENTORY } from "@pl/ui/inventory";
@@ -104,6 +107,8 @@ export const typedOrders = param("typed") !== "off";
 const survivalMode = param("mode") === "survival" && plusScenario !== "owner";
 /** `&ads=on|floor|warned|stopped|empty|pending|old`: "Sohbete ilan" on, and its plan's state. */
 const adsScenario = param("ads");
+/** `&handoff=<why>`: the handoff's reason; `halted` also stops trading. */
+const handoffWhy = param("handoff") ?? "owner_order";
 /**
  * `&topup=on`: AFK+ extra credits on sale (the rail's "Kontör al"); `&topup=bought`: also the
  * windows used up and a bought pack paying (cloud-afk README "AFK+ extra credits").
@@ -201,8 +206,8 @@ export function mockAi(): PlusAi {
     staffReason: null,
     until: paused ? W5H_RESET_AT : null,
     trade: {
-      on: plusScenario !== "owner",
-      off: plusScenario === "owner" ? "profile" : null,
+      on: plusScenario !== "owner" && handoffWhy !== "halted",
+      off: plusScenario === "owner" ? "profile" : handoffWhy === "halted" ? "halted" : null,
       by: plusScenario === "owner" ? "owner" : "bot",
       buy: "on",
     },
@@ -787,7 +792,7 @@ function approvalList(): PlusApproval[] {
       // Kirpi_Gamer's own trade: Neon_Drift's elytra talk ends in the approval below (TASTE-2 r1).
       deal: { side: "buy", item: "minecraft:emerald", qty: 2, price: 1_800, pay: "money" },
       counterpart: "Kirpi_Gamer",
-      why: [],
+      why: handoffWhy === "none" ? [] : [handoffWhy],
       createdAt: now - 40 * MIN,
       expiresAt: now + 23 * HOUR,
     },

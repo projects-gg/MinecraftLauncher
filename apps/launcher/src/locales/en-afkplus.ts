@@ -110,6 +110,8 @@ export const enAfkPlus = {
     paused: "ProBot AI stopped",
     tradeLobby: "The account is in the lobby. It starts trading once it's back in the game mode",
     tradeProfile: "Trading is off in this game mode right now",
+    tradeHalted:
+      "ProBot AI stopped trading: it saw a trade window it didn't recognise. You make the trades for now.",
     tradeOwner: "On this server ProBot AI agrees on deals and you make the trades",
     notifyOnly: "You set no spending limit, so ProBot AI doesn't buy. It tells you what it finds",
     line: {
@@ -362,6 +364,17 @@ export const enAfkPlus = {
     joinCancel: "Cancel",
     addAccount: "There's no {{name}} account in the launcher. Add it first.",
     gameOpen: "A game is already open. Close it first.",
+    stopped: "ProBot AI stopped the trade.",
+    why: {
+      owner_order: "You chose to make this order's trades yourself.",
+      halted: "It saw a trade window it didn't recognise, so it has stopped trading for now.",
+      place: "It wasn't somewhere it can trade (for example, in the lobby).",
+      server: "It can't make trades itself on this server.",
+      pay: "It can't enter money in this server's trade window.",
+      cap: "The amount is more than it trades on its own.",
+      window: "The trade window wasn't one it knows, so it clicked nothing to stay safe.",
+      other: "It couldn't make this trade itself.",
+    },
   },
   firstSight: {
     title: "First sight",
