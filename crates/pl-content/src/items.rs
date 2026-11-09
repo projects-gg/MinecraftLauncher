@@ -31,6 +31,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::fsutil::normalize_hex;
 use crate::model::{PackItem, PackManifest};
+use crate::overrides::ItemOverride;
 use crate::sync::{InstalledFile, PackState};
 
 /// The in-game overlay's item in the official pack (OVL2): Settings → Genel "Oyun içi katman"
@@ -174,8 +175,9 @@ pub struct PackSelection {
     pub items: BTreeMap<String, bool>,
     /// Legacy optional group id → enabled. Groups not listed keep their recorded choice.
     pub groups: BTreeMap<String, bool>,
-    /// Items to bring back to the pack's file ("Önerilene döndür"): a file the player replaced
-    /// is overwritten with the pack's. Listing an item does not change its choice.
+    /// Items to bring back to the pack's file ("Önerilene döndür", "Paketin Sürümüne Dön"): a
+    /// file the player replaced is overwritten with the pack's, and the item's override
+    /// ([`crate::overrides::ItemOverride`]) goes. Listing an item does not change its choice.
     #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     pub revert: BTreeSet<String>,
 }
@@ -247,6 +249,14 @@ pub struct ItemStatus {
     /// Switched off and kept as `<path>.disabled` on disk (set by [`crate::plan_sync`]).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub disabled_copy: bool,
+    /// The player's own version of the item, installed instead of the pack's file (PACK-EDIT;
+    /// set by [`crate::plan_sync`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_override: Option<ItemOverride>,
+    /// File name of a jar of the player's in `mods/` that declares the item's mod: it stands in
+    /// for the item, whose copy is not installed (set by [`crate::plan_sync`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stand_in: Option<String>,
 }
 
 /// Result of [`resolve_items`].
@@ -415,6 +425,8 @@ pub(crate) fn resolve_with(
                 manual: None,
                 modified: false,
                 disabled_copy: false,
+                version_override: None,
+                stand_in: None,
             }
         })
         .collect();

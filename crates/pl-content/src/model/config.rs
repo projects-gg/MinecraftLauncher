@@ -493,8 +493,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
 }
 
 /// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
-/// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk`, `voice`, `socNext` and
-/// `telemetry`, which stay off until Studio turns them on.
+/// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk`, `voice`, `socNext`,
+/// `telemetry` and `packEdit`, which stay off until Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -564,6 +564,13 @@ pub struct Features {
     /// off again forgets what waits; written only when on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub telemetry: bool,
+    /// "Sürümü Değiştir" (PACK-EDIT): players pick another Modrinth version of an official pack
+    /// mod in the mod center, and the launcher upgrades a pack library by itself when a mod of
+    /// theirs needs a newer one. Off by default; written only when on. Without it a jar of the
+    /// player's still stands in for the pack's copy of the same mod and duplicates are still
+    /// turned off before a launch (not features).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub pack_edit: bool,
 }
 
 impl Default for Features {
@@ -585,6 +592,7 @@ impl Default for Features {
             voice: false,
             soc_next: false,
             telemetry: false,
+            pack_edit: false,
         }
     }
 }

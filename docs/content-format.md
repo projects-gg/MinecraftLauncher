@@ -390,7 +390,7 @@ cache file extension.
 
 Every field is optional (`{}` is a valid config). Defaults: no maintenance, no banners, bundled
 hero art with `particles: embers`, `season: none`, all feature flags `true` except `friends`,
-`teams`, `chat`, `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk`, `voice`, `socNext` and `telemetry` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
+`teams`, `chat`, `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk`, `voice`, `socNext`, `telemetry` and `packEdit` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
 news feed, the launcher's built-in recommended Minecraft version.
 
 - `banners[].level`: `info | warning | event | critical`; a banner is shown while
@@ -540,6 +540,16 @@ news feed, the launcher's built-in recommended Minecraft version.
   on forgets what it had not sent. Turn it on only after the privacy page says it. Writers omit it
   while it is `false`; launchers that do not know the field ignore it. Publishing it needs a Studio
   that knows the field (TELEMETRY).
+- `features.packEdit`: "Sürümü Değiştir" (PACK-EDIT): desktop launchers let players pick another
+  Modrinth version of an official pack item in the mod center (the player's
+  [override](#sync-semantics-and-pack-state)), and when a mod of the player's needs a pack library
+  newer than the pack's (a dependency version the check refuses), the launcher upgrades the library
+  as such an override before the launch and in "Onar". Off by default: while it is `false` (or
+  missing) nothing of it shows and nothing is upgraded; overrides made earlier stay and can be
+  undone. Two rules are not features and hold without it: a jar the player added that declares a
+  pack item's mod id stands in for the item, and a mod installed twice keeps one copy before a
+  launch. Writers omit it while it is `false`; launchers that do not know the field ignore it.
+  Publishing it needs a Studio that knows the field (PACK-EDIT).
 - `newsFeed`: the Discord bot's feed ([News feed (Discord bot)](#news-feed-discord-bot)).
   `mirrors`: 1–4 distinct `https://` bases with a host, ending in `/`, without credentials, query
   or fragment. `keys`: 1–4 distinct `{ keyId, publicKey }`, `publicKey` the base64 of a 32-byte
@@ -1402,7 +1412,22 @@ The launcher records the active set of a game directory in
   "groups": { "shaders": false },
   "items": { "AANobbMI": true, "HVnmMxH1": false, "YL57xq9U": false },
   "seenItems": ["AANobbMI", "HVnmMxH1", "P7dR8mSH", "YL57xq9U"],
-  "manual": { "YL57xq9U": "disabled" }
+  "manual": { "YL57xq9U": "disabled" },
+  "overrides": {
+    "P7dR8mSH": {
+      "path": "mods/fabric-api-0.117.0+1.21.1.jar",
+      "sha1": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c",
+      "size": 2310144,
+      "url": "https://cdn.modrinth.com/data/P7dR8mSH/versions/Xk3dq9Ab/fabric-api-0.117.0%2B1.21.1.jar",
+      "versionId": "Xk3dq9Ab",
+      "versionNumber": "0.117.0+1.21.1",
+      "published": "2026-11-02T09:30:00Z",
+      "packSha1": "c4a6b98922058d3b769e3f702b75863b87652188",
+      "reason": "needed",
+      "neededBy": ["Bobby"]
+    }
+  },
+  "itemMods": { "AANobbMI": ["sodium"], "P7dR8mSH": ["fabric-api"] }
 }
 ```
 
@@ -1417,6 +1442,28 @@ The launcher records the active set of a game directory in
   item ids the player has been shown. `manual`: item id → the manual change a sync adopted
   (`removed`, `disabled`, `enabled`) that the player has not confirmed in the mod center yet.
   All of them are optional.
+- `overrides` (PACK-EDIT, desktop): item id → the player's own version of the item: a Modrinth
+  version the player picked ("Sürümü Değiştir", `reason: chosen`) or one the launcher picked
+  because a mod of the player's needs a newer one (`reason: needed`, `neededBy` names those
+  mods). The sync installs the override's file (`path` directly under `mods/`, a `.jar`; `sha1`,
+  optional `sha512`, `size`; `url` on `https://cdn.modrinth.com/` only) in place of the item's file,
+  records it under the item, deletes the item's own file while unchanged, and never puts the
+  pack's file back; a repair keeps it too. An override that breaks these rules, takes another
+  manifest file's path, or whose item left the pack (or is a launcher setting's) is ignored and
+  dropped. A selection's `revert` ("Paketin Sürümüne Dön") drops it and brings the pack's file
+  back. `packSha1` is the pack's file for the item when the override was made or last compared:
+  once the manifest has another file there, the launcher compares Modrinth's publish dates of the
+  pack's version and the override's (`published`) and drops the override when the pack's is not
+  older (the player follows the pack again); otherwise it keeps it and remembers the new
+  `packSha1`. Overrides belong to their version's set (parked and restored with it, never carried
+  to another version).
+- `itemMods` (desktop): item id → the mod ids (top level and provided) its jar declares, learned
+  whenever a sync finds the item's file on disk. A jar in `mods/` that the pack did not install
+  (no record) and that is no override's file **stands in** for every item whose mod ids it
+  declares or provides (Fabric API's item is known as `fabric-api` before anything is learned):
+  the item's file is not installed, a copy the pack installed goes while unchanged, a missing pack
+  file is not taken for the player's removal, and the item comes back once the jar goes. Items a
+  launcher setting owns are left to it. Learned ids carry over to a version's first visit.
 
 Which items are installed (the mod center rules):
 

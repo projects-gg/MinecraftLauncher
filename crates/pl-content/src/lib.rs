@@ -19,6 +19,8 @@
 //!   updating and removing a [`ModSet`] with the sync engine, per version like the pack state.
 //! - [`needs`]: mods that need another mod in practice although they declare it optional
 //!   ([`hidden_needs`]).
+//! - [`overrides`]: the player's own versions of pack items and the player's jars that stand in
+//!   for them (PACK-EDIT), followed by the sync.
 //! - [`studio`]: [`IndexBuilder`] and helpers to publish content; [`json`] gives the
 //!   deterministic serialization Studio uploads.
 //! - [`feed`]: the Discord bot's news feed ([`FeedClient`]: delegated-key verification,
@@ -38,6 +40,7 @@ pub mod json;
 pub mod model;
 pub mod modsets;
 pub mod needs;
+pub mod overrides;
 pub mod path;
 pub mod season;
 pub mod sets;
@@ -69,6 +72,10 @@ pub use modsets::{
     plan_set, plan_set_removal, provided_projects,
 };
 pub use needs::{HIDDEN_NEEDS, HiddenNeed, hidden_needs};
+pub use overrides::{
+    DiskJar, FABRIC_API_MOD_ID, FollowOutcome, ItemOverride, OVERRIDE_DOWNLOAD_PREFIX,
+    OverrideReason, PendingComparison, follow_pack, own_stand_ins, pending_comparisons,
+};
 pub use sets::{ParkedSet, SetInfo, SwitchJournal, SwitchRequest, SwitchStep, VersionSets};
 pub use signing::{
     CONTENT_PUBLIC_KEYS, SignatureFile, SigningKey, TrustedKey, VerifyingKey, content_public_keys,
