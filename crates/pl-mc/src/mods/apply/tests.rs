@@ -174,14 +174,14 @@ impl RepairHost for Host {
             .map(|(item, _, _)| item.clone())
     }
 
-    async fn sync_pack(&self, request: PackRequest, progress: PercentFn) -> Result<()> {
+    async fn sync_pack(&self, request: PackRequest, progress: PercentFn) -> Result<PackSynced> {
         progress(50.0);
         let writes: Vec<(PathBuf, Vec<u8>)> = self.on_sync.lock().unwrap().drain(..).collect();
         for (path, bytes) in writes {
             std::fs::write(path, bytes).unwrap();
         }
         self.requests.lock().unwrap().push(request);
-        Ok(())
+        Ok(PackSynced::default())
     }
 
     async fn loader_versions(&self) -> Result<Vec<LoaderVersion>> {
@@ -245,6 +245,7 @@ impl Game {
             env,
             origins: &origins,
             has_pack: host.pack,
+            pack_upgrades: false,
         };
         plan_repair(&ctx, Some(&report), None)
     }
@@ -710,6 +711,7 @@ async fn an_update_without_a_fitting_version_turns_the_mod_off() {
         env: &env,
         origins: &origins,
         has_pack: false,
+        pack_upgrades: false,
     };
     let plan = plan_repair(&ctx, Some(&report), None);
     let job = g.job(&host, env, client(&server), None);

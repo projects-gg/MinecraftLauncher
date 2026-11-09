@@ -15,6 +15,10 @@
 //!   disabled copy is kept while the item is off; a disabled copy renamed back switches the item
 //!   on. When the mods folder vanished, or most pack mods disappeared at once, the set counts as
 //!   wiped and the selection is installed again instead ([`SyncPlan::reset`]);
+//! - the player's own versions of items ([`crate::overrides`]): an override's file is installed
+//!   instead of the item's and never replaced by the pack's; a jar of the player's that declares
+//!   an item's mod id stands in for the item, whose copy is then neither installed nor kept
+//!   (the loader never sees the mod twice);
 //! - any other pack file the player disabled (`<path>.disabled`) stays disabled;
 //! - optional groups switch the files no item covers; server-only files are skipped;
 //! - a path whose spelling only changes in letter case between versions (`config/Foo.toml` →
@@ -43,6 +47,9 @@ use crate::items::{
     resolve_items, resolve_with,
 };
 use crate::model::{EnvSupport, FilePolicy, PackFile, PackItem, PackManifest, ProjectsExtension};
+use crate::overrides::{
+    DiskJar, ItemOverride, effective_overrides, learn_item_mods, own_stand_ins,
+};
 use crate::path::{LAUNCHER_DIR, check_relative_path, join_relative};
 
 /// File name of the pack state inside `<game_dir>/.projects/` and inside a parked set folder.
@@ -86,6 +93,14 @@ pub struct PackState {
     /// (item id → change).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub manual: BTreeMap<String, ManualChange>,
+    /// Item id → the version the sync installs instead of the pack's file (PACK-EDIT,
+    /// [`crate::overrides`]): the player's pick, or a newer one a mod of theirs needs.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub overrides: BTreeMap<String, ItemOverride>,
+    /// Item id → the mod ids its jar declares, learned from the disk: a jar of the player's that
+    /// declares one of them stands in for the item ([`crate::overrides::own_stand_ins`]).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub item_mods: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -168,6 +183,8 @@ impl PackState {
     ///   saw are new and stay off) together with the records under [`COPIED_DIRS`], which the
     ///   switch copies; no `mods/` record carries over, so the next sync installs the target's
     ///   mods. The state names no pack version until that sync.
+    /// - Overrides belong to their version's set and stay with it; the mod ids learned for the
+    ///   items carry over on a first visit (an item's mod is the same in every version).
     pub fn switch_version(
         self,
         from_minecraft: &str,
@@ -184,6 +201,8 @@ impl PackState {
             items,
             seen_items,
             manual,
+            overrides,
+            item_mods,
         } = self;
         let (parked_files, shared_files): (BTreeMap<_, _>, BTreeMap<_, _>) = files
             .into_iter()
@@ -224,6 +243,8 @@ impl PackState {
                     items: items.clone(),
                     seen_items: seen_items.clone(),
                     manual: BTreeMap::new(),
+                    overrides: BTreeMap::new(),
+                    item_mods: item_mods.clone(),
                 }
             }
         };
@@ -238,6 +259,8 @@ impl PackState {
                 items,
                 seen_items,
                 manual,
+                overrides,
+                item_mods,
             },
             active,
         }
@@ -280,9 +303,15 @@ pub(crate) fn in_dirs(path: &str, dirs: &[&str]) -> bool {
 }
 
 /// Knobs for [`plan_sync`].
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SyncPolicy {
+    /// The jars of the game directory's `mods/` with their mod ids (the launcher reads them,
+    /// `pl_mc::mods::scan`). An enabled jar of the player's that declares a pack item's mod id
+    /// stands in for the item ([`crate::overrides::own_stand_ins`]); empty: nothing does, and
+    /// nothing is learned.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub disk_mods: Vec<DiskJar>,
     /// "Repair": make every pack file match the pack again, overriding `ifMissing` and
     /// `preserveUserChanges` (user-added and disabled files are still left alone).
     pub repair: bool,
@@ -648,8 +677,14 @@ pub fn estimate_downloads(manifest: &PackManifest, state: Option<&PackState>) ->
         .map(|status| status.id.as_str())
         .collect();
     let groups = group_choices(&manifest.projects, state, None);
+    let overrides: HashMap<String, PackFile> = state
+        .map(|state| effective_overrides(manifest, state, &|_| false))
+        .unwrap_or_default()
+        .iter()
+        .map(|(id, choice)| (id.clone(), choice.pack_file()))
+        .collect();
     let mut estimate = DownloadEstimate::default();
-    for (file, _, _) in desired_files(manifest, &enabled, &groups) {
+    for (file, _, _) in desired_files(manifest, &enabled, &groups, &overrides, &BTreeMap::new()) {
         let expected = normalize_hex(&file.hashes.sha1, 40);
         let current = state
             .and_then(|state| state.files.get(&file.path))
@@ -721,10 +756,21 @@ pub async fn plan_sync(
     let empty = PackState::default();
     let prev = previous.unwrap_or(&empty);
 
-    // Manual changes: what became of the files the last sync installed.
+    // The player's own versions of items, and the player's jars that stand in for items.
+    let reverted = |id: &str| selection.is_some_and(|s| s.revert.contains(id));
+    let overrides = effective_overrides(manifest, prev, &reverted);
+    let override_files: HashMap<String, PackFile> = overrides
+        .iter()
+        .map(|(id, choice)| (id.clone(), choice.pack_file()))
+        .collect();
+    let learned = learn_item_mods(manifest, prev, &policy.disk_mods);
+    let stand_ins = own_stand_ins(manifest, prev, &learned, &overrides, &policy.disk_mods);
+
+    // Manual changes: what became of the files the last sync installed. A file a jar of the
+    // player's stands in for is not the player's change.
     let disk = observe_records(game_dir, ext, prev).await;
-    let reset = looks_wiped(game_dir, prev, &disk).await;
-    let mut adoption = adopt(ext, prev, selection, &disk, reset);
+    let reset = looks_wiped(game_dir, ext, prev, &disk, &stand_ins).await;
+    let mut adoption = adopt(ext, prev, selection, &disk, reset, &stand_ins);
 
     let resolution = resolve_with(
         manifest,
@@ -741,11 +787,11 @@ pub async fn plan_sync(
         .collect();
     // Libraries are not choices: one the player removed comes back because something needs it,
     // and the mod center says so.
-    for item in ext
-        .items
-        .iter()
-        .filter(|item| item.library && enabled_items.contains(item.id.as_str()))
-    {
+    for item in ext.items.iter().filter(|item| {
+        item.library
+            && enabled_items.contains(item.id.as_str())
+            && !stand_ins.contains_key(&item.id)
+    }) {
         let Some((path, record)) = installed_record(prev, item) else {
             continue;
         };
@@ -763,7 +809,13 @@ pub async fn plan_sync(
     }
 
     let groups = group_choices(ext, previous, selection);
-    let desired = desired_files(manifest, &enabled_items, &groups);
+    let desired = desired_files(
+        manifest,
+        &enabled_items,
+        &groups,
+        &override_files,
+        &stand_ins,
+    );
     let desired_paths: HashSet<&str> = desired
         .iter()
         .map(|(file, _, _)| file.path.as_str())
@@ -828,6 +880,8 @@ pub async fn plan_sync(
             items: resolution.choices.clone(),
             seen_items: resolution.seen.clone(),
             manual: BTreeMap::new(),
+            overrides: overrides.clone(),
+            item_mods: learned,
         },
         state_changed: false,
     };
@@ -1016,6 +1070,21 @@ pub async fn plan_sync(
         status.manual = plan.next_state.manual.get(&status.id).copied();
         status.modified = modified_items.contains(&status.id);
         status.disabled_copy = kept_disabled.contains(&status.id);
+        if let Some(path) = stand_ins.get(&status.id) {
+            // The player's jar is the item's copy: nothing of the pack's comes for it.
+            status.stand_in = Some(path.rsplit('/').next().unwrap_or(path).to_owned());
+            status.update_available = false;
+        } else if let Some(choice) = overrides.get(&status.id) {
+            // Up to date once the override's file is the one recorded for the item.
+            let in_place = prev.files.iter().any(|(path, record)| {
+                path.eq_ignore_ascii_case(&choice.path)
+                    && record.item.as_deref() == Some(status.id.as_str())
+                    && record.sha1.eq_ignore_ascii_case(&choice.sha1)
+            });
+            status.update_available = status.installed && !in_place;
+            status.size = choice.size;
+            status.version_override = Some(choice.clone());
+        }
     }
     plan.adopted = adoption.changes;
     plan.reset = reset;
@@ -1045,11 +1114,14 @@ fn group_choices(
 
 /// The files the client should have, with their (manifest) policy and item: items follow the
 /// selection (groups do not apply to them), other files their groups; server-only files are
-/// skipped.
+/// skipped. An item with an override (`overrides`: item id → its file) gets that file instead of
+/// its own; an item a jar of the player's stands in for (`stand_ins`) gets none.
 fn desired_files<'a>(
     manifest: &'a PackManifest,
     enabled_items: &HashSet<&str>,
     groups: &BTreeMap<String, bool>,
+    overrides: &'a HashMap<String, PackFile>,
+    stand_ins: &BTreeMap<String, String>,
 ) -> Vec<(&'a PackFile, FilePolicy, Option<&'a str>)> {
     let ext: &'a ProjectsExtension = &manifest.projects;
     let item_by_path: HashMap<&'a str, &'a PackItem> = ext
@@ -1068,19 +1140,27 @@ fn desired_files<'a>(
         .iter()
         .filter(|file| file.client_support() != EnvSupport::Unsupported)
         .filter_map(|file| {
-            let wanted = match item_by_path.get(file.path.as_str()) {
-                Some(item) => enabled_items
-                    .contains(item.id.as_str())
-                    .then_some(Some(item.id.as_str())),
-                None => membership
-                    .get(file.path.as_str())
-                    .is_none_or(|ids| {
+            let (file, item) = match item_by_path.get(file.path.as_str()) {
+                Some(item) => {
+                    if !enabled_items.contains(item.id.as_str()) || stand_ins.contains_key(&item.id)
+                    {
+                        return None;
+                    }
+                    let file = overrides.get(&item.id).unwrap_or(file);
+                    (file, Some(item.id.as_str()))
+                }
+                None => {
+                    let wanted = membership.get(file.path.as_str()).is_none_or(|ids| {
                         ids.iter()
                             .any(|id| groups.get(*id).copied().unwrap_or(false))
-                    })
-                    .then_some(None),
+                    });
+                    if !wanted {
+                        return None;
+                    }
+                    (file, None)
+                }
             };
-            wanted.map(|item| (file, ext.config_policy.policy_for(&file.path), item))
+            Some((file, ext.config_policy.policy_for(&file.path), item))
         })
         .collect()
 }
@@ -1141,12 +1221,23 @@ async fn observe(game_dir: &Path, path: &str) -> Seen {
 }
 
 /// The mods folder looks wiped rather than edited: it is gone, or at least
-/// [`RESET_MIN_MISSING`] pack mods and more than half of them disappeared at once.
-async fn looks_wiped(game_dir: &Path, prev: &PackState, disk: &HashMap<String, Seen>) -> bool {
+/// [`RESET_MIN_MISSING`] pack mods and more than half of them disappeared at once. Files of
+/// items a jar of the player's stands in for do not count.
+async fn looks_wiped(
+    game_dir: &Path,
+    ext: &ProjectsExtension,
+    prev: &PackState,
+    disk: &HashMap<String, Seen>,
+    stand_ins: &BTreeMap<String, String>,
+) -> bool {
     let mods: Vec<&String> = prev
         .files
         .iter()
-        .filter(|(path, record)| FileCategory::of(path) == FileCategory::Mod && !record.disabled)
+        .filter(|(path, record)| {
+            FileCategory::of(path) == FileCategory::Mod
+                && !record.disabled
+                && record_item(ext, path, record).is_none_or(|id| !stand_ins.contains_key(id))
+        })
         .map(|(path, _)| path)
         .collect();
     let missing = mods
@@ -1165,20 +1256,21 @@ async fn looks_wiped(game_dir: &Path, prev: &PackState, disk: &HashMap<String, S
 /// Item choices the disk shows: files the last sync installed that the player deleted or
 /// disabled switch their item off, a kept disabled copy renamed back switches it on. Items
 /// the selection names are the player's explicit choice and are skipped, and so are the items a
-/// launcher setting owns (its switch is their one place).
+/// launcher setting owns (its switch is their one place) and those a jar of the player's stands
+/// in for (the jar is the item's copy; leaving the choice as it was brings the pack's copy back
+/// once the jar goes).
 fn adopt(
     ext: &ProjectsExtension,
     prev: &PackState,
     selection: Option<&PackSelection>,
     disk: &HashMap<String, Seen>,
     reset: bool,
+    stand_ins: &BTreeMap<String, String>,
 ) -> Adoption {
     let mut adoption = Adoption::default();
-    for item in ext
-        .items
-        .iter()
-        .filter(|item| !item.library && !LauncherItems::owns(&item.id))
-    {
+    for item in ext.items.iter().filter(|item| {
+        !item.library && !LauncherItems::owns(&item.id) && !stand_ins.contains_key(&item.id)
+    }) {
         if selection.is_some_and(|s| s.items.contains_key(&item.id)) {
             continue;
         }
@@ -3797,5 +3889,220 @@ mod tests {
         assert_eq!(back.parked.files["config/sodium.json"].sha1, "dd");
         assert!(!back.parked.items["sodium"]);
         assert_eq!(back.parked.pack_id, "projects-1.21.4");
+    }
+
+    // --- PACK-EDIT: the player's jars and versions ------------------------------------------
+
+    fn disk_jar(path: &str, id: &str) -> DiskJar {
+        DiskJar {
+            path: path.into(),
+            ids: vec![id.into()],
+            enabled: true,
+        }
+    }
+
+    fn seeing(disk: Vec<DiskJar>) -> SyncPolicy {
+        SyncPolicy {
+            disk_mods: disk,
+            ..SyncPolicy::default()
+        }
+    }
+
+    fn newer_fabric() -> ItemOverride {
+        ItemOverride {
+            path: "mods/fabric-api-0.141.jar".into(),
+            sha1: sha1_hex(b"fabric-new"),
+            sha512: None,
+            size: 10,
+            url: "https://cdn.modrinth.com/data/P7dR8mSH/versions/abc/fabric-api-0.141.jar".into(),
+            version_id: "abc".into(),
+            version_number: "0.141.0+26.1.2".into(),
+            published: Some("2026-11-01T10:00:00Z".into()),
+            pack_sha1: sha1_hex(b"fabric"),
+            reason: crate::overrides::OverrideReason::Chosen,
+            needed_by: Vec::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_jar_of_the_players_stands_in_for_the_pack_copy() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        let (m, state) = installed_with_zoom(game).await;
+        // A sync that sees the pack's jars learns their mod ids.
+        let learn = plan_sync(
+            &m,
+            game,
+            Some(&state),
+            None,
+            &seeing(vec![
+                disk_jar("mods/fabric-api.jar", "fabric-api"),
+                disk_jar("mods/sodium.jar", "sodium"),
+            ]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(learn.next_state.item_mods["fabric-api"], ["fabric-api"]);
+        let state = learn.next_state;
+
+        // The player deletes the pack's Fabric API and drops a newer one under another name:
+        // nothing of the pack's comes back and nothing counts as switched off.
+        std::fs::remove_file(game.join("mods/fabric-api.jar")).unwrap();
+        write(game, "mods/fabric-api-0.141.jar", b"fabric-new");
+        let theirs = vec![
+            disk_jar("mods/fabric-api-0.141.jar", "fabric-api"),
+            disk_jar("mods/sodium.jar", "sodium"),
+        ];
+        let plan = plan_sync(&m, game, Some(&state), None, &seeing(theirs.clone()))
+            .await
+            .unwrap();
+        assert!(plan.downloads.is_empty() && plan.deletes.is_empty());
+        assert!(plan.adopted.is_empty() && plan.next_state.manual.is_empty());
+        let fabric = status(&plan, "fabric-api");
+        assert_eq!(fabric.stand_in.as_deref(), Some("fabric-api-0.141.jar"));
+        assert!(fabric.effectively_enabled && !fabric.update_available);
+        assert!(!plan.next_state.files.contains_key("mods/fabric-api.jar"));
+
+        // The pack's copy beside it goes: the loader would see the mod twice.
+        write(game, "mods/fabric-api.jar", b"fabric");
+        let mut both = theirs.clone();
+        both.push(disk_jar("mods/fabric-api.jar", "fabric-api"));
+        let plan = plan_sync(&m, game, Some(&state), None, &seeing(both))
+            .await
+            .unwrap();
+        assert_eq!(deleted(&plan), ["mods/fabric-api.jar"]);
+        assert!(plan.downloads.is_empty());
+
+        // Once the player's jar goes, the pack's copy comes back.
+        std::fs::remove_file(game.join("mods/fabric-api.jar")).unwrap();
+        std::fs::remove_file(game.join("mods/fabric-api-0.141.jar")).unwrap();
+        let back = plan_sync(
+            &m,
+            game,
+            Some(&plan.next_state),
+            None,
+            &seeing(vec![disk_jar("mods/sodium.jar", "sodium")]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            paths(&back.downloads),
+            [("mods/fabric-api.jar", DownloadAction::Add)]
+        );
+
+        // Without the disk's jars (callers that do not read them) nothing stands in.
+        let blind = plan_sync(&m, game, Some(&state), None, &SyncPolicy::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            paths(&blind.downloads),
+            [("mods/fabric-api.jar", DownloadAction::Add)]
+        );
+    }
+
+    #[tokio::test]
+    async fn an_override_replaces_the_pack_file_until_the_player_goes_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        let (m, mut state) = installed_with_zoom(game).await;
+        let mine = newer_fabric();
+        state.overrides.insert("fabric-api".into(), mine.clone());
+        let plan = plan_sync(&m, game, Some(&state), None, &SyncPolicy::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            paths(&plan.downloads),
+            [("mods/fabric-api-0.141.jar", DownloadAction::Update)]
+        );
+        assert_eq!(plan.downloads[0].urls, std::slice::from_ref(&mine.url));
+        assert_eq!(plan.downloads[0].item.as_deref(), Some("fabric-api"));
+        assert_eq!(deleted(&plan), ["mods/fabric-api.jar"]);
+        assert_eq!(plan.next_state.overrides["fabric-api"], mine);
+        let fabric = status(&plan, "fabric-api");
+        assert_eq!(fabric.version_override.as_ref(), Some(&mine));
+        assert!(fabric.update_available, "its file is not in place yet");
+
+        // Applied: later syncs, a repair too, keep the player's file.
+        std::fs::remove_file(game.join("mods/fabric-api.jar")).unwrap();
+        write(game, "mods/fabric-api-0.141.jar", b"fabric-new");
+        let state = plan.next_state.clone();
+        for repair in [false, true] {
+            let again = plan_sync(
+                &m,
+                game,
+                Some(&state),
+                None,
+                &SyncPolicy {
+                    repair,
+                    ..SyncPolicy::default()
+                },
+            )
+            .await
+            .unwrap();
+            assert!(
+                again.downloads.is_empty() && again.deletes.is_empty(),
+                "repair: {repair}"
+            );
+            assert!(!status(&again, "fabric-api").update_available);
+            assert_eq!(again.next_state.overrides.len(), 1);
+        }
+
+        // "Paketin Sürümüne Dön": the pack's file comes back and the override goes.
+        let back = plan_sync(
+            &m,
+            game,
+            Some(&state),
+            Some(&PackSelection {
+                revert: BTreeSet::from(["fabric-api".to_owned()]),
+                ..PackSelection::default()
+            }),
+            &SyncPolicy::default(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            paths(&back.downloads),
+            [("mods/fabric-api.jar", DownloadAction::Update)]
+        );
+        assert_eq!(deleted(&back), ["mods/fabric-api-0.141.jar"]);
+        assert!(back.next_state.overrides.is_empty());
+        assert!(status(&back, "fabric-api").version_override.is_none());
+    }
+
+    #[tokio::test]
+    async fn an_unusable_override_is_dropped() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        let (m, mut state) = installed_with_zoom(game).await;
+        let mut elsewhere = newer_fabric();
+        elsewhere.url = "https://example.com/fabric.jar".into();
+        state.overrides.insert("fabric-api".into(), elsewhere);
+        let plan = plan_sync(&m, game, Some(&state), None, &SyncPolicy::default())
+            .await
+            .unwrap();
+        assert!(plan.downloads.is_empty() && plan.deletes.is_empty());
+        assert!(plan.next_state.overrides.is_empty());
+    }
+
+    #[test]
+    fn overrides_stay_with_their_version_set() {
+        let mut state = PackState::default();
+        state.overrides.insert("fabric-api".into(), newer_fabric());
+        state
+            .item_mods
+            .insert("fabric-api".into(), vec!["fabric-api".into()]);
+        let first = state.switch_version("26.1.2", "26.2", None);
+        assert_eq!(first.parked.overrides.len(), 1);
+        assert!(first.active.overrides.is_empty());
+        assert_eq!(
+            first.active.item_mods.len(),
+            1,
+            "an item's mod ids carry over"
+        );
+        let back = first
+            .active
+            .switch_version("26.2", "26.1.2", Some(first.parked.clone()));
+        assert_eq!(back.active.overrides.len(), 1);
+        assert!(back.parked.overrides.is_empty());
     }
 }

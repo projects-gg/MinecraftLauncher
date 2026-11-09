@@ -150,6 +150,31 @@ pub struct ModCenterItemView {
     pub modified: bool,
     /// Switched off and kept as a disabled copy.
     pub disabled_copy: bool,
+    /// The player's own version of the mod (PACK-EDIT), installed instead of the pack's.
+    pub version_override: Option<VersionOverrideView>,
+    /// File name of a jar of the player's that stands in for the mod: the pack's copy is not
+    /// installed.
+    pub stand_in: Option<String>,
+}
+
+/// Why the player has their own version of a pack mod.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum OverrideKind {
+    /// The player picked it ("Sürümü Değiştir").
+    Chosen,
+    /// The launcher picked it: a mod of the player's needs it newer.
+    Needed,
+}
+
+/// The player's own version of a pack mod.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionOverrideView {
+    pub version_number: String,
+    pub kind: OverrideKind,
+    /// For `needed`: the mods that needed it, by name.
+    pub needed_by: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -347,6 +372,17 @@ pub(crate) fn item_views(
                 manual: status.manual.and_then(change_view),
                 modified: status.modified,
                 disabled_copy: status.disabled_copy,
+                version_override: status.version_override.as_ref().map(|choice| {
+                    VersionOverrideView {
+                        version_number: choice.version_number.clone(),
+                        kind: match choice.reason {
+                            pl_content::OverrideReason::Needed => OverrideKind::Needed,
+                            _ => OverrideKind::Chosen,
+                        },
+                        needed_by: choice.needed_by.clone(),
+                    }
+                }),
+                stand_in: status.stand_in.clone(),
             })
         })
         .collect()
@@ -413,12 +449,14 @@ pub(crate) fn notice(
 
 /// Background-sync policy for `game_dir`: files whose size and recorded hash match are not hashed
 /// again; the launcher's own items follow their settings ("Oyun içi katman", crate::overlay;
-/// "Hızlı kaynak paketi yükleme", crate::fastpack).
+/// "Hızlı kaynak paketi yükleme", crate::fastpack); a jar of the player's stands in for the pack
+/// item with its mod id (PACK-EDIT, `pl_content::overrides`).
 pub(crate) async fn quick(game_dir: &Path, previous: Option<&PackState>) -> SyncPolicy {
     SyncPolicy {
         repair: false,
         quick_check: true,
         items: crate::fastpack::pack_items(game_dir, previous).await,
+        disk_mods: crate::commands::packedit::disk_mods(game_dir).await,
     }
 }
 
@@ -459,7 +497,7 @@ fn game_running(state: &AppState, instance_id: &str) -> bool {
     state.games.lock().of_instance(instance_id)
 }
 
-fn not_available() -> CmdError {
+pub(crate) fn not_available() -> CmdError {
     CmdError::new(
         "PAKET-YOK",
         pick(

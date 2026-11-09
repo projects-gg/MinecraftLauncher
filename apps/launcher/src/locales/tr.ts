@@ -44,6 +44,7 @@ import { trMotion } from "./tr-motion";
 import { trNewsColumn } from "./tr-news-column";
 import { trOverlay } from "./tr-overlay";
 import { trOverview } from "./tr-overview";
+import { trPackEdit } from "./tr-pack-edit";
 import { trPlacement } from "./tr-placement";
 import { trPlayAcct } from "./tr-play-acct";
 import { trPlayAgain } from "./tr-play-again";
@@ -121,6 +122,7 @@ export const tr = {
   crewWave2: trCrewWave2,
   overlay: trOverlay,
   fastPack: trFastPack,
+  packEdit: trPackEdit,
   lib1: trLib1,
   fix2: trFix2,
   chat2: trChat2,

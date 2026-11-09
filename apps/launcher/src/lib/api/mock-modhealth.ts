@@ -393,6 +393,10 @@ export const mockModHealth: ModHealthApi = {
     await delay(140);
     return keysFixed.delete(instanceId);
   },
+  async undoDuplicates() {
+    await delay(140);
+    return true;
+  },
 };
 
 /** The crash a mock launch reports for `localStorage["pl.mock.crash"]`. */

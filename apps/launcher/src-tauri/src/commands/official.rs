@@ -17,8 +17,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use pl_content::{
-    ContentSnapshot, PackLoader, PackManifest, PackRef, PackState, RootIndex, SyncPolicy,
-    SyncProgress, SyncProgressFn, apply_sync, plan_sync,
+    ContentSnapshot, PackLoader, PackManifest, PackRef, PackState, RootIndex, SyncProgress,
+    SyncProgressFn, apply_sync, plan_sync,
 };
 use pl_lang::pick;
 use pl_mc::install::{LaunchBar, McContext};
@@ -682,23 +682,19 @@ pub(crate) async fn sync_pack_files(
     }: PackSync<'_>,
     cancel: &CancellationToken,
 ) -> CmdResult<()> {
+    // The player's versions of pack mods follow the pack again once it caught up (PACK-EDIT;
+    // asks Modrinth only when the pack changed such a mod, never offline).
+    if !offline {
+        crate::commands::packedit::follow_pack(state, manifest, game_dir).await;
+    }
     let previous = PackState::load(game_dir).await.map_err(pack_error)?;
     let first_install = previous.is_none();
-    let plan = plan_sync(
-        manifest,
-        game_dir,
-        previous.as_ref(),
-        None,
-        &SyncPolicy {
-            repair: false,
-            quick_check: true,
-            // "Oyun içi katman" installs or removes the overlay's mod (crate::overlay), "Hızlı doku
-            // paketi yükleme" the fast packs (crate::fastpack).
-            items: crate::fastpack::pack_items(game_dir, previous.as_ref()).await,
-        },
-    )
-    .await
-    .map_err(pack_error)?;
+    // "Oyun içi katman" installs or removes the overlay's mod (crate::overlay), "Hızlı doku paketi
+    // yükleme" the fast packs (crate::fastpack); the player's jars stand in for pack mods.
+    let policy = modcenter::quick(game_dir, previous.as_ref()).await;
+    let plan = plan_sync(manifest, game_dir, previous.as_ref(), None, &policy)
+        .await
+        .map_err(pack_error)?;
 
     let mut changed = 0;
     let mut failed = 0;

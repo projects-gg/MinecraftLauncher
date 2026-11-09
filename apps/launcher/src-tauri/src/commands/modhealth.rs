@@ -32,9 +32,10 @@ use pl_mc::launch::crash::{
 };
 use pl_mc::loaders::{LoaderKind, LoaderVersion};
 use pl_mc::mods::apply::{
-    PackRequest, PercentFn, ReinstallJob, ReinstallPhase, ReinstallProgress, RepairHost, RepairJob,
-    RepairOutcome, RepairProgress, StepNote, StepState, StepStatus, check_environment,
-    file_origins, fix_key, java_major_from_version_json, run_reinstall, run_repair,
+    PackRequest, PackSynced, PercentFn, ReinstallJob, ReinstallPhase, ReinstallProgress,
+    RepairHost, RepairJob, RepairOutcome, RepairProgress, StepNote, StepState, StepStatus,
+    check_environment, file_origins, fix_key, java_major_from_version_json, run_reinstall,
+    run_repair,
 };
 use pl_mc::mods::check::{
     CheckEnvironment, DisableReason, FileOrigins, IssueKind, ModCheckReport, ModFix, ModIssue,
@@ -75,6 +76,12 @@ pub struct ModHealth {
     /// The key clashes asked about before a launch, per instance (the issue's key): asked once
     /// per session, whatever the answer.
     keys_asked: Mutex<HashMap<String, String>>,
+    /// Extra copies of a duplicated mod the player put back ("Geri al" after the launcher turned
+    /// them off), per instance: not turned off again this session (the launch asks instead).
+    declined: Mutex<HashMap<String, HashSet<String>>>,
+    /// Such copies to switch back on at the instance's next launch (the "Geri al" came while its
+    /// game was starting or running).
+    undo_pending: Mutex<HashMap<String, Vec<String>>>,
 }
 
 /// The registry, created on first use.
@@ -580,6 +587,7 @@ fn check_view(
         env: &checked.env,
         origins: &checked.origins,
         has_pack,
+        pack_upgrades: has_pack && crate::commands::packedit::on(),
     };
     // One issue per cause: a dependency missing for several mods, asked for with different
     // requirements or by one of its parts' ids (Fabric API), is one line naming every mod. Its
@@ -707,6 +715,10 @@ impl RepairHost for LauncherHost<'_> {
         self.manifest.is_some()
     }
 
+    fn pack_upgrades(&self) -> bool {
+        self.manifest.is_some() && crate::commands::packedit::on()
+    }
+
     async fn pack_files(&self) -> Vec<String> {
         PackState::load(&self.game_dir)
             .await
@@ -731,11 +743,44 @@ impl RepairHost for LauncherHost<'_> {
             .map(|item| item.id.clone())
     }
 
-    async fn sync_pack(&self, request: PackRequest, progress: PercentFn) -> pl_mc::Result<()> {
+    async fn sync_pack(
+        &self,
+        request: PackRequest,
+        progress: PercentFn,
+    ) -> pl_mc::Result<PackSynced> {
         let manifest = self.manifest.as_ref().ok_or(pl_mc::Error::Offline)?;
-        let previous = PackState::load(&self.game_dir)
+        let mut previous = PackState::load(&self.game_dir)
             .await
             .map_err(pack_failure)?;
+        // Pack libraries a mod needs newer become the player's versions first (PACK-EDIT).
+        let mut synced = PackSynced::default();
+        if !request.upgrade.is_empty() {
+            let pack_state = previous.get_or_insert_with(PackState::default);
+            let wants: Vec<crate::commands::packedit::Upgrade> = request
+                .upgrade
+                .iter()
+                .map(|upgrade| crate::commands::packedit::Upgrade {
+                    path: upgrade.path.clone(),
+                    version_reqs: upgrade.version_reqs.clone(),
+                    needed_by: Vec::new(),
+                })
+                .collect();
+            let (upgraded, left) = crate::commands::packedit::choose_upgrades(
+                self.state,
+                manifest,
+                (&self.minecraft, self.loader),
+                pack_state,
+                &wants,
+            )
+            .await;
+            synced.not_upgraded = left;
+            if !upgraded.is_empty() {
+                pack_state
+                    .save(&self.game_dir)
+                    .await
+                    .map_err(pack_failure)?;
+            }
+        }
         let item_of = |path: &str| {
             previous
                 .as_ref()
@@ -810,7 +855,7 @@ impl RepairHost for LauncherHost<'_> {
         )
         .await;
         tracing::info!(instance = %self.instance_id, summary = %plan.summary().describe_tr(), "pack synced for a mod repair");
-        Ok(())
+        Ok(synced)
     }
 
     async fn loader_versions(&self) -> pl_mc::Result<Vec<LoaderVersion>> {
@@ -975,6 +1020,203 @@ pub(crate) async fn prelaunch(
     } else {
         Prelaunch::Warned(view)
     }
+}
+
+// --- what the launcher fixes by itself (PACK-EDIT) --------------------------------------------
+
+/// A copy of a duplicated mod the launcher turned off before a launch.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnedOffView {
+    /// The mod's name.
+    pub name: String,
+    /// The file turned off (`mods_undo_duplicates` puts it back).
+    pub file: String,
+}
+
+/// What the launcher fixed by itself right before the pre-launch check.
+#[derive(Debug, Clone, Default, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoFixView {
+    /// Pack mods moved to a newer version because a mod of the player's needs it
+    /// (`features.packEdit`).
+    pub upgraded: Vec<crate::commands::packedit::UpgradedView>,
+    /// Extra copies of mods installed twice, turned off.
+    pub turned_off: Vec<TurnedOffView>,
+}
+
+/// Fixes what the launcher may fix alone before the game sees the mods (PACK-EDIT): with
+/// `features.packEdit`, a pack library a mod needs newer moves to a fitting newer version (the
+/// player's version of the pack mod; synced right away); and a mod installed twice keeps one
+/// copy, the player's own over the pack's, then the newest, the others renamed to `.disabled`
+/// ("Geri al": [`mods_undo_duplicates`]; this session then asks at the launch instead). Only
+/// what would certainly stop the game. `None` when nothing changed; a failure only skips it.
+pub(crate) async fn autofix(
+    app: &AppHandle,
+    state: &AppState,
+    instance: &Instance,
+    java: Option<u32>,
+    cancel: &CancellationToken,
+) -> Option<AutoFixView> {
+    if instance.loader.kind == LoaderKind::Vanilla {
+        return None;
+    }
+    let game_dir = state.instances.game_dir(&instance.id).ok()?;
+    let mods_dir = game_dir.join("mods");
+    // Copies the player asked back while the game ran: on again before the check, which then
+    // asks about them.
+    let pending = health(app)
+        .undo_pending
+        .lock()
+        .remove(&instance.id)
+        .unwrap_or_default();
+    for file in pending {
+        let disabled = mods_dir.join(format!("{file}.disabled"));
+        if tokio::fs::metadata(&disabled).await.is_ok()
+            && let Err(error) = pl_mc::mods::set_enabled(&disabled, true).await
+        {
+            tracing::warn!(%error, %file, "duplicate copy not put back");
+        }
+    }
+    let mut checked = check_instance(state, instance, java).await.ok()?;
+    let mut view = AutoFixView::default();
+
+    if crate::commands::packedit::on() && instance.managed_pack.is_some() {
+        let wants =
+            crate::commands::packedit::upgrades_wanted(&checked.report, &checked.origins, |m| {
+                checked.titles.name(m)
+            });
+        if !wants.is_empty()
+            && let PackSource::Ready { manifest, .. } =
+                pack_source(state, instance, &game_dir).await
+            && let Ok(Some(mut pack_state)) = PackState::load(&game_dir).await
+        {
+            let (upgraded, _) = crate::commands::packedit::choose_upgrades(
+                state,
+                &manifest,
+                (&instance.mc_version, instance.loader.kind),
+                &mut pack_state,
+                &wants,
+            )
+            .await;
+            if !upgraded.is_empty() && pack_state.save(&game_dir).await.is_ok() {
+                let policy = quick(&game_dir, Some(&pack_state)).await;
+                let synced =
+                    match plan_sync(&manifest, &game_dir, Some(&pack_state), None, &policy).await {
+                        Ok(plan) => {
+                            apply_sync(&plan, &state.mc.downloader, &sync_options(cancel), None)
+                                .await
+                                .map(|_| ())
+                        }
+                        Err(error) => Err(error),
+                    };
+                match synced {
+                    Ok(()) => {
+                        view.upgraded = upgraded;
+                        if let Ok(again) = check_instance(state, instance, java).await {
+                            checked = again;
+                        }
+                    }
+                    // The override stays: the next sync installs it.
+                    Err(error) => {
+                        tracing::warn!(%error, "pack upgrade not installed before the launch")
+                    }
+                }
+            }
+        }
+    }
+
+    let declined = health(app)
+        .declined
+        .lock()
+        .get(&instance.id)
+        .cloned()
+        .unwrap_or_default();
+    let blocking: Vec<&ModIssue> = checked
+        .report
+        .issues
+        .iter()
+        .filter(|issue| issue.kind == IssueKind::Duplicate && issue.severity == Severity::Blocking)
+        .collect();
+    if !blocking.is_empty() {
+        let only_blocking = ModCheckReport {
+            issues: blocking.into_iter().cloned().collect(),
+            checked_files: checked.report.checked_files,
+        };
+        for off in pl_mc::mods::check::duplicates_to_turn_off(&only_blocking) {
+            if declined.contains(&off.file) {
+                continue;
+            }
+            match pl_mc::mods::set_enabled(&mods_dir.join(&off.file), false).await {
+                Ok(_) => {
+                    tracing::info!(instance = %instance.id, file = %off.file, kept = %off.kept, "duplicate mod copy turned off before the launch");
+                    view.turned_off.push(TurnedOffView {
+                        name: checked
+                            .titles
+                            .of(&off.kept)
+                            .map_or_else(|| off.name.clone(), str::to_owned),
+                        file: off.file,
+                    });
+                }
+                Err(error) => {
+                    tracing::warn!(%error, file = %off.file, "duplicate mod copy not turned off")
+                }
+            }
+        }
+    }
+    (!view.upgraded.is_empty() || !view.turned_off.is_empty()).then_some(view)
+}
+
+/// "Geri al" after the launcher turned off extra copies of a duplicated mod: this session's
+/// launches ask about them instead of turning them off. They are switched on again now when the
+/// instance is idle (`true`); while its game is starting or running (the loader must not see the
+/// mod twice) at its next launch, before the check (`false`).
+#[tauri::command]
+#[specta::specta]
+pub async fn mods_undo_duplicates(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    files: Vec<String>,
+) -> CmdResult<bool> {
+    // Only plain file names of the mods folder.
+    let files: Vec<String> = files
+        .into_iter()
+        .filter(|file| !file.contains(['/', '\\', ':']) && pl_mc::mods::is_mod_file_name(file))
+        .collect();
+    health(&app)
+        .declined
+        .lock()
+        .entry(instance_id.clone())
+        .or_default()
+        .extend(files.iter().cloned());
+    let lock = instance_lock(&app, &instance_id);
+    let idle = refuse_while_running(&state, &instance_id).is_ok();
+    let guard = if idle { lock.try_lock().ok() } else { None };
+    let Some(_guard) = guard else {
+        health(&app)
+            .undo_pending
+            .lock()
+            .entry(instance_id)
+            .or_default()
+            .extend(files);
+        return Ok(false);
+    };
+    let game_dir = state
+        .instances
+        .game_dir(&instance_id)
+        .map_err(CmdError::from)?;
+    let mods_dir = game_dir.join("mods");
+    for file in &files {
+        let disabled = mods_dir.join(format!("{file}.disabled"));
+        if tokio::fs::metadata(&disabled).await.is_err() {
+            continue;
+        }
+        if let Err(error) = pl_mc::mods::set_enabled(&disabled, true).await {
+            tracing::warn!(%error, %file, "duplicate copy not put back");
+        }
+    }
+    Ok(true)
 }
 
 // --- key clashes (KEYS2) -----------------------------------------------------------------------
@@ -1215,6 +1457,7 @@ pub(crate) async fn crash_view(
             env: &checked.env,
             origins: &checked.origins,
             has_pack: instance.managed_pack.is_some(),
+            pack_upgrades: instance.managed_pack.is_some() && crate::commands::packedit::on(),
         };
         let plan = plan_repair(&ctx, Some(&checked.report), Some(&diagnosis));
         repair = repairable(&plan, &HashSet::new());
@@ -1346,7 +1589,9 @@ pub struct RepairResultView {
 /// The file a repair step acts on, if any (a pack path's file name for pack steps).
 fn step_file(action: &RepairAction) -> Option<&str> {
     match action {
-        RepairAction::RedownloadPackFile { path } | RepairAction::RevertPackFile { path, .. } => {
+        RepairAction::RedownloadPackFile { path }
+        | RepairAction::RevertPackFile { path, .. }
+        | RepairAction::UpgradePackFile { path, .. } => {
             Some(path.rsplit(['/', '\\']).next().unwrap_or(path))
         }
         RepairAction::RedownloadModrinthFile { file, .. }
@@ -1371,7 +1616,10 @@ fn step_view(state: &StepState, titles: &Titles) -> RepairStepView {
         RepairAction::DisableFile { .. } => RepairStepKind::Disable,
         RepairAction::UpdateLoader { .. } => RepairStepKind::Loader,
         RepairAction::UseJava { .. } => RepairStepKind::Java,
-        RepairAction::UpdateToCompatible { .. } => RepairStepKind::Update,
+        // A pack library moved to the newer version a mod needs (PACK-EDIT) reads as an update.
+        RepairAction::UpdateToCompatible { .. } | RepairAction::UpgradePackFile { .. } => {
+            RepairStepKind::Update
+        }
         RepairAction::FetchDependency { .. } => RepairStepKind::Fetch,
     };
     // A mod by its catalog title ("Sodium yeniden indirildi"), never by its file name.
@@ -1448,6 +1696,7 @@ pub async fn mods_repair(
         env: &checked.env,
         origins: &checked.origins,
         has_pack: host.has_pack(),
+        pack_upgrades: host.pack_upgrades(),
     };
     let tried = tried_for(&app, &instance_id);
     let crash = match &scope {
@@ -1525,6 +1774,7 @@ pub async fn mods_repair(
             env: &after.env,
             origins: &after.origins,
             has_pack: host.has_pack(),
+            pack_upgrades: host.pack_upgrades(),
         };
         let still: HashSet<String> = after
             .report

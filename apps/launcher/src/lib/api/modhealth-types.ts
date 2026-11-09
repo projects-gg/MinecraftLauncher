@@ -210,6 +210,12 @@ export interface ModHealthApi {
   fixKeys(instanceId: string): Promise<KeyFix>;
   /** "Geri al" after `fixKeys`; false when the backup is gone (nothing changed). */
   undoKeys(instanceId: string, backup: string): Promise<boolean>;
+  /**
+   * "Geri Al" after the launcher turned off extra copies of a mod installed twice (PACK-EDIT):
+   * this session's launches ask instead. `true`: back on now; `false`: at the next launch (the
+   * game was starting or running).
+   */
+  undoDuplicates(instanceId: string, files: string[]): Promise<boolean>;
 }
 
 // --- crashes -----------------------------------------------------------------------------------

@@ -250,6 +250,8 @@ pub struct HomeView {
     pub links: LinksView,
     /// SOC-NEXT's screens in the friends feature: `features.socNext` with `features.friends`.
     pub soc_next: bool,
+    /// "Sürümü Değiştir" for the official pack's mods (PACK-EDIT): `features.packEdit`.
+    pub pack_edit: bool,
     pub offline: bool,
     pub from_cache: bool,
 }
@@ -288,6 +290,8 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
     crate::fastpack::apply_flag(&state.root, snapshot.config.features.fast_packs);
     // Usage data (TELEMETRY): counted and sent only while it is on; off forgets what waits.
     crate::telemetry::apply_flag(snapshot.config.features.telemetry);
+    // "Sürümü Değiştir" (PACK-EDIT): the upgrades before a launch and in repairs follow it.
+    crate::commands::packedit::apply_flag(snapshot.config.features.pack_edit);
     state
         .afk
         .set_client_release(afk_client_release(state, snapshot));
@@ -530,6 +534,7 @@ async fn home_view(state: &AppState, snapshot: &ContentSnapshot) -> HomeView {
         pack_notes: pack_notes(state, snapshot).await,
         links: LinksView::from_config(&snapshot.config.links),
         soc_next: snapshot.config.features.friends && snapshot.config.features.soc_next,
+        pack_edit: snapshot.config.features.pack_edit,
         offline: snapshot.offline,
         from_cache: snapshot.from_cache,
     }

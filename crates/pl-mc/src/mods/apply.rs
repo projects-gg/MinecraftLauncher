@@ -300,6 +300,25 @@ pub struct PackRequest {
     pub enable_items: Vec<String>,
     /// The set's folders were emptied: install the saved selection again.
     pub reinstall: bool,
+    /// Pack files moved to a newer version a mod needs, before the sync (PACK-EDIT).
+    pub upgrade: Vec<PackUpgrade>,
+}
+
+/// A pack file to move to a newer version ([`RepairAction::UpgradePackFile`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PackUpgrade {
+    /// The pack path (`mods/fabric-api.jar`).
+    pub path: String,
+    /// Every requirement the new version must meet, in the loader's syntax.
+    pub version_reqs: Vec<String>,
+}
+
+/// What a pack sync of a repair could not do.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PackSynced {
+    /// Pack paths of [`PackRequest::upgrade`] no fitting version was found for (left as they
+    /// were).
+    pub not_upgraded: Vec<String>,
 }
 
 impl PackRequest {
@@ -317,12 +336,17 @@ pub trait RepairHost: Send + Sync {
     /// The pack item that installs the Modrinth project `project_id` (or a mod known by one of
     /// `slugs`), when the pack has one.
     fn pack_item_for(&self, project_id: &str, slugs: &[String]) -> Option<String>;
+    /// Whether pack files a mod needs newer may move to a newer version
+    /// ([`RepairContext::pack_upgrades`]).
+    fn pack_upgrades(&self) -> bool {
+        false
+    }
     /// Run the official pack sync with `request`; `progress` gets 0–100.
     fn sync_pack(
         &self,
         request: PackRequest,
         progress: PercentFn,
-    ) -> impl Future<Output = Result<()>> + Send;
+    ) -> impl Future<Output = Result<PackSynced>> + Send;
     /// Installable versions of the instance's loader for its Minecraft version, newest first.
     fn loader_versions(&self) -> impl Future<Output = Result<Vec<LoaderVersion>>> + Send;
     /// Use this loader version from now on; `false` when the instance does not choose its
@@ -355,6 +379,7 @@ pub fn step_key(action: &RepairAction) -> String {
         RepairAction::VerifyPackFiles => "pack".to_owned(),
         RepairAction::RedownloadPackFile { path } => format!("pack-file:{path}"),
         RepairAction::RevertPackFile { path, .. } => format!("revert:{path}"),
+        RepairAction::UpgradePackFile { path, .. } => format!("upgrade:{path}"),
         RepairAction::RedownloadModrinthFile { file, .. } => format!("redownload:{file}"),
         RepairAction::EnableFile { file, .. } => format!("enable:{file}"),
         RepairAction::DisableFile { file, .. } => format!("disable:{file}"),
@@ -526,6 +551,12 @@ impl<H: RepairHost> Run<'_, '_, H> {
                 RepairAction::VerifyPackFiles => request.sync = true,
                 RepairAction::RedownloadPackFile { path }
                 | RepairAction::RevertPackFile { path, .. } => request.revert.push(path.clone()),
+                RepairAction::UpgradePackFile {
+                    path, version_reqs, ..
+                } => request.upgrade.push(PackUpgrade {
+                    path: path.clone(),
+                    version_reqs: version_reqs.clone(),
+                }),
                 RepairAction::EnableFile { file, .. } => match pack(file) {
                     Some(path) => request.enable.push(path),
                     None => continue,
@@ -549,9 +580,16 @@ impl<H: RepairHost> Run<'_, '_, H> {
         let disabled = request.disable.clone();
         let result = self.job.host.sync_pack(request, self.percent_fn()).await;
         match result {
-            Ok(()) => {
+            Ok(synced) => {
                 // A pack item another enabled item needs stays installed.
                 for index in involved {
+                    if let RepairAction::UpgradePackFile { path, .. } =
+                        &self.steps[index].step.action
+                        && synced.not_upgraded.contains(path)
+                    {
+                        self.set(index, StepStatus::Failed, Some(StepNote::NoVersion));
+                        continue;
+                    }
                     let kept = match &self.steps[index].step.action {
                         RepairAction::DisableFile { file, .. } => {
                             let path = self.job.mods_dir.join(strip_disabled(file));
@@ -727,6 +765,7 @@ impl<H: RepairHost> Run<'_, '_, H> {
             env: &self.env,
             origins: &origins,
             has_pack: self.job.host.has_pack(),
+            pack_upgrades: self.job.host.pack_upgrades(),
         };
         let fresh = plan_repair(&ctx, Some(&report), crash);
         let wanted: Vec<RepairStep> = fresh
@@ -1115,7 +1154,7 @@ impl<H: RepairHost> Run<'_, '_, H> {
                 ..PackRequest::default()
             };
             match self.job.host.sync_pack(request, self.percent_fn()).await {
-                Ok(()) => self.set_all(&members, StepStatus::Done, Some(StepNote::FromPack)),
+                Ok(_) => self.set_all(&members, StepStatus::Done, Some(StepNote::FromPack)),
                 Err(error) if error.is_cancelled() => {}
                 Err(error) => {
                     self.set_all(&members, StepStatus::Failed, Some(network_note(&error)))
@@ -1483,7 +1522,7 @@ pub async fn run_reinstall<H: RepairHost>(job: &ReinstallJob<'_, H>) -> Result<R
             ..PackRequest::default()
         };
         match job.host.sync_pack(request, progress).await {
-            Ok(()) => outcome.pack_synced = true,
+            Ok(_) => outcome.pack_synced = true,
             Err(error) => tracing::warn!(%error, "pack sync after a reinstall failed"),
         }
     }

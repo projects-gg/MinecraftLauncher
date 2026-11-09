@@ -317,6 +317,7 @@ function SetPanel({
                 prefs={prefs}
                 onToggle={(on) => toggle(item, on)}
                 onRevert={() => undefined}
+                onBackToPack={() => undefined}
               />
             ))}
           </ul>

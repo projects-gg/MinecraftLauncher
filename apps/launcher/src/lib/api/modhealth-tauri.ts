@@ -86,4 +86,5 @@ export const tauriModHealth: ModHealthApi = {
     return { backup: fix.backup ?? undefined, changes: fix.changes.map(keyChange) };
   },
   undoKeys: (instanceId, backup) => ok(commands.modsUndoKeys(instanceId, backup)),
+  undoDuplicates: (instanceId, files) => ok(commands.modsUndoDuplicates(instanceId, files)),
 };

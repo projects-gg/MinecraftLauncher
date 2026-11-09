@@ -28,6 +28,8 @@ pub mod modpack_update;
 pub mod modrinth;
 pub mod modsets;
 pub mod official;
+// PACK-EDIT: the player's own versions of the official pack's mods.
+pub mod packedit;
 pub mod projects_skin;
 pub mod resume;
 pub mod server;
