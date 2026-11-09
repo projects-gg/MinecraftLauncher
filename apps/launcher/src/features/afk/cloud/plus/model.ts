@@ -629,6 +629,8 @@ const HANDOFF_WHY = [
   "pay",
   "cap",
   "window",
+  // The counterpart's side of the window was not the deal and stayed so after the bot's message.
+  "offer",
   "other",
 ] as const;
 export type HandoffWhy = (typeof HANDOFF_WHY)[number];

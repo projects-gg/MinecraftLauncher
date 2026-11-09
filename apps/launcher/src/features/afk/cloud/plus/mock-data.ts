@@ -24,8 +24,8 @@
 //   an older service (no plan: the switch as before).
 //   Without it the switch is off and the plan still comes, as from the newest service.
 // - `&handoff=<why>`: why the handoff is the player's trade (`owner_order` by default, as its order
-//   says; `halted`, `place`, `server`, `pay`, `cap`, `window`, `other`, or `none` as from an older
-//   agent). `halted` also stops the account's trading (the rail's note).
+//   says; `halted`, `place`, `server`, `pay`, `cap`, `window`, `offer`, `other`, or `none` as from
+//   an older agent). `halted` also stops the account's trading (the rail's note).
 // With `?cloud=intro` (no cloud account) `&plus=on` shows the AFK+ card beside 7/24 Bulut's.
 // The item data here is a small stand-in written for previews (the real file comes from our CDN).
 import { type InvFrame, type InvItem, SAMPLE_INVENTORY } from "@pl/ui/inventory";
