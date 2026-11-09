@@ -98,6 +98,8 @@ export const commands = {
 	links: LinksView,
 	/**  SOC-NEXT's screens in the friends feature: `features.socNext` with `features.friends`. */
 	socNext: boolean,
+	/**  "Sürümü Değiştir" for the official pack's mods (PACK-EDIT): `features.packEdit`. */
+	packEdit: boolean,
 	offline: boolean,
 	fromCache: boolean,
 } | null, CmdError>(__TAURI_INVOKE("content_home")),
@@ -1277,6 +1279,21 @@ export const commands = {
 	 */
 	modsUndoKeys: (instanceId: string, backup: string) => typedError<boolean, CmdError>(__TAURI_INVOKE("mods_undo_keys", { instanceId, backup })),
 	/**
+	 *  "Geri al" after the launcher turned off extra copies of a duplicated mod: this session's
+	 *  launches ask about them instead of turning them off. They are switched on again now when the
+	 *  instance is idle (`true`); while its game is starting or running (the loader must not see the
+	 *  mod twice) at its next launch, before the check (`false`).
+	 */
+	modsUndoDuplicates: (instanceId: string, files: string[]) => typedError<boolean, CmdError>(__TAURI_INVOKE("mods_undo_duplicates", { instanceId, files })),
+	/**  The Modrinth versions of a pack mod for the instance's Minecraft version and loader. */
+	packItemVersions: (instanceId: string, itemId: string) => typedError<PackItemVersionsView, CmdError>(__TAURI_INVOKE("pack_item_versions", { instanceId, itemId })),
+	/**
+	 *  Installs `version_id` of a pack mod for the player instead of the pack's (`None`, or the
+	 *  pack's own version: back to the pack's), then syncs like the mod center's "Uygula". Refused
+	 *  while the instance's game runs.
+	 */
+	packItemUseVersion: (instanceId: string, itemId: string, versionId: string | null, jobId: string, onProgress: Channel<JobProgressView>) => typedError<ModCenterApplyView, CmdError>(__TAURI_INVOKE("pack_item_use_version", { instanceId, itemId, versionId, jobId, onProgress })),
+	/**
 	 *  Settings → Java: the launcher's runtimes, then the Javas on the computer, then custom paths
 	 *  that are neither, each with the instances that use it. `rescan` looks for system Javas again.
 	 */
@@ -2222,6 +2239,17 @@ export type AutoEatOptions = {
 	enabled?: boolean,
 	/**  Food bar value, 0-20. */
 	threshold?: number,
+};
+
+/**  What the launcher fixed by itself right before the pre-launch check. */
+export type AutoFixView = {
+	/**
+	 *  Pack mods moved to a newer version because a mod of the player's needs it
+	 *  (`features.packEdit`).
+	 */
+	upgraded: UpgradedView[],
+	/**  Extra copies of mods installed twice, turned off. */
+	turnedOff: TurnedOffView[],
 };
 
 /**
@@ -5450,6 +5478,8 @@ export type HomeView = {
 	links: LinksView,
 	/**  SOC-NEXT's screens in the friends feature: `features.socNext` with `features.friends`. */
 	socNext: boolean,
+	/**  "Sürümü Değiştir" for the official pack's mods (PACK-EDIT): `features.packEdit`. */
+	packEdit: boolean,
 	offline: boolean,
 	fromCache: boolean,
 };
@@ -6287,6 +6317,14 @@ account: GameAccount }) & { changedFiles?: never; changelog?: never; code?: neve
 	type: "modsBlocked",
 } & ModCheckView | 
 /**
+ *  Before the mod check the launcher fixed what it may fix alone (PACK-EDIT): a pack mod a
+ *  mod of the player's needs newer moved to that version, an extra copy of a mod installed
+ *  twice was turned off ("Geri al": `mods_undo_duplicates`). The launch goes on.
+ */
+{
+	type: "modsAutoFixed",
+} & AutoFixView | 
+/**
  *  The instance's custom Java does not suit this game (too old for it or its mods, too new
  *  for a LaunchWrapper game, gone, not working): it was not started (the player chooses
  *  "Kur ve oyna", "Yine de dene" or cancels).
@@ -6854,6 +6892,13 @@ export type ModCenterItemView = {
 	modified: boolean,
 	/**  Switched off and kept as a disabled copy. */
 	disabledCopy: boolean,
+	/**  The player's own version of the mod (PACK-EDIT), installed instead of the pack's. */
+	versionOverride: VersionOverrideView | null,
+	/**
+	 *  File name of a jar of the player's that stands in for the mod: the pack's copy is not
+	 *  installed.
+	 */
+	standIn: string | null,
 };
 
 export type ModCenterPackView = {
@@ -7584,6 +7629,13 @@ export type OverlayStatus = {
 	kinds: string[],
 };
 
+/**  Why the player has their own version of a pack mod. */
+export type OverrideKind = 
+/**  The player picked it ("Sürümü Değiştir"). */
+"chosen" | 
+/**  The launcher picked it: a mod of the player's needs it newer. */
+"needed";
+
 /**  One file an update adds, changes, removes or leaves alone. */
 export type PackChangeView = {
 	/**  Game-relative path. */
@@ -7596,6 +7648,28 @@ export type PackChangeView = {
 	 */
 	folder: string,
 	iconUrl: string | null,
+};
+
+/**  One Modrinth version of a pack mod, for "Sürümü Değiştir". */
+export type PackItemVersionView = {
+	/**  The Modrinth version id. */
+	id: string,
+	/**  Its version number (`0.141.1+26.1.2`). */
+	number: string,
+	/**  When it was published (RFC 3339). */
+	published: string,
+	sizeBytes: number,
+	/**  A release (not a beta or an alpha). */
+	stable: boolean,
+	/**  The pack's own version. */
+	pack: boolean,
+	/**  The version installed for the player now. */
+	current: boolean,
+};
+
+export type PackItemVersionsView = {
+	/**  Newest first. */
+	versions: PackItemVersionView[],
 };
 
 /**  Latest release of the official pack, for the patch notes card. */
@@ -11851,6 +11925,14 @@ export type TurnOffView = {
 	name: string,
 };
 
+/**  A copy of a duplicated mod the launcher turned off before a launch. */
+export type TurnedOffView = {
+	/**  The mod's name. */
+	name: string,
+	/**  The file turned off (`mods_undo_duplicates` puts it back). */
+	file: string,
+};
+
 /**  Why a profile cannot come over. */
 export type Unsupported = 
 /**
@@ -11881,6 +11963,16 @@ export type UpdateStep =
 "stoppingAfk" | 
 /**  The installer starts: the launcher closes and opens again. */
 "installing";
+
+/**  A pack mod the launcher moved to a newer version for a mod of the player's. */
+export type UpgradedView = {
+	/**  The pack mod's title. */
+	name: string,
+	/**  Its new version number. */
+	version: string,
+	/**  The mods that needed it, by name. */
+	neededBy: string[],
+};
 
 /**
  *  Why the settings could not be saved: the server address check, then the legacy form's
@@ -11947,6 +12039,14 @@ export type VersionOptionsView = {
 	/**  The list could only be partly loaded (no network and nothing cached). */
 	partial: boolean,
 	gameRunning: boolean,
+};
+
+/**  The player's own version of a pack mod. */
+export type VersionOverrideView = {
+	versionNumber: string,
+	kind: OverrideKind,
+	/**  For `needed`: the mods that needed it, by name. */
+	neededBy: string[],
 };
 
 /**  What an action got: `refused` empty means it went through. */

@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use pl_auth::FailureClass;
-use pl_content::{PackManifest, PackState, SyncPolicy, plan_sync};
+use pl_content::{PackManifest, PackState, plan_sync};
 use pl_lang::pick;
 use pl_mc::install::context::BACKGROUND_CONCURRENCY;
 use pl_mc::install::space::{self, GameFiles, Target};
@@ -147,6 +147,10 @@ pub enum LaunchEventView {
     /// The mods would certainly stop the game: it was not started (the player chooses
     /// "Onar", "Yine de başlat" or "İptal").
     ModsBlocked(crate::commands::modhealth::ModCheckView),
+    /// Before the mod check the launcher fixed what it may fix alone (PACK-EDIT): a pack mod a
+    /// mod of the player's needs newer moved to that version, an extra copy of a mod installed
+    /// twice was turned off ("Geri al": `mods_undo_duplicates`). The launch goes on.
+    ModsAutoFixed(crate::commands::modhealth::AutoFixView),
     /// The instance's custom Java does not suit this game (too old for it or its mods, too new
     /// for a LaunchWrapper game, gone, not working): it was not started (the player chooses
     /// "Kur ve oyna", "Yine de dene" or cancels).
@@ -600,11 +604,7 @@ fn pack_upper_bound(manifest: &PackManifest) -> u64 {
 /// (planning only reads). Nothing when the folder cannot be read: the sync reports that itself.
 async fn pack_missing(manifest: &PackManifest, game_dir: &Path) -> u64 {
     let previous = PackState::load(game_dir).await.ok().flatten();
-    let policy = SyncPolicy {
-        repair: false,
-        quick_check: true,
-        items: crate::fastpack::pack_items(game_dir, previous.as_ref()).await,
-    };
+    let policy = crate::commands::modcenter::quick(game_dir, previous.as_ref()).await;
     match plan_sync(manifest, game_dir, previous.as_ref(), None, &policy).await {
         Ok(plan) => plan.downloads.iter().map(|download| download.size).sum(),
         Err(error) => {
@@ -1111,6 +1111,12 @@ async fn prepare_and_spawn(
     // would certainly stop the game stop the launch here instead.
     checkpoint(cancel)?;
     let java_major = Some(installed.java.info.major);
+    if !beside
+        && let Some(fixed) = modhealth::autofix(app, state, &instance, java_major, cancel).await
+    {
+        let _ = on_event.send(LaunchEventView::ModsAutoFixed(fixed));
+    }
+    checkpoint(cancel)?;
     let health = if beside {
         modhealth::Prelaunch::Clear
     } else {

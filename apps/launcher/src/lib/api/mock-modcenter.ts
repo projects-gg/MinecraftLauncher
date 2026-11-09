@@ -11,7 +11,9 @@ import type {
   ModCenterItem,
   ModCenterPreview,
   ModSelection,
+  PackItemVersion,
   SwitchPreview,
+  VersionOverride,
 } from "./modcenter-types";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -220,6 +222,51 @@ const seeds: Seed[] = [
   },
 ];
 
+/**
+ * PACK-EDIT states: Fabric API upgraded for a mod of the player's, Entity Culling on the
+ * player's own version. `?packEdit=plain` starts without them (every row on the pack's version).
+ */
+const overrides: Record<string, VersionOverride | undefined> = (() => {
+  try {
+    if (new URLSearchParams(window.location.search).get("packEdit") === "plain") return {};
+  } catch {
+    // No window: the defaults below.
+  }
+  return {
+    P7dR8mSH: { versionNumber: "0.141.1+26.1.2", kind: "needed", neededBy: ["Bobby"] },
+    NNAgCjsB: { versionNumber: "1.12.0", kind: "chosen", neededBy: [] },
+  };
+})();
+
+/** Version numbers the mock lists per mod (newest first); the pack's is the second one. */
+const versionNumbers: Record<string, string[]> = {
+  P7dR8mSH: [
+    "0.141.1+26.1.2",
+    "0.141.0+26.1.2",
+    "0.140.2+26.1.2",
+    "0.119.2+26.1.2",
+    "0.119.1+26.1.2",
+  ],
+  NNAgCjsB: ["1.12.0", "1.11.3", "1.11.2", "1.10.1"],
+};
+
+function mockVersions(itemId: string): PackItemVersion[] {
+  const seed = seeds.find((s) => s.id === itemId);
+  const numbers = versionNumbers[itemId] ?? ["2.1.0", "2.0.4", "2.0.3", "1.9.8"];
+  const packNumber =
+    itemId === "P7dR8mSH" ? "0.119.2+26.1.2" : itemId === "NNAgCjsB" ? "1.11.3" : numbers[1];
+  const current = overrides[itemId]?.versionNumber ?? packNumber;
+  return numbers.map((number, index) => ({
+    id: `${itemId}-${index}`,
+    number,
+    published: daysAgo(index * 9 + 2),
+    sizeBytes: (seed?.sizeBytes ?? MB) * (1 - index * 0.01),
+    stable: !number.includes("beta"),
+    pack: number === packNumber,
+    current: number === current,
+  }));
+}
+
 /** Enabled = selected plus everything they need (transitively). */
 function resolve(choices: Record<string, boolean>): ModCenterItem[] {
   const byId = new Map(seeds.map((s) => [s.id, s]));
@@ -243,6 +290,7 @@ function resolve(choices: Record<string, boolean>): ModCenterItem[] {
     updateAvailable: Boolean(s.updateAvailable) && installed.has(s.id),
     modified: Boolean(s.modified),
     disabledCopy: Boolean(s.disabledCopy) && !enabled.has(s.id),
+    versionOverride: overrides[s.id],
   }));
 }
 
@@ -434,6 +482,8 @@ export function createMockModCenter(): ModCenterApi {
       const plan = preview(selection);
       await progress(onProgress, Math.max(2, plan.summary.added.mods * 3));
       Object.assign(choices, selection.items);
+      // "Paketin Sürümüne Dön" (PACK-EDIT) is a revert.
+      for (const id of selection.revert ?? []) overrides[id] = undefined;
       for (const item of resolve(choices)) {
         if (item.enabled) installed.add(item.id);
         else installed.delete(item.id);
@@ -449,6 +499,20 @@ export function createMockModCenter(): ModCenterApi {
     async markSeen() {
       await delay(120);
       seen = true;
+    },
+    async itemVersions(_instanceId, itemId) {
+      await delay(modrinthOffline() ? 400 : 320);
+      if (modrinthOffline()) throw new Error("Modrinth'e ulaşılamadı.");
+      return mockVersions(itemId);
+    },
+    async setVersion(_instanceId, itemId, versionId, _jobId, onProgress) {
+      await progress(onProgress, 4);
+      const picked = mockVersions(itemId).find((v) => v.id === versionId);
+      overrides[itemId] =
+        picked && !picked.pack
+          ? { versionNumber: picked.number, kind: "chosen", neededBy: [] }
+          : undefined;
+      return { downloaded: 1, restored: 0, removed: 1, issues: 0 };
     },
     async versions(instanceId, includeSnapshots) {
       await delay(240);

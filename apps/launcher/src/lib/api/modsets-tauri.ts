@@ -53,6 +53,8 @@ const centerItem = (i: ModCenterItemView): ModCenterItem => ({
   pageUrl: i.pageUrl ?? undefined,
   projectId: i.projectId ?? undefined,
   manual: i.manual ?? undefined,
+  versionOverride: i.versionOverride ?? undefined,
+  standIn: i.standIn ?? undefined,
 });
 
 const setItem = (i: SetItemPreview): SetItem => ({

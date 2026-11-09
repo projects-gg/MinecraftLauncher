@@ -8,7 +8,11 @@ import { launchErrorCode } from "@/features/disk/launch-error";
 import { askGameSwitch } from "@/features/game-switch/store";
 import { useJavaPrompt } from "@/features/java/prompt-store";
 import { announceShotNotCopied } from "@/features/library/shot-copy";
-import { announceModsNotice, announceVersionDropped } from "@/features/modcenter/notices";
+import {
+  announceAutoFixed,
+  announceModsNotice,
+  announceVersionDropped,
+} from "@/features/modcenter/notices";
 import { announceModWarnings, useModFlow } from "@/features/modhealth/flow";
 import { loadNotes } from "@/features/updates/notes";
 import {
@@ -695,6 +699,9 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
         }
         case "modsNotice":
           announceModsNotice(instanceId, event);
+          break;
+        case "modsAutoFixed":
+          announceAutoFixed(instanceId, event);
           break;
         case "packVersionDropped":
           announceVersionDropped(instanceId, event.minecraft, event.recommended);

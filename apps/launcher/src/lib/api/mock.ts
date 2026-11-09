@@ -558,6 +558,8 @@ function mockHome(): HomeContent {
     links: mockLinks(),
     // SOC-NEXT's screens show in previews unless `?socNext=off`.
     socNext: mockFlag("socNext") !== "off",
+    // PACK-EDIT's "Sürümü Değiştir" shows in previews unless `?packEdit=off`.
+    packEdit: mockFlag("packEdit") !== "off",
     banners:
       banners === "none"
         ? []
@@ -1211,6 +1213,14 @@ export const mockApi: LauncherApi = {
         });
       }
       from += span;
+    }
+    // Preview switch `?autofix=1` (PACK-EDIT): what the launcher fixed before the mod check.
+    if (instance?.loader !== "vanilla" && mockFlag("autofix") === "1") {
+      onEvent({
+        type: "modsAutoFixed",
+        upgraded: [{ name: "Fabric API", version: "0.141.1+26.1.2", neededBy: ["Bobby"] }],
+        turnedOff: [{ name: "Sodium", file: "sodium-fabric-0.6.12+mc26.1.2.jar" }],
+      });
     }
     // Preview switches (mock-modhealth.ts): mods that stop the game, warnings, a crash.
     if (instance?.loader !== "vanilla") {

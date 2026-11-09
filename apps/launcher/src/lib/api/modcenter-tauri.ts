@@ -49,6 +49,8 @@ const item = (i: ModCenterItemView): ModCenterItem => ({
   pageUrl: i.pageUrl ?? undefined,
   projectId: i.projectId ?? undefined,
   manual: i.manual ?? undefined,
+  versionOverride: i.versionOverride ?? undefined,
+  standIn: i.standIn ?? undefined,
 });
 
 const selection = (s: ModSelection): ModSelectionInput => ({
@@ -91,6 +93,19 @@ export const tauriModCenter: ModCenterApi = {
   async markSeen(instanceId) {
     await ok(commands.modCenterMarkSeen(instanceId));
   },
+  async itemVersions(instanceId, itemId) {
+    return (await ok(commands.packItemVersions(instanceId, itemId))).versions;
+  },
+  setVersion: (instanceId, itemId, versionId, jobId, onProgress) =>
+    ok(
+      commands.packItemUseVersion(
+        instanceId,
+        itemId,
+        versionId,
+        jobId,
+        progressChannel(onProgress),
+      ),
+    ),
   async versions(instanceId, includeSnapshots) {
     const v = await ok(commands.instanceVersions(instanceId, includeSnapshots));
     return {

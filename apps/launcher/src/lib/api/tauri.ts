@@ -281,6 +281,7 @@ function home(v: HomeView): HomeContent {
       community: v.links.community,
     },
     socNext: v.socNext,
+    packEdit: v.packEdit,
     offline: v.offline,
   };
 }
@@ -352,6 +353,8 @@ function launchEvent(e: LaunchEventView): LaunchEvent {
         reset: e.reset,
         issues: e.issues,
       };
+    case "modsAutoFixed":
+      return { type: "modsAutoFixed", upgraded: e.upgraded, turnedOff: e.turnedOff };
     case "packVersionDropped":
       return {
         type: "packVersionDropped",

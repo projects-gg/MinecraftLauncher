@@ -197,6 +197,8 @@ export interface HomeContent {
   status?: HomeStatus;
   /** SOC-NEXT's screens in the friends feature (`features.socNext` with `features.friends`). */
   socNext?: boolean;
+  /** "Sürümü Değiştir" for the official pack's mods (`features.packEdit`, PACK-EDIT). */
+  packEdit?: boolean;
   /** True when the content came from the local cache because the network failed. */
   offline: boolean;
 }
@@ -360,6 +362,16 @@ export type LaunchEvent =
       changedFiles: number;
     }
   | ({ type: "modsNotice" } & ModsNotice)
+  /**
+   * PACK-EDIT: before the mod check the launcher fixed what it may fix alone; the launch goes on.
+   * `upgraded`: pack mods moved to a newer version a mod of the player's needs; `turnedOff`: extra
+   * copies of mods installed twice ("Geri Al" puts them back).
+   */
+  | {
+      type: "modsAutoFixed";
+      upgraded: Array<{ name: string; version: string; neededBy: string[] }>;
+      turnedOff: Array<{ name: string; file: string }>;
+    }
   | {
       /** The pack no longer offers this version; the installed set was launched as it is. */
       type: "packVersionDropped";

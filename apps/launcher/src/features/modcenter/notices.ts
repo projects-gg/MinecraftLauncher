@@ -2,9 +2,11 @@
 // folder, a Minecraft version the pack stopped offering). Details live in the "Modlar" tab; the
 // toast only says what happened and links there.
 import { toast } from "@pl/ui";
+import { showError } from "@/features/content/jobs";
 import type { ModsSection } from "@/features/library/instance-tab";
-import type { ModsNotice } from "@/lib/api";
+import { api, type LaunchEvent, type ModsNotice } from "@/lib/api";
 import i18n from "@/lib/i18n";
+import { shortVersion } from "./pack-versions-text";
 
 /**
  * Opens the instance page on its "Modlar" tab, on `section` when given (else where the player
@@ -60,6 +62,61 @@ export function announceModsNotice(instanceId: string, notice: ModsNotice) {
       onClick: () => openModCenter(instanceId, "recommended"),
     },
   });
+}
+
+type AutoFixed = Extract<LaunchEvent, { type: "modsAutoFixed" }>;
+
+/**
+ * PACK-EDIT: what the launcher fixed before the game started. An upgrade says which mod needed
+ * it; turned-off copies offer "Geri Al" (back on, and this session's launches ask instead).
+ */
+export function announceAutoFixed(instanceId: string, fixed: AutoFixed) {
+  const t = i18n.t.bind(i18n);
+  const [first] = fixed.upgraded;
+  if (first) {
+    const names = [...new Set(fixed.upgraded.flatMap((u) => u.neededBy))];
+    toast(
+      fixed.upgraded.length === 1
+        ? t("packEdit.fixed.upgraded", {
+            name: `${first.name} ${shortVersion(first.version)}`,
+          })
+        : t("packEdit.fixed.upgradedMany", { count: fixed.upgraded.length }),
+      {
+        duration: 9000,
+        description:
+          names.length > 0
+            ? t("packEdit.fixed.upgradedWhy", { names: names.join(", ") })
+            : undefined,
+        action: {
+          label: t("packEdit.fixed.details"),
+          onClick: () => openModCenter(instanceId, "recommended"),
+        },
+      },
+    );
+  }
+  const [off] = fixed.turnedOff;
+  if (off) {
+    const files = fixed.turnedOff.map((o) => o.file);
+    toast(
+      fixed.turnedOff.length === 1
+        ? t("packEdit.fixed.turnedOff", { name: off.name })
+        : t("packEdit.fixed.turnedOffMany", { count: fixed.turnedOff.length }),
+      {
+        duration: 12_000,
+        action: {
+          label: t("packEdit.fixed.undo"),
+          onClick: () => {
+            void api.modHealth
+              .undoDuplicates(instanceId, files)
+              .then((now) =>
+                toast(now ? t("packEdit.fixed.undone") : t("packEdit.fixed.undoLater")),
+              )
+              .catch(showError);
+          },
+        },
+      },
+    );
+  }
 }
 
 export function announceVersionDropped(

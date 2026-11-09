@@ -38,6 +38,7 @@ import {
 import { formatBytes } from "@/lib/format";
 import { type ModDraft, useDrafts } from "@/stores/drafts";
 import { fade, glide, type MotionPrefs, pop, swap, useMotionPrefs } from "./motion";
+import { ChangeLink, PackVersionsDialog, usePackEdit, VersionLine } from "./pack-versions";
 import { JobLine } from "./parts";
 import {
   bringsAlong,
@@ -100,6 +101,8 @@ export function ItemRow({
   onToggle,
   onRevert,
   onOpen,
+  onChangeVersion,
+  onBackToPack,
 }: {
   item: ModCenterItem;
   items: ModCenterItem[];
@@ -113,6 +116,10 @@ export function ItemRow({
   onToggle: (on: boolean) => void;
   onRevert: (on: boolean) => void;
   onOpen?: () => void;
+  /** "Sürümü Değiştir" (PACK-EDIT; only while the flag is on and the mod can change). */
+  onChangeVersion?: () => void;
+  /** "Paketin Sürümüne Dön" for a mod on the player's own version. */
+  onBackToPack: () => void;
 }) {
   const { t } = useTranslation();
   const on = enabled.has(item.id);
@@ -121,6 +128,8 @@ export function ItemRow({
   const brings = on ? [] : bringsAlong(items, item.id, enabled);
   const names = (list: string[]) => list.join(", ");
   const page = safePageUrl(item.pageUrl);
+  // On the player's own version the link sits beside the version line instead.
+  const changeLink = item.versionOverride ? undefined : onChangeVersion;
 
   const notes: string[] = [];
   if (item.manual === "removed") {
@@ -187,13 +196,21 @@ export function ItemRow({
               ? badge(prefs, "update", t("modCenter.badges.update"))
               : null}
             {item.modified ? badge(prefs, "modified", t("modCenter.badges.modified")) : null}
+            {item.versionOverride ? badge(prefs, "yours", t("packEdit.yours")) : null}
+            {item.standIn ? badge(prefs, "your-file", t("packEdit.yourFile")) : null}
           </AnimatePresence>
         </div>
-        {item.summary || page ? (
+        {item.summary || page || (changeLink && on) ? (
           <p className="mt-0.5 text-[13px] leading-snug text-ash-400">
             {item.summary}
             {item.summary && page ? " " : null}
             {page ? <PageLink url={page} name={item.title} /> : null}
+            {changeLink && on ? (
+              <>
+                {item.summary || page ? <span className="inline-block w-3" /> : null}
+                <ChangeLink name={item.title} disabled={locked} onClick={changeLink} />
+              </>
+            ) : null}
           </p>
         ) : null}
         <div className="relative">
@@ -209,6 +226,12 @@ export function ItemRow({
             ))}
           </AnimatePresence>
         </div>
+        <VersionLine
+          item={item}
+          locked={locked}
+          onChange={item.versionOverride ? onChangeVersion : undefined}
+          onBack={onBackToPack}
+        />
         {item.modified ? (
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
             <p className="text-[12.5px] text-ash-300">{t("modCenter.item.modified")}</p>
@@ -244,11 +267,19 @@ export function LibraryRow({
   items,
   enabled,
   prefs,
+  locked,
+  onChangeVersion,
+  onBackToPack,
 }: {
   item: ModCenterItem;
   items: ModCenterItem[];
   enabled: Set<string>;
   prefs: MotionPrefs;
+  locked: boolean;
+  /** "Sürümü Değiştir" (PACK-EDIT; only while the flag is on and the library can change). */
+  onChangeVersion?: () => void;
+  /** "Paketin Sürümüne Dön" for a library on the player's own version. */
+  onBackToPack: () => void;
 }) {
   const { t } = useTranslation();
   const on = enabled.has(item.id);
@@ -268,7 +299,7 @@ export function LibraryRow({
     <motion.li
       layout={prefs.layout ? "position" : false}
       transition={{ layout: glide }}
-      className="flex items-center gap-3 px-3 py-2"
+      className="flex items-start gap-3 px-3 py-2"
     >
       <ProjectIcon
         src={item.iconUrl}
@@ -276,7 +307,13 @@ export function LibraryRow({
         className={cn("transition-opacity duration-200", !on && "opacity-50")}
       />
       <div className="relative min-w-0 flex-1">
-        <p className="truncate text-[13.5px] font-medium text-bone-100">{item.title}</p>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <p className="truncate text-[13.5px] font-medium text-bone-100">{item.title}</p>
+          <AnimatePresence initial={false} mode="popLayout">
+            {item.versionOverride ? badge(prefs, "yours", t("packEdit.yours")) : null}
+            {item.standIn ? badge(prefs, "your-file", t("packEdit.yourFile")) : null}
+          </AnimatePresence>
+        </div>
         <AnimatePresence initial={false} mode="popLayout">
           {note ? (
             <motion.p key={note} {...swap(0.2)} className="truncate text-[12px] text-ash-400">
@@ -284,6 +321,17 @@ export function LibraryRow({
             </motion.p>
           ) : null}
         </AnimatePresence>
+        {onChangeVersion && on && !item.versionOverride && !item.standIn ? (
+          <p className="mt-0.5">
+            <ChangeLink name={item.title} disabled={locked} onClick={onChangeVersion} />
+          </p>
+        ) : null}
+        <VersionLine
+          item={item}
+          locked={locked}
+          onChange={item.versionOverride ? onChangeVersion : undefined}
+          onBack={onBackToPack}
+        />
       </div>
       <span className="relative shrink-0 text-[12px] text-ash-400">
         <AnimatePresence initial={false} mode="popLayout">
@@ -452,6 +500,17 @@ export function RecommendedTab({
   const gameRunning = useGameRunning(instanceId);
   const locked = gameRunning || applying !== null;
   const position = prefs.layout ? ("position" as const) : false;
+  // PACK-EDIT: "Sürümü Değiştir" while `features.packEdit` is on; the way back always.
+  const packEdit = usePackEdit();
+  const [versionsOf, setVersionsOf] = useState<ModCenterItem | null>(null);
+  // The changes waiting in the bar go along, not lost.
+  const backToPack = (item: ModCenterItem) =>
+    void apply({
+      items: selection?.items ?? {},
+      revert: [...(selection?.revert ?? []).filter((id) => id !== item.id), item.id],
+    });
+  const changeVersion = (item: ModCenterItem) =>
+    packEdit && item.projectId && !item.standIn ? () => setVersionsOf(item) : undefined;
 
   const apply = async (chosen: ModSelection) => {
     if (useApplying.getState().progress[instanceId]) return;
@@ -503,6 +562,8 @@ export function RecommendedTab({
       onToggle={(on) => toggle(item, on)}
       onRevert={(on) => setReverting(item, on)}
       onOpen={item.projectId ? () => onOpenProject(item) : undefined}
+      onChangeVersion={changeVersion(item)}
+      onBackToPack={() => backToPack(item)}
     />
   );
 
@@ -638,6 +699,9 @@ export function RecommendedTab({
                   items={view.items}
                   enabled={enabled}
                   prefs={prefs}
+                  locked={locked}
+                  onChangeVersion={changeVersion(item)}
+                  onBackToPack={() => backToPack(item)}
                 />
               ))}
             </ul>
@@ -660,6 +724,11 @@ export function RecommendedTab({
         ) : null}
       </div>
 
+      <PackVersionsDialog
+        instanceId={instanceId}
+        item={versionsOf}
+        onClose={() => setVersionsOf(null)}
+      />
       <ChangeBar open={Boolean(selection || applying)} label={t("modCenter.bar.label")}>
         <AnimatePresence initial={false} mode="popLayout">
           {barMode === "applying" ? (

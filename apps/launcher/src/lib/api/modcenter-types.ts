@@ -46,6 +46,34 @@ export interface ModCenterItem {
   modified: boolean;
   /** Off and kept as a disabled copy. */
   disabledCopy: boolean;
+  /** The player's own version of the mod (PACK-EDIT), installed instead of the pack's. */
+  versionOverride?: VersionOverride;
+  /** File name of a jar of the player's that stands in for the mod (the pack's is not installed). */
+  standIn?: string;
+}
+
+/** The player's own version of a recommended mod. */
+export interface VersionOverride {
+  versionNumber: string;
+  /** `chosen`: the player picked it; `needed`: a mod of theirs needed it newer. */
+  kind: "chosen" | "needed";
+  /** For `needed`: the mods that needed it. */
+  neededBy: string[];
+}
+
+/** One Modrinth version of a recommended mod ("Sürümü Değiştir"). */
+export interface PackItemVersion {
+  id: string;
+  number: string;
+  /** ISO date. */
+  published: string;
+  sizeBytes: number;
+  /** A release (not a beta or an alpha). */
+  stable: boolean;
+  /** The pack's own version. */
+  pack: boolean;
+  /** Installed for the player now. */
+  current: boolean;
 }
 
 export type ModIssueKind = "unreadable" | "notAFile" | "busy";
@@ -270,6 +298,16 @@ export interface ModCenterApi {
   ): Promise<ModCenterApplyResult>;
   /** New mods are no longer flagged; adopted changes are acknowledged. */
   markSeen(instanceId: string): Promise<void>;
+  /** Modrinth versions of a recommended mod for the instance's game version, newest first. */
+  itemVersions(instanceId: string, itemId: string): Promise<PackItemVersion[]>;
+  /** Installs `versionId` of a recommended mod instead of the pack's (`null`: the pack's again). */
+  setVersion(
+    instanceId: string,
+    itemId: string,
+    versionId: string | null,
+    jobId: string,
+    onProgress: (progress: JobProgress) => void,
+  ): Promise<ModCenterApplyResult>;
   /** Versions to move to; snapshots only when `includeSnapshots` (Settings → Oyun). */
   versions(instanceId: string, includeSnapshots: boolean): Promise<InstanceVersions>;
   switchPreview(instanceId: string, minecraft: string): Promise<SwitchPreview>;
