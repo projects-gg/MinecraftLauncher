@@ -15,9 +15,30 @@ use super::{
     ModrinthUnresolvedDependency, ModrinthUnresolvedReason, ModrinthVersion, ModrinthVersionType,
 };
 use crate::error::{Error, Result};
+use crate::loaders::LoaderKind;
+use crate::mods::version::requirement_matches;
 
 /// Concurrent `/project/{id}/version` requests per round.
 const PROJECT_LOOKUPS_IN_FLIGHT: usize = 4;
+
+/// The newest version (a release first, else any) whose version number meets every requirement
+/// in `loader`'s syntax (PACK-EDIT: a pack library a mod needs newer). `versions` newest first, as
+/// the API lists them; a version number that cannot be read never fits.
+pub fn newest_meeting<'a>(
+    versions: &'a [ModrinthVersion],
+    loader: LoaderKind,
+    reqs: &[String],
+) -> Option<&'a ModrinthVersion> {
+    let fits = |version: &&ModrinthVersion| {
+        reqs.iter()
+            .all(|req| requirement_matches(loader, req, &version.version_number) == Some(true))
+    };
+    versions
+        .iter()
+        .filter(|v| v.version_type == ModrinthVersionType::Release)
+        .find(fits)
+        .or_else(|| versions.iter().find(fits))
+}
 
 /// Newest release, else newest beta, else newest alpha (the API lists newest first).
 pub(crate) fn pick_best<'a>(

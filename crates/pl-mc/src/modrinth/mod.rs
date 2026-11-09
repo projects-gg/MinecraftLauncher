@@ -18,6 +18,7 @@ use url::Url;
 
 pub use migration::{MigrationFit, migration_fits, migration_hashes, migration_moves};
 pub use models::*;
+pub use resolve::newest_meeting;
 
 use crate::error::{Error, Result};
 

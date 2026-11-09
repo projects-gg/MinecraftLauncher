@@ -560,6 +560,58 @@ pub fn check_mods(
     }
 }
 
+/// A copy of a duplicated mod the launcher turns off by itself before a launch (PACK-EDIT), so
+/// the loader never sees the mod twice.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DuplicateOff {
+    /// The jar turned off (renamed to `.disabled`), in the mods folder.
+    pub file: String,
+    /// The jar that stays.
+    pub kept: String,
+    /// The mod's name, for the notice.
+    pub name: String,
+}
+
+/// The copies to turn off for every duplicate of `report` made of separate jars: all but the one
+/// the check keeps (the player's own over the pack's, then the newest). A separate copy older
+/// than one another mod bundles is left to the repair.
+pub fn duplicates_to_turn_off(report: &ModCheckReport) -> Vec<DuplicateOff> {
+    let mut out: Vec<DuplicateOff> = Vec::new();
+    for issue in report.issues.iter().filter(|issue| {
+        issue.kind == IssueKind::Duplicate
+            && issue.mods.len() >= 2
+            && issue.mods.iter().all(|m| !m.bundled)
+            && issue.target.as_ref().is_none_or(|t| t.file.is_none())
+    }) {
+        let off: Vec<&String> = issue
+            .fixes
+            .iter()
+            .filter_map(|fix| match fix {
+                ModFix::DisableFile {
+                    file,
+                    reason: DisableReason::Duplicate,
+                } => Some(file),
+                _ => None,
+            })
+            .collect();
+        let Some(kept) = issue.mods.iter().find(|m| !off.contains(&&m.file)) else {
+            continue;
+        };
+        for file in off {
+            if out.iter().any(|o| o.file == *file) || out.iter().any(|o| o.kept == *file) {
+                continue;
+            }
+            out.push(DuplicateOff {
+                file: file.clone(),
+                kept: kept.file.clone(),
+                name: kept.name.clone(),
+            });
+        }
+    }
+    out
+}
+
 struct Checker<'a> {
     profile: &'a Profile<'a>,
     snapshot: &'a ModSnapshot,
@@ -757,6 +809,26 @@ impl Checker<'_> {
         }
     }
 
+    /// The copy of a duplicate to keep: the player's own (a file the official pack did not
+    /// install) over the pack's, as the pack sync does (PACK-EDIT), then the newest.
+    fn keep<'b>(&self, copies: &[Present<'b>]) -> Present<'b> {
+        let own: Vec<Present<'b>> = copies
+            .iter()
+            .filter(|c| {
+                !matches!(
+                    self.origins.get(c.jar.base_name()),
+                    Some(FileOrigin::Pack { .. })
+                )
+            })
+            .copied()
+            .collect();
+        if own.is_empty() || own.len() == copies.len() {
+            self.newest(copies)
+        } else {
+            self.newest(&own)
+        }
+    }
+
     /// The copy to keep among several: the newest version, else the newest file.
     fn newest<'b>(&self, copies: &[Present<'b>]) -> Present<'b> {
         let mut best = copies[0];
@@ -824,7 +896,7 @@ impl Checker<'_> {
             } else {
                 Severity::Warning
             };
-            let keep = self.newest(&copies);
+            let keep = self.keep(&copies);
             let fixes = copies
                 .iter()
                 .filter(|c| !std::ptr::eq(c.jar, keep.jar))
@@ -1286,6 +1358,64 @@ mod tests {
         assert!(report.issues.is_empty(), "{:#?}", report.issues);
         assert_eq!(report.checked_files, 2);
         assert!(!report.has_blocking());
+    }
+
+    #[test]
+    fn duplicates_keep_the_players_copy_and_are_turned_off_alone() {
+        let jars = vec![
+            jar(
+                "fabric-api-0.141.jar",
+                fabric_jar("fabric-api", "0.141.0", ""),
+            ),
+            jar(
+                "fabric-api-0.116.jar",
+                fabric_jar("fabric-api", "0.116.6", ""),
+            ),
+            jar("sodium-0.6.jar", fabric_jar("sodium", "0.6.0", "")),
+            jar("sodium-0.5.jar", fabric_jar("sodium", "0.5.8", "")),
+        ];
+        // The pack installed the newer Sodium and the older Fabric API; the player added the rest.
+        let origins = FileOrigins::from([
+            (
+                "fabric-api-0.116.jar".to_owned(),
+                FileOrigin::Pack {
+                    path: "mods/fabric-api-0.116.jar".into(),
+                },
+            ),
+            (
+                "sodium-0.6.jar".to_owned(),
+                FileOrigin::Pack {
+                    path: "mods/sodium-0.6.jar".into(),
+                },
+            ),
+        ]);
+        let report = check_mods(&ModSnapshot::new("mods", jars), &fabric(), &origins);
+        let off = duplicates_to_turn_off(&report);
+        assert_eq!(
+            off,
+            [
+                DuplicateOff {
+                    file: "fabric-api-0.116.jar".into(),
+                    kept: "fabric-api-0.141.jar".into(),
+                    name: "fabric-api name".into(),
+                },
+                DuplicateOff {
+                    file: "sodium-0.6.jar".into(),
+                    kept: "sodium-0.5.jar".into(),
+                    name: "sodium name".into(),
+                },
+            ],
+            "the player's own copy wins, even when older"
+        );
+        // Without origins the newest stays.
+        let report = check(
+            &fabric(),
+            vec![
+                jar("sodium-0.5.jar", fabric_jar("sodium", "0.5.8", "")),
+                jar("sodium-0.6.jar", fabric_jar("sodium", "0.6.0", "")),
+            ],
+        );
+        assert_eq!(duplicates_to_turn_off(&report)[0].file, "sodium-0.5.jar");
     }
 
     #[test]

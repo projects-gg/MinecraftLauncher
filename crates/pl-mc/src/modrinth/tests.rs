@@ -235,6 +235,34 @@ fn targets_and_version_choice() {
     assert!(pick_best(&versions, &forge).is_none());
 }
 
+#[test]
+fn the_newest_release_that_meets_every_requirement() {
+    let numbered = |id: &str, kind: &str, number: &str| {
+        let mut version = decode_version(version_json(id, "P7dR8mSH", kind, json!([]), id));
+        version.version_number = number.into();
+        version
+    };
+    let versions = [
+        numbered("c", "beta", "0.142.0-beta.1+26.1.2"),
+        numbered("b", "release", "0.141.1+26.1.2"),
+        numbered("a", "release", "0.140.0+26.1.2"),
+        numbered("x", "release", "not a version"),
+    ];
+    let pick = |reqs: &[&str]| {
+        let reqs: Vec<String> = reqs.iter().map(|r| (*r).to_owned()).collect();
+        newest_meeting(&versions, LoaderKind::Fabric, &reqs).map(|v| v.id.as_str())
+    };
+    assert_eq!(pick(&[">=0.140.0"]), Some("b"));
+    assert_eq!(pick(&[">=0.140.0", "<0.141"]), Some("a"));
+    assert_eq!(
+        pick(&[">=0.142.0-beta.1"]),
+        Some("c"),
+        "a beta when no release fits"
+    );
+    assert_eq!(pick(&[">=0.150"]), None);
+    assert_eq!(pick(&[]), Some("b"), "no requirement: the newest release");
+}
+
 #[tokio::test]
 async fn resolver_handles_pins_cycles_installed_and_external() {
     let root_deps = json!([

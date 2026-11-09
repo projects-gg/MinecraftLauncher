@@ -53,6 +53,15 @@ pub enum RepairAction {
         path: String,
         mod_id: String,
     },
+    /// Move a pack file to a newer version a mod needs (PACK-EDIT): the launcher picks it on
+    /// Modrinth and keeps it as the player's version of the pack item. Planned only with
+    /// [`RepairContext::pack_upgrades`].
+    UpgradePackFile {
+        path: String,
+        mod_id: String,
+        /// Every requirement the new version must meet, in the loader's syntax.
+        version_reqs: Vec<String>,
+    },
     RedownloadModrinthFile {
         file: String,
         project_id: String,
@@ -123,6 +132,9 @@ pub struct RepairContext<'a> {
     pub origins: &'a FileOrigins,
     /// The set includes the official pack (its files can be verified by a sync).
     pub has_pack: bool,
+    /// A pack file a mod needs in a newer version moves to that version (PACK-EDIT,
+    /// [`RepairAction::UpgradePackFile`]) instead of going back to the pack's.
+    pub pack_upgrades: bool,
 }
 
 /// Issue kinds whose fixes "Onar" applies even though they are only warnings.
@@ -153,7 +165,9 @@ fn reason_rank(reason: DisableReason) -> u8 {
 fn action_rank(action: &RepairAction) -> u8 {
     match action {
         RepairAction::VerifyPackFiles => 0,
-        RepairAction::RedownloadPackFile { .. } | RepairAction::RevertPackFile { .. } => 1,
+        RepairAction::RedownloadPackFile { .. }
+        | RepairAction::RevertPackFile { .. }
+        | RepairAction::UpgradePackFile { .. } => 1,
         RepairAction::RedownloadModrinthFile { .. } => 2,
         RepairAction::EnableFile { .. } => 3,
         RepairAction::DisableFile { .. } => 4,
@@ -272,7 +286,8 @@ pub fn plan_repair(
         .filter_map(|s| match &s.action {
             RepairAction::EnableFile { mod_id, .. }
             | RepairAction::UpdateToCompatible { mod_id, .. }
-            | RepairAction::RevertPackFile { mod_id, .. } => Some(mod_id.clone()),
+            | RepairAction::RevertPackFile { mod_id, .. }
+            | RepairAction::UpgradePackFile { mod_id, .. } => Some(mod_id.clone()),
             _ => None,
         })
         .collect();
@@ -280,7 +295,9 @@ pub fn plan_repair(
         RepairAction::UpdateToCompatible { file, .. } | RepairAction::EnableFile { file, .. } => {
             !disabled.contains(file)
         }
-        RepairAction::RevertPackFile { path, .. } => !disabled.contains(pack_file_name(path)),
+        RepairAction::RevertPackFile { path, .. } | RepairAction::UpgradePackFile { path, .. } => {
+            !disabled.contains(pack_file_name(path))
+        }
         RepairAction::FetchDependency {
             mod_id,
             required_by,
@@ -381,7 +398,8 @@ fn lookup(
 }
 
 /// The step a fix becomes for this set. A pack file that needs another version goes back to
-/// the pack's version: pack files are never upgraded here and get no Modrinth lookup.
+/// the pack's version and gets no Modrinth lookup, unless a mod needs it newer and the set takes
+/// upgrades of pack files ([`RepairContext::pack_upgrades`]).
 pub(crate) fn action_for(fix: ModFix, ctx: &RepairContext<'_>) -> RepairAction {
     match fix {
         ModFix::FetchDependency {
@@ -401,6 +419,13 @@ pub(crate) fn action_for(fix: ModFix, ctx: &RepairContext<'_>) -> RepairAction {
             version_req,
             disable_if_unavailable,
         } => match pack_path(ctx.origins, &file) {
+            Some(path) if ctx.pack_upgrades && version_req.is_some() => {
+                RepairAction::UpgradePackFile {
+                    path,
+                    mod_id,
+                    version_reqs: version_req.into_iter().collect(),
+                }
+            }
             Some(path) => RepairAction::RevertPackFile { path, mod_id },
             None => RepairAction::UpdateToCompatible {
                 lookup: lookup(ctx, Some(&file), &mod_id, version_req),
@@ -516,6 +541,16 @@ fn merge(steps: &mut Vec<RepairStep>, action: RepairAction, kind: Option<IssueKi
         (RepairAction::UseJava { major }, RepairAction::UseJava { major: other }) => {
             *major = (*major).max(other);
         }
+        (
+            RepairAction::UpgradePackFile { version_reqs, .. },
+            RepairAction::UpgradePackFile {
+                version_reqs: more, ..
+            },
+        ) => {
+            for req in more {
+                push_unique(version_reqs, Some(req));
+            }
+        }
         _ => {}
     }
 }
@@ -529,7 +564,8 @@ fn same_target(a: &RepairAction, b: &RepairAction) -> bool {
         | (A::UpdateToCompatible { file: x, .. }, A::UpdateToCompatible { file: y, .. })
         | (A::RedownloadModrinthFile { file: x, .. }, A::RedownloadModrinthFile { file: y, .. })
         | (A::RedownloadPackFile { path: x }, A::RedownloadPackFile { path: y })
-        | (A::RevertPackFile { path: x, .. }, A::RevertPackFile { path: y, .. }) => x == y,
+        | (A::RevertPackFile { path: x, .. }, A::RevertPackFile { path: y, .. })
+        | (A::UpgradePackFile { path: x, .. }, A::UpgradePackFile { path: y, .. }) => x == y,
         (A::FetchDependency { mod_id: x, .. }, A::FetchDependency { mod_id: y, .. }) => {
             x == y || dependency_project(x) == dependency_project(y)
         }
@@ -548,9 +584,9 @@ fn step_name(action: &RepairAction, names: &HashMap<String, String>) -> String {
     };
     match action {
         RepairAction::VerifyPackFiles => String::new(),
-        RepairAction::RedownloadPackFile { path } | RepairAction::RevertPackFile { path, .. } => {
-            for_file(pack_file_name(path))
-        }
+        RepairAction::RedownloadPackFile { path }
+        | RepairAction::RevertPackFile { path, .. }
+        | RepairAction::UpgradePackFile { path, .. } => for_file(pack_file_name(path)),
         RepairAction::RedownloadModrinthFile { file, .. }
         | RepairAction::EnableFile { file, .. }
         | RepairAction::DisableFile { file, .. }
@@ -890,6 +926,7 @@ mod tests {
                 RepairAction::VerifyPackFiles => "verify",
                 RepairAction::RedownloadPackFile { .. } => "redownload-pack",
                 RepairAction::RevertPackFile { .. } => "revert-pack",
+                RepairAction::UpgradePackFile { .. } => "upgrade-pack",
                 RepairAction::RedownloadModrinthFile { .. } => "redownload-modrinth",
                 RepairAction::EnableFile { .. } => "enable",
                 RepairAction::DisableFile { .. } => "disable",
@@ -966,6 +1003,7 @@ mod tests {
             env: &env,
             origins: &origins,
             has_pack: false,
+            pack_upgrades: false,
         };
         let plan = plan_repair(&ctx, Some(&report), None);
         assert_eq!(
@@ -1044,6 +1082,7 @@ mod tests {
         // back.
         let ctx = RepairContext {
             has_pack: true,
+            pack_upgrades: false,
             ..ctx
         };
         let plan = plan_repair(&ctx, Some(&report), None);
@@ -1086,6 +1125,7 @@ mod tests {
             env: &env,
             origins: &origins,
             has_pack: true,
+            pack_upgrades: false,
         };
         let plan = plan_repair(&ctx, Some(&report), None);
         assert_eq!(
@@ -1121,6 +1161,30 @@ mod tests {
         assert_eq!(update, ("own-old.jar", true));
         assert!(plan.needs_network);
 
+        // PACK-EDIT: the library a mod needs newer moves to a newer version instead; the pack
+        // mod made for another Minecraft version still goes back to the pack's.
+        let upgrades = RepairContext {
+            pack_upgrades: true,
+            ..ctx
+        };
+        let plan = plan_repair(&upgrades, Some(&report), None);
+        assert_eq!(
+            kinds(&plan),
+            vec!["verify", "upgrade-pack", "revert-pack", "update"]
+        );
+        let upgrade = plan.steps.iter().find_map(|s| match &s.action {
+            RepairAction::UpgradePackFile {
+                path,
+                mod_id,
+                version_reqs,
+            } => Some((path.as_str(), mod_id.as_str(), version_reqs.clone())),
+            _ => None,
+        });
+        assert_eq!(
+            upgrade,
+            Some(("mods/pack-lib.jar", "packlib", vec![">=2.0".to_owned()]))
+        );
+
         // A crash that blames a pack mod's file reverts it as well.
         let crash = CrashDiagnosis {
             mod_fixes: vec![ModFix::UpdateToCompatible {
@@ -1151,6 +1215,7 @@ mod tests {
             env: &env,
             origins: &origins,
             has_pack: false,
+            pack_upgrades: false,
         };
         let plan = plan_repair(&ctx, Some(&report), None);
         let disabled: Vec<&str> = plan
@@ -1218,6 +1283,7 @@ mod tests {
             env: &env,
             origins: &origins,
             has_pack: false,
+            pack_upgrades: false,
         };
         let plan = plan_repair(&ctx, Some(&report), None);
         let fetches: Vec<(&RepairStep, &str, &Vec<String>, &Vec<String>)> = plan
@@ -1301,6 +1367,7 @@ mod tests {
             env: &env,
             origins: &origins,
             has_pack: false,
+            pack_upgrades: false,
         };
         let plan = plan_repair(&ctx, Some(&report), Some(&crash));
         assert_eq!(kinds(&plan), vec!["disable"], "{:#?}", plan.steps);
@@ -1379,6 +1446,7 @@ mod tests {
             env: &env,
             origins: &origins,
             has_pack: false,
+            pack_upgrades: false,
         };
         let plan = plan_repair(&ctx, Some(&report), None);
         assert!(plan.steps.is_empty());
