@@ -43,6 +43,7 @@ import { enMotion } from "./en-motion";
 import { enNewsColumn } from "./en-news-column";
 import { enOverlay } from "./en-overlay";
 import { enOverview } from "./en-overview";
+import { enPackEdit } from "./en-pack-edit";
 import { enPlacement } from "./en-placement";
 import { enPlayAcct } from "./en-play-acct";
 import { enPlayAgain } from "./en-play-again";
@@ -328,6 +329,7 @@ export const en: DeepPartial<Strings> = {
   crewWave2: enCrewWave2,
   overlay: enOverlay,
   fastPack: enFastPack,
+  packEdit: enPackEdit,
   lib1: enLib1,
   fix2: enFix2,
   chat2: enChat2,
