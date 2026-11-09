@@ -206,10 +206,12 @@ export function ItemRow({
             {item.summary && page ? " " : null}
             {page ? <PageLink url={page} name={item.title} /> : null}
             {changeLink && on ? (
-              <>
+              // Shown on the row's hover or focus (twelve rows of two links read as noise); the
+              // space stays, nothing moves.
+              <span className="opacity-0 transition-opacity duration-150 group-focus-within/row:opacity-100 group-hover/row:opacity-100">
                 {item.summary || page ? <span className="inline-block w-3" /> : null}
                 <ChangeLink name={item.title} disabled={locked} onClick={changeLink} />
-              </>
+              </span>
             ) : null}
           </p>
         ) : null}
@@ -299,7 +301,7 @@ export function LibraryRow({
     <motion.li
       layout={prefs.layout ? "position" : false}
       transition={{ layout: glide }}
-      className="flex items-start gap-3 px-3 py-2"
+      className="group/row flex items-start gap-3 px-3 py-2"
     >
       <ProjectIcon
         src={item.iconUrl}
@@ -322,7 +324,7 @@ export function LibraryRow({
           ) : null}
         </AnimatePresence>
         {onChangeVersion && on && !item.versionOverride && !item.standIn ? (
-          <p className="mt-0.5">
+          <p className="mt-0.5 opacity-0 transition-opacity duration-150 group-focus-within/row:opacity-100 group-hover/row:opacity-100">
             <ChangeLink name={item.title} disabled={locked} onClick={onChangeVersion} />
           </p>
         ) : null}
