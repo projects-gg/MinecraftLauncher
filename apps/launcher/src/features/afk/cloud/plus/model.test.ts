@@ -434,6 +434,7 @@ describe("Sınırlara git: the limit a line is about", () => {
     expect(handoffReason(["owner_order"])).toEqual({ code: "owner_order", stopped: false });
     expect(handoffReason(["halted"])).toEqual({ code: "halted", stopped: true });
     expect(handoffReason(["pay"])).toEqual({ code: "pay", stopped: true });
+    expect(handoffReason(["offer"])).toEqual({ code: "offer", stopped: true });
     // An older agent's empty list, or a code this launcher does not know, names nothing.
     expect(handoffReason([])).toBeNull();
     expect(handoffReason(["constructor"])).toBeNull();

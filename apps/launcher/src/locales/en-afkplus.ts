@@ -367,12 +367,14 @@ export const enAfkPlus = {
     stopped: "ProBot AI stopped the trade.",
     why: {
       owner_order: "You chose to make this order's trades yourself.",
-      halted: "It saw a trade window it didn't recognise, so it has stopped trading for now.",
+      halted: "It saw a trade window it didn't recognise, so it has paused trades for now.",
       place: "It wasn't somewhere it can trade (for example, in the lobby).",
       server: "It can't make trades itself on this server.",
       pay: "It can't enter money in this server's trade window.",
       cap: "The amount is more than it trades on its own.",
       window: "The trade window wasn't one it knows, so it clicked nothing to stay safe.",
+      offer:
+        "The other player put something different from what was agreed in the trade and didn't fix it.",
       other: "It couldn't make this trade itself.",
     },
   },
