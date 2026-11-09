@@ -6,7 +6,6 @@ import { showError } from "@/features/content/jobs";
 import type { ModsSection } from "@/features/library/instance-tab";
 import { api, type LaunchEvent, type ModsNotice } from "@/lib/api";
 import i18n from "@/lib/i18n";
-import { shortVersion } from "./pack-versions-text";
 
 /**
  * Opens the instance page on its "Modlar" tab, on `section` when given (else where the player
@@ -77,9 +76,7 @@ export function announceAutoFixed(instanceId: string, fixed: AutoFixed) {
     const names = [...new Set(fixed.upgraded.flatMap((u) => u.neededBy))];
     toast(
       fixed.upgraded.length === 1
-        ? t("packEdit.fixed.upgraded", {
-            name: `${first.name} ${shortVersion(first.version)}`,
-          })
+        ? t("packEdit.fixed.upgraded", { name: first.name })
         : t("packEdit.fixed.upgradedMany", { count: fixed.upgraded.length }),
       {
         duration: 9000,

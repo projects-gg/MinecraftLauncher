@@ -196,8 +196,6 @@ export function ItemRow({
               ? badge(prefs, "update", t("modCenter.badges.update"))
               : null}
             {item.modified ? badge(prefs, "modified", t("modCenter.badges.modified")) : null}
-            {item.versionOverride ? badge(prefs, "yours", t("packEdit.yours")) : null}
-            {item.standIn ? badge(prefs, "your-file", t("packEdit.yourFile")) : null}
           </AnimatePresence>
         </div>
         {item.summary || page || (changeLink && on) ? (
@@ -206,10 +204,12 @@ export function ItemRow({
             {item.summary && page ? " " : null}
             {page ? <PageLink url={page} name={item.title} /> : null}
             {changeLink && on ? (
-              <>
+              // Shown on the row's hover or focus (twelve rows of two links read as noise); the
+              // space stays, nothing moves.
+              <span className="opacity-0 transition-opacity duration-150 group-focus-within/row:opacity-100 group-hover/row:opacity-100">
                 {item.summary || page ? <span className="inline-block w-3" /> : null}
                 <ChangeLink name={item.title} disabled={locked} onClick={changeLink} />
-              </>
+              </span>
             ) : null}
           </p>
         ) : null}
@@ -299,7 +299,7 @@ export function LibraryRow({
     <motion.li
       layout={prefs.layout ? "position" : false}
       transition={{ layout: glide }}
-      className="flex items-start gap-3 px-3 py-2"
+      className="group/row flex items-start gap-3 px-3 py-2"
     >
       <ProjectIcon
         src={item.iconUrl}
@@ -307,13 +307,7 @@ export function LibraryRow({
         className={cn("transition-opacity duration-200", !on && "opacity-50")}
       />
       <div className="relative min-w-0 flex-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-          <p className="truncate text-[13.5px] font-medium text-bone-100">{item.title}</p>
-          <AnimatePresence initial={false} mode="popLayout">
-            {item.versionOverride ? badge(prefs, "yours", t("packEdit.yours")) : null}
-            {item.standIn ? badge(prefs, "your-file", t("packEdit.yourFile")) : null}
-          </AnimatePresence>
-        </div>
+        <p className="truncate text-[13.5px] font-medium text-bone-100">{item.title}</p>
         <AnimatePresence initial={false} mode="popLayout">
           {note ? (
             <motion.p key={note} {...swap(0.2)} className="truncate text-[12px] text-ash-400">
@@ -322,7 +316,7 @@ export function LibraryRow({
           ) : null}
         </AnimatePresence>
         {onChangeVersion && on && !item.versionOverride && !item.standIn ? (
-          <p className="mt-0.5">
+          <p className="mt-0.5 opacity-0 transition-opacity duration-150 group-focus-within/row:opacity-100 group-hover/row:opacity-100">
             <ChangeLink name={item.title} disabled={locked} onClick={onChangeVersion} />
           </p>
         ) : null}
