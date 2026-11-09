@@ -537,7 +537,10 @@ mod tests {
         let learned = learn_item_mods(&m, &state, &[pack_copy.clone(), theirs_off]);
         assert_eq!(learned["lib"], ["lib"]);
         let none = own_stand_ins(&m, &state, &learned, &BTreeMap::new(), &[pack_copy.clone()]);
-        assert!(none.is_empty(), "a disabled jar of the player's stands in for nothing");
+        assert!(
+            none.is_empty(),
+            "a disabled jar of the player's stands in for nothing"
+        );
         let theirs = jar("mods/lib-2.jar", &["lib"]);
         let some = own_stand_ins(&m, &state, &learned, &BTreeMap::new(), &[pack_copy, theirs]);
         assert_eq!(some["lib"], "mods/lib-2.jar");

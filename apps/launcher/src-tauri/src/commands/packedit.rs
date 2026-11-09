@@ -73,7 +73,9 @@ pub(crate) async fn disk_mods(game_dir: &Path) -> Vec<DiskJar> {
                     .contents
                     .mods
                     .iter()
-                    .filter(|m| matches!(m.descriptor, DescriptorKind::Fabric | DescriptorKind::Quilt))
+                    .filter(|m| {
+                        matches!(m.descriptor, DescriptorKind::Fabric | DescriptorKind::Quilt)
+                    })
                     .flat_map(|m| std::iter::once(m.id.clone()).chain(m.provides.iter().cloned()))
                     .collect();
                 (!ids.is_empty()).then(|| DiskJar {
