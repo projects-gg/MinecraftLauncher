@@ -6,14 +6,10 @@ export const trPackEdit = {
   /** Quiet link on a recommended mod's row (shown while `features.packEdit` is on). */
   change: "Sürümü Değiştir",
   changeFor: "{{name}} sürümünü değiştir",
-  /** Chip on a row that runs the player's own version. */
-  yours: "Senin Sürümün",
-  /** Chip on a row whose mod a jar the player added stands in for. */
-  yourFile: "Senin Dosyan",
   /** Note under a row: the player picked the version. */
   chosen: "{{version}} sürümünü kullanıyorsun.",
   /** Note under a row: the launcher moved it up for the player's mods. */
-  needed: "{{names}} istediği için {{version}} sürümüne geçildi.",
+  needed: "{{names}} için {{version}} sürümüne geçildi.",
   /** Note under a row whose mod the player's own jar replaces. */
   standIn: "Mod klasörüne eklediğin kopya kullanılıyor.",
   /** Button beside the note: back to the pack's version. */
@@ -22,7 +18,7 @@ export const trPackEdit = {
   dialog: {
     title: "{{name}} Sürümleri",
     /** The one sentence: what happens to the choice later (not obvious). */
-    description: "Seçtiğin sürüm, paket daha yenisine geçene kadar kalır.",
+    description: "Paket daha yeni bir sürüme geçene kadar seçtiğin sürüm kullanılır.",
     inPack: "Paketteki",
     inUse: "Kullanılan",
     beta: "Beta",
@@ -40,7 +36,7 @@ export const trPackEdit = {
   fixed: {
     upgraded: "{{name}} güncellendi",
     upgradedMany: "{{count}} mod güncellendi",
-    upgradedWhy: "{{names}} daha yeni bir sürüm istiyordu.",
+    upgradedWhy: "{{names}} için gerekiyordu.",
     turnedOff: "{{name}} iki kez yüklüydü, fazla kopyası kapatıldı.",
     turnedOffMany: "{{count}} mod iki kez yüklüydü, fazla kopyaları kapatıldı.",
     undo: "Geri Al",
