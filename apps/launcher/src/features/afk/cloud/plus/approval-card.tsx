@@ -35,7 +35,7 @@ import { AmountField } from "./fields";
 import { ItemTile, PlusItemIcon } from "./item-icon";
 import { itemLabel, type Namer } from "./items";
 import { LimitLine } from "./limits-link";
-import { limitReason } from "./model";
+import { handoffReason, limitReason } from "./model";
 import { moneyText } from "./orders";
 import { minutesLeft } from "./time";
 import { storeApproval, usePlusUi } from "./use-plus";
@@ -255,11 +255,22 @@ export function ApprovalCard({
           ? t("afkPlus.firstSight.question", { name: customName })
           : customName
         : dealWords;
+  // Why the trade is the player's: the bot stopped (and why), or the player chose it for the order.
+  const handoff = kind === "handoff" ? handoffReason(approval.why) : null;
+  const handoffWhy = handoff
+    ? [
+        ...(handoff.stopped ? [t("afkPlus.handoff.stopped")] : []),
+        t(`afkPlus.handoff.why.${handoff.code}`),
+      ].join(" ")
+    : null;
   // Each reason on its own line (short phrases in a row read as one run-on line), each once.
   const lines = [
     ...new Set(
       kind === "handoff"
-        ? [t("afkPlus.handoff.body", { who: approval.counterpart, deal: dealWords })]
+        ? [
+            t("afkPlus.handoff.body", { who: approval.counterpart, deal: dealWords }),
+            ...(handoffWhy ? [handoffWhy] : []),
+          ]
         : kind === "confirm_item"
           ? [party]
           : [

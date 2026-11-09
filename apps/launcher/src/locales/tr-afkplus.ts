@@ -137,6 +137,9 @@ export const trAfkPlus = {
     paused: "ProBot AI durdu",
     tradeLobby: "Hesap lobide, oyun moduna dönünce takasa başlar",
     tradeProfile: "Bu oyun modunda takas şu an kapalı",
+    // It saw a trade window it does not know and stopped trading by itself (`trade.off: "halted"`).
+    tradeHalted:
+      "ProBot AI takasları durdurdu: tanımadığı bir takas penceresi gördü. Takasları şimdilik sen yaparsın.",
     tradeOwner: "Bu sunucuda ProBot AI anlaşır, takası sen yaparsın",
     notifyOnly: "Harcama sınırı koymadığın için ProBot AI almıyor, bulunca haber veriyor",
     // On the account's card, after the "AFK+" label: the states that name AFK+, without the name.
@@ -427,6 +430,19 @@ export const trAfkPlus = {
     joinCancel: "Vazgeç",
     addAccount: "Launcher'da {{name}} hesabı yok. Önce ekle.",
     gameOpen: "Oyun zaten açık. Önce onu kapat.",
+    // Why the trade is the player's (the agent's one `why` code). "stopped" comes first for every
+    // reason but the player's own choice; an unknown code adds nothing.
+    stopped: "ProBot AI takası durdurdu.",
+    why: {
+      owner_order: "Bu siparişte takası senin yapmanı seçtin.",
+      halted: "Tanımadığı bir takas penceresi gördüğü için takasları şimdilik durdurdu.",
+      place: "Takas yapabileceği bir yerde değildi (örneğin lobide).",
+      server: "Bu sunucuda takası kendisi yapamıyor.",
+      pay: "Bu sunucunun takas penceresine para yazamıyor.",
+      cap: "Tutar, kendi başına yapabileceği takasların üstünde.",
+      window: "Takas penceresi tanıdığı gibi değildi, güvenlik için hiçbir şeye tıklamadı.",
+      other: "Bu takası kendisi yapamadı.",
+    },
   },
   // A custom item seen for the first time (afkplus-free.md §1.5).
   firstSight: {

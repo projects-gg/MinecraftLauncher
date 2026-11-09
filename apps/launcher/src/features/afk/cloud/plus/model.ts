@@ -620,6 +620,34 @@ export function limitReason(why: readonly string[]): LimitReason | null {
   return null;
 }
 
+/** Why a handoff is the player's trade: the agent sends one of these as its `why`. */
+const HANDOFF_WHY = [
+  "owner_order",
+  "halted",
+  "place",
+  "server",
+  "pay",
+  "cap",
+  "window",
+  "other",
+] as const;
+export type HandoffWhy = (typeof HANDOFF_WHY)[number];
+
+/**
+ * The reason a handoff names, and whether "ProBot AI takası durdurdu." leads it (always, but when
+ * the player chose to make the order's trades). An older agent's empty list, or a code this
+ * launcher does not know, names nothing.
+ */
+export function handoffReason(
+  why: readonly string[],
+): { code: HandoffWhy; stopped: boolean } | null {
+  for (const reason of why) {
+    const code = HANDOFF_WHY.find((known) => known === reason);
+    if (code) return { code, stopped: code !== "owner_order" };
+  }
+  return null;
+}
+
 /** Buying waits for both spending limits ("bulunca haber veriyor"): the first one missing. */
 export function spendingField(limits: Pick<PlusLimits, "perDealMax" | "totalBudget">): LimitField {
   return limits.perDealMax === null ? "perDealMax" : "totalBudget";
@@ -868,6 +896,8 @@ export function aiState(ai: PlusAi | null | undefined): AiState {
 /** What trading can do now, when it is not everything (the bot in the lobby, no spending limit). */
 export function tradeNoteKey(ai: PlusAi | null | undefined): string | null {
   if (ai?.state !== "on") return null;
+  // It saw a trade window it does not know and stopped trading on its own (the agent's halt).
+  if (ai.trade.off === "halted") return "tradeHalted";
   // A server without a trade profile: it chats and agrees, the player makes the trades.
   if (ai.trade.by === "owner") return "tradeOwner";
   if (!ai.trade.on) return ai.trade.off === "profile" ? "tradeProfile" : "tradeLobby";
