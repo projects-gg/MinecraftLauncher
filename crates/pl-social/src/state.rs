@@ -79,8 +79,8 @@ pub struct SocialState {
     seen_notices: HashSet<String>,
     /// The plans of the player's crews they see, as the service keeps them (TEAM5).
     plans: Vec<CrewPlan>,
-    /// This computer's clock minus the service's (seconds), from the last `hello`: plans carry
-    /// the service's times.
+    /// This computer's clock minus the service's (seconds), from the last `hello`: plans and
+    /// (CREW-PLUS) the start of friends' game sessions carry the service's times.
     plan_skew: i64,
     /// Who came into the player's crews while connected, in the order they came (TEAM6).
     joins: Vec<CrewJoin>,
@@ -1837,6 +1837,7 @@ impl SocialState {
                             friend,
                             self.online.get(&friend.profile.id),
                             self.badge_view(&friend.profile),
+                            self.plan_skew,
                         )
                     })
                     .collect()
@@ -1933,6 +1934,7 @@ impl SocialState {
             friend,
             self.online.get(id),
             self.badge_view(&friend.profile),
+            self.plan_skew,
         ))
     }
 
@@ -2052,13 +2054,17 @@ fn moved(before: &CrewCall, next: &CrewCall) -> bool {
         || (before.server.is_some() && next.server.is_some() && before.server != next.server)
 }
 
+/// A friend as the UI shows them; `skew` is this computer's clock minus the service's (the start
+/// of their game session comes on the service's clock, CREW-PLUS).
 fn friend_view(
     friend: &Friend,
     presence: Option<&Presence>,
     badge: Option<Box<CrewBadgeView>>,
+    skew: i64,
 ) -> FriendView {
     let profile = &friend.profile;
     let online = presence.filter(|p| p.state != PresenceState::Offline);
+    let playing = online.filter(|p| p.state == PresenceState::Playing);
     FriendView {
         id: profile.id.clone(),
         name: profile.name().to_owned(),
@@ -2079,6 +2085,10 @@ fn friend_view(
         voice: online.and_then(|p| p.voice),
         // SHARE-LIVE: only while they are in a voice room (an old presence says nothing more).
         live: online.is_some_and(|p| p.live && p.voice == Some(crate::voice::PresenceVoice::In)),
+        // CREW-PLUS: when their game session began, on this computer's clock.
+        playing_since: playing
+            .and_then(|p| p.playing_since)
+            .map(|since| since.saturating_add(skew)),
     }
 }
 
@@ -2298,7 +2308,43 @@ mod tests {
             voice: None,
             note: None,
             live: false,
+            playing_since: None,
         }
+    }
+
+    /// CREW-PLUS: a friend's game session starts on this computer's clock (the service's time and
+    /// `hello`'s `now` set the difference), only while they play and share it.
+    #[test]
+    fn a_friend_playing_shows_when_their_session_began_on_this_clock() {
+        let mut state = loaded();
+        // The service's clock is 2 minutes behind this computer's.
+        state.apply(
+            &PresenceEvent::Connected {
+                status: StatusMode::Online,
+                friends: Vec::new(),
+                invites: Vec::new(),
+                calls: Vec::new(),
+                clock: Some(NOW - 120),
+                rel: None,
+                chat: None,
+                plans: None,
+                note: None,
+                pins: None,
+            },
+            NOW,
+        );
+        let mut playing = presence("2", PresenceState::Playing, Some(GameLocation::Projects));
+        playing.playing_since = Some(NOW - 120 - 1_500);
+        state.apply(&PresenceEvent::Presence(playing.clone()), NOW);
+        assert_eq!(
+            by_id(&state.friends(), "2").playing_since,
+            Some(NOW - 1_500)
+        );
+        // Back in the launcher (or not shared any more): nothing to show.
+        playing.state = PresenceState::Launcher;
+        playing.game = None;
+        state.apply(&PresenceEvent::Presence(playing), NOW);
+        assert_eq!(by_id(&state.friends(), "2").playing_since, None);
     }
 
     fn invite(id: &str, from: &str, at: i64, quiet: bool) -> Invite {

@@ -1266,6 +1266,11 @@ pub struct FriendView {
     /// Always sent; optional for the page's types, whose older views (and tests) never had it.
     #[specta(optional)]
     pub live: bool,
+    /// CREW-PLUS: while they play, when their game session began (Unix seconds, this computer's
+    /// clock): the row says how long ("25 dk"). None: not playing, or they keep "last seen" to
+    /// themselves. Optional for the page's types, as `live`.
+    #[specta(optional)]
+    pub playing_since: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]

@@ -238,6 +238,11 @@ pub struct Presence {
         deserialize_with = "crate::voice::only_true"
     )]
     pub live: bool,
+    /// CREW-PLUS: while playing, when their game session began (Unix seconds on the service's
+    /// clock, down to five minutes); only from friends who share "last seen". None: not known or
+    /// not shared.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playing_since: Option<i64>,
 }
 
 /// A field that may be absent (None), `null` (`Some(None)`) or a value: the outer `Option` says
@@ -470,6 +475,10 @@ pub(crate) enum ClientMessage {
         /// took `voice1`.
         #[serde(skip_serializing_if = "Option::is_none")]
         voice: Option<&'static str>,
+        /// CREW-PLUS: how long the game has been open (whole seconds), only while playing and
+        /// from the first second: a reconnect mid-game keeps the session's start on the service.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        played: Option<u64>,
     },
     /// VOICE: calls a friend (a new friend room led by the player); answered by `rid`.
     VoiceCall {
@@ -619,6 +628,7 @@ impl ClientMessage {
                 singleplayer: false,
                 ver: None,
                 voice: None,
+                played: None,
             },
             LocalStatus::Playing { host } => Self::Status {
                 state: "playing",
@@ -626,6 +636,7 @@ impl ClientMessage {
                 singleplayer: false,
                 ver,
                 voice: None,
+                played: None,
             },
             LocalStatus::Singleplayer => Self::Status {
                 state: "playing",
@@ -633,6 +644,7 @@ impl ClientMessage {
                 singleplayer: true,
                 ver,
                 voice: None,
+                played: None,
             },
         }
     }
@@ -641,6 +653,15 @@ impl ClientMessage {
     pub(crate) fn with_voice(mut self, on: Option<bool>) -> Self {
         if let Self::Status { voice, .. } = &mut self {
             *voice = on.map(|on| if on { "on" } else { "off" });
+        }
+        self
+    }
+
+    /// CREW-PLUS: the status message with how long the game has been open (seconds): only while
+    /// playing, and left out under a second (the service starts the session then anyway).
+    pub(crate) fn with_played(mut self, seconds: Option<u64>) -> Self {
+        if let Self::Status { state, played, .. } = &mut self {
+            *played = seconds.filter(|seconds| *seconds > 0 && *state == "playing");
         }
         self
     }
@@ -1229,10 +1250,32 @@ mod tests {
             with(&LocalStatus::Launcher),
             r#"{"t":"status","state":"launcher"}"#
         );
+        // CREW-PLUS: how long the game has been open, only while playing and from the first second.
+        let played = |s: &LocalStatus, seconds: Option<u64>| {
+            serde_json::to_string(&ClientMessage::status(s, None).with_played(seconds)).unwrap()
+        };
+        assert_eq!(
+            played(&LocalStatus::Playing { host: None }, Some(1520)),
+            r#"{"t":"status","state":"playing","played":1520}"#
+        );
+        assert_eq!(
+            played(&LocalStatus::Singleplayer, Some(0)),
+            r#"{"t":"status","state":"playing","singleplayer":true}"#
+        );
+        assert_eq!(
+            played(&LocalStatus::Launcher, Some(60)),
+            r#"{"t":"status","state":"launcher"}"#
+        );
+        let seen: Presence = serde_json::from_str(
+            r#"{"id":"1","state":"playing","status":"online","playingSince":1792400100}"#,
+        )
+        .unwrap();
+        assert_eq!(seen.playing_since, Some(1_792_400_100));
         let seen: Presence = serde_json::from_str(
             r#"{"id":"1","state":"playing","status":"online","game":{"where":"other","ver":"26.2"}}"#,
         )
         .unwrap();
+        assert_eq!(seen.playing_since, None);
         assert_eq!(
             seen.game,
             Some(Game {
