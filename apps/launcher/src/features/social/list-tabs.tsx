@@ -1,5 +1,8 @@
 // The list page while chat is on (CHAT1): "Arkadaşlar" and "Mesajlar" (with how many are unread),
-// the friend list and the conversations. Without chat it is the friend list alone, as before.
+// the friend list and the conversations; the panel opens on the one the player last picked, after a
+// restart too (CREW-UI, `setListTab`), so a request or an invite that waits in "Arkadaşlar" while
+// "Mesajlar" shows puts the title bar's small gold mark on that tab. Without chat it is the friend
+// list alone, as before.
 // While the player's world is shared (HOST1) "Dünyan açık" sits above both. SOC-NEXT: the count
 // takes the conversations marked unread here, and the tab's right click marks them all read.
 import { TabPanel, Tabs } from "@pl/ui";
@@ -30,6 +33,8 @@ function ListBody() {
   const setTab = useSocialUi((s) => s.setListTab);
   const next = useSocNext();
   const marks = useSocNextPrefs((s) => s.unreadMarks);
+  // A request or an invite waits in the friend list (the title bar's gold mark says the same).
+  const asks = useSocialUi((s) => s.view.incoming.length > 0 || s.view.invites.length > 0);
   if (!chat) return <ListPage />;
   const unread = next ? unreadShownAll(chat, marks) : unreadAll(chat);
   return (
@@ -38,7 +43,11 @@ function ListBody() {
       onValueChange={setTab}
       label={t("social.title")}
       items={[
-        { value: "friends", label: t("chat.tabs.friends") },
+        {
+          value: "friends",
+          label: t("chat.tabs.friends"),
+          marker: asks && tab !== "friends" ? t("social.pill.pending") : undefined,
+        },
         {
           value: "messages",
           label: t("chat.tabs.messages"),

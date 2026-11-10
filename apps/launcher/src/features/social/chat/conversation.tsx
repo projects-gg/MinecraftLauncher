@@ -656,7 +656,7 @@ export function Conversation({
     void load(conv);
   }, [conv, load]);
 
-  // Opened to be written in: the field takes the focus (a crew's tab picked by hand keeps it).
+  // Opened to be written in: the field takes the focus.
   useEffect(() => {
     if (focusAsked !== conv || !onScreen) return;
     if (useSocialUi.getState().takeChatFocus(conv) && writable) setFocusRequest((n) => n + 1);
@@ -1300,7 +1300,8 @@ export function Conversation({
           className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pt-2 [scrollbar-gutter:stable]"
         >
           {/* With "yazıyor…" on, the list keeps a line free under its newest message for it;
-              SOC-NOTE: with pins, room at its top for their line. */}
+              SOC-NOTE: with pins, room at its top for their line. The first page read from this
+              computer fades in (CREW-UI: the page slides in light and its rows follow). */}
           <div
             ref={content}
             className={cn(
@@ -1308,6 +1309,7 @@ export function Conversation({
               extras.typing && "pb-7",
               crewPins.length > 0 && "pt-11",
               faded && "opacity-80",
+              !thread?.loaded && "opacity-0",
             )}
           >
             {thread?.loaded && !items.length ? (

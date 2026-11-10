@@ -120,13 +120,12 @@ export function sayJoined(
   });
 }
 
-/** Opens a crew's page (its "Ekip" pane) in the friends panel. */
+/** Opens a crew's page in the friends panel. */
 export function openCrewPage(id: string) {
   const ui = useSocialUi.getState();
   if (!ui.open) ui.openPanel({ page: "team" });
   else ui.goTo("team");
   ui.setCrewTab(id);
-  ui.setCrewPane("crew");
 }
 
 // --- requests from a tag ------------------------------------------------------------------------
