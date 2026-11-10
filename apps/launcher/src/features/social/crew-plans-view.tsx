@@ -891,6 +891,8 @@ function PlanForm({
   const [busy, setBusy] = useState(false);
   const [taken, setTaken] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // CREW-PLUS: a template's name is being written: "Planla" waits for it.
+  const [renaming, setRenaming] = useState(false);
   const lineId = useId();
   const day = dayOf(at, days) ?? days[0];
   const times = useMemo(() => (day ? planTimes(day, opened) : []), [day, opened]);
@@ -908,7 +910,7 @@ function PlanForm({
     setError(null);
   };
   const submit = async () => {
-    if (problem || busy) return;
+    if (problem || busy || renaming) return;
     const existing = plans.find((plan) => plan.at === at);
     if (existing) {
       setTaken(true);
@@ -953,6 +955,7 @@ function PlanForm({
           if (notes) setNote(nextNote);
         }}
         onRefuse={setError}
+        onRenaming={setRenaming}
       />
       <Segmented<string>
         value={day.key}
@@ -987,7 +990,12 @@ function PlanForm({
         <Button size="sm" variant="ghost" onClick={onDone}>
           {t("teams.cancel")}
         </Button>
-        <Button type="submit" size="sm" variant="primary" disabled={busy || Boolean(problem)}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="primary"
+          disabled={busy || Boolean(problem) || renaming}
+        >
           {t("crewWave2.plans.form.submit")}
         </Button>
       </div>

@@ -5,7 +5,7 @@
 // the player's own; their chips carry the launcher's menu (right click, long press, Shift+F10):
 // "Yeniden Adlandır" in place, "Sil" with "Geri Al" in its toast.
 import { Check, PencilSimple, Plus, Trash, X } from "@phosphor-icons/react";
-import { ContextMenu, cn, IconButton, type MenuItem, Tooltip, toast } from "@pl/ui";
+import { ContextMenu, cn, type MenuItem, Tooltip, toast } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type ButtonHTMLAttributes,
@@ -102,7 +102,32 @@ function FillTip({ when, note }: { when: string; note: string }) {
   );
 }
 
-/** Renaming one of the player's own in place: Enter keeps it, Esc leaves it as it was. */
+/** A small action inside the rename field (✓, ×). */
+function FieldAction({
+  label,
+  icon,
+  onPress,
+}: {
+  label: string;
+  icon: ReactNode;
+  onPress: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onPress}
+      className="flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-ash-300 transition-[color,background-color,transform] duration-150 ease-out hover:bg-white/10 hover:text-bone-50 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97]"
+    >
+      {icon}
+    </button>
+  );
+}
+
+/**
+ * Renaming one of the player's own in its chip's place (the other chips stay, the row keeps its
+ * height): Enter keeps the name, Esc leaves it as it was.
+ */
 function RenameField({
   initial,
   onDone,
@@ -115,7 +140,7 @@ function RenameField({
   const { t } = useTranslation();
   const [value, setValue] = useState(initial);
   const input = useRef<HTMLInputElement>(null);
-  const box = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     input.current?.focus();
     input.current?.select();
@@ -137,7 +162,7 @@ function RenameField({
     else onCancel();
   };
   return (
-    <div ref={box} className="flex items-center gap-1.5">
+    <span ref={box} className="relative flex h-[26px] max-w-full items-center">
       <input
         ref={input}
         value={value}
@@ -152,21 +177,22 @@ function RenameField({
             save();
           }
         }}
-        className="h-8 min-w-0 flex-1 rounded-md border border-white/10 bg-obsidian-800/80 px-2.5 text-[13px] text-bone-50 transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-ash-500 hover:border-white/16 focus:border-gold-400/70 focus:ring-2 focus:ring-gold-300/25"
+        className="field-sizing-content h-[26px] max-w-[13rem] min-w-[7rem] rounded-md border border-white/10 bg-obsidian-800/80 pr-[48px] pl-2.5 text-[13px] text-bone-50 transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-ash-500 hover:border-white/16 focus:border-gold-400/70 focus:ring-2 focus:ring-gold-300/25"
       />
-      <IconButton
-        label={t("crewPlus.templates.renameSave")}
-        icon={<Check size={15} weight="bold" />}
-        size="sm"
-        onClick={save}
-      />
-      <IconButton
-        label={t("crewPlus.templates.renameCancel")}
-        icon={<X size={15} />}
-        size="sm"
-        onClick={onCancel}
-      />
-    </div>
+      {/* ✓ and × inside the field's end: the field takes about the chip's room, the row stays. */}
+      <span className="absolute top-1/2 right-1 flex -translate-y-1/2 gap-0.5">
+        <FieldAction
+          label={t("crewPlus.templates.renameSave")}
+          icon={<Check size={12} weight="bold" aria-hidden />}
+          onPress={save}
+        />
+        <FieldAction
+          label={t("crewPlus.templates.renameCancel")}
+          icon={<X size={12} weight="bold" aria-hidden />}
+          onPress={onCancel}
+        />
+      </span>
+    </span>
   );
 }
 
@@ -185,6 +211,7 @@ export function TemplateChips({
   notes,
   onFill,
   onRefuse,
+  onRenaming,
 }: {
   days: readonly PlanDay[];
   day: PlanDay;
@@ -194,11 +221,24 @@ export function TemplateChips({
   notes: boolean;
   onFill: (at: number, note: string) => void;
   onRefuse: (text: string) => void;
+  /** A name is being written: the form's own buttons wait meanwhile. */
+  onRenaming?: (renaming: boolean) => void;
 }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
   const own = usePlanTemplates((s) => s.own);
-  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renaming, setRenamingId] = useState<string | null>(null);
+  const setRenaming = (id: string | null) => {
+    setRenamingId(id);
+    onRenaming?.(id !== null);
+  };
+  // The template went while its name was being written (deleted, or a backup came): the field goes.
+  useEffect(() => {
+    if (renaming !== null && !own.some((one) => one.id === renaming)) {
+      setRenamingId(null);
+      onRenaming?.(false);
+    }
+  }, [own, renaming, onRenaming]);
   const formNote = cleanPlanNote(note);
 
   const fillOf = (template: PlanTemplate) => templateTime(template, days, opened);
@@ -239,22 +279,6 @@ export function TemplateChips({
     });
   };
 
-  const editing = own.find((one) => one.id === renaming);
-  if (editing) {
-    return (
-      <div className="mb-3">
-        <RenameField
-          initial={editing.name}
-          onDone={(name) => {
-            usePlanTemplates.getState().rename(editing.id, name);
-            setRenaming(null);
-          }}
-          onCancel={() => setRenaming(null)}
-        />
-      </div>
-    );
-  }
-
   return (
     <fieldset
       aria-label={t("crewPlus.templates.label")}
@@ -281,6 +305,20 @@ export function TemplateChips({
               onSelect: () => remove(template.id),
             },
           ];
+          if (template.id === renaming) {
+            return (
+              <motion.span key={template.id} className="flex max-w-full" {...pop(reduce)}>
+                <RenameField
+                  initial={template.name}
+                  onDone={(name) => {
+                    usePlanTemplates.getState().rename(template.id, name);
+                    setRenaming(null);
+                  }}
+                  onCancel={() => setRenaming(null)}
+                />
+              </motion.span>
+            );
+          }
           return (
             <motion.span key={template.id} className="flex max-w-full" {...pop(reduce)}>
               <ContextMenu
