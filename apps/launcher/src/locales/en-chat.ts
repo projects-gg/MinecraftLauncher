@@ -3,8 +3,6 @@ export const enChat = {
   tabs: {
     friends: "Friends",
     messages: "Messages",
-    crew: "Overview",
-    chat: "Chat",
   },
   list: {
     label: "Your messages",

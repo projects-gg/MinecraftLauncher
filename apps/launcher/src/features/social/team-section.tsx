@@ -57,6 +57,8 @@ export interface CrewMenuPlace {
   onOpen?: (() => void) | false;
   /** The crew page's rail lays the crews out sideways: "Sola taşı" / "Sağa taşı". */
   sideways?: boolean;
+  /** The crew's own chat (its header, CREW-UI): no "Sohbeti aç" there. */
+  inChat?: boolean;
 }
 
 /**
@@ -65,7 +67,7 @@ export interface CrewMenuPlace {
  * already on screen) are left out there.
  */
 export function useCrewItems(team: SocialTeam, place: CrewMenuPlace = {}) {
-  const { folded = false, onToggle, onOpen, sideways = false } = place;
+  const { folded = false, onToggle, onOpen, sideways = false, inChat = false } = place;
   const { t } = useTranslation();
   const friends = useSocialUi((s) => s.view.friends);
   const crew = useSocialUi((s) => s.view.crew);
@@ -112,6 +114,7 @@ export function useCrewItems(team: SocialTeam, place: CrewMenuPlace = {}) {
   const drop: TeamAction[] = [];
   if (!onToggle) drop.push("toggle");
   if (onOpen === false) drop.push("open");
+  if (inChat) drop.push("chat");
   const plan = without(full, drop);
   return rowsOf(plan, (row): MenuItem | null => {
     switch (row.action) {

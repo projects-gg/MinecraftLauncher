@@ -2,8 +2,9 @@
 // player's own card and status; pages (list, add, settings) slide in from the side they belong
 // to. Signed out it is the opt-in screen; while a saved session is checked, skeletons. With several
 // crews (TEAM4) the crew page is "Ekipler" and its bell is the crew's on screen. With chat (CHAT1)
-// the list has "Arkadaşlar" and "Mesajlar", and a conversation (a friend's on its own page, a crew's
-// "Sohbet" on the crew page) fills the panel: its messages scroll, the composer stays at the bottom.
+// the list has "Arkadaşlar" and "Mesajlar" (a fresh opening shows the one the player last picked,
+// CREW-UI), and a conversation fills the chat page, a friend's or a crew's ("Sohbete Git" on the
+// crew page): its messages scroll, the composer stays at the bottom.
 import { CaretLeft, GearSix, UserPlus, UsersThree, X } from "@phosphor-icons/react";
 import {
   cn,
@@ -24,6 +25,8 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AddPage } from "./add-page";
 import { ChatHeader, ChatPage } from "./chat/chat-page";
+import { crewOf } from "./chat/conversations";
+import { CrewChatHeader, CrewChatPage, useChatCrew } from "./chat/crew-chat";
 import { ConsentPage } from "./consent-page";
 import { CrewNotifyButton } from "./crew-notify";
 import { DiscoverPage } from "./discover/discover-page";
@@ -55,6 +58,7 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" | "name" 
   const teams = useSocialUi((s) => s.view.teams);
   const several = useSocialUi((s) => s.view.crew.multi && s.view.crews.length > 1);
   const shownCrew = useShownCrewId();
+  const chatCrew = useChatCrew();
   const goTo = useSocialUi((s) => s.goTo);
   // CREW-DISCOVER: "Ekip bul" goes back to the crew page it opens from.
   const sub = page === "add" || page === "settings" || page === "team" || page === "discover";
@@ -80,7 +84,11 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" | "name" 
             {...crossfade()}
           >
             {chat ? (
-              <ChatHeader />
+              chatCrew ? (
+                <CrewChatHeader team={chatCrew} />
+              ) : (
+                <ChatHeader />
+              )
             ) : sub ? (
               <>
                 <IconButton
@@ -159,7 +167,8 @@ export function FriendsSheet() {
   const variants = pageVariants(reduce);
 
   const chatConv = useSocialUi((s) => s.chatConv);
-  const crewPane = useSocialUi((s) => s.crewPane);
+  // A crew's chat needs its crew (one the player left goes back to the list).
+  const chatCrew = chatConv ? crewOf(chatConv) : null;
   // SOC-ID: a new account's name step fills the panel right after its sign-in.
   const nameStep = useIdentityUi((s) => s.nameStep);
   const shown: SocialPage | "consent" | "restoring" | "name" =
@@ -169,7 +178,10 @@ export function FriendsSheet() {
         : view.me &&
             (page !== "team" || view.teams) &&
             (page !== "discover" || (view.teams && view.crew.discover === true)) &&
-            (page !== "chat" || (view.chat !== undefined && chatConv !== null))
+            (page !== "chat" ||
+              (view.chat !== undefined &&
+                chatConv !== null &&
+                (chatCrew === null || view.crews.some((crew) => crew.id === chatCrew))))
           ? page
           : "list"
       : view.auth === "restoring"
@@ -182,9 +194,7 @@ export function FriendsSheet() {
     if (!open) listTop.current = 0;
   }, [open]);
   // A conversation fills the panel: its own list scrolls, the composer stays at the bottom.
-  const fill =
-    shown === "chat" ||
-    (shown === "team" && crewPane === "chat" && view.chat !== undefined && view.crews.length > 0);
+  const fill = shown === "chat";
 
   return (
     <Dialog.Root open={open && view.enabled} onOpenChange={(next) => !next && close()}>
@@ -274,7 +284,11 @@ export function FriendsSheet() {
                                 <SocialSettings />
                               </div>
                             ) : shown === "chat" ? (
-                              <ChatPage />
+                              chatCrew ? (
+                                <CrewChatPage />
+                              ) : (
+                                <ChatPage />
+                              )
                             ) : shown === "discover" ? (
                               <DiscoverPage />
                             ) : (

@@ -253,7 +253,8 @@ function PlayingLine() {
         <button
           type="button"
           aria-label={`${text}. ${t("social.home.open")}`}
-          onClick={() => openPanel({ page: "list" })}
+          // The friends it names are on "Arkadaşlar", whichever tab the player keeps (CREW-UI).
+          onClick={() => openPanel({ page: "list", tab: "friends" })}
           onKeyDown={(event) => {
             openMenuFromKey(event);
           }}

@@ -18,6 +18,7 @@ import { trCloudAfk } from "./tr-cloud-afk";
 import { trCloudAfkFeat } from "./tr-cloud-afk-feat";
 import { trCloudAfkMove } from "./tr-cloud-afk-move";
 import { trCloudStale } from "./tr-cloud-stale";
+import { trCrewUi } from "./tr-crew-ui";
 import { trCrewWave2 } from "./tr-crew-wave2";
 import { trCrews } from "./tr-crews";
 import { trDiscordPlace } from "./tr-discord-place";
@@ -159,6 +160,7 @@ export const tr = {
   socNext: trSocNext,
   socNote: trSocNote,
   telemetry: trTelemetry,
+  crewUi: trCrewUi,
   nav: {
     home: "Ana sayfa",
     library: "Kütüphane",

@@ -30,8 +30,9 @@ function inviteOf(session: string): WorldInvite | undefined {
   return useHostUi.getState().view.invites.find((invite) => invite.session === session);
 }
 
+/** The invite waits on "Arkadaşlar", whichever tab the player keeps (CREW-UI). */
 function openFriends() {
-  useSocialUi.getState().openPanel({ page: "list" });
+  useSocialUi.getState().openPanel({ page: "list", tab: "friends" });
 }
 
 function handleNotice(notice: HostNotice) {

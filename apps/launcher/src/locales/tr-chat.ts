@@ -4,9 +4,6 @@ export const trChat = {
   tabs: {
     friends: "Arkadaşlar",
     messages: "Mesajlar",
-    // The crew page's first tab, under its "Ekip" title: never "Ekip" again (CHAT-PROD leftovers).
-    crew: "Genel bakış",
-    chat: "Sohbet",
   },
   list: {
     label: "Mesajların",

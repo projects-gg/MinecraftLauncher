@@ -40,7 +40,7 @@ import { usePrefs } from "@/stores/prefs";
 import { attempt, notifyOutside } from "./actions";
 import { sayJoined } from "./badge-actions";
 import { useChat } from "./chat/chat-store";
-import { chatMutedNow, crewOf } from "./chat/conversations";
+import { chatMutedNow } from "./chat/conversations";
 import {
   ChatNotices,
   type ChatNoticeWay,
@@ -85,7 +85,13 @@ import { MarkedSentence } from "./person-mark";
 import { PersonAskDialog } from "./person-menu";
 import { PlanReminders } from "./plan-reminders";
 import { ReportDialog } from "./report-dialog";
-import { friendListShown, useSocialPrefs, useSocialUi } from "./store";
+import {
+  conversationShown,
+  crewPageShown,
+  friendListShown,
+  useSocialPrefs,
+  useSocialUi,
+} from "./store";
 import { useCallTicker } from "./use-call-clock";
 
 /** A friend coming online or joining projects.gg notifies at most this often. */
@@ -186,7 +192,6 @@ function showCrew(id: string) {
   const ui = useSocialUi.getState();
   ui.openPanel({ page: "team" });
   ui.setCrewTab(id);
-  ui.setCrewPane("crew");
 }
 
 /** A click on a friend's or an invite's system notification: the friends list. */
@@ -203,13 +208,7 @@ function showCalledCrew(crews: string[]) {
 
 /** That crew's page is on screen (the panel open on it). */
 function crewInView(id: string): boolean {
-  const ui = useSocialUi.getState();
-  if (!ui.open || ui.page !== "team" || ui.crewPane !== "crew") return false;
-  const crews = ui.view.crews;
-  const shown = ui.view.crew.multi
-    ? (crews.find((crew) => crew.id === ui.crewTab) ?? crews[0])
-    : crews[0];
-  return shown?.id === id;
+  return crewPageShown(useSocialUi.getState(), id);
 }
 
 function handleNotice(notice: SocialNotice) {
@@ -457,18 +456,9 @@ function handleNotice(notice: SocialNotice) {
   }
 }
 
-/** A conversation is on screen: a friend's chat page, or the crew page on that crew's "Sohbet". */
+/** A conversation is on screen: the chat page shows it (a friend's or, CREW-UI, a crew's). */
 function chatOnScreen(conv: string): boolean {
-  const ui = useSocialUi.getState();
-  if (!ui.open) return false;
-  if (ui.page === "chat") return ui.chatConv === conv;
-  const team = crewOf(conv);
-  if (ui.page !== "team" || ui.crewPane !== "chat" || !team) return false;
-  const shown =
-    ui.crewTab && ui.view.crews.some((c) => c.id === ui.crewTab)
-      ? ui.crewTab
-      : ui.view.crews[0]?.id;
-  return shown === team;
+  return conversationShown(useSocialUi.getState(), conv);
 }
 
 /** A new chat message from someone else: a toast, a system notification, or nothing (notify.ts);
