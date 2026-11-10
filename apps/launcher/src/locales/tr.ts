@@ -18,6 +18,7 @@ import { trCloudAfk } from "./tr-cloud-afk";
 import { trCloudAfkFeat } from "./tr-cloud-afk-feat";
 import { trCloudAfkMove } from "./tr-cloud-afk-move";
 import { trCloudStale } from "./tr-cloud-stale";
+import { trCrewPlus } from "./tr-crew-plus";
 import { trCrewUi } from "./tr-crew-ui";
 import { trCrewWave2 } from "./tr-crew-wave2";
 import { trCrews } from "./tr-crews";
@@ -123,6 +124,7 @@ export const tr = {
   safety: trSafety,
   help: trHelp,
   crewWave2: trCrewWave2,
+  crewPlus: trCrewPlus,
   overlay: trOverlay,
   fastPack: trFastPack,
   packEdit: trPackEdit,

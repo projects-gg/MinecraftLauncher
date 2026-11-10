@@ -2958,6 +2958,74 @@ fn soc2_view() -> SocialView {
     v
 }
 
+/// CREW-PLUS: the player's own plan templates reach a mod that shows plans (checked again, only
+/// while they may plan somewhere), and a friend's game session start rides on the friend frame.
+#[tokio::test]
+async fn plan_templates_and_play_time_reach_the_game() {
+    use crate::protocol::PlanTemplate;
+    use serde_json::json;
+
+    let mut view = soc2_view();
+    let since = now_secs() - 1_500;
+    let ayse = view.friends.iter_mut().find(|f| f.id == "f-ayse").unwrap();
+    ayse.playing_since = Some(since);
+    // An offline friend never carries one (the service sends none; a stale one is not shown).
+    let can = view.friends.iter_mut().find(|f| f.id == "f-can").unwrap();
+    can.playing_since = Some(since);
+    let social = FakeSocial::new(view);
+    let template = |name: &str, day: &str, time: u16, note: &str| PlanTemplate {
+        name: name.into(),
+        day: day.into(),
+        time,
+        note: note.into(),
+    };
+    let overlay = Overlay::new(OverlayConfig {
+        plan_templates: vec![
+            template("  Ada   turu ", "sat", 15 * 60, "Sesliye  gelin"),
+            template("Gece", "today", 21 * 60 + 30, ""),
+            template("Bozuk", "someday", 21 * 60, ""),
+            template("Yamuk", "fri", 21 * 60 + 10, ""),
+        ],
+        ..OverlayConfig::default()
+    });
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+
+    // A mod from before plans: no templates at all.
+    let mut old = MockMod::connect_with(&endpoint, &["people", "people2", "people3"]).await;
+    old.next_of("welcome").await;
+    assert!(old.next_of("lists").await.get("templates").is_none());
+    drop(old);
+
+    let mut game = MockMod::connect_with(&endpoint, SOC2).await;
+    game.next_of("welcome").await;
+    let l = game.next_of("lists").await;
+    assert_eq!(
+        l["templates"],
+        json!([
+            {"name":"Ada turu","day":"sat","time":900,"note":"Sesliye gelin"},
+            {"name":"Gece","day":"today","time":1290,"note":""}
+        ])
+    );
+    let snapshot = game.next_of("snapshot").await;
+    let friend = |id: &str| {
+        snapshot["friends"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|f| f["id"] == id)
+            .cloned()
+            .unwrap()
+    };
+    assert_eq!(friend("f-ayse")["since"], json!(since * 1000));
+    assert!(friend("f-can").get("since").is_none());
+    assert!(friend("f-mert").get("since").is_none());
+
+    // The page drops them: the next lists has none.
+    overlay.configure(OverlayConfig::default());
+    let l = game.next_of("lists").await;
+    assert!(l.get("templates").is_none());
+}
+
 fn now_secs() -> i64 {
     i64::try_from(
         std::time::SystemTime::now()

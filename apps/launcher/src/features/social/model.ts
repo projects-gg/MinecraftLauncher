@@ -24,6 +24,7 @@ import { waitingRequests } from "./crew-joining";
 import { callHeardIn, crewCallsHeard, crewMutedNow, crewmateHeardIn, mutedNow } from "./mute";
 import { cleanIgnored, cleanPinned } from "./next/prefs";
 import { shownHost } from "./next/streamer";
+import { cleanTemplates, type PlanTemplate } from "./plan-templates";
 
 const collator = new Intl.Collator("tr", { sensitivity: "base" });
 
@@ -513,6 +514,8 @@ export interface BackupFriends {
    * top of "Mesajlar" (at most 3); left out while empty. Nicknames never travel (this computer). */
   ignored?: string[];
   pinnedChats?: string[];
+  /** CREW-PLUS: the player's own crew plan templates (at most 5); left out while there are none. */
+  planTemplates?: PlanTemplate[];
 }
 
 /** Friend ids with a yes or no, at most 200 (what a backup may carry). */
@@ -610,6 +613,9 @@ function buildBackupBase(
       ...(friends.pinnedChats && cleanPinned(friends.pinnedChats).length
         ? { pinnedChats: cleanPinned(friends.pinnedChats) }
         : {}),
+      ...(friends.planTemplates && cleanTemplates(friends.planTemplates).length
+        ? { planTemplates: cleanTemplates(friends.planTemplates) }
+        : {}),
     },
   };
 }
@@ -690,6 +696,9 @@ export function readBackup(data: unknown): {
     if (friends.ignored !== undefined) out.friends.ignored = cleanIgnored(friends.ignored);
     if (friends.pinnedChats !== undefined) {
       out.friends.pinnedChats = cleanPinned(friends.pinnedChats);
+    }
+    if (friends.planTemplates !== undefined) {
+      out.friends.planTemplates = cleanTemplates(friends.planTemplates);
     }
   }
   return out;

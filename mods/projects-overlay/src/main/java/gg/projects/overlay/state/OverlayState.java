@@ -53,10 +53,12 @@ public final class OverlayState {
      * crews the player may invite to ({@code member} or {@code invited}, by crew id). {@code marks} (BADGES-UI): the
      * keys of their profile badges as the launcher sent them ({@link #marks(List)} names those the catalogue knows).
      * {@code dnd} (OVL-SOC, V23): an online friend on "Rahatsız etmeyin" (the launcher's gold dot with its bar).
+     * {@code since} (CREW-PLUS): while they play, when their game session began (Unix ms, this computer's clock; 0: not
+     * known, or they keep "last seen" to themselves).
      */
     public record Friend(String id, String name, String where, boolean joinable, String host, String badge,
         String seen, boolean fav, boolean alert, String group, Map<String, String> crews, List<String> marks,
-        boolean dnd) {
+        boolean dnd, long since) {
         public boolean onProjects() {
             return where.equals("projects");
         }
@@ -354,6 +356,27 @@ public final class OverlayState {
     }
 
     /**
+     * CREW-PLUS: one of the player's own crew plan templates (the launcher keeps them): its name, a day relative to the
+     * day it is used ({@code today}, {@code tomorrow}, {@code mon} … {@code sun}), minutes after midnight (a whole
+     * quarter) and a note ("" none).
+     */
+    public record PlanTemplate(String name, String day, int time, String note) {
+        /** The days a template may name. */
+        public static final List<String> DAYS = List.of("today", "tomorrow", "mon", "tue", "wed", "thu", "fri", "sat",
+            "sun");
+
+        /** A template as the bridge may carry it, or null for one that breaks the launcher's rules. */
+        public static PlanTemplate of(String name, String day, long time, String note) {
+            String cleanName = Protocol.plain(name, 24).trim();
+            String cleanNote = Protocol.plain(note, 80).trim();
+            if (cleanName.isEmpty() || !DAYS.contains(day) || time < 0 || time >= 24 * 60 || time % 15 != 0) {
+                return null;
+            }
+            return new PlanTemplate(cleanName, day, (int) time, cleanNote);
+        }
+    }
+
+    /**
      * What "Bul" found for a code: {@code kind} {@code friend}, {@code crew} or {@code none} ({@code reason}); a person's
      * or crew's id and name, how the player stands to it ({@code relation}); a crew's size and tag, whether it approves
      * newcomers and whether the player's request to it waits.
@@ -460,6 +483,8 @@ public final class OverlayState {
     private List<Plan> plans = List.of();
     private List<String> planners = List.of();
     private boolean planNotes;
+    /** CREW-PLUS: the player's own plan templates, in their order (at most five). */
+    private List<PlanTemplate> planTemplates = List.of();
     /** The newest answer to "Bul", or null. */
     private Found found;
     private int foundRevision;
@@ -651,6 +676,11 @@ public final class OverlayState {
     /** A plan may carry a note now. */
     public boolean planNotes() {
         return planNotes;
+    }
+
+    /** CREW-PLUS: the player's own plan templates (the form shows them after its built-in ones). */
+    public List<PlanTemplate> planTemplates() {
+        return planTemplates;
     }
 
     /** The newest answer to "Bul", or null. */
@@ -1251,6 +1281,7 @@ public final class OverlayState {
         plans = List.of();
         planners = List.of();
         planNotes = false;
+        planTemplates = List.of();
         found = null;
         prefs = null;
         forgetPresses();
@@ -1446,6 +1477,16 @@ public final class OverlayState {
         plans = List.copyOf(nextPlans);
         planners = idsOf(arr(frame, "planners"));
         planNotes = Protocol.bool(frame, "notes", false);
+        // CREW-PLUS: the player's own plan templates (a launcher from before sends none: the built-in ones only).
+        List<PlanTemplate> nextTemplates = new ArrayList<>();
+        forEach(frame, "templates", t -> {
+            PlanTemplate template = PlanTemplate.of(Protocol.str(t, "name", ""), Protocol.str(t, "day", ""),
+                Protocol.num(t, "time", -1), Protocol.str(t, "note", ""));
+            if (template != null && nextTemplates.size() < 5) {
+                nextTemplates.add(template);
+            }
+        });
+        planTemplates = List.copyOf(nextTemplates);
     }
 
     private List<Request> requestsOf(JsonObject frame, String key, int max) {
@@ -1781,7 +1822,7 @@ public final class OverlayState {
         friends.put(id, new Friend(id, name(o, "name"), Protocol.str(o, "where", "offline"),
             Protocol.bool(o, "joinable", false), host.isEmpty() ? null : host, crewId(o), seenOf(o),
             Protocol.bool(o, "fav", false), Protocol.bool(o, "alert", false), groupId(o), crewPlaces(o),
-            markKeys(arr(o, "marks")), Protocol.bool(o, "dnd", false)));
+            markKeys(arr(o, "marks")), Protocol.bool(o, "dnd", false), Math.max(0, Protocol.num(o, "since", 0))));
         // HOST1 (H13): only the launcher that got the invite sends it; gone with the next frame without it.
         JsonObject world = obj(o, "world");
         if (world == null) {

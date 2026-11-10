@@ -1177,6 +1177,7 @@ fn scene_of(view: &SocialView, config: &OverlayConfig, worlds: &WorldsShown, lin
     let now = now_ms();
     let mut scene = Scene::from_view(view, &config.notify, now);
     scene.apply_next(view, config.next.as_ref(), now);
+    scene.apply_templates(&config.plan_templates);
     if scene.signed_in {
         scene.mark_worlds(&worlds.marks);
         if worlds.may_host {

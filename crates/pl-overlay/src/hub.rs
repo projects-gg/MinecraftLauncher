@@ -77,6 +77,10 @@ pub struct OverlayConfig {
     /// `features.socNext` is on (the page's `useSocNext`); none: nothing of SOC-NEXT reaches the
     /// game and everything is as before.
     pub next: Option<SocNextPrefs>,
+    /// CREW-PLUS: the player's own crew plan templates (the launcher's plan form keeps them): the
+    /// game's plan form shows them after its built-in ones. Optional for the page's types.
+    #[specta(optional)]
+    pub plan_templates: Vec<crate::protocol::PlanTemplate>,
 }
 
 /// SOC-NEXT's choices the page keeps that the game follows (OVL-SOC 2): friends' nicknames (this
@@ -108,6 +112,7 @@ impl Default for OverlayConfig {
             reduced_motion: false,
             emoji: true,
             next: None,
+            plan_templates: Vec::new(),
         }
     }
 }

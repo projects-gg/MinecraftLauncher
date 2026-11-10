@@ -76,6 +76,7 @@ import { useShownNote } from "./note/notes";
 import { PersonMarkList, useMarks } from "./person-mark";
 import { usePersonItems } from "./person-menu";
 import { canInvite } from "./play-together";
+import { friendPlayed, playedSpoken, usePlayedClock } from "./played";
 import { PresenceText } from "./presence-text";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -310,7 +311,7 @@ function FriendCard({
             {world ? (
               <WorldLine invite={world} />
             ) : (
-              <PresenceText friend={friend} t={t} joinable={joinable} />
+              <PresenceText friend={friend} t={t} joinable={joinable} played />
             )}
             {friend.dnd ? <span> ({t("social.presence.dnd")})</span> : null}
           </p>
@@ -622,8 +623,12 @@ export function FriendRow({
   const shownLine = noteLine
     ? `${presenceLine(friend, t)}, ${t("socNote.note.theirs", { text: noteLine })}`
     : line;
-  const spokenLine =
+  // CREW-PLUS: how long they have been playing ("25 dakikadır oyunda"), said with the line.
+  const playedNow = usePlayedClock((s) => (friend.playingSince === undefined ? 0 : s.now));
+  const played = playedNow ? friendPlayed(friend, playedNow) : null;
+  const heardLine =
     inVoice && !voiceLine ? `${shownLine}, ${t("voice.presence.inVoice")}` : shownLine;
+  const spokenLine = played ? `${heardLine}, ${playedSpoken(played, t)}` : heardLine;
   const badge = useShownBadge(friend.badge);
   const marks = useMarks(friend.marks);
   // SHARE-LIVE: "YAYINDA" after the name while they share in a voice room; resting on it (or the
@@ -737,7 +742,7 @@ export function FriendRow({
                           ) : voiceLine ? (
                             line
                           ) : (
-                            <PresenceText friend={friend} t={t} joinable={joinable} />
+                            <PresenceText friend={friend} t={t} joinable={joinable} played />
                           )}
                         </>
                       )}

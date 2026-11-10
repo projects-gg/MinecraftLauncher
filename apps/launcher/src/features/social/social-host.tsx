@@ -84,6 +84,8 @@ import { NoticeDialog } from "./notice-dialog";
 import { MarkedSentence } from "./person-mark";
 import { PersonAskDialog } from "./person-menu";
 import { PlanReminders } from "./plan-reminders";
+import { plainTemplates, usePlanTemplates } from "./plan-templates";
+import { usePlayedTicker } from "./played";
 import { ReportDialog } from "./report-dialog";
 import {
   conversationShown,
@@ -671,6 +673,8 @@ async function currentBackup() {
       // SOC-NEXT: who the player ignores and the pinned conversations (ids only).
       ignored: useSocNextPrefs.getState().ignored,
       pinnedChats: useSocNextPrefs.getState().pinnedChats,
+      // CREW-PLUS: the player's own crew plan templates.
+      planTemplates: plainTemplates(usePlanTemplates.getState().own),
     },
     voice,
   );
@@ -735,6 +739,10 @@ function useBackupSync() {
         schedule(BACKUP_DEBOUNCE_MS);
       }
     });
+    // CREW-PLUS: a template saved, renamed or deleted.
+    const stopTemplates = usePlanTemplates.subscribe((now, before) => {
+      if (now.own !== before.own) schedule(BACKUP_DEBOUNCE_MS);
+    });
     // Voice chat's settings and per-person choices, changed here or in the game's overlay.
     const stopVoice = useVoiceUi.subscribe((now, before) => {
       if (now.state.backupRev !== before.state.backupRev) schedule(BACKUP_DEBOUNCE_MS);
@@ -744,6 +752,7 @@ function useBackupSync() {
       stopPrefs();
       stopSocial();
       stopNext();
+      stopTemplates();
       stopVoice();
     };
   }, [ready, enabled]);
@@ -809,6 +818,10 @@ function RestoreDialog() {
         ignored: read.friends.ignored,
         pinnedChats: read.friends.pinnedChats,
       });
+      // CREW-PLUS: the player's own plan templates (a backup from before has none: kept as they are).
+      if (read.friends.planTemplates) {
+        usePlanTemplates.getState().replace(read.friends.planTemplates);
+      }
       // "Sesli sohbet": the launcher reads and bounds it (this computer's devices stay); a part it
       // cannot read leaves the rest applied.
       if (read.voice) await voiceApi.restore(read.voice).catch(() => undefined);
@@ -857,6 +870,8 @@ export function SocialHost() {
   useSocialSync();
   useBackupSync();
   useCallTicker();
+  // CREW-PLUS: friends' play time, redrawn only while the panel shows it.
+  usePlayedTicker();
   // The in-game overlay follows the friends notification choices (features/overlay).
   useOverlaySync();
   // "Yazıyor…" frames are kept from the start, so a list or a conversation that opens shows who

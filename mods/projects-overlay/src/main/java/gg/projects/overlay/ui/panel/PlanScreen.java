@@ -5,6 +5,7 @@ import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.PlanTemplates;
 import gg.projects.overlay.ui.PlanWhen;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
@@ -27,6 +28,10 @@ import net.minecraft.util.FormattedCharSequence;
  * may make one. "Plan yap" is the form: the day as chips (today while a quarter of it is left and the six after), the
  * time in quarter hours with ‹ and ›, a note of at most 80 characters while the crew's plans take one, "Vazgeç" and the
  * one gold "Planla". Esc goes back (from the form to the plans when they were open, else to the panel).
+ *
+ * <p>CREW-PLUS: "Şablonlar" over the day chips, the launcher's template chips ({@link PlanTemplates}: the built-in three,
+ * then the player's own from the launcher), each putting its day, time and note in the form; the one the form holds
+ * sits on the quiet plate.
  */
 public final class PlanScreen extends Screen {
     /** Wider than the other dialogs: seven day chips keep "Bugün" and "Yarın" whole. */
@@ -67,6 +72,10 @@ public final class PlanScreen extends Screen {
     private IconButton earlier;
     private IconButton later;
     private final List<ActionButton> dayChips = new ArrayList<>();
+    /** CREW-PLUS: the template chips and their templates (built-in first, then the player's own). */
+    private final List<ActionButton> templateChips = new ArrayList<>();
+    private final List<OverlayState.PlanTemplate> templateOf = new ArrayList<>();
+    private int templateY = -1;
     private int dayY;
     private int timeY;
     private int noteY;
@@ -246,6 +255,40 @@ public final class PlanScreen extends Screen {
             }
         }
         int y = PAD + 14 + 2 + 9 + 10;
+        // CREW-PLUS: "Şablonlar" over the template chips (the built-in three, then the player's own), each as wide as
+        // its words, in at most two rows; what does not fit stays in the launcher.
+        templateChips.clear();
+        templateOf.clear();
+        templateY = -1;
+        List<int[]> templateAt = new ArrayList<>();
+        if (!days.isEmpty()) {
+            List<OverlayState.PlanTemplate> all = new ArrayList<>(PlanTemplates.builtIn());
+            all.addAll(state.planTemplates());
+            templateY = y;
+            y += 9 + 3;
+            int rowX = 0;
+            int row = 0;
+            for (OverlayState.PlanTemplate template : all) {
+                ActionButton chip = new ActionButton(ActionButton.Style.SECONDARY,
+                    Component.literal(Texts.fit(Fonts.small(), template.name(), 96)), null,
+                    () -> applyTemplate(template));
+                chip.setPadding(4);
+                int w = Math.min(chip.preferredWidth(), textW);
+                if (rowX > 0 && rowX + w > textW) {
+                    row++;
+                    rowX = 0;
+                }
+                if (row > 1) {
+                    break;
+                }
+                chip.setChosen(holds(template));
+                templateChips.add(chip);
+                templateOf.add(template);
+                templateAt.add(new int[] {rowX, y + row * (ActionButton.HEIGHT + 3), w});
+                rowX += w + 3;
+            }
+            y += (row > 1 ? 2 : row + 1) * (ActionButton.HEIGHT + 3) - 3 + 8;
+        }
         // The day: "Gün" over its chips.
         dayY = y;
         y += 9 + 3;
@@ -289,6 +332,12 @@ public final class PlanScreen extends Screen {
         cardH = y + ActionButton.HEIGHT + PAD;
         cardX = (width - WIDTH) / 2;
         cardY = Math.max(4, (height - cardH) / 2);
+        for (int i = 0; i < templateChips.size(); i++) {
+            int[] place = templateAt.get(i);
+            ActionButton chip = templateChips.get(i);
+            PanelWidget.place(chip, cardX + PAD + place[0], cardY + place[1], place[2], ActionButton.HEIGHT);
+            add(chip);
+        }
         int chipX = cardX + PAD;
         for (int i = 0; i < dayChips.size(); i++) {
             ActionButton chip = dayChips.get(i);
@@ -334,6 +383,30 @@ public final class PlanScreen extends Screen {
         long now = wall();
         day = index;
         at = PlanWhen.on(days.get(index), at, now);
+        rebuildWidgets();
+    }
+
+    /** CREW-PLUS: the form holds {@code template}'s fill now (its chip sits on the quiet plate, as the chosen day). */
+    private boolean holds(OverlayState.PlanTemplate template) {
+        PlanTemplates.Fill fill = PlanTemplates.fill(template, days, wall());
+        if (fill == null || fill.day() != day || fill.at() != at) {
+            return false;
+        }
+        String written = note == null ? "" : note.getValue().trim();
+        return !state.planNotes() || written.equals(template.note());
+    }
+
+    /** CREW-PLUS: a template chip puts its day, time and note in the form (all still editable). */
+    private void applyTemplate(OverlayState.PlanTemplate template) {
+        PlanTemplates.Fill fill = PlanTemplates.fill(template, days, wall());
+        if (fill == null) {
+            return;
+        }
+        day = fill.day();
+        at = fill.at();
+        if (note != null && state.planNotes()) {
+            note.setValue(template.note());
+        }
         rebuildWidgets();
     }
 
@@ -386,6 +459,13 @@ public final class PlanScreen extends Screen {
 
     @Override
     public void tick() {
+        // CREW-PLUS: a template chip stays on its plate only while the form holds its fill (a ‹ › step or a note
+        // typed takes it off).
+        if (making) {
+            for (int i = 0; i < templateChips.size(); i++) {
+                templateChips.get(i).setChosen(holds(templateOf.get(i)));
+            }
+        }
         // The plans changed (an answer came back, a plan went): laid out again, the keys where they were; the form
         // keeps its picks.
         if (!making && !plansKey().equals(shown)) {
@@ -510,6 +590,10 @@ public final class PlanScreen extends Screen {
 
     private void drawForm(GuiGraphicsExtractor g, float x) {
         Font small = Fonts.small();
+        if (templateY >= 0) {
+            Draw.text(g, small, Texts.str("plan.form.templates"), x,
+                Fonts.centeredY(Fonts.Face.SMALL, cardY + templateY + 4.5f), Theme.ASH_400);
+        }
         Draw.text(g, small, Texts.str("plan.form.day"), x, Fonts.centeredY(Fonts.Face.SMALL, cardY + dayY + 4.5f),
             Theme.ASH_400);
         Draw.text(g, small, Texts.str("plan.form.time"), x, Fonts.centeredY(Fonts.Face.SMALL,

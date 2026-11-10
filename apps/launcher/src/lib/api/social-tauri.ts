@@ -149,6 +149,8 @@ function friend(v: FriendView): Friend {
     voice: opt(v.voice),
     // SHARE-LIVE: they share their screen in a room ("YAYINDA" beside their name; `presence.live`).
     voiceLive: v.live === true || undefined,
+    // CREW-PLUS: when their game session began, on this computer's clock (`presence.playingSince`).
+    playingSince: opt(v.playingSince),
   };
 }
 

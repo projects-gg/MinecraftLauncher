@@ -52,6 +52,7 @@ import { CardNote } from "./note/note-ui";
 import { useShownNote } from "./note/notes";
 import { PersonMarkList, useMarks } from "./person-mark";
 import { type PersonQuestion, usePersonItems } from "./person-menu";
+import { withPlayed } from "./played";
 import { PresenceText } from "./presence-text";
 import { SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
@@ -394,9 +395,10 @@ function MemberCard({
               t("teams.member.blocked")
             ) : (
               <PresenceText
-                friend={friend && member.state === "offline" ? friend : member}
+                friend={friend && member.state === "offline" ? friend : withPlayed(member, friend)}
                 t={t}
                 joinable={joinable}
+                played
               />
             )}
           </p>
@@ -711,9 +713,14 @@ export function TeamMemberRow({
                           sub
                         ) : (
                           <PresenceText
-                            friend={friend && member.state === "offline" ? friend : member}
+                            friend={
+                              friend && member.state === "offline"
+                                ? friend
+                                : withPlayed(member, friend)
+                            }
                             t={t}
                             joinable={joinable}
+                            played
                           />
                         )}
                       </motion.span>

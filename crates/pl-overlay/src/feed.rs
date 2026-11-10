@@ -37,9 +37,10 @@ use crate::protocol::{
     CrewInviteItem, CrewItem, CrewPlace, CrewRoles, FEATURE_CARDS2, FEATURE_CHAT3, FEATURE_CREWS2,
     FEATURE_INVITE, FEATURE_MATES, FEATURE_NEXT, FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_PEOPLE3,
     FEATURE_PEOPLE4, FEATURE_PEOPLE5, FEATURE_PLANS, FEATURE_STREAMER, FEATURE_TAGS, FriendView,
-    GroupItem, LinkView, ListsExtra, MAX_HISTORY, MAX_LAUNCHER_FRAME, MAX_QUOTE_CHARS, MateRights,
-    Me, MsgView, NoteKind, PROTO, Place, PlanItem, PrefsView, ReactionView, ReplyView, RequestItem,
-    SendFailure, ToGame, ToastKind, ToastView, WorldMark,
+    GroupItem, LinkView, ListsExtra, MAX_HISTORY, MAX_LAUNCHER_FRAME, MAX_PLAN_TEMPLATES,
+    MAX_QUOTE_CHARS, MateRights, Me, MsgView, NoteKind, PROTO, Place, PlanItem, PlanTemplate,
+    PrefsView, ReactionView, ReplyView, RequestItem, SendFailure, ToGame, ToastKind, ToastView,
+    WorldMark,
 };
 
 /// Conversations a snapshot lists at most (the newest first).
@@ -403,6 +404,7 @@ impl Said {
             extra.plans.clear();
             extra.planners.clear();
             extra.notes = false;
+            extra.templates.clear();
         }
         if !self.mates {
             extra.mates.clear();
@@ -875,6 +877,8 @@ impl Scene {
                 .filter(|mate| !mate.blocked && !blocked_ids.contains(mate.id.as_str()))
                 .filter_map(|mate| Some((mate.id.clone(), mate_presence(mate)?)))
                 .collect(),
+            // CREW-PLUS: the player's own plan templates come with the config (`apply_templates`).
+            templates: Vec::new(),
         };
         let lists = PeopleLists {
             groups: groups.clone(),
@@ -960,6 +964,11 @@ impl Scene {
                     real: None,
                     // SHARE-LIVE: "YAYINDA" beside a friend who shares in a voice room.
                     live: friend.live && place != Place::Offline,
+                    // CREW-PLUS: how long they have been playing (only in a game, only shared).
+                    since: friend
+                        .playing_since
+                        .filter(|_| place.in_game())
+                        .map(|since| since.saturating_mul(1000)),
                 }
             })
             .collect();
@@ -1288,6 +1297,21 @@ impl Scene {
                 );
             }
         }
+    }
+
+    /// CREW-PLUS: the player's own plan templates (the page keeps them) on a scene where they may
+    /// plan in some crew: checked again, at most [`MAX_PLAN_TEMPLATES`], in their order. Nowhere to
+    /// plan: none (the form does not show).
+    pub fn apply_templates(&mut self, templates: &[PlanTemplate]) {
+        self.lists.extra.templates = if self.signed_in && !self.lists.extra.planners.is_empty() {
+            templates
+                .iter()
+                .filter_map(PlanTemplate::checked)
+                .take(MAX_PLAN_TEMPLATES)
+                .collect()
+        } else {
+            Vec::new()
+        };
     }
 
     /// The player's nickname for friend `id` (SOC-NEXT §3.6), when they gave one: a card names them
@@ -2615,6 +2639,7 @@ pub(crate) mod tests {
             marks: Vec::new(),
             voice: None,
             live: false,
+            playing_since: None,
         }
     }
 

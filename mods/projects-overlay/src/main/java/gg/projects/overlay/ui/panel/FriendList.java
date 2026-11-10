@@ -14,6 +14,7 @@ import gg.projects.overlay.ui.LiveChip;
 import gg.projects.overlay.ui.LiveTip;
 import gg.projects.overlay.ui.MarkTip;
 import gg.projects.overlay.ui.Marks;
+import gg.projects.overlay.ui.PlayTime;
 import gg.projects.overlay.ui.PresenceDot;
 import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
@@ -170,7 +171,22 @@ public final class FriendList extends PanelWidget {
         float pillX;
         float pillW;
         Icon icon;
+        /**
+         * CREW-PLUS: when their game session began (Unix ms; 0: none shown), the line's words without how long, the
+         * room for them, and the play time the line was last laid out with ({@link PlayTime#bucket}).
+         */
+        long since;
+        String whereText = "";
+        int whereRoom;
+        long playedBucket = -1;
+        /** CREW-PLUS: how long, after the clock ("25 dk"), and where the place's words end; null: none. */
+        String played;
+        float placeW;
     }
+
+    /** CREW-PLUS: the clock before a friend's play time, and its room on each side. */
+    private static final int PLAYED_ICON = 8;
+    private static final int PLAYED_GAP = 4;
 
     private final Actions actions;
     /** The state the list was last laid out from (a request's answer on its way, OVL-SOC 2). */
@@ -510,6 +526,25 @@ public final class FriendList extends PanelWidget {
         return y + 4;
     }
 
+    /**
+     * CREW-PLUS: a row's line with how long they have been playing, as the launcher's: the place, a small clock, "25 dk"
+     * (the clock says "for", where a bare time could read as "ago"). Laid out again only when that changes (each five
+     * minutes under an hour, then each hour; drawn only while the panel is open), the place fitted first so the time
+     * always shows.
+     */
+    private static void layoutPlayed(Row row, Font small) {
+        long bucket = row.since > 0 ? PlayTime.bucket(row.since, System.currentTimeMillis()) : -1;
+        if (bucket == row.playedBucket) {
+            return;
+        }
+        row.playedBucket = bucket;
+        row.played = PlayTime.text(bucket);
+        int tail = row.played == null ? 0 : PLAYED_GAP + PLAYED_ICON + 2 + small.width(row.played);
+        String place = Texts.fit(small, row.whereText, Math.max(0, row.whereRoom - tail));
+        row.where = Texts.visual(place);
+        row.placeW = small.width(place);
+    }
+
     /** An answer row whose answer is on its way: its chip and × wait. */
     private boolean waiting(Row row) {
         if (state == null) {
@@ -577,6 +612,15 @@ public final class FriendList extends PanelWidget {
             row.lone = world == null && (f.where().equals("game") && f.inGame()
                 || f.where().equals("offline") && !f.online() && f.seen() == null);
             row.where = Texts.visual(row.lone ? "" : Texts.fit(small, where, nameRoom));
+            // CREW-PLUS: a line with a place says how long they have been playing too (a lone row stays lone: its name
+            // never moves when the time comes).
+            row.since = !row.lone && world == null && f.inGame() ? f.since() : 0;
+            row.whereText = where;
+            row.whereRoom = nameRoom;
+            String played = row.since > 0 ? PlayTime.spoken(row.since, System.currentTimeMillis()) : null;
+            if (played != null) {
+                where = where + ", " + played;
+            }
             row.face = Face.of(f.name(), f.id());
             row.joinWidth = joinWidth;
             row.y = y;
@@ -1013,8 +1057,15 @@ public final class FriendList extends PanelWidget {
                 liveChip.draw(g, liveX(row, nameX), y + nameMid);
             }
             if (!row.lone) {
-                Draw.text(g, small, row.where, tx, Fonts.centeredY(Fonts.Face.SMALL, y + 17), row.inGame
-                    ? Theme.ASH_300 : Theme.ASH_400);
+                layoutPlayed(row, small);
+                float ly = Fonts.centeredY(Fonts.Face.SMALL, y + 17);
+                Draw.text(g, small, row.where, tx, ly, row.inGame ? Theme.ASH_300 : Theme.ASH_400);
+                if (row.played != null) {
+                    float ix = tx + row.placeW + PLAYED_GAP;
+                    Draw.icon(g, Icon.CLOCK, PLAYED_ICON, Draw.snap(ix), Draw.snap(y + 17 - PLAYED_ICON / 2f),
+                        Theme.ASH_400);
+                    Draw.text(g, small, row.played, ix + PLAYED_ICON + 2, ly, Theme.ASH_400);
+                }
             }
             if (row.request) {
                 // OVL-SOC 2: "Kabul et" (gold words while lit, as "Katıl") and the × that declines, always there;

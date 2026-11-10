@@ -110,6 +110,9 @@ const codeNotFound = () =>
     pick("Bu koda ait kimse bulunamadı.", "Nobody has this code."),
   );
 
+/** CREW-PLUS: a game session that began `minutes` ago, down to five minutes, as the service sends it. */
+const sessionFor = (minutes: number) => Math.floor((Date.now() / 1000 - minutes * 60) / 300) * 300;
+
 function searchParam(key: string): string | null {
   if (typeof window === "undefined") return null;
   const fromSearch = new URLSearchParams(window.location.search).get(key);
@@ -247,6 +250,7 @@ function friendsBase(): Friend[] {
       game: { where: "projects", host: "play.projects.gg", ver: "1.21.4" },
       discordUrl: "https://discord.com/users/301",
       since: "2026-09-02",
+      playingSince: sessionFor(27),
     },
     {
       id: "302",
@@ -259,6 +263,7 @@ function friendsBase(): Friend[] {
       game: { where: "projects", host: "play.projects.gg" },
       discordUrl: "https://discord.com/users/302",
       since: "2026-08-11",
+      playingSince: sessionFor(75),
     },
     {
       id: "303",
@@ -280,6 +285,7 @@ function friendsBase(): Friend[] {
       dnd: false,
       game: { where: "other", ver: "1.20.1" },
       discordUrl: "https://discord.com/users/304",
+      playingSince: sessionFor(150),
     },
     {
       id: "305",
