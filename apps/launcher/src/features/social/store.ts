@@ -9,18 +9,16 @@ import {
   type SocialSnapshot,
   type StatusMode,
 } from "@/lib/api/social-types";
-import type { ChatMutes } from "./chat/conversations";
+import { type ChatMutes, crewOf } from "./chat/conversations";
 import type { HomeHint } from "./model";
 import { shownView } from "./next/view";
 
-/** CREW-DISCOVER: "discover" is "Ekip bul", one step below the crew page it opens from. */
+/** CREW-DISCOVER: "discover" is "Ekip bul", one step below the crew page it opens from. "chat" is a
+ * conversation, a friend's or a crew's (CREW-UI: the crew page opens its chat with "Sohbete Git"). */
 export type SocialPage = "list" | "add" | "settings" | "team" | "chat" | "discover";
 
 /** The list page's two halves: friends, and the conversations ("Mesajlar"). */
 export type ListTab = "friends" | "messages";
-
-/** A crew page shows the crew, or its chat ("Sohbet"). */
-export type CrewPane = "crew" | "chat";
 
 /** What "Rapor et" is about, with what the dialog shows of it. */
 export interface ReportRequest {
@@ -84,7 +82,8 @@ interface SocialUi {
     code?: string;
     link?: string;
     from?: HTMLElement | null;
-    /** The list page's tab to show (a request's or an invite's "Göster": "Arkadaşlar"). */
+    /** The list page's tab to show for this visit (a request's or an invite's "Göster":
+     * "Arkadaşlar"); without it a fresh opening shows the tab the player last picked. */
     tab?: ListTab;
   }) => void;
   closePanel: () => void;
@@ -159,21 +158,24 @@ interface SocialUi {
   lastCallAt: number | null;
   setCallWait: (change: { refusedUntil?: number; lastCallAt?: number }) => void;
 
-  /** The list page shows friends or the conversations (this session only). */
+  /** The list page shows friends or the conversations. A fresh opening shows the tab the player
+   * last picked (`useSocialPrefs` `listTab`, CREW-UI), unless it asks for one. */
   listTab: ListTab;
+  /** The player picks a tab: shown now and remembered on this computer. */
   setListTab: (tab: ListTab) => void;
-  /** The crew page shows the crew or its chat (this session only). */
-  crewPane: CrewPane;
-  setCrewPane: (pane: CrewPane) => void;
   /** The conversation the chat page shows, and the page it came from (back goes there). */
   chatConv: string | null;
   chatFrom: SocialPage;
-  /** Opens a conversation: a friend's on the chat page, a crew's on its crew page. */
+  /**
+   * Opens a conversation on the chat page, a friend's or a crew's (CREW-UI: a crew's chat is no
+   * longer a tab of its crew page). Back goes to `from`, else to the page the panel was on; with the
+   * panel closed or on another chat, a crew's chat goes back to its own crew page, a friend's to
+   * the list.
+   */
   openChat: (conv: string, options?: { from?: SocialPage }) => void;
   /**
-   * The conversation `openChat` opened to be written in (a row, "Mesaj", a toast's "Yanıtla"): its
-   * field takes the focus once it shows (CHAT-PROD). A crew's "Sohbet" tab picked by hand leaves
-   * the focus on the tab.
+   * The conversation `openChat` opened to be written in (a row, "Mesaj", "Sohbete Git", a toast's
+   * "Yanıtla"): its field takes the focus once it shows (CHAT-PROD).
    */
   chatFocus: string | null;
   /** The conversation on screen takes the focus asked for it (true once). */
@@ -196,6 +198,32 @@ export function friendListShown(ui: {
   view: { chat?: unknown };
 }): boolean {
   return ui.open && ui.page === "list" && (!ui.view.chat || ui.listTab === "friends");
+}
+
+/** A conversation is on screen: the panel open on its chat page (a friend's or a crew's). */
+export function conversationShown(
+  ui: { open: boolean; page: SocialPage; chatConv: string | null },
+  conv: string,
+): boolean {
+  return ui.open && ui.page === "chat" && ui.chatConv === conv;
+}
+
+/** That crew's page is on screen: the panel open on it (with several crews, on its tab). */
+export function crewPageShown(
+  ui: {
+    open: boolean;
+    page: SocialPage;
+    crewTab: string | null;
+    view: { crew: { multi?: boolean }; crews: readonly { id: string }[] };
+  },
+  id: string,
+): boolean {
+  if (!ui.open || ui.page !== "team") return false;
+  const crews = ui.view.crews;
+  const shown = ui.view.crew.multi
+    ? (crews.find((crew) => crew.id === ui.crewTab) ?? crews[0])
+    : crews[0];
+  return shown?.id === id;
 }
 
 /** The same badge catalogue (BADGES-UI) in two snapshots. */
@@ -238,11 +266,15 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
       page,
       direction: DEPTH[page] >= DEPTH[s.page] ? 1 : -1,
       prefillCode: options?.code ?? s.prefillCode,
-      ...(options?.tab ? { listTab: options.tab } : {}),
+      // A tab asked for shows for this visit only; a fresh opening shows the player's own pick
+      // (CREW-UI: kept across starts), one already open stays where it is.
+      ...(options?.tab
+        ? { listTab: options.tab }
+        : s.open
+          ? {}
+          : { listTab: useSocialPrefs.getState().listTab }),
       // An invite link opens "Ekip kur ya da katıl", where it is looked up.
-      ...(options?.link
-        ? { prefillLink: options.link, crewTab: "new", crewPane: "crew" as const }
-        : {}),
+      ...(options?.link ? { prefillLink: options.link, crewTab: "new" } : {}),
       returnFocus:
         options?.from ??
         (document.activeElement instanceof HTMLElement ? document.activeElement : null),
@@ -327,24 +359,30 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
     })),
 
   listTab: "friends",
-  setListTab: (listTab) => set({ listTab }),
-  crewPane: "crew",
-  setCrewPane: (crewPane) => set({ crewPane }),
+  setListTab: (listTab) => {
+    set({ listTab });
+    useSocialPrefs.getState().set("listTab", listTab);
+  },
   chatConv: null,
   chatFrom: "list",
   openChat: (conv, options) => {
     const s = get();
-    if (conv.startsWith("c:")) {
-      // A crew's chat lives on its crew page.
-      if (!s.open) s.openPanel({ page: "team" });
-      else s.goTo("team");
-      set({ crewTab: conv.slice(2), crewPane: "chat", chatFocus: conv });
-      return;
-    }
-    const from = options?.from ?? (s.open && s.page !== "chat" ? s.page : "list");
+    const crew = crewOf(conv);
+    // The page the panel shows now, when there is one to come back to; the conversation on screen
+    // opened again keeps its way back.
+    const here = s.open && s.page !== "chat" ? s.page : null;
+    const again = s.open && s.page === "chat" && s.chatConv === conv;
+    const from = options?.from ?? (again ? s.chatFrom : (here ?? (crew ? "team" : "list")));
     if (!s.open) s.openPanel({ page: "chat" });
     else s.goTo("chat");
-    set({ chatConv: conv, chatFrom: from, chatFocus: conv });
+    set({
+      chatConv: conv,
+      chatFrom: from,
+      chatFocus: conv,
+      // Back to the crew page shows the crew the player was on; reached from elsewhere, it shows
+      // this chat's crew.
+      ...(crew && from === "team" && here !== "team" && !again ? { crewTab: crew } : {}),
+    });
   },
   chatFocus: null,
   takeChatFocus: (conv) => {
@@ -389,6 +427,9 @@ interface SocialPrefs {
   notifyJoinRequests: boolean;
   /** "Plan hatırlatmaları": "Geliyorum" and "Belki" ring 10 minutes before (on by default). */
   notifyPlans: boolean;
+  /** The list page's tab the player last picked (CREW-UI): a fresh opening of the panel shows it.
+   * A view of this computer only, like `collapsed` (not in the backup). */
+  listTab: ListTab;
   /** Conversations muted on this computer ("Sessize al"): until when (ms), or null until unmuted. */
   chatMutes: ChatMutes;
   setChatMute: (conv: string, until: number | null | undefined) => void;
@@ -428,6 +469,7 @@ export const useSocialPrefs = create<SocialPrefs>()(
       notifyCrewChat: false,
       notifyJoinRequests: true,
       notifyPlans: true,
+      listTab: "friends",
       chatMutes: {},
       setChatMute: (conv, until) =>
         set((s) => {

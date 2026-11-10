@@ -10,8 +10,9 @@
 // player's own row and the teammates grouped by where they are ("Projects'te 4", with "Katıl"; the
 // groups add up to the strip's count, SMALL12); friends to invite; the
 // crew code; the leader's "Yetkiler"; leaving. Every irreversible step asks once, in place, with
-// one sentence; nothing else asks. With chat (CHAT1) the crew has "Ekip" and "Sohbet" (its chat,
-// filling the panel); a crew whose name moderators reset says so on top while it stays locked
+// one sentence; nothing else asks. With chat (CHAT1) "Sohbete Git" under the card opens the crew's
+// chat on the panel's chat page (CREW-UI; the page itself has no tabs); a crew whose name
+// moderators reset says so on top while it stays locked
 // (MOD1), and a new Discord account hears in place why it cannot found a crew yet (SPAM1). The
 // second wave (TEAM5): join requests above the members for those who answer them
 // (crew-requests.tsx), "Planlar" (crew-plans-view.tsx), the invite link and "Katılım" under the
@@ -46,8 +47,6 @@ import {
   SearchInput,
   Skeleton,
   Switch,
-  TabPanel,
-  Tabs,
   Tooltip,
 } from "@pl/ui";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
@@ -69,7 +68,7 @@ import { matchesQuery } from "@/lib/search";
 import { attempt, copyText } from "./actions";
 import { sayJoined, useMyBadge } from "./badge-actions";
 import { callNames, callWaitUntil, liveCalls, waitMinutes } from "./calls";
-import { CrewChat } from "./chat/crew-chat";
+import { CrewChatEntry } from "./chat/crew-chat-entry";
 import { BadgedName, WearToggle } from "./crew-badge";
 import { CallStrip } from "./crew-call";
 import { CallReason, useCallPress } from "./crew-call-picker";
@@ -96,14 +95,11 @@ import { dayMonth, limitOf, opensIn } from "./limits";
 import { openMenuFromKey } from "./menu-key";
 import { type Leaving, leavingOf } from "./menus";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
-import { useMarkedUnread } from "./next/conv-hooks";
-import { useSocNext } from "./next/flag";
-import { openChatSearch } from "./next/search-bar";
 import { Hidden } from "./next/streamer-ui";
 import { NameWithMark } from "./person-mark";
 import { PersonContextMenu } from "./person-menu";
 import { SocialAvatar, SocialFace } from "./social-face";
-import { type CrewPane, useSocialUi } from "./store";
+import { useSocialUi } from "./store";
 import { CrewMark, TeamTag } from "./team-emblem";
 import { RoleBadge, TeamMemberRow } from "./team-member";
 import { TeamInviteRow, useCrewItems } from "./team-section";
@@ -1222,6 +1218,8 @@ function CrewView({ team }: { team: SocialTeam }) {
   const leaving = leavingOf(team);
   const inviteRef = useRef<HTMLDivElement>(null);
   const leaveRef = useRef<HTMLDivElement>(null);
+  // CHAT1: the crew's chat, one step deeper ("Sohbete Git", CREW-UI).
+  const chat = useSocialUi((s) => s.view.chat !== undefined);
   // Leaving the page for another crew, it never takes the next crew's menu intent.
   const current = useShownCrewId() === team.id;
   // Rights taken away while editing close the editor (the crew says so live).
@@ -1295,6 +1293,13 @@ function CrewView({ team }: { team: SocialTeam }) {
             )}
           </AnimatePresence>
         </section>
+
+        {/* "Sohbete Git" (CREW-UI): right under the card, above "Sesli" (there with voice off too). */}
+        {chat ? (
+          <motion.div {...glideBox}>
+            <CrewChatEntry team={team} />
+          </motion.div>
+        ) : null}
 
         {/* "Sesli" (VOICE): the crew's voice rooms, right under its card. */}
         <motion.div {...glideBox}>
@@ -1441,50 +1446,6 @@ function AddCrew({ canAdd, limit }: { canAdd: boolean; limit: number }) {
   );
 }
 
-/** A crew with chat (CHAT1): "Ekip" (the crew) and "Sohbet" (its chat, with how many are unread). */
-function CrewPanes({ team }: { team: SocialTeam }) {
-  const { t } = useTranslation();
-  const pane = useSocialUi((s) => s.crewPane);
-  const setPane = useSocialUi((s) => s.setCrewPane);
-  const unread = useSocialUi(
-    (s) => s.view.chat?.conversations.find((c) => c.id === `c:${team.id}`)?.unread ?? 0,
-  );
-  const open = useSocialUi((s) => s.open && s.page === "team");
-  // SOC-NEXT: one marked unread here counts one; the chat's search sits at the tabs' end.
-  const next = useSocNext();
-  const marked = useMarkedUnread(`c:${team.id}`);
-  const count = unread || marked;
-  return (
-    <div className="relative flex min-h-0 flex-1 flex-col">
-      <Tabs<CrewPane>
-        value={pane}
-        onValueChange={setPane}
-        label={team.name}
-        items={[
-          { value: "crew", label: t("chat.tabs.crew") },
-          { value: "chat", label: t("chat.tabs.chat"), count: count > 0 ? count : undefined },
-        ]}
-      >
-        <TabPanel value="crew" className="overflow-visible pt-3">
-          <CrewView team={team} />
-        </TabPanel>
-        <TabPanel value="chat" className="flex flex-col overflow-hidden pt-0">
-          <CrewChat team={team} onScreen={open && pane === "chat"} />
-        </TabPanel>
-      </Tabs>
-      {next && pane === "chat" ? (
-        <IconButton
-          label={t("socNext.search.open")}
-          icon={<MagnifyingGlass size={17} />}
-          size="sm"
-          className="absolute top-px right-0"
-          onClick={() => openChatSearch(`c:${team.id}`)}
-        />
-      ) : null}
-    </div>
-  );
-}
-
 /**
  * A crew switch slides the page in from the side the picked mark sits on and the old one out the
  * other way (fades only under reduced motion). `custom` carries the side to the leaving page too.
@@ -1509,10 +1470,6 @@ export function TeamPage() {
   const canAdd = canAddCrew(crews, limit, multi);
   const shownKey = shown === NEW_CREW_TAB ? NEW_CREW_TAB : shown.id;
   const rail = multi && crews.length > 0;
-  const chat = useSocialUi((s) => s.view.chat !== undefined);
-  const pane = useSocialUi((s) => s.crewPane);
-  // The chat fills the panel (its messages scroll, the composer stays at the bottom).
-  const fill = chat && pane === "chat" && shown !== NEW_CREW_TAB;
 
   // A crew founded or joined from "Ekip kur ya da katıl" comes on screen once it arrives.
   const count = useRef(crews.length);
@@ -1554,7 +1511,7 @@ export function TeamPage() {
     : rise(reduce, 6, 0.28);
 
   return (
-    <div ref={root} className={fill ? "flex h-full min-h-0 flex-col" : undefined}>
+    <div ref={root}>
       {rail ? <CrewRail crews={crews} shown={shownKey} canAdd={canAdd} limit={limit} /> : null}
       {/* Not `presenceAffectsLayout`: with it every snapshot drew every motion of the crew
           page again, its chat's rows too (CHAT-PROD). */}
@@ -1568,13 +1525,10 @@ export function TeamPage() {
           key={shown === NEW_CREW_TAB ? "none" : `team:${shown.id}`}
           role={rail ? "tabpanel" : undefined}
           aria-labelledby={rail ? `crew-tab-${shownKey}` : undefined}
-          className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}
           {...slide}
         >
           {shown === NEW_CREW_TAB ? (
             <AddCrew canAdd={canAdd} limit={limit} />
-          ) : chat ? (
-            <CrewPanes team={shown} />
           ) : (
             <CrewView team={shown} />
           )}

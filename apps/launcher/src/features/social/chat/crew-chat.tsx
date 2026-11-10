@@ -1,10 +1,16 @@
-// A crew's "Sohbet": the crew's conversation, with names over others' groups and the quick replies
+// A crew's chat: the crew's conversation, with names over others' groups and the quick replies
 // over the composer. Its leader and moderators may delete any message (the service decides; the
 // menu offers it where the view says so). The crew's plans show as quiet lines when they were made
 // (TEAM5), from the plans this computer has; so do newcomers while this launcher was connected
 // (TEAM6 "Hoş geldin": "Ayşe ekibe katıldı" with "Selam ver", which sends the "Selam" sticker, or
 // "Hoş geldin! 👋" without stickers, once and for ten minutes; "Ekibe katıldın" for the player).
-import { ContentIcon, toast } from "@pl/ui";
+//
+// CREW-UI: it fills the panel's chat page, as a friend's conversation does ("Sohbete Git" on the
+// crew page, a row in "Mesajlar", a notice). Its header: back, the crew's mark and name, how many
+// are online; the search (SOC-NEXT) and the crew's bell. A right click there is the crew's own menu.
+import { BellSlash, CaretLeft, MagnifyingGlass } from "@phosphor-icons/react";
+import { ContentIcon, ContextMenu, IconButton, toast } from "@pl/ui";
+import { Dialog as RadixDialog } from "radix-ui";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { friendlyError } from "@/features/accounts/use-accounts";
@@ -12,13 +18,89 @@ import { api } from "@/lib/api";
 import type { ChatMessage, CrewJoin, PinLine, SocialTeam } from "@/lib/api/social-types";
 import { currentLanguage } from "@/lib/i18n";
 import { canGreet, nextGreetEnd } from "../badges";
+import { CrewNotifyButton, useCrewMute } from "../crew-notify";
 import { planWhen, withPlanNote } from "../crew-plans";
+import { useSocNext } from "../next/flag";
+import { openChatSearch } from "../next/search-bar";
 import { usePinsOn } from "../note/pins";
-import { useSocialUi } from "../store";
+import { useSocialPrefs, useSocialUi } from "../store";
+import { CrewMark } from "../team-emblem";
+import { useCrewItems } from "../team-section";
 import { useComposerNotice, useComposerState, usePeople } from "./chat-page";
 import { type ChatLine, Conversation, useUnreadAtOpen } from "./conversation";
-import { crewConversation } from "./conversations";
+import { chatMutedNow, crewConversation, crewOf } from "./conversations";
 import { messageLine } from "./preview";
+
+/** The crew whose chat the chat page shows (undefined for a friend's, or a crew the player left). */
+export function useChatCrew(): SocialTeam | undefined {
+  return useSocialUi((s) => {
+    const id = s.chatConv ? crewOf(s.chatConv) : null;
+    return id ? s.view.crews.find((crew) => crew.id === id) : undefined;
+  });
+}
+
+export function CrewChatHeader({ team }: { team: SocialTeam }) {
+  const { t } = useTranslation();
+  const back = useSocialUi((s) => s.goTo);
+  const from = useSocialUi((s) => s.chatFrom);
+  const conv = crewConversation(team.id);
+  const mutedHere = useSocialPrefs((s) => chatMutedNow(conv, s.chatMutes, Date.now()));
+  const crewMute = useCrewMute(team.id);
+  const next = useSocNext();
+  // The crew's menu, as wherever it shows (FIX2); this is its chat already.
+  const items = useCrewItems(team, { inChat: true });
+  const online = team.members.filter((m) => !m.me && !m.blocked && m.state !== "offline").length;
+  // The bell beside says the crew's own silence; the name's struck bell is for this conversation
+  // muted on this computer alone (the conversation's menu in "Mesajlar").
+  const bellMuted = crewMute.muted || (Boolean(crewMute.target) && crewMute.allMuted);
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-2">
+      <IconButton
+        label={t("social.actions.back")}
+        icon={<CaretLeft size={18} weight="bold" />}
+        className="-ml-2"
+        onClick={() => back(from === "chat" ? "list" : from)}
+      />
+      <ContextMenu items={items}>
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <CrewMark look={team} size={32} />
+          <div className="min-w-0 flex-1">
+            <RadixDialog.Title className="flex min-w-0 items-center gap-1.5 text-[15px] leading-tight font-semibold text-bone-50">
+              <span className="truncate">{team.name}</span>
+              {mutedHere && !bellMuted ? (
+                <BellSlash
+                  size={13}
+                  className="shrink-0 text-ash-400"
+                  aria-label={t("chat.list.muted")}
+                />
+              ) : null}
+            </RadixDialog.Title>
+            <p className="truncate text-[12px] text-ash-300">
+              {online ? t("teams.online", { count: online }) : t("social.account.noneOnline")}
+            </p>
+          </div>
+        </div>
+      </ContextMenu>
+      {next ? (
+        <IconButton
+          label={t("socNext.search.open")}
+          icon={<MagnifyingGlass size={18} />}
+          className="shrink-0"
+          onClick={() => openChatSearch(conv)}
+        />
+      ) : null}
+      <CrewNotifyButton crew={team.id} />
+    </div>
+  );
+}
+
+/** The chat page with a crew's chat on it. */
+export function CrewChatPage() {
+  const team = useChatCrew();
+  // A crew's chat opened over another one starts afresh: its own unread line, place and newest
+  // message.
+  return team ? <CrewChat key={team.id} team={team} onScreen /> : null;
+}
 
 const NO_JOINS: CrewJoin[] = [];
 const NO_PIN_LINES: PinLine[] = [];
