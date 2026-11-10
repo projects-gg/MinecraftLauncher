@@ -1303,14 +1303,14 @@ export const en: DeepPartial<Strings> = {
     general: {
       language: "Language",
       languageAuto: "Automatic",
-      onGameStart: "When the game starts",
+      onGameStart: "When the Game Starts",
       onGameStartHelp: "The launcher never closes while AFK accounts are running.",
       keep: "Stay open",
       minimize: "Minimise",
       tray: "Hide in the tray",
       close: "Close",
-      startOnBoot: "Launch at startup",
-      notifications: "Desktop notifications",
+      startOnBoot: "Launch at Startup",
+      notifications: "Desktop Notifications",
       startOnBootFailed: "Couldn't change this setting right now. Try again.",
     },
     appearance: {

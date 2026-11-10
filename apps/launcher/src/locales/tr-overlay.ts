@@ -1,11 +1,13 @@
-// The in-game overlay's switch (Settings → Genel, OVL2). Short, sentence case, "sen". The overlay's
-// own words (its cards, its panel, its settings) live in the mod's language files. A line that
-// says it will not work says where and what it needs, then its action gives the fix. Install
+// The in-game overlay's switch (Settings → Genel, OVL2). Short, sentence case, "sen"; the
+// switches' names in Title Case (the owner, 7 Nov 2026), as the mod's client tweaks'
+// (tr-tweaks.ts). The overlay's own words (its cards, its panel, its settings) live in the mod's
+// language files. A line that says it will not work says where and what it needs, then its
+// action gives the fix. Install
 // names come first and take no suffix ("kurulumunda", "kurulumuna" do), as in "{{name}} hesabına
 // geç". The official pack is called that everywhere ("Resmî paketi kur", "Resmî pakete geç").
 export const trOverlay = {
   /** The switch: on by default. */
-  setting: "Oyun içi katman",
+  setting: "Oyun İçi Katman",
   /**
    * What it gives and how it opens, true whether the switch is on or off (nothing in the launcher
    * shows it working). `key` is the default key, drawn as a key cap: the player may bind another
@@ -16,7 +18,7 @@ export const trOverlay = {
    * CHAT-EMOJI: the chat's emoji picker, right under the overlay's switch, on by default. The same
    * mod, so the lines that say it will not work (`needs`, `packMissing`, `waits…`) are shared.
    */
-  emojiSetting: "Sohbette emoji seçici",
+  emojiSetting: "Sohbette Emoji Seçici",
   /** What it gives and its default key (F9; rebound in the game's Controls), drawn as a key cap. */
   emojiHelp: "Sohbet ekranında emojiler tek tıkla eklenir. Varsayılan tuşu {{key}}.",
   /** In its place while "Oyun açılınca launcher: Kapansın" is chosen, before `toMinimize`. */

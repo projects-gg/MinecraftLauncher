@@ -1066,14 +1066,14 @@ export const tr = {
     general: {
       language: "Dil",
       languageAuto: "Otomatik",
-      onGameStart: "Oyun açılınca launcher",
+      onGameStart: "Oyun Açılınca Launcher",
       onGameStartHelp: "AFK hesapları çalışırken launcher hiçbir zaman kapanmaz.",
       keep: "Açık kalsın",
       minimize: "Simge durumuna küçülsün",
       tray: "Tepsiye gizlensin",
       close: "Kapansın",
-      startOnBoot: "Bilgisayar açılınca başlat",
-      notifications: "Masaüstü bildirimleri",
+      startOnBoot: "Bilgisayar Açılınca Başlat",
+      notifications: "Masaüstü Bildirimleri",
       startOnBootFailed: "Bu ayar şu an değiştirilemedi. Tekrar dene.",
     },
     appearance: {
