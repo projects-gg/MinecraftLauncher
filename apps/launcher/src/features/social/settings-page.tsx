@@ -316,7 +316,7 @@ function TagSetting() {
 /** "Yok" in the tag picker (Radix selects take no empty value). */
 const NO_TAG = "none";
 
-type PrivacyKey = "shareServer" | "shareLastSeen" | "shareRead" | "shareTyping";
+type PrivacyKey = "shareServer" | "shareLastSeen" | "shareRead" | "shareTyping" | "sharePlayTime";
 
 /** One privacy switch: it turns at the click, the launcher sends it (SOC-LAG). */
 function PrivacySwitch({
@@ -367,6 +367,18 @@ function PrivacySection({ me }: { me: SocialMe }) {
           kept={me.privacy.shareLastSeen}
           label={t("social.settings.shareLastSeen")}
         />
+        {/* CREW-PLUS: "Oynama Süremi Göster", while the service has it; friends see the time only
+            with "Son görülme" on too, which the line under it says while that one is off. */}
+        {me.privacy.sharePlayTime !== undefined ? (
+          <PrivacySwitch
+            field="sharePlayTime"
+            kept={me.privacy.sharePlayTime}
+            label={t("crewPlus.privacy.playTime")}
+            description={
+              me.privacy.shareLastSeen ? undefined : t("crewPlus.privacy.playTimeNeedsSeen")
+            }
+          />
+        ) : null}
         {extras && me.privacy.shareRead !== undefined ? (
           <PrivacySwitch
             field="shareRead"

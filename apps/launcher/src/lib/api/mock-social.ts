@@ -635,7 +635,7 @@ function initial(): SocialSnapshot {
       shareLink: "https://social.projects.gg/f/PRJ-7K3M-Q9TD",
       qr: QR_FIRST,
       status: "online",
-      privacy: { shareServer: false, shareLastSeen: true },
+      privacy: { shareServer: false, shareLastSeen: true, sharePlayTime: true },
       backup,
       ...markOf("100"),
       marksHidden: marksHiddenOf(),
