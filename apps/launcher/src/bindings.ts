@@ -5297,6 +5297,12 @@ export type FriendView_Deserialize = {
 	 *  Always sent; optional for the page's types, whose older views (and tests) never had it.
 	 */
 	live?: boolean,
+	/**
+	 *  CREW-PLUS: while they play, when their game session began (Unix seconds, this computer's
+	 *  clock): the row says how long ("25 dk"). None: not playing, or they keep "last seen" to
+	 *  themselves. Optional for the page's types, as `live`.
+	 */
+	playingSince?: number | null,
 };
 
 export type FriendView_Serialize = {
@@ -5332,6 +5338,12 @@ export type FriendView_Serialize = {
 	 *  Always sent; optional for the page's types, whose older views (and tests) never had it.
 	 */
 	live?: boolean,
+	/**
+	 *  CREW-PLUS: while they play, when their game session began (Unix seconds, this computer's
+	 *  clock): the row says how long ("25 dk"). None: not playing, or they keep "last seen" to
+	 *  themselves. Optional for the page's types, as `live`.
+	 */
+	playingSince?: number | null,
 };
 
 export type Game = Game_Serialize | Game_Deserialize;
@@ -7597,6 +7609,11 @@ export type OverlayConfig = {
 	 *  game and everything is as before.
 	 */
 	next?: SocNextPrefs | null,
+	/**
+	 *  CREW-PLUS: the player's own crew plan templates (the launcher's plan form keeps them): the
+	 *  game's plan form shows them after its built-in ones. Optional for the page's types.
+	 */
+	planTemplates?: PlanTemplate[],
 };
 
 /**  What the page shows at its start. */
@@ -7906,6 +7923,27 @@ export type PlanAnswer = "yes" | "maybe" | "no";
 export type PlanAnswerView = {
 	id: string,
 	answer: PlanAnswer,
+};
+
+/**
+ *  CREW-PLUS: one of the player's own crew plan templates ("Şablonlara Ekle" in the launcher's
+ *  plan form): a day relative to the day it is used, a time of day and a note. Never a date.
+ */
+export type PlanTemplate = {
+	/**  Its name on the chip (1–24 characters). */
+	name: string,
+	/**
+	 *  `today`, `tomorrow`, or the next of a weekday: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`,
+	 *  `sun` (today when it is that day and the time is still ahead).
+	 */
+	day: string,
+	/**  Minutes after midnight, a whole quarter of an hour (0–1425). */
+	time: number,
+	/**
+	 *  The plan's note, one line of at most 80 characters ("": none). Always there, both ways: the
+	 *  page's types stay one (serde attributes that differ by direction split them in two).
+	 */
+	note: string,
 };
 
 /**  "Planlar": a time to meet on Projects in one of the player's crews. */
