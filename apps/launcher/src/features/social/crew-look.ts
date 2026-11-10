@@ -125,22 +125,35 @@ export function crewFrame(value: string | undefined): CrewFrame {
 /**
  * The frames' outlines in a 40 × 40 box: the brand's cut (top-left and bottom-right corners), a
  * shield, a Minecraft-like banner with a swallowtail, a hexagon. `glyphY` moves the emblem to where
- * the shape has its weight (a banner's tail and a shield's point sit low).
+ * the shape has its weight (a banner's tail and a shield's point sit low); `left` is where the
+ * outline starts (`crewMarkInset`).
  */
-export const FRAME_SHAPES: Record<CrewFrame, { path: string; glyphY: number }> = {
-  cut: { path: "M9 1.5H38.5V31L31 38.5H1.5V9Z", glyphY: 20 },
+export const FRAME_SHAPES: Record<CrewFrame, { path: string; glyphY: number; left: number }> = {
+  cut: { path: "M9 1.5H38.5V31L31 38.5H1.5V9Z", glyphY: 20, left: 1.5 },
   shield: {
     path: "M20 1.5L36.5 6.5V19C36.5 28.6 29.6 35.2 20 38.5C10.4 35.2 3.5 28.6 3.5 19V6.5Z",
     glyphY: 18.5,
+    left: 3.5,
   },
-  banner: { path: "M4.5 1.5H35.5V38.5L20 31L4.5 38.5Z", glyphY: 16.5 },
-  hex: { path: "M20 1.5L36.5 10.75V29.25L20 38.5L3.5 29.25V10.75Z", glyphY: 20 },
+  banner: { path: "M4.5 1.5H35.5V38.5L20 31L4.5 38.5Z", glyphY: 16.5, left: 4.5 },
+  hex: { path: "M20 1.5L36.5 10.75V29.25L20 38.5L3.5 29.25V10.75Z", glyphY: 20, left: 3.5 },
 };
 
 /** The edge thins as the mark grows: 2.2 units at 22 px, 1.4 at 64 px. */
 export function edgeWidth(size: number): number {
   const t = Math.min(1, Math.max(0, (size - 22) / (64 - 22)));
   return Math.round((2.2 - 0.8 * t) * 100) / 100;
+}
+
+/**
+ * How far a mark's outline (its edge included) starts inside its box, in whole pixels: 6 px for a
+ * banner at 64 px, 1 px for the cut. A big mark that heads a column moves left by this much so its
+ * edge, not its empty box, stands on the column's line (CREW-UI review: the crew card's banner
+ * stood 7 px right of everything under it).
+ */
+export function crewMarkInset(look: { frame?: string }, size: number): number {
+  const shape = FRAME_SHAPES[crewFrame(look.frame)];
+  return Math.max(0, Math.round(((shape.left - edgeWidth(size) / 2) / 40) * size));
 }
 
 /** `#RRGGBB` with an alpha, as `rgb(r g b / a)`. */

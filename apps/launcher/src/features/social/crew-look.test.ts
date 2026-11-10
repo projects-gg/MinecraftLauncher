@@ -4,6 +4,7 @@ import {
   CREW_COLORS,
   crewColor,
   crewFrame,
+  crewMarkInset,
   EMBLEMS,
   edgeWidth,
   emblemsFor,
@@ -96,6 +97,17 @@ describe("crew looks", () => {
     expect(edgeWidth(64)).toBe(1.4);
     expect(edgeWidth(10)).toBe(2.2);
     expect(edgeWidth(43)).toBeCloseTo(1.8, 1);
+  });
+
+  it("knows how far each frame's edge sits inside its box", () => {
+    // The crew card's 64 px mark moves left by this much: its edge on the column's line.
+    expect(crewMarkInset({ frame: "banner" }, 64)).toBe(6);
+    expect(crewMarkInset({ frame: "shield" }, 64)).toBe(4);
+    expect(crewMarkInset({ frame: "hex" }, 64)).toBe(4);
+    expect(crewMarkInset({ frame: "cut" }, 64)).toBe(1);
+    // An unknown frame is the default one, and small marks need next to nothing.
+    expect(crewMarkInset({ frame: "nope" }, 64)).toBe(crewMarkInset({ frame: undefined }, 64));
+    expect(crewMarkInset({ frame: "cut" }, 22)).toBe(0);
   });
 
   it("shuffles all three at once, never keeping one as it was", () => {

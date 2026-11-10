@@ -83,6 +83,7 @@ import {
 } from "./crew-editor";
 import { type CrewKey, crewKeyOf, formatJoinInput, joinOffer, showsLink } from "./crew-joining";
 import { CrewLinkRows } from "./crew-link";
+import { crewMarkInset } from "./crew-look";
 import { CrewPlans } from "./crew-plans-view";
 import { CrewRail } from "./crew-rail";
 import { CrewRequests, MyRequests } from "./crew-requests";
@@ -824,7 +825,8 @@ function CrewCard({
     <div className="relative">
       <ContextMenu items={items}>
         <div className="relative flex items-start gap-3.5">
-          <CrewMark look={team} size={64} />
+          {/* The outline's edge on the card's column line, not its box (a banner sits 6 px in). */}
+          <CrewMark look={team} size={64} style={{ marginLeft: -crewMarkInset(team, 64) }} />
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-2 pr-1">
               <span className="truncate font-display text-[20px] leading-tight font-semibold text-bone-50">
