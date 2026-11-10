@@ -68,6 +68,7 @@ mod model;
 mod presence;
 mod protocol;
 mod qr;
+mod rpc;
 mod service;
 mod state;
 mod stickers;
@@ -164,6 +165,8 @@ pub use protocol::{
 // SOC-NOTE: status notes and pinned messages.
 pub use protocol::{ChatPin, NOTES_CAP, PINS_CAP, StatusNote};
 pub use qr::{QrPath, qr_path};
+// RPC-PLUS: the crew line of the Discord activity.
+pub use rpc::{CrewTogether, crew_together};
 pub use service::{ServiceConfig, SocialService, SocialUpdate, UpdateSink};
 pub use state::{Connection, GREET_WINDOW_SECS, INVITE_LIFETIME_SECS, SocialState};
 pub use stickers::{Sticker, sticker, sticker_sets, sticker_text};

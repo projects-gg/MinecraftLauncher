@@ -1,24 +1,30 @@
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use pl_discord::{Activity, GamePlace, PlacePrivacy, ShownPlace, StatusDisplayType, shown_place};
+use pl_discord::{
+    Activity, CrewNow, CrewPrivacy, GamePlace, PlacePrivacy, ShownCrew, ShownPlace,
+    StatusDisplayType, shown_crew, shown_place,
+};
 use pl_lang::Lang;
-use pl_social::LocalStatus;
+use pl_social::{CrewTogether, LocalStatus, SocialUpdate};
 use serde::Deserialize;
 use tauri::{AppHandle, Manager, State};
 
 use crate::state::{AppState, DISCORD_CLIENT_ID};
 
-/// What the player is doing, sent by the UI whenever it changes. The backend turns it into a
-/// Rich Presence activity; where the game is comes from the game's log (OVL-RPC), so a server
-/// change shows while the launcher's page rests in the tray.
+/// What the player is doing and what they let Discord show, sent by the UI whenever it changes.
+/// The backend turns it into a Rich Presence activity; where the game is comes from the game's
+/// log (OVL-RPC) and the crew from the friends service (RPC-PLUS), so both follow the game while
+/// the launcher's page rests in the tray.
 #[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PresenceContext {
     /// "home" | "library" | "news" | "afk" | "settings" | "downloading" | "starting" (the game's
     /// window is not on screen yet) | "playing"
     pub activity: String,
-    pub instance_name: Option<String>,
+    /// The pack's name, only for an instance the launcher keeps from a pack (the official
+    /// Projects pack); a name the player gave their own instance never goes to Discord.
+    pub pack_name: Option<String>,
     pub mc_version: Option<String>,
     pub loader: Option<String>,
     /// Projects' player count, shown only while the game is on Projects.
@@ -26,10 +32,20 @@ pub struct PresenceContext {
     pub max_players: Option<u32>,
     pub percent: Option<u32>,
     pub started_at_ms: Option<u64>,
-    /// "Bağlandığım Sunucuyu Göster": where the game is (Projects, singleplayer, a server).
+    /// "Oynadığım Yeri Göster": where the game is (Projects, singleplayer, a server).
     pub show_server: bool,
     /// "Sunucu Adresini Göster": another server's address too (Projects' is always public).
     pub show_address: bool,
+    /// "Ekibimle Oynadığımı Göster" (RPC-PLUS).
+    pub show_crew: bool,
+    /// "Kaç Kişi Olduğumuzu Göster": the crewmates together, of the crew's size.
+    pub show_crew_count: bool,
+    /// "Ekibimin Adını Göster": the name of the crew whose tag the player wears.
+    pub show_crew_name: bool,
+    /// "Paketi ve Sürümü Göster".
+    pub show_pack: bool,
+    /// "Oyun Süresini Göster".
+    pub show_elapsed: bool,
 }
 
 const LOGO: &str = "logo";
@@ -42,14 +58,29 @@ const BLOCK: &str = "discord-block";
 /// anew.
 static LAST: Mutex<Option<PresenceContext>> = Mutex::new(None);
 
+/// RPC-PLUS: the crew the player plays with now, from the friends service's last view.
+static CREW: Mutex<Option<CrewTogether>> = Mutex::new(None);
+
 /// The interface's language (the player's Discord friends read it), `shown` the place as the
-/// player lets it show, `block` whether the block picture may stand for it.
-fn build(ctx: &PresenceContext, shown: ShownPlace<'_>, lang: Lang, block: bool) -> Activity {
+/// player lets it show, `crew` the crew line, `block` whether the block picture may stand for it.
+fn build(
+    ctx: &PresenceContext,
+    shown: ShownPlace<'_>,
+    crew: Option<ShownCrew<'_>>,
+    lang: Lang,
+    block: bool,
+) -> Activity {
     let version_line = match (&ctx.loader, &ctx.mc_version) {
         (Some(loader), Some(version)) if loader != "vanilla" => format!("{loader} {version}"),
         (_, Some(version)) => format!("Minecraft {version}"),
         _ => "Minecraft".to_owned(),
     };
+    // "Projects · Fabric 26.1.2" for the official pack, else the loader and version.
+    let pack_line = match &ctx.pack_name {
+        Some(name) => format!("{name} · {version_line}"),
+        None => version_line,
+    };
+    let pack = ctx.show_pack.then_some(pack_line.as_str());
     let in_launcher = lang.pick("Launcher'da", "In the launcher");
     let base = Activity::new()
         .large_image(LOGO)
@@ -77,7 +108,6 @@ fn build(ctx: &PresenceContext, shown: ShownPlace<'_>, lang: Lang, block: bool) 
                     lang.pick("Bir sunucuda oynuyor", "Playing on a server")
                 }
             };
-            // The address beside the picture; the version then on the picture's hover.
             let address = match shown {
                 ShownPlace::Projects { address }
                 | ShownPlace::Server {
@@ -85,26 +115,51 @@ fn build(ctx: &PresenceContext, shown: ShownPlace<'_>, lang: Lang, block: bool) 
                 } => Some(address),
                 _ => None,
             };
+            // The second line: the crew, else the address beside the picture, else the pack.
+            let mut party = None;
+            let second = if let Some(crew) = crew {
+                party = crew
+                    .party
+                    .map(|(together, size)| ("projects-crew", together, size));
+                Some(match crew.name {
+                    Some(name) => {
+                        lang.pick(format!("{name} ekibiyle"), format!("With the {name} crew"))
+                    }
+                    None => lang.pick("Ekibiyle", "With their crew").to_owned(),
+                })
+            } else if let Some(address) = address {
+                if let (Some(players), Some(max), ShownPlace::Projects { .. }) =
+                    (ctx.players, ctx.max_players, shown)
+                {
+                    party = Some(("projects-server", players, max));
+                }
+                Some(address.to_owned())
+            } else {
+                pack.map(str::to_owned)
+            };
+            let second_is_pack = second.as_deref() == pack;
             let mut activity = base
                 .details(details)
-                .state(address.unwrap_or(version_line.as_str()))
                 .status_display(StatusDisplayType::Details);
+            if let Some(second) = second {
+                activity = activity.state(second);
+            }
+            // The pack on the picture's hover when the second line says something else.
+            let hover = pack.filter(|_| !second_is_pack);
             if block && shown.generic_picture() {
                 activity = activity
                     .large_image(BLOCK)
-                    .large_text(version_line.clone())
+                    .large_text(hover.unwrap_or("Minecraft"))
                     .small_image(LOGO)
                     .small_text("Projects Launcher");
-            } else if address.is_some() {
-                activity = activity.large_text(version_line.clone());
+            } else if let Some(hover) = hover {
+                activity = activity.large_text(hover);
             }
-            if let Some(started) = ctx.started_at_ms {
+            if let (Some(started), true) = (ctx.started_at_ms, ctx.show_elapsed) {
                 activity = activity.start_timestamp(started);
             }
-            if let (Some(players), Some(max), ShownPlace::Projects { .. }) =
-                (ctx.players, ctx.max_players, shown)
-            {
-                activity = activity.party("projects-server", players, max);
+            if let Some((id, current, max)) = party {
+                activity = activity.party(id, current, max);
             }
             activity
         }
@@ -114,15 +169,19 @@ fn build(ctx: &PresenceContext, shown: ShownPlace<'_>, lang: Lang, block: bool) 
                 .state(lang.pick(format!("%{percent}"), format!("{percent}%")))
         }
         // "Playing" only once the game's window is on screen, as in the launcher.
-        "starting" => base
-            .details(lang.pick("Oyunu açıyor", "Starting the game"))
-            .state(version_line),
+        "starting" => {
+            let activity = base.details(lang.pick("Oyunu açıyor", "Starting the game"));
+            match pack {
+                Some(pack) => activity.state(pack),
+                None => activity,
+            }
+        }
         "afk" => base
             .details(lang.pick("AFK hesaplarını yönetiyor", "Managing AFK accounts"))
             .state(in_launcher),
         "library" => base
             .details(lang.pick("Kütüphanede", "In the library"))
-            .state(match &ctx.instance_name {
+            .state(match &ctx.pack_name {
                 Some(name) => lang.pick(
                     format!("{name} kurulumunu inceliyor"),
                     format!("Looking at {name}"),
@@ -164,10 +223,23 @@ fn show(app: &AppHandle, state: &AppState, ctx: &PresenceContext) {
             show_address: ctx.show_address,
         },
     );
+    let crew_now = CREW.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let crew = shown_crew(
+        crew_now.as_ref().map(|crew| CrewNow {
+            name: crew.name.as_deref(),
+            together: crew.together,
+            size: crew.size,
+        }),
+        CrewPrivacy {
+            show_crew: ctx.show_crew,
+            show_count: ctx.show_crew_count,
+            show_name: ctx.show_crew_name,
+        },
+    );
     let block = ctx.activity == "playing" && shown.generic_picture() && block_ready(app);
     state
         .presence
-        .set(Some(build(ctx, shown, Lang::current(), block)));
+        .set(Some(build(ctx, shown, crew, Lang::current(), block)));
 }
 
 #[tauri::command]
@@ -178,7 +250,7 @@ pub fn discord_update(app: AppHandle, state: State<'_, AppState>, context: Prese
 }
 
 /// The same context anew: the interface's language changed, the game moved (another server,
-/// singleplayer, the menus), or the block picture turned out to be there.
+/// singleplayer, the menus), the crew line changed, or the block picture turned out to be there.
 pub fn refresh(app: &AppHandle) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
@@ -187,6 +259,23 @@ pub fn refresh(app: &AppHandle) {
     if let Some(context) = last {
         show(app, &state, &context);
     }
+}
+
+/// RPC-PLUS: every view of the friends service; the activity is shown anew only when the crew
+/// line's facts changed (crewmates coming and going on Projects, the worn tag).
+pub fn on_social(app: &AppHandle, update: &SocialUpdate) {
+    let SocialUpdate::View(view) = update else {
+        return;
+    };
+    let now = view.crew_together();
+    {
+        let mut crew = CREW.lock().unwrap_or_else(|e| e.into_inner());
+        if *crew == now {
+            return;
+        }
+        *crew = now;
+    }
+    refresh(app);
 }
 
 #[tauri::command]

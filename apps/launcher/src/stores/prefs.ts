@@ -76,6 +76,16 @@ interface PrefsState {
    * (off: Discord shows it to everyone who sees the player, not only friends).
    */
   discordShowAddress: boolean;
+  /**
+   * RPC-PLUS, on by default (the owner, 10 Nov 2026: what does a player no social harm is shown):
+   * "Ekibiyle" while crewmates play on Projects with the player, how many of the crew, the worn
+   * crew's name, the official pack and version, the time played.
+   */
+  discordShowCrew: boolean;
+  discordShowCrewCount: boolean;
+  discordShowCrewName: boolean;
+  discordShowPack: boolean;
+  discordShowElapsed: boolean;
   concurrentDownloads: number;
   verifyOnLaunch: boolean;
   /** Settings → İndirmeler: the selected instance downloads while the launcher is idle. */
@@ -138,6 +148,11 @@ export const usePrefs = create<PrefsState>()(
       discordEnabled: true,
       discordShowServer: true,
       discordShowAddress: false,
+      discordShowCrew: true,
+      discordShowCrewCount: true,
+      discordShowCrewName: true,
+      discordShowPack: true,
+      discordShowElapsed: true,
       concurrentDownloads: 16,
       verifyOnLaunch: false,
       backgroundPrepare: true,

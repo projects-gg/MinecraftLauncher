@@ -26,6 +26,11 @@ export function usePresenceSync() {
   const enabled = usePrefs((s) => s.discordEnabled);
   const showServer = usePrefs((s) => s.discordShowServer);
   const showAddress = usePrefs((s) => s.discordShowAddress);
+  const showCrew = usePrefs((s) => s.discordShowCrew);
+  const showCrewCount = usePrefs((s) => s.discordShowCrewCount);
+  const showCrewName = usePrefs((s) => s.discordShowCrewName);
+  const showPack = usePrefs((s) => s.discordShowPack);
+  const showElapsed = usePrefs((s) => s.discordShowElapsed);
   const { data: instances } = useQuery({
     queryKey: ["instances"],
     queryFn: () => api.instances(),
@@ -57,7 +62,8 @@ export function usePresenceSync() {
     const playing = since !== null;
     void api.updatePresence({
       activity,
-      instanceName: instance?.name ?? null,
+      // RPC-PLUS: only the official pack's name; a name the player gave their instance stays home.
+      packName: instance?.managed ? instance.name : null,
       mcVersion: instance?.mcVersion ?? null,
       loader: instance?.loader ?? null,
       players: playing && server?.online ? server.players : null,
@@ -66,7 +72,27 @@ export function usePresenceSync() {
       startedAtMs: since,
       showServer,
       showAddress,
+      showCrew,
+      showCrewCount,
+      showCrewName,
+      showPack,
+      showElapsed,
     });
     // Percent updates are coalesced by the backend's rate limiter.
-  }, [pathname, percent, since, opening, enabled, showServer, showAddress, instance, server]);
+  }, [
+    pathname,
+    percent,
+    since,
+    opening,
+    enabled,
+    showServer,
+    showAddress,
+    showCrew,
+    showCrewCount,
+    showCrewName,
+    showPack,
+    showElapsed,
+    instance,
+    server,
+  ]);
 }

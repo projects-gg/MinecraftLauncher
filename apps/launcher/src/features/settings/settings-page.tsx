@@ -496,63 +496,128 @@ function Discord() {
           hideLabel
         />
       </Row>
-      <Row title={t("discordPlace.showPlace")}>
-        <Switch
-          checked={p.discordShowServer}
-          onCheckedChange={(v) => p.set("discordShowServer", v)}
-          label={t("discordPlace.showPlace")}
-          hideLabel
-          disabled={!p.discordEnabled}
-        />
-      </Row>
-      {/* OVL-RPC: another server's address is the player's to share; Projects' always shows. */}
-      <Row title={t("discordPlace.showAddress")} help={t("discordPlace.showAddressHelp")}>
-        <Switch
-          checked={p.discordShowAddress}
-          onCheckedChange={(v) => p.set("discordShowAddress", v)}
-          label={t("discordPlace.showAddress")}
-          hideLabel
-          disabled={!p.discordEnabled || !p.discordShowServer}
-        />
-      </Row>
-      {p.discordEnabled ? (
-        <div className="mt-5">
-          <p className="mb-2 text-[12px] text-ash-400">{t("discordPlace.preview")}</p>
-          {p.discordShowServer ? (
-            <div className="flex flex-wrap gap-3">
-              <DiscordCard
-                caption={t("discordPlace.onProjects")}
-                picture={logo}
-                details={t("discordPlace.playingProjects")}
-                state={t("discordPlace.projectsState")}
-              />
-              <DiscordCard
-                caption={t("discordPlace.onServer")}
-                picture={grass}
-                badge
-                details={t("discordPlace.playingServer")}
-                state={
-                  p.discordShowAddress ? t("discordPlace.serverAddress") : t("discordPlace.version")
-                }
-              />
-            </div>
-          ) : (
-            <DiscordCard
-              picture={logo}
-              details={t("discordPlace.playingMinecraft")}
-              state={t("discordPlace.version")}
-            />
-          )}
-        </div>
-      ) : null}
+      {/* RPC-PLUS: what does a player no social harm is on by default; another server's address
+          stays the player's to share. */}
+      <h3 className="mt-5 mb-0.5 text-[12.5px] font-semibold text-ash-300">
+        {t("discordPlace.groupGame")}
+      </h3>
+      <DiscordSwitch pref="discordShowServer" title={t("discordPlace.showPlace")} />
+      <DiscordSwitch
+        pref="discordShowAddress"
+        title={t("discordPlace.showAddress")}
+        help={t("discordPlace.showAddressHelp")}
+        needs={p.discordShowServer}
+      />
+      <DiscordSwitch pref="discordShowPack" title={t("discordPlace.showPack")} />
+      <DiscordSwitch pref="discordShowElapsed" title={t("discordPlace.showElapsed")} />
+      <h3 className="mt-5 mb-0.5 text-[12.5px] font-semibold text-ash-300">
+        {t("discordPlace.groupCrew")}
+      </h3>
+      <DiscordSwitch
+        pref="discordShowCrew"
+        title={t("discordPlace.showCrew")}
+        help={t("discordPlace.showCrewHelp")}
+      />
+      <DiscordSwitch
+        pref="discordShowCrewCount"
+        title={t("discordPlace.showCrewCount")}
+        needs={p.discordShowCrew}
+      />
+      <DiscordSwitch
+        pref="discordShowCrewName"
+        title={t("discordPlace.showCrewName")}
+        help={t("discordPlace.showCrewNameHelp")}
+        needs={p.discordShowCrew}
+      />
+      {p.discordEnabled ? <DiscordPreview /> : null}
     </>
   );
 }
 
+type DiscordPref =
+  | "discordShowServer"
+  | "discordShowAddress"
+  | "discordShowPack"
+  | "discordShowElapsed"
+  | "discordShowCrew"
+  | "discordShowCrewCount"
+  | "discordShowCrewName";
+
+/** One of the Discord section's switches; off with the status, and with the one it depends on. */
+function DiscordSwitch({
+  pref,
+  title,
+  help,
+  needs = true,
+}: {
+  pref: DiscordPref;
+  title: string;
+  help?: string;
+  needs?: boolean;
+}) {
+  const p = usePrefs();
+  return (
+    <Row title={title} help={help}>
+      <Switch
+        checked={p[pref]}
+        onCheckedChange={(v) => p.set(pref, v)}
+        label={title}
+        hideLabel
+        disabled={!p.discordEnabled || !needs}
+      />
+    </Row>
+  );
+}
+
+/** The activity as Discord shows it with the switches as they are (`commands/discord.rs`). */
+function DiscordPreview() {
+  const { t } = useTranslation();
+  const p = usePrefs();
+  const crew = p.discordShowCrew
+    ? [
+        p.discordShowCrewName
+          ? t("discordPlace.withCrewNamed", { name: t("discordPlace.crewName") })
+          : t("discordPlace.withCrew"),
+        p.discordShowCrewCount ? t("discordPlace.crewCount") : null,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    : null;
+  const pack = p.discordShowPack ? t("discordPlace.version") : null;
+  return (
+    <div className="mt-5">
+      <p className="mb-2 text-[12px] text-ash-400">{t("discordPlace.preview")}</p>
+      {p.discordShowServer ? (
+        <div className="flex flex-wrap gap-3">
+          <DiscordCard
+            caption={t("discordPlace.onProjects")}
+            picture={logo}
+            details={t("discordPlace.playingProjects")}
+            state={crew ?? t("discordPlace.projectsState")}
+          />
+          <DiscordCard
+            caption={t("discordPlace.onServer")}
+            picture={grass}
+            badge
+            details={t("discordPlace.playingServer")}
+            state={p.discordShowAddress ? t("discordPlace.serverAddress") : pack}
+          />
+        </div>
+      ) : (
+        <DiscordCard
+          picture={logo}
+          details={t("discordPlace.playingMinecraft")}
+          state={crew ?? pack}
+        />
+      )}
+    </div>
+  );
+}
+
 /**
- * What Discord shows while playing (the lines `commands/discord.rs` builds): the picture (Projects'
- * logo, or the generic block with the logo in its corner), the application's name on Discord, the
- * place, the address or the version, the time.
+ * What Discord shows while playing: the picture (Projects' logo, or the generic block with the logo
+ * in its corner), the application's name on Discord, the place, the crew, the address or the pack,
+ * the time.
  */
 function DiscordCard({
   caption,
@@ -565,9 +630,10 @@ function DiscordCard({
   picture: string;
   badge?: boolean;
   details: string;
-  state: string;
+  state: string | null;
 }) {
   const { t } = useTranslation();
+  const elapsed = usePrefs((s) => s.discordShowElapsed);
   return (
     <div>
       {caption ? <p className="mb-1.5 text-[12px] text-ash-500">{caption}</p> : null}
@@ -585,8 +651,10 @@ function DiscordCard({
         <div className="text-[13px] leading-snug">
           <p className="font-semibold text-white">projects.gg</p>
           <p className="text-[#dbdee1]">{details}</p>
-          <p className="text-[#b5bac1] tabular-nums">{state}</p>
-          <p className="text-[#b5bac1] tabular-nums">{t("discordPlace.elapsed")}</p>
+          {state ? <p className="text-[#b5bac1] tabular-nums">{state}</p> : null}
+          {elapsed ? (
+            <p className="text-[#b5bac1] tabular-nums">{t("discordPlace.elapsed")}</p>
+          ) : null}
         </div>
       </div>
     </div>
