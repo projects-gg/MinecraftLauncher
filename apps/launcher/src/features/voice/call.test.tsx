@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // VOICE-CALL: starting a call asks first ("{name} aransın mı?" with "Ara" and "Vazgeç") unless the
-// player turned "Aramadan önce sor" off; the friend's card always has its voice button while voice
+// player turned "Aramadan önce Sor" off; the friend's card always has its voice button while voice
 // chat is on (faded with one plain reason when the friend cannot be called); a call with one friend
 // shows its time and its stage; the meter lights as many bars as the voice reaches.
 import { setAppReducedMotion, TooltipProvider } from "@pl/ui";
@@ -94,7 +94,7 @@ describe("asking before a call", () => {
     await settle();
     // The friends list does not know 302 here: "Bir oyuncu".
     expect(screen.getByText("Bir oyuncu aransın mı?")).toBeTruthy();
-    expect(screen.queryByText(/Rahatsız etmeyin/)).toBeNull();
+    expect(screen.queryByText(/Rahatsız Etmeyin/)).toBeNull();
     expect(call).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Ara" }));
     await settle();
@@ -118,7 +118,7 @@ describe("asking before a call", () => {
     expect(call).not.toHaveBeenCalled();
   });
 
-  it('calls at once with "Aramadan önce sor" off', async () => {
+  it('calls at once with "Aramadan önce Sor" off', async () => {
     const call = vi.spyOn(voiceApi, "call").mockResolvedValue(VOICE_OK);
     act(() => useVoiceUi.getState().setState(scenario("ready", { ask: false })));
     act(() => askToCall("302"));
@@ -172,13 +172,13 @@ describe("the friend's card (VOICE-CALL)", () => {
     );
   }
 
-  it('offers "Sesli arama başlat", asked first', async () => {
+  it('offers "Sesli Arama Başlat", asked first', async () => {
     useSocialUi.setState((s) => ({
       view: { ...s.view, friends: [{ ...s.view.friends[0], id: "302", voice: "ready" } as never] },
     }));
     const call = vi.spyOn(voiceApi, "call").mockResolvedValue(VOICE_OK);
     card(scenario("ready"));
-    fireEvent.click(screen.getByRole("button", { name: "Sesli arama başlat" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sesli Arama Başlat" }));
     await settle();
     // Asked, not called yet (the dialog is mounted by VoiceHost).
     expect(call).not.toHaveBeenCalled();
@@ -193,7 +193,7 @@ describe("the friend's card (VOICE-CALL)", () => {
     }));
     const call = vi.spyOn(voiceApi, "call").mockResolvedValue(VOICE_OK);
     card({ ...scenario("ready"), presence: {} });
-    const button = screen.getByRole("button", { name: "Sesli arama başlat" });
+    const button = screen.getByRole("button", { name: "Sesli Arama Başlat" });
     expect(button.getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(button);
     expect(call).not.toHaveBeenCalled();

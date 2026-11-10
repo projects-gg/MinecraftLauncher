@@ -31,10 +31,10 @@ describe("Durdur ve oyna (PLAY-ACCT): another launch on its way", () => {
     const words = questionWords(sides());
     expect(turkish(words.title)).toBe("Oyun KorAtesi_ hesabıyla açılsın mı?");
     expect(words.body.map(turkish)).toEqual(["EjderAvcisi ile açılmakta olan oyun durdurulacak."]);
-    expect(turkish(words.confirm)).toBe("Durdur ve oyna");
+    expect(turkish(words.confirm)).toBe("Durdur ve Oyna");
     expect(english(words.title)).toBe("Play as KorAtesi_?");
     expect(words.body.map(english)).toEqual(["The game starting as EjderAvcisi will stop."]);
-    expect(english(words.confirm)).toBe("Stop and play");
+    expect(english(words.confirm)).toBe("Stop and Play");
   });
 
   it("names the other installation as one when the other account starts another one", () => {
@@ -101,13 +101,13 @@ describe("one more game (PLAY-AGAIN)", () => {
       "İki oyun aynı sunucuya girerse biri atılır.",
     ]);
     expect(words.note).toBeNull();
-    expect(turkish(words.confirm)).toBe("Yine de aç");
+    expect(turkish(words.confirm)).toBe("Yine de Aç");
     expect(english(words.title)).toBe("Open another game?");
     expect(words.body.map(english)).toEqual([
       "EjderAvcisi is already in a game.",
       "If both games join the same server, one gets kicked.",
     ]);
-    expect(english(words.confirm)).toBe("Open anyway");
+    expect(english(words.confirm)).toBe("Open Anyway");
     // The account not known: the owner's own words.
     expect(oneMoreWords("again", false).body.map(turkish)).toEqual([
       "Bu adla oyun zaten açık.",
@@ -126,7 +126,7 @@ describe("one more game (PLAY-AGAIN)", () => {
     expect(words.note && turkish(words.note)).toBe(
       "Bilgisayarında boş bellek az, oyunlar takılabilir.",
     );
-    expect(turkish(words.confirm)).toBe("Yine de aç");
+    expect(turkish(words.confirm)).toBe("Yine de Aç");
     // Another account's game only: the memory is the whole reason, the same title and the same
     // answer to it (one question, one answer).
     const beside = oneMoreWords("memory", true, "KorAtesi_");
@@ -135,11 +135,11 @@ describe("one more game (PLAY-AGAIN)", () => {
       "Bilgisayarında boş bellek az, oyunlar takılabilir.",
     ]);
     expect(beside.note).toBeNull();
-    expect(turkish(beside.confirm)).toBe("Yine de aç");
+    expect(turkish(beside.confirm)).toBe("Yine de Aç");
     expect(beside.body.map(english)).toEqual([
       "Your computer is low on free memory, so the games may stutter.",
     ]);
-    expect(english(beside.confirm)).toBe("Open anyway");
+    expect(english(beside.confirm)).toBe("Open Anyway");
   });
 
   it("never names a technical figure or an id", () => {

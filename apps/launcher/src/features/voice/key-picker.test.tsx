@@ -29,7 +29,7 @@ function picker(shortcut: VoiceShortcut, value: VoiceKey | null = null) {
       onRefused={() => {}}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: /Tuş seç|Değiştir/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Tuş Seç|Değiştir/ }));
   return onPick;
 }
 
@@ -85,13 +85,13 @@ describe("the voice key picker", () => {
       <KeyPicker
         value={{ kind: "keyboard", code: "KeyM", label: "M", mods: ["ctrl", "shift"] }}
         shortcut="mute"
-        label="Mikrofonu kapat/aç"
+        label="Mikrofonu Kapat/Aç"
         onPick={() => {}}
         onRefused={() => {}}
       />,
     );
     expect(
-      screen.getByRole("button", { name: "Mikrofonu kapat/aç: Ctrl + Shift + M, Değiştir" }),
+      screen.getByRole("button", { name: "Mikrofonu Kapat/Aç: Ctrl + Shift + M, Değiştir" }),
     ).toBeTruthy();
     expect(screen.getAllByText("+")).toHaveLength(2);
   });

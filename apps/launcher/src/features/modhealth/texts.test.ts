@@ -82,12 +82,12 @@ describe("mod health texts", () => {
 
   it("labels the fix buttons", () => {
     expect(fixLabel(t, { label: "fix", count: 1 })).toBe("Düzelt");
-    expect(fixLabel(t, { label: "disable", count: 1 })).toBe("Bu modu kapat");
+    expect(fixLabel(t, { label: "disable", count: 1 })).toBe("Bu Modu Kapat");
     expect(fixLabel(t, { label: "disableNamed", name: "OptiFabric", count: 1 })).toBe(
-      "OptiFabric modunu kapat",
+      "OptiFabric Modunu Kapat",
     );
-    expect(fixLabel(t, { label: "disableOld", count: 1 })).toBe("Eski kopyayı kapat");
-    expect(fixLabel(t, { label: "disableOld", count: 2 })).toBe("Eski kopyaları kapat");
+    expect(fixLabel(t, { label: "disableOld", count: 1 })).toBe("Eski Kopyayı Kapat");
+    expect(fixLabel(t, { label: "disableOld", count: 2 })).toBe("Eski Kopyaları Kapat");
     expect(fixLabel(t, { label: "enable", count: 1 })).toBe("Aç");
   });
 

@@ -87,7 +87,7 @@ describe("AFK notices in words", () => {
       t,
       "tr",
     );
-    expect(unread?.body).toBe('afkPlus.notices.confirmItem {"item":"Özel eşya"}');
+    expect(unread?.body).toBe('afkPlus.notices.confirmItem {"item":"Özel Eşya"}');
     // Paid with an item: what changes hands, never the count as money.
     const swap = noticeWords(
       notice("approval", {
@@ -99,12 +99,12 @@ describe("AFK notices in words", () => {
       t,
       "tr",
     );
-    expect(swap?.body).toBe('afkPlus.notices.approval {"deal":"2 Netherite ingot"}');
+    expect(swap?.body).toBe('afkPlus.notices.approval {"deal":"2 Netherite Ingot"}');
   });
 
   it("read an item without a known name from its id", () => {
     const words = noticeWords(notice("deal_failed", { item: "minecraft:diamond_sword" }), t, "tr");
-    expect(words?.body).toBe('afkPlus.notices.dealFailed {"item":"Diamond sword"}');
+    expect(words?.body).toBe('afkPlus.notices.dealFailed {"item":"Diamond Sword"}');
   });
 
   it("tell a sale from a buy", () => {

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// "Para birimi": nothing while Studio's switch is off, the profile's own name as words with a lock,
+// "Para Birimi": nothing while Studio's switch is off, the profile's own name as words with a lock,
 // else the player's own field, with one line under it (the hint, or that the name cannot be used).
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -11,7 +11,7 @@ const ignore = () => {};
 /** The field, after checking that its words name it. */
 function fieldOf(container: HTMLElement): HTMLInputElement {
   const field = container.querySelector("input") as HTMLInputElement;
-  expect(screen.getByText("Para birimi").getAttribute("for")).toBe(field.id);
+  expect(screen.getByText("Para Birimi").getAttribute("for")).toBe(field.id);
   return field;
 }
 

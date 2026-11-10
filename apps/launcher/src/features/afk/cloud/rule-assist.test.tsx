@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-// "ProBot AI ile kalıp kur" in a 7/24 Bulut rule: offered only while the service's model can answer;
-// the box asks with the player's words, shows the sentence and examples, "Bu kalıbı kullan" puts the
-// trigger in the rule and the field then reads as that sentence ("Kalıbı değiştir" opens the box
-// again); "Kalıbı kendim yazacağım" waits in the box; a refusal shows the command's own words.
+// "ProBot AI ile Kalıp Kur" in a 7/24 Bulut rule: offered only while the service's model can answer;
+// the box asks with the player's words, shows the sentence and examples, "Bu Kalıbı Kullan" puts the
+// trigger in the rule and the field then reads as that sentence ("Kalıbı Değiştir" opens the box
+// again); "Kalıbı Kendim Yazacağım" waits in the box; a refusal shows the command's own words.
 import { TooltipProvider } from "@pl/ui";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
@@ -100,16 +100,16 @@ afterEach(() => cleanup());
 describe("ProBot AI in a cloud rule's trigger", () => {
   it("is not offered while the service's model cannot answer", () => {
     render(<Rule available={false} suggest={never} />);
-    expect(screen.queryByText("ProBot AI ile kalıp kur")).toBeNull();
-    expect(screen.getByText("Kalıbı kendim yazacağım")).toBeTruthy();
+    expect(screen.queryByText("ProBot AI ile Kalıp Kur")).toBeNull();
+    expect(screen.getByText("Kalıbı Kendim Yazacağım")).toBeTruthy();
   });
 
   it("asks with the player's words and puts the pattern it made in the rule", async () => {
     const suggest = vi.fn<Suggest>(async () => MADE);
     render(<Rule available suggest={suggest} />);
     // With ProBot AI, writing a pattern by hand waits in its box.
-    expect(screen.queryByText("Kalıbı kendim yazacağım")).toBeNull();
-    fireEvent.click(screen.getByText("ProBot AI ile kalıp kur"));
+    expect(screen.queryByText("Kalıbı Kendim Yazacağım")).toBeNull();
+    fireEvent.click(screen.getByText("ProBot AI ile Kalıp Kur"));
     const words = screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz.");
     fireEvent.change(words, { target: { value: "  biri tp  ya da ışınla yazınca " } });
     create();
@@ -118,19 +118,19 @@ describe("ProBot AI in a cloud rule's trigger", () => {
     expect(screen.getByText("beni ışınla")).toBeTruthy();
     expect(screen.getByText("tpa geldim")).toBeTruthy();
 
-    fireEvent.click(screen.getByText("Tekrar dene"));
+    fireEvent.click(screen.getByText("Tekrar Dene"));
     await waitFor(() =>
       expect(suggest).toHaveBeenLastCalledWith("biri tp ya da ışınla yazınca", true),
     );
 
-    fireEvent.click(await screen.findByText("Bu kalıbı kullan"));
+    fireEvent.click(await screen.findByText("Bu Kalıbı Kullan"));
     expect(screen.getByTestId("rule").textContent).toBe(`regex:${MADE.match}`);
     // The field reads as the sentence, kept on this computer for this rule's pattern.
     expect(screen.getByText("Ne zaman yanıt verir?")).toBeTruthy();
     expect(screen.getAllByText(MADE.summary).length).toBeGreaterThan(0);
     expect(savedSentence("a_TEST1", "r1", MADE.match)).toBe(MADE.summary);
-    expect(screen.getByText("Kalıbı değiştir")).toBeTruthy();
-    expect(screen.getByText("Düz söze dön")).toBeTruthy();
+    expect(screen.getByText("Kalıbı Değiştir")).toBeTruthy();
+    expect(screen.getByText("Düz Söze Dön")).toBeTruthy();
   });
 
   it("offers no new answer for a plain phrase, which needs no model", async () => {
@@ -143,16 +143,16 @@ describe("ProBot AI in a cloud rule's trigger", () => {
       source: "plain",
     };
     render(<Rule available suggest={async () => plain} />);
-    fireEvent.click(screen.getByText("ProBot AI ile kalıp kur"));
+    fireEvent.click(screen.getByText("ProBot AI ile Kalıp Kur"));
     fireEvent.change(screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz."), {
       target: { value: "selam" },
     });
     create();
     expect(await screen.findByText(plain.summary)).toBeTruthy();
-    expect(screen.queryByText("Tekrar dene")).toBeNull();
-    fireEvent.click(screen.getByText("Bu kalıbı kullan"));
+    expect(screen.queryByText("Tekrar Dene")).toBeNull();
+    fireEvent.click(screen.getByText("Bu Kalıbı Kullan"));
     expect(screen.getByTestId("rule").textContent).toBe("plain:selam");
-    expect(screen.getByText("Mesajda geçen söz")).toBeTruthy();
+    expect(screen.getByText("Mesajda Geçen Söz")).toBeTruthy();
   });
 
   it("shows a refusal in the command's own words", async () => {
@@ -169,7 +169,7 @@ describe("ProBot AI in a cloud rule's trigger", () => {
         }}
       />,
     );
-    fireEvent.click(screen.getByText("ProBot AI ile kalıp kur"));
+    fireEvent.click(screen.getByText("ProBot AI ile Kalıp Kur"));
     fireEvent.change(screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz."), {
       target: { value: "bir şeyler yazınca" },
     });
@@ -181,7 +181,7 @@ describe("ProBot AI in a cloud rule's trigger", () => {
   it("keeps a too long description on this side", () => {
     const suggest = vi.fn<Suggest>(never);
     render(<Rule available suggest={suggest} />);
-    fireEvent.click(screen.getByText("ProBot AI ile kalıp kur"));
+    fireEvent.click(screen.getByText("ProBot AI ile Kalıp Kur"));
     fireEvent.change(screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz."), {
       target: { value: "ş".repeat(201) },
     });
@@ -192,16 +192,16 @@ describe("ProBot AI in a cloud rule's trigger", () => {
 
   it("lets the player write the pattern by hand from the box", () => {
     render(<Rule available suggest={never} start={{ pattern: "tp", regex: false }} />);
-    fireEvent.click(screen.getByText("ProBot AI ile kalıp kur"));
-    fireEvent.click(screen.getByText("Kalıbı kendim yazacağım"));
+    fireEvent.click(screen.getByText("ProBot AI ile Kalıp Kur"));
+    fireEvent.click(screen.getByText("Kalıbı Kendim Yazacağım"));
     expect(screen.getByTestId("rule").textContent).toBe("regex:tp");
-    expect(screen.getByLabelText("Özel kalıp")).toBeTruthy();
+    expect(screen.getByLabelText("Özel Kalıp")).toBeTruthy();
   });
 
   it("reads a pattern it made earlier on this computer as its sentence", () => {
     render(<Rule available suggest={never} start={{ pattern: MADE.match, regex: true }} />);
     // Not one it made here: the pattern shows as itself.
-    expect(screen.getByLabelText("Özel kalıp")).toBeTruthy();
+    expect(screen.getByLabelText("Özel Kalıp")).toBeTruthy();
     cleanup();
     saveSentence("a_TEST1", "r1", MADE.match, MADE.summary);
     render(<Rule available suggest={never} start={{ pattern: MADE.match, regex: true }} />);

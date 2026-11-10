@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// "ProBot AI ile kalıp kur" in a desktop rule (PATTERN-L): offered only while the service has it for
+// "ProBot AI ile Kalıp Kur" in a desktop rule (PATTERN-L): offered only while the service has it for
 // this player, the same box as a 7/24 Bulut rule's; only the player's words are asked about, "Bu
 // kalıbı kullan" puts the trigger in the draft's rule, and the sentence is kept for the account.
 import { TooltipProvider } from "@pl/ui";
@@ -125,23 +125,23 @@ afterEach(() => cleanup());
 describe("ProBot AI in a desktop rule's trigger", () => {
   it("is not offered while the service has it not for this player", () => {
     render(<Section />);
-    expect(screen.queryByText("ProBot AI ile kalıp kur")).toBeNull();
-    expect(screen.getByText("Kalıbı kendim yazacağım")).toBeTruthy();
+    expect(screen.queryByText("ProBot AI ile Kalıp Kur")).toBeNull();
+    expect(screen.getByText("Kalıbı Kendim Yazacağım")).toBeTruthy();
   });
 
   it("asks with the player's words alone and puts the pattern it made in the rule", async () => {
     const suggest = vi.fn<RulePatterns["suggest"]>(async () => MADE);
     render(<Section patterns={{ accountId: "desktop:afk-1", suggest }} />);
     // With ProBot AI, writing a pattern by hand waits in its box (as in a 7/24 Bulut rule).
-    expect(screen.queryByText("Kalıbı kendim yazacağım")).toBeNull();
-    fireEvent.click(screen.getByText("ProBot AI ile kalıp kur"));
+    expect(screen.queryByText("Kalıbı Kendim Yazacağım")).toBeNull();
+    fireEvent.click(screen.getByText("ProBot AI ile Kalıp Kur"));
     fireEvent.change(screen.getByLabelText("Hangi mesajlara yanıt versin? Kendi sözlerinle yaz."), {
       target: { value: " biri tp ya da ışınla yazınca " },
     });
     fireEvent.click(screen.getByRole("button", { name: "Oluştur" }));
     expect(suggest).toHaveBeenCalledWith("biri tp ya da ışınla yazınca", false);
     expect(await screen.findByText(MADE.summary)).toBeTruthy();
-    fireEvent.click(screen.getByText("Bu kalıbı kullan"));
+    fireEvent.click(screen.getByText("Bu Kalıbı Kullan"));
     expect(screen.getByTestId("rule").textContent).toBe(`regex:${MADE.match}`);
     expect(screen.getByText("Ne zaman yanıt verir?")).toBeTruthy();
     // Kept for the account and the pattern: a desktop rule has no lasting id.

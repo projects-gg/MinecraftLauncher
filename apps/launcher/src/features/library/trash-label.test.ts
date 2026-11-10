@@ -49,27 +49,27 @@ describe("trashLabel", () => {
         { kind: "backup", name: "x", fileName: "2026-10-12_20-11-04_Yeni Dünya.zip" },
         now,
       ),
-    ).toBe("Yeni Dünya yedeği");
+    ).toBe("Yeni Dünya Yedeği");
     expect(
       trashLabel({ kind: "screenshot", name: "x", fileName: "2026-10-17_09.05.00.png" }, now),
-    ).toBe("Ekran görüntüsü, Bugün 09:05");
+    ).toBe("Ekran Görüntüsü, Bugün 09:05");
     expect(trashLabel({ kind: "screenshot", name: "x", fileName: "garip.png" }, now)).toBe(
-      "Ekran görüntüsü",
+      "Ekran Görüntüsü",
     );
   });
 
   it("names the folders a reinstall set aside", () => {
     expect(trashLabel({ kind: "modSet", name: "26.1.2 mods", fileName: "mods" }, now)).toBe(
-      "Eski modlar (26.1.2)",
+      "Eski Modlar (26.1.2)",
     );
     expect(trashLabel({ kind: "modSet", name: "1.21.1 config", fileName: "config" }, now)).toBe(
-      "Eski mod ayarları (1.21.1)",
+      "Eski Mod Ayarları (1.21.1)",
     );
   });
 
   it("names a parked version set by its version", () => {
     expect(trashLabel({ kind: "versionSet", name: "1.17.1", fileName: "1.17.1" }, now)).toBe(
-      "1.17.1 sürüm seti",
+      "1.17.1 Sürüm Seti",
     );
   });
 

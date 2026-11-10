@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // The title bar's room (VOICE-L3): nothing without a room or a call; "Aranıyor…" with "İptal" while
-// the player's call rings; "Cevap yok" with "Tekrar ara" after it; the room with "Mikrofon" and
+// the player's call rings; "Cevap yok" with "Tekrar Ara" after it; the room with "Mikrofon" and
 // "Ayrıl", whose names say what a press does; a moderator's mute holds the microphone.
 import { setAppReducedMotion, TooltipProvider } from "@pl/ui";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -78,32 +78,32 @@ describe("the voice pill", () => {
     act(() => useVoiceUi.getState().setEnded({ kind: "noAnswer", friend: "302" }));
     show(scenario("ready"));
     expect(screen.getByText("Cevap yok")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Tekrar ara" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tekrar Ara" }));
     expect(call).toHaveBeenCalledWith("302");
   });
 
   it("names the microphone's button by what a press does", () => {
     show(scenario("room"));
-    expect(screen.getByRole("button", { name: "Mikrofonu kapat" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Mikrofonu Kapat" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Ayrıl" })).toBeTruthy();
     cleanup();
     show(scenario("muted"));
-    expect(screen.getByRole("button", { name: "Mikrofonu aç" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Mikrofonu Aç" })).toBeTruthy();
   });
 
   it("shows deafened as both off, and the headphones undeafen (VOICE-KEYS)", async () => {
     const deaf = vi.spyOn(voiceApi, "setDeaf").mockResolvedValue();
     show(scenario("deaf"));
     // The microphone is off with it.
-    expect(screen.getByRole("button", { name: "Mikrofonu aç" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Mikrofonu Aç" })).toBeTruthy();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Sağırlaştırmayı kaldır" }));
+      fireEvent.click(screen.getByRole("button", { name: "Sağırlaştırmayı Kaldır" }));
     });
     expect(deaf).toHaveBeenCalledWith(false);
     cleanup();
     // Hearing: no headphones sign at all.
     show(scenario("room"));
-    expect(screen.queryByRole("button", { name: "Sağırlaştırmayı kaldır" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sağırlaştırmayı Kaldır" })).toBeNull();
   });
 
   it("holds the microphone while a moderator's mute runs", () => {

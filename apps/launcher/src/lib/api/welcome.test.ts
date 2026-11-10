@@ -4,7 +4,7 @@ import { welcomeHome } from "./welcome";
 describe("welcomeHome", () => {
   it("greets without announcing anything", () => {
     const home = welcomeHome();
-    expect(home.hero.title).toBe("Projects'e hoş geldin");
+    expect(home.hero.title).toBe("Projects'e Hoş Geldin");
     expect(home.hero.subtitle).toBe("Oyna'ya bas, sunucuda görüşürüz.");
     expect(home.hero.newsId).toBeUndefined();
     expect(home.hero.ctaUrl).toBeUndefined();

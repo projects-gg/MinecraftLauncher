@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// "Sınırlara git": only beside a line about a limit (an approval's reason as the card picks it),
+// "Sınırlara Git": only beside a line about a limit (an approval's reason as the card picks it),
 // and it goes to that limit.
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -11,12 +11,12 @@ const ignore = () => undefined;
 
 afterEach(() => cleanup());
 
-describe("Sınırlara git", () => {
+describe("Sınırlara Git", () => {
   it("stands beside a line about a limit and goes to it", () => {
     const went: string[] = [];
     render(<LimitLine onGo={() => went.push("limits")}>Onay sınırının üstünde</LimitLine>);
     expect(screen.getByText("Onay sınırının üstünde")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Sınırlara git" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sınırlara Git" }));
     expect(went).toEqual(["limits"]);
   });
 
@@ -27,9 +27,9 @@ describe("Sınırlara git", () => {
         Onay sınırının üstünde
       </LimitLine>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Onay sınırına git" }));
+    fireEvent.click(screen.getByRole("button", { name: "Onay Sınırına Git" }));
     expect(went).toEqual(["approvalAbove"]);
-    expect(screen.queryByRole("button", { name: "Sınırlara git" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sınırlara Git" })).toBeNull();
   });
 
   it.each<[string, boolean]>([
@@ -43,6 +43,6 @@ describe("Sınırlara git", () => {
   ])("on an approval's %s line: %s", (reason, shown) => {
     render(<LimitLine onGo={limitReason([reason]) ? ignore : null}>{reason}</LimitLine>);
     expect(screen.getByText(reason)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Sınırlara git" }) !== null).toBe(shown);
+    expect(screen.queryByRole("button", { name: "Sınırlara Git" }) !== null).toBe(shown);
   });
 });

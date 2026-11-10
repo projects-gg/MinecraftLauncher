@@ -264,20 +264,20 @@ describe("reasonOf", () => {
 
 describe("fixLabel", () => {
   it("keeps the names the fixes have elsewhere", () => {
-    expect(fixLabel(t, "makeSpace")).toBe("Yer aç");
-    expect(fixLabel(t, "installJava")).toBe("Kur ve oyna");
-    expect(fixLabel(t, "instanceSettings")).toBe("Kurulum ayarlarını aç");
+    expect(fixLabel(t, "makeSpace")).toBe("Yer Aç");
+    expect(fixLabel(t, "installJava")).toBe("Kur ve Oyna");
+    expect(fixLabel(t, "instanceSettings")).toBe("Kurulum Ayarlarını Aç");
     expect(fixLabel(t, "repair")).toBe("Onar");
     expect(fixLabel(t, "showMods")).toBe("Göster");
-    expect(fixLabel(t, "clockSettings")).toBe("Saat ayarları");
+    expect(fixLabel(t, "clockSettings")).toBe("Saat Ayarları");
   });
 });
 
 describe("verdictLine", () => {
   it("lists the rows the headline counts", () => {
-    expect(verdictLine(t, ["disk", "mods"], "tr")).toBe("Disk alanı ve Modlar");
-    expect(verdictLine(t, ["disk", "mods", "java"], "tr")).toBe("Disk alanı, Modlar ve Java");
-    expect(verdictLine(tEn, ["disk", "mods"], "en")).toBe("Disk space and Mods");
+    expect(verdictLine(t, ["disk", "mods"], "tr")).toBe("Disk Alanı ve Modlar");
+    expect(verdictLine(t, ["disk", "mods", "java"], "tr")).toBe("Disk Alanı, Modlar ve Java");
+    expect(verdictLine(tEn, ["disk", "mods"], "en")).toBe("Disk Space and Mods");
   });
 
   it("counts in the headline", () => {
@@ -332,9 +332,9 @@ describe("summaryText", () => {
     expect(lines[4]).toMatch(/^Denetim: /);
     expect(lines[5]).toBe("Son açılış hatası: AG-YOK");
     expect(lines.slice(7)).toEqual([
-      "Sorun: Disk alanı. Neredeyse yer kalmadı: 820 MB boş. [DISK-FULL]",
-      "Sorun: Son çökme. Dün: Sodium oyunu çökertmiş olabilir. [CRASH-RECENT]",
-      "Uyarı: Projects sunucusu. Ping yüksek: 340 ms. [SERVER-SLOW]",
+      "Sorun: Disk Alanı. Neredeyse yer kalmadı: 820 MB boş. [DISK-FULL]",
+      "Sorun: Son Çökme. Dün: Sodium oyunu çökertmiş olabilir. [CRASH-RECENT]",
+      "Uyarı: Projects Sunucusu. Ping yüksek: 340 ms. [SERVER-SLOW]",
       "Tamam: İnternet. Bağlısın. [INTERNET-OK]",
     ]);
   });
