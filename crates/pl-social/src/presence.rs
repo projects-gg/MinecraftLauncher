@@ -603,6 +603,9 @@ pub(crate) struct Outgoing {
     status: LocalStatus,
     version: Option<String>,
     voice_off: bool,
+    /// CREW-PLUS: when the game session began (this launcher saw the game start): every status
+    /// while it plays says how long it has been open, so a reconnect keeps the session's start.
+    since: Option<Instant>,
 }
 
 impl Outgoing {
@@ -613,7 +616,21 @@ impl Outgoing {
             status: self.status.clone(),
             version: self.version.clone().filter(|_| playing),
             voice_off: self.voice_off,
+            since: self.since.filter(|_| playing),
         }
+    }
+
+    /// CREW-PLUS: a new status; a game session starts when the launcher goes into a game, lasts
+    /// across servers and worlds, and ends back in the launcher.
+    fn moved_to(&mut self, status: LocalStatus, now: Instant) {
+        let was_playing = !matches!(self.status, LocalStatus::Launcher);
+        let playing = !matches!(status, LocalStatus::Launcher);
+        self.since = match (was_playing, playing) {
+            (_, false) => None,
+            (false, true) => Some(now),
+            (true, true) => self.since.or(Some(now)),
+        };
+        self.status = status;
     }
 }
 
@@ -650,7 +667,7 @@ impl PresenceControl {
             if current.status == status {
                 false
             } else {
-                current.status = status;
+                current.moved_to(status, Instant::now());
                 true
             }
         })
@@ -1799,9 +1816,13 @@ async fn send_status(
     // VOICE: the switch goes along on a connection that took `voice1` (which counts as "on"
     // until told otherwise).
     let voice = state.voice_on.then_some(!desired.voice_off);
+    // CREW-PLUS: how long the game has been open (a service from before ignores it).
+    let played = desired.since.map(|since| since.elapsed().as_secs());
     send(
         sink,
-        &ClientMessage::status(&desired.status, desired.version.as_deref()).with_voice(voice),
+        &ClientMessage::status(&desired.status, desired.version.as_deref())
+            .with_voice(voice)
+            .with_played(played),
     )
     .await?;
     state.sent = Some(desired);
@@ -2744,11 +2765,40 @@ mod tests {
             handle.next_event().await.unwrap(),
             PresenceEvent::Connected { .. }
         ));
-        // The new connection starts as "launcher" on the service; the client restores "playing".
+        // The new connection starts as "launcher" on the service; the client restores "playing"
+        // and (CREW-PLUS) how long the game has been open, once that is a second or more.
+        let mut restored = next_json(&mut server).await;
+        let played = restored.as_object_mut().unwrap().remove("played");
+        assert!(played.is_none_or(|played| played.as_u64().is_some_and(|s| s < 60)));
         assert_eq!(
-            next_json(&mut server).await,
+            restored,
             serde_json::json!({"t": "status", "state": "playing"})
         );
+    }
+
+    /// CREW-PLUS: a game session starts going into a game, lasts across servers and worlds, ends
+    /// back in the launcher; the service hears how long it has been open only while it plays.
+    #[test]
+    fn a_game_session_runs_from_the_game_to_the_launcher() {
+        let start = Instant::now();
+        let later = start + Duration::from_secs(90);
+        let mut out = Outgoing::default();
+        out.moved_to(LocalStatus::Playing { host: None }, start);
+        assert_eq!(out.since, Some(start));
+        out.moved_to(
+            LocalStatus::Playing {
+                host: Some("projects.gg".into()),
+            },
+            later,
+        );
+        out.moved_to(LocalStatus::Singleplayer, later);
+        assert_eq!(out.since, Some(start), "the same session");
+        assert_eq!(out.on_wire().since, Some(start));
+        out.moved_to(LocalStatus::Launcher, later);
+        assert_eq!(out.since, None);
+        assert_eq!(out.on_wire().since, None);
+        out.moved_to(LocalStatus::Singleplayer, later);
+        assert_eq!(out.since, Some(later), "a new game, a new session");
     }
 
     #[tokio::test]

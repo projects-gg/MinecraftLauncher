@@ -843,7 +843,8 @@ pub struct TeamView {
     pub members: Vec<TeamMemberView>,
     /// Friends the player invited who have not answered yet.
     pub invited: Vec<String>,
-    /// How many may be in a team.
+    /// How many may be in this crew: its cap from a service with crew caps (CREW-CAP), else the
+    /// service's `limits.teamMembers`, else 30.
     pub limit: u32,
     /// The player's own mute of this crew as it reads now (never muted from a service without
     /// `multi`; `crewNotifications` covers all crews).
@@ -918,6 +919,9 @@ pub struct CrewBadgeView {
     pub created_on: String,
     /// How many are in the crew.
     pub members: u32,
+    /// CREW-CAP: the crew's cap (none from a service before crew caps): shown beside `members`
+    /// once the crew is nearly full.
+    pub max_members: Option<u32>,
     /// The crew takes join requests from its tag's card now (always false while the service does
     /// not offer them). "Katılma isteği gönder" shows only when, besides, the wearer is the
     /// player's friend, the player is not in the crew, invited to it or waiting for its answer,
@@ -938,6 +942,7 @@ impl From<&crate::model::CrewBadge> for CrewBadgeView {
             motto: badge.motto.clone(),
             created_on: badge.created_on.clone(),
             members: badge.members,
+            max_members: badge.max_members,
             requests: badge.requests,
         }
     }
@@ -1028,6 +1033,9 @@ pub struct TeamRequestView {
     pub frame: String,
     pub motto: String,
     pub members: u32,
+    /// CREW-CAP: the crew's cap (none from a service before crew caps): shown beside `members`
+    /// once the crew is nearly full.
+    pub max_members: Option<u32>,
     /// Unix seconds.
     pub sent_at: i64,
 }
@@ -1131,6 +1139,9 @@ pub struct TeamInviteView {
     pub motto: String,
     /// How many are in the team.
     pub members: u32,
+    /// CREW-CAP: the crew's cap (none from a service before crew caps): shown beside `members`
+    /// once the crew is nearly full.
+    pub max_members: Option<u32>,
     /// The friend who invited.
     pub from: ProfileView,
     /// Unix seconds.
@@ -1149,6 +1160,9 @@ pub struct TeamLookupView {
     pub frame: String,
     pub motto: String,
     pub members: u32,
+    /// CREW-CAP: the crew's cap (none from a service before crew caps): shown beside `members`
+    /// once the crew is nearly full.
+    pub max_members: Option<u32>,
     pub relation: TeamRelation,
     /// `EKP-XXXX-XXXX`, for joining (empty when it was looked up by its invite link).
     pub code: String,
@@ -1266,6 +1280,11 @@ pub struct FriendView {
     /// Always sent; optional for the page's types, whose older views (and tests) never had it.
     #[specta(optional)]
     pub live: bool,
+    /// CREW-PLUS: while they play, when their game session began (Unix seconds, this computer's
+    /// clock): the row says how long ("25 dk"). None: not playing, or they keep "last seen" to
+    /// themselves. Optional for the page's types, as `live`.
+    #[specta(optional)]
+    pub playing_since: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]

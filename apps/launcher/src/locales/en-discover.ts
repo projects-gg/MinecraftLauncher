@@ -37,6 +37,8 @@ export const enDiscover = {
     members_other: "{{count}} members",
     membersActive_one: "{{count}} member, active this week",
     membersActive_other: "{{count}} members, active this week",
+    membersOf: "{{count}}/{{limit}} members",
+    membersOfActive: "{{count}}/{{limit}} members, active this week",
     join: "Join",
     ask: "Ask to join",
     member: "You're in this crew",

@@ -27,6 +27,7 @@ function crewOf(wire: WireCrew): DiscoverCrew {
     motto: wire.motto ?? "",
     tags: knownTags(wire.tags ?? []),
     join: wire.join ?? "open",
+    maxMembers: wire.maxMembers ?? undefined,
     active: wire.active ?? false,
   };
 }

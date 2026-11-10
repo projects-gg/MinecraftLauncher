@@ -35,7 +35,8 @@ const MAX_INVITES: usize = 30;
 const MAX_TEAM_INVITES: usize = 20;
 /// "Selam ver" stays this long after someone came in (TEAM6).
 pub const GREET_WINDOW_SECS: i64 = 600;
-/// "Ekibe katıldı" lines kept per crew (TEAM6): a crew has at most 30 members.
+/// "Ekibe katıldı" lines kept per crew (TEAM6): the latest 30 (a crew may have up to 100 members
+/// since CREW-CAP; older lines go).
 const MAX_CREW_JOINS: usize = 30;
 /// A tag that came off live (its `badge` message) and its crew's message saying the crew was
 /// hidden belong together within this long, in either order (TEAM6).
@@ -79,8 +80,8 @@ pub struct SocialState {
     seen_notices: HashSet<String>,
     /// The plans of the player's crews they see, as the service keeps them (TEAM5).
     plans: Vec<CrewPlan>,
-    /// This computer's clock minus the service's (seconds), from the last `hello`: plans carry
-    /// the service's times.
+    /// This computer's clock minus the service's (seconds), from the last `hello`: plans and
+    /// (CREW-PLUS) the start of friends' game sessions carry the service's times.
     plan_skew: i64,
     /// Who came into the player's crews while connected, in the order they came (TEAM6).
     joins: Vec<CrewJoin>,
@@ -1767,7 +1768,11 @@ impl SocialState {
             permissions: team.permissions,
             members,
             invited: entry.invited.clone(),
-            limit: overview.limits.team_members.unwrap_or(30),
+            // CREW-CAP: the crew's own cap; from an older service its single one, else 30.
+            limit: team
+                .max_members
+                .or(overview.limits.team_members)
+                .unwrap_or(30),
             notifications: entry.notifications.at(now),
             text_locked_until: team.text_locked_until.filter(|until| *until > now),
             join: team.join,
@@ -1837,6 +1842,7 @@ impl SocialState {
                             friend,
                             self.online.get(&friend.profile.id),
                             self.badge_view(&friend.profile),
+                            self.plan_skew,
                         )
                     })
                     .collect()
@@ -1933,6 +1939,7 @@ impl SocialState {
             friend,
             self.online.get(id),
             self.badge_view(&friend.profile),
+            self.plan_skew,
         ))
     }
 
@@ -2052,13 +2059,17 @@ fn moved(before: &CrewCall, next: &CrewCall) -> bool {
         || (before.server.is_some() && next.server.is_some() && before.server != next.server)
 }
 
+/// A friend as the UI shows them; `skew` is this computer's clock minus the service's (the start
+/// of their game session comes on the service's clock, CREW-PLUS).
 fn friend_view(
     friend: &Friend,
     presence: Option<&Presence>,
     badge: Option<Box<CrewBadgeView>>,
+    skew: i64,
 ) -> FriendView {
     let profile = &friend.profile;
     let online = presence.filter(|p| p.state != PresenceState::Offline);
+    let playing = online.filter(|p| p.state == PresenceState::Playing);
     FriendView {
         id: profile.id.clone(),
         name: profile.name().to_owned(),
@@ -2079,6 +2090,10 @@ fn friend_view(
         voice: online.and_then(|p| p.voice),
         // SHARE-LIVE: only while they are in a voice room (an old presence says nothing more).
         live: online.is_some_and(|p| p.live && p.voice == Some(crate::voice::PresenceVoice::In)),
+        // CREW-PLUS: when their game session began, on this computer's clock.
+        playing_since: playing
+            .and_then(|p| p.playing_since)
+            .map(|since| since.saturating_add(skew)),
     }
 }
 
@@ -2092,6 +2107,7 @@ fn team_invite_view(invite: &TeamInvite) -> TeamInviteView {
         frame: invite.team.frame.clone(),
         motto: invite.team.motto.clone(),
         members: invite.team.members,
+        max_members: invite.team.max_members,
         from: ProfileView::from(&invite.from),
         sent_at: invite.sent_at,
     }
@@ -2136,6 +2152,7 @@ fn team_request_view(request: &TeamRequest) -> TeamRequestView {
         frame: team.frame.clone(),
         motto: team.motto.clone(),
         members: team.members,
+        max_members: team.max_members,
         sent_at: request.sent_at,
     }
 }
@@ -2298,7 +2315,43 @@ mod tests {
             voice: None,
             note: None,
             live: false,
+            playing_since: None,
         }
+    }
+
+    /// CREW-PLUS: a friend's game session starts on this computer's clock (the service's time and
+    /// `hello`'s `now` set the difference), only while they play and share it.
+    #[test]
+    fn a_friend_playing_shows_when_their_session_began_on_this_clock() {
+        let mut state = loaded();
+        // The service's clock is 2 minutes behind this computer's.
+        state.apply(
+            &PresenceEvent::Connected {
+                status: StatusMode::Online,
+                friends: Vec::new(),
+                invites: Vec::new(),
+                calls: Vec::new(),
+                clock: Some(NOW - 120),
+                rel: None,
+                chat: None,
+                plans: None,
+                note: None,
+                pins: None,
+            },
+            NOW,
+        );
+        let mut playing = presence("2", PresenceState::Playing, Some(GameLocation::Projects));
+        playing.playing_since = Some(NOW - 120 - 1_500);
+        state.apply(&PresenceEvent::Presence(playing.clone()), NOW);
+        assert_eq!(
+            by_id(&state.friends(), "2").playing_since,
+            Some(NOW - 1_500)
+        );
+        // Back in the launcher (or not shared any more): nothing to show.
+        playing.state = PresenceState::Launcher;
+        playing.game = None;
+        state.apply(&PresenceEvent::Presence(playing), NOW);
+        assert_eq!(by_id(&state.friends(), "2").playing_since, None);
     }
 
     fn invite(id: &str, from: &str, at: i64, quiet: bool) -> Invite {
@@ -2845,7 +2898,31 @@ mod tests {
             hidden: false,
             badge_requests: true,
             slow: 0,
+            max_members: None,
         }
+    }
+
+    #[test]
+    fn a_crew_shows_its_own_cap_else_the_services_one() {
+        let mut state = loaded();
+        let members = [
+            ("100000000000000000", "Ben", TeamRole::Founder),
+            ("1", "Ayse_07", TeamRole::Member),
+        ];
+        // A service before crew caps: its one limit (30 in `loaded`).
+        state.team_answer(TeamAnswer {
+            team: Some(team(&members)),
+            invited: Vec::new(),
+        });
+        assert_eq!(crew_view(&state).unwrap().limit, 30);
+        // CREW-CAP: the crew's own cap wins.
+        let mut capped = team(&members);
+        capped.max_members = Some(60);
+        state.team_answer(TeamAnswer {
+            team: Some(capped),
+            invited: Vec::new(),
+        });
+        assert_eq!(crew_view(&state).unwrap().limit, 60);
     }
 
     #[test]
@@ -3390,6 +3467,7 @@ mod tests {
                 frame: "hex".into(),
                 motto: String::new(),
                 members: 4,
+                max_members: None,
                 join: crate::model::JoinMode::Open,
             },
             from: profile("2", "Bora"),
@@ -3977,6 +4055,7 @@ mod tests {
             frame: "hex".into(),
             motto: String::new(),
             members: 4,
+            max_members: Some(100),
             join: crate::model::JoinMode::Approval,
         };
         state.join_requested(TeamRequest {
@@ -4249,6 +4328,7 @@ mod tests {
             motto: "Gece bizimdir".into(),
             created_on: "2026-09-20".into(),
             members: 3,
+            max_members: None,
             requests: true,
         }
     }

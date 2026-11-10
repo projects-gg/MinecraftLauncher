@@ -13,6 +13,8 @@
 // plan. Who answered opens under the faces (the chevron): coming, maybe, can't come, five each and
 // "N kişi daha", every person with the menu they have everywhere. The card glides to its new size
 // (a transform layout animation) while what comes fades in and what goes fades out.
+//
+// CREW-PLUS: template chips over the form fill its day, time and note (plan-template-chips.tsx).
 import {
   CalendarBlank,
   CalendarPlus,
@@ -84,6 +86,7 @@ import {
   planNoteLength,
   planNoteProblem,
 } from "./plan-note";
+import { TemplateChips } from "./plan-template-chips";
 import { SocialAvatar, SocialFace } from "./social-face";
 import { useSocialUi } from "./store";
 import { RoleBadge } from "./team-member";
@@ -888,6 +891,8 @@ function PlanForm({
   const [busy, setBusy] = useState(false);
   const [taken, setTaken] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // CREW-PLUS: a template's name is being written: "Planla" waits for it.
+  const [renaming, setRenaming] = useState(false);
   const lineId = useId();
   const day = dayOf(at, days) ?? days[0];
   const times = useMemo(() => (day ? planTimes(day, opened) : []), [day, opened]);
@@ -905,7 +910,7 @@ function PlanForm({
     setError(null);
   };
   const submit = async () => {
-    if (problem || busy) return;
+    if (problem || busy || renaming) return;
     const existing = plans.find((plan) => plan.at === at);
     if (existing) {
       setTaken(true);
@@ -937,6 +942,21 @@ function PlanForm({
         void submit();
       }}
     >
+      {/* CREW-PLUS: a template fills the day, the time and the note; anything stays editable. */}
+      <TemplateChips
+        days={days}
+        day={day}
+        opened={opened}
+        at={at}
+        note={note}
+        notes={notes}
+        onFill={(next, nextNote) => {
+          move(next);
+          if (notes) setNote(nextNote);
+        }}
+        onRefuse={setError}
+        onRenaming={setRenaming}
+      />
       <Segmented<string>
         value={day.key}
         onValueChange={(key) => {
@@ -970,7 +990,12 @@ function PlanForm({
         <Button size="sm" variant="ghost" onClick={onDone}>
           {t("teams.cancel")}
         </Button>
-        <Button type="submit" size="sm" variant="primary" disabled={busy || Boolean(problem)}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="primary"
+          disabled={busy || Boolean(problem) || renaming}
+        >
           {t("crewWave2.plans.form.submit")}
         </Button>
       </div>

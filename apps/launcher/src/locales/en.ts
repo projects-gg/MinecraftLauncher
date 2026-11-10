@@ -17,6 +17,8 @@ import { enCloudAfk } from "./en-cloud-afk";
 import { enCloudAfkFeat } from "./en-cloud-afk-feat";
 import { enCloudAfkMove } from "./en-cloud-afk-move";
 import { enCloudStale } from "./en-cloud-stale";
+import { enCrewPlus } from "./en-crew-plus";
+import { enCrewUi } from "./en-crew-ui";
 import { enCrewWave2 } from "./en-crew-wave2";
 import { enCrews } from "./en-crews";
 import { enDiscordPlace } from "./en-discord-place";
@@ -330,6 +332,7 @@ export const en: DeepPartial<Strings> = {
   safety: enSafety,
   help: enHelp,
   crewWave2: enCrewWave2,
+  crewPlus: enCrewPlus,
   overlay: enOverlay,
   fastPack: enFastPack,
   packEdit: enPackEdit,
@@ -367,6 +370,7 @@ export const en: DeepPartial<Strings> = {
   socNext: enSocNext,
   socNote: enSocNote,
   telemetry: enTelemetry,
+  crewUi: enCrewUi,
   tweaks: enTweaks,
   nav: {
     home: "Home",

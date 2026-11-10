@@ -123,6 +123,7 @@ function badge(v: CrewBadgeView | null | undefined): CrewBadge | undefined {
         motto: v.motto,
         createdOn: v.createdOn,
         members: v.members,
+        maxMembers: opt(v.maxMembers),
         requests: v.requests,
       }
     : undefined;
@@ -148,6 +149,8 @@ function friend(v: FriendView): Friend {
     voice: opt(v.voice),
     // SHARE-LIVE: they share their screen in a room ("YAYINDA" beside their name; `presence.live`).
     voiceLive: v.live === true || undefined,
+    // CREW-PLUS: when their game session began, on this computer's clock (`presence.playingSince`).
+    playingSince: opt(v.playingSince),
   };
 }
 
@@ -409,6 +412,7 @@ function teamRequest(v: TeamRequestView): TeamRequest {
     frame: v.frame,
     motto: v.motto,
     members: v.members,
+    maxMembers: opt(v.maxMembers),
     sentAt: v.sentAt,
   };
 }
@@ -443,6 +447,7 @@ function teamLookup(v: TeamLookupView): TeamLookup {
     frame: v.frame,
     motto: v.motto,
     members: v.members,
+    maxMembers: opt(v.maxMembers),
     relation: v.relation,
     code: v.code,
     link: opt(v.link),
@@ -500,6 +505,7 @@ function teamInvite(v: TeamInviteView): TeamInvite {
     frame: v.frame,
     motto: v.motto,
     members: v.members,
+    maxMembers: opt(v.maxMembers),
     from: profile(v.from),
     sentAt: v.sentAt,
   };

@@ -66,7 +66,6 @@ function tell(due: DuePlan, crew: SocialTeam): boolean {
     const ui = useSocialUi.getState();
     ui.openPanel({ page: "team" });
     ui.setCrewTab(crew.id);
-    ui.setCrewPane("crew");
   };
   if (windowAway()) {
     if (!usePrefs.getState().desktopNotifications) return false;

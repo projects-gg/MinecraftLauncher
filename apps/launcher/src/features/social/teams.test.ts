@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { describe, expect, it } from "vitest";
 import type { SocialTeam, TeamMember } from "@/lib/api/social-types";
 import {
@@ -8,6 +9,7 @@ import {
   crewAnniversary,
   crewOnProjects,
   crewRights,
+  crewSize,
   DEFAULT_PERMISSIONS,
   daysSince,
   formatTeamCodeInput,
@@ -15,6 +17,7 @@ import {
   membersMayHave,
   mottoLength,
   mottoProblem,
+  nearlyFull,
   normalizeTeamCode,
   rosterGroups,
   rosterOrder,
@@ -296,5 +299,31 @@ describe("the crew's days", () => {
     const now = Date.UTC(2026, 9, 20, 12);
     expect(daysSince(now / 1000 - 12 * 86_400 - 60, now)).toBe(12);
     expect(daysSince(now / 1000 - 60, now)).toBe(0);
+  });
+});
+
+describe("crew size (CREW-CAP)", () => {
+  const t = ((key: string, values?: Record<string, unknown>) =>
+    values ? `${key} ${JSON.stringify(values)}` : key) as unknown as TFunction;
+
+  it("is nearly full from 90% of the cap", () => {
+    expect(nearlyFull(89, 100)).toBe(false);
+    expect(nearlyFull(90, 100)).toBe(true);
+    expect(nearlyFull(100, 100)).toBe(true);
+    // A cap lowered below the crew: still (over) full, nobody leaves.
+    expect(nearlyFull(105, 60)).toBe(true);
+    expect(nearlyFull(26, 30)).toBe(false);
+    expect(nearlyFull(27, 30)).toBe(true);
+    expect(nearlyFull(1, 2)).toBe(false);
+    expect(nearlyFull(2, 2)).toBe(true);
+    // No cap (an older service): never.
+    expect(nearlyFull(29, undefined)).toBe(false);
+  });
+
+  it("shows the cap beside the count only then", () => {
+    expect(crewSize(t, 12, 100)).toBe('teams.members {"count":12}');
+    expect(crewSize(t, 89, 100)).toBe('teams.members {"count":89}');
+    expect(crewSize(t, 92, 100)).toBe('teams.membersOf {"count":92,"limit":100}');
+    expect(crewSize(t, 30, undefined)).toBe('teams.members {"count":30}');
   });
 });

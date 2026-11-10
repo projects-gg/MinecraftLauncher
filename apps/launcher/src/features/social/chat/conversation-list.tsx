@@ -1,7 +1,7 @@
 // "Mesajlar": the player's conversations, the newest first: a friend's picture with presence or a
 // crew's mark, the name, the last message ("Sen: …" for the player's own), when, and how many are
 // unread (gold). A conversation muted here carries a struck bell; one whose message did not go says
-// so. A press opens it (a friend's on the chat page, a crew's on its crew page, "Sohbet"). Its
+// so. A press opens it on the chat page, a crew's too (CREW-UI; "Geri" comes back here). Its
 // right click (Shift+F10, the menu key) is the friend's own menu, or the crew's "Sohbeti aç" and
 // "Ekibi aç" (FIX2). CHAT2: a sticker reads "Çıkartma: GG"; while someone writes there, the
 // last line is a quiet "yazıyor…" (screen readers are not told). A friend's row carries the crew
@@ -16,7 +16,6 @@
 // crew's. Up to three pinned conversations lead the list (a quiet pin by their time); one marked
 // unread here counts one. A direct conversation with someone the player ignores is faded.
 import {
-  At,
   BellSlash,
   ChatsCircle,
   EyeSlash,
@@ -36,9 +35,7 @@ import { enter, glide, leave, useSocialMotion } from "../motion";
 import { conversationItems, ListClearDialog } from "../next/conv-actions";
 import { livePins, shownUnread, withPinsFirst } from "../next/conv-menu";
 import { useSocNext } from "../next/flag";
-import { useMentionMarks } from "../next/mention-marks";
-import { mentionOf } from "../next/mentions";
-import { realNameOf } from "../next/nickname";
+import { useMentionShown } from "../next/mention-marks";
 import { useSocNextPrefs } from "../next/prefs";
 import { useMarks } from "../person-mark";
 import { PersonContextMenu, type PersonRef } from "../person-menu";
@@ -50,6 +47,7 @@ import { chatMutedNow, conversationFace, peerOf, tombstoneKind } from "./convers
 import { useChatExtras } from "./extras";
 import { stickerName } from "./preview";
 import { onlineIn, useTyping, useTypingFeed, writersOf } from "./typing";
+import { UnreadChip } from "./unread-chip";
 
 /** A crew conversation's right click: its chat (the row's press) and its crew page. */
 function CrewRowMenu({
@@ -188,23 +186,7 @@ function Row({
   const marks = useMarks(face.person?.marks);
   // SOC-NEXT §3.1: an unread crew message that mentions the player puts "@" by the count (one
   // that came live, or the newest when the launcher was closed meanwhile).
-  const markedMention = useMentionMarks((s) => next && Boolean(s.convs[conversation.id]));
-  const me = view.me?.id;
-  const mentioned =
-    next &&
-    unread &&
-    (markedMention ||
-      Boolean(
-        face.crew &&
-          last &&
-          !last.mine &&
-          !gone &&
-          mentionOf(
-            last.text,
-            me,
-            face.crew.members.map((m) => ({ id: m.id, name: realNameOf(m) })),
-          ) !== "none",
-      ));
+  const mentioned = useMentionShown(conversation, unread, face.crew, view.me?.id);
   const label = [
     badgeRowLabel(name, badge, t, marks),
     unread ? t("chat.list.unread", { count }) : null,
@@ -314,21 +296,7 @@ function Row({
               {last ? listStamp(last.at, nowMs, t("chat.day.yesterday")) : null}
             </span>
           ) : null}
-          <AnimatePresence initial={false}>
-            {unread ? (
-              <motion.span
-                key="unread"
-                aria-hidden
-                className="chamfer flex h-[18px] min-w-[18px] items-center justify-center gap-px bg-gold-500 px-1 font-display text-[11px] font-semibold text-gold-ink tabular-nums [--cut:4px]"
-                initial={{ opacity: 0, transform: "scale(0.8)" }}
-                animate={{ opacity: 1, transform: "scale(1)", transition: enter(0.2) }}
-                exit={{ opacity: 0, transform: "scale(0.8)", transition: leave(0.14) }}
-              >
-                {mentioned ? <At size={11} weight="bold" aria-hidden /> : null}
-                {count > 99 ? "99+" : count}
-              </motion.span>
-            ) : null}
-          </AnimatePresence>
+          <UnreadChip count={count} mentioned={mentioned} />
         </span>
       </button>
     </RowMenu>

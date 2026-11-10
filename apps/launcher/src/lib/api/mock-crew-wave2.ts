@@ -14,7 +14,9 @@
 // - FIX2: plans carry notes ("Bedwars, sesli gelin"), written with the plan or later by its maker,
 //   cleared by the crew's leaders (`&fix2=0`: a service from before notes); a note with "küfür"
 //   in it is turned away as the service's word list would; `&crowd=1` puts 22 more crewmates in
-//   the crew, most of them answering the first plan (its answers list pages).
+//   the crew, most of them answering the first plan (its answers list pages);
+// - CREW-CAP: `&cap=<n>` gives every crew its own cap of n members (the count shows "30/32 üye"
+//   once the crew is nearly full, "8 üye" before).
 
 import { cleanPlanNote, planNoteProblem } from "@/features/social/plan-note";
 import type {
@@ -175,7 +177,7 @@ function crowded(team: SocialTeam): SocialTeam {
     joinedAt: now() - (index + 2) * 86_400,
     togetherMonth: 0,
   }));
-  return { ...team, members: [...team.members, ...extra], limit: 30 };
+  return { ...team, members: [...team.members, ...extra] };
 }
 
 /** The crowd's answers to a plan: most come, some may, a few cannot. */
@@ -334,9 +336,11 @@ export function wave2Snapshot(
   const on = wave2On(ctx.param) && snapshot.crew.look;
   const notes = on && ctx.param("fix2") !== "0";
   const crowd = ctx.param("crowd") !== null;
+  const cap = Number(ctx.param("cap"));
   const crews = snapshot.crews.map((team, index) => {
     const second = wave2Team(team, ctx.scenario, on);
-    return crowd && index === 0 ? crowded(second) : second;
+    const filled = crowd && index === 0 ? crowded(second) : second;
+    return Number.isInteger(cap) && cap > 1 ? { ...filled, limit: cap } : filled;
   });
   const waits =
     (ctx.scenario === "crewAsk" && ctx.param("asked") !== null) || ctx.scenario === "crewAccepted";

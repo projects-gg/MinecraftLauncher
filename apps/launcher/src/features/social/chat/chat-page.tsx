@@ -263,7 +263,11 @@ export function ChatHeader() {
             </div>
             {peer ? (
               <p className="truncate text-[12px] text-ash-300">
-                {ignoring ? <IgnoredLine friend={peer} /> : <PresenceText friend={peer} t={t} />}
+                {ignoring ? (
+                  <IgnoredLine friend={peer} />
+                ) : (
+                  <PresenceText friend={peer} t={t} played />
+                )}
               </p>
             ) : null}
           </div>

@@ -139,6 +139,8 @@ export interface CrewBadge extends CrewLook {
   createdOn: string;
   /** How many are in the crew. */
   members: number;
+  /** CREW-CAP: the crew's cap (absent from a service before it); shown once nearly full. */
+  maxMembers?: number;
   /** The crew takes join requests from its tag now: its setting, Studio's switch, not full and
    * fewer than 10 such requests today (the service decides; the player's own conditions are the
    * launcher's). */
@@ -168,6 +170,12 @@ export interface Friend extends SocialProfile {
   voiceLive?: boolean;
   /** SOC-NOTE: their status note while they are online and notes are on (`chat.socNote.notes`). */
   note?: StatusNote;
+  /**
+   * CREW-PLUS: while they play, when their game session began (Unix seconds, this computer's
+   * clock, down to five minutes): the line says how long ("25 dk"). Absent: not playing, or they
+   * keep "last seen" to themselves (the service then sends nothing).
+   */
+  playingSince?: number;
 }
 
 /** SOC-NOTE: a status note, one line of at most 40 characters for friends; `until`: Unix seconds
@@ -694,6 +702,8 @@ export interface TeamRequest extends CrewLook {
   tag: string;
   motto: string;
   members: number;
+  /** CREW-CAP: the crew's cap (absent from a service before it); shown once nearly full. */
+  maxMembers?: number;
   /** Unix seconds. */
   sentAt: number;
 }
@@ -882,6 +892,8 @@ export interface TeamInvite extends CrewLook {
   tag: string;
   motto: string;
   members: number;
+  /** CREW-CAP: the crew's cap (absent from a service before it); shown once nearly full. */
+  maxMembers?: number;
   from: SocialProfile;
   /** Unix seconds. */
   sentAt: number;
@@ -893,6 +905,8 @@ export interface TeamLookup extends CrewLook {
   tag: string;
   motto: string;
   members: number;
+  /** CREW-CAP: the crew's cap (absent from a service before it); shown once nearly full. */
+  maxMembers?: number;
   relation: TeamRelation;
   /** `EKP-XXXX-XXXX` (empty when it was looked up by its invite link). */
   code: string;

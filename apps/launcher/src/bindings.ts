@@ -4606,6 +4606,11 @@ export type CrewBadgeView = {
 	/**  How many are in the crew. */
 	members: number,
 	/**
+	 *  CREW-CAP: the crew's cap (none from a service before crew caps): shown beside `members`
+	 *  once the crew is nearly full.
+	 */
+	maxMembers: number | null,
+	/**
 	 *  The crew takes join requests from its tag's card now (always false while the service does
 	 *  not offer them). "Katılma isteği gönder" shows only when, besides, the wearer is the
 	 *  player's friend, the player is not in the crew, invited to it or waiting for its answer,
@@ -4876,6 +4881,11 @@ export type DiscoverCrew = {
 	tags?: string[],
 	join?: JoinMode,
 	members: number,
+	/**
+	 *  CREW-CAP: the crew's cap when the listing was made (its own, else the service's default);
+	 *  none from a service before crew caps (its cap was 30).
+	 */
+	maxMembers?: number | null,
 	/**  At least 3 members (all of a smaller crew) were on in the last 7 days. */
 	active?: boolean,
 };
@@ -5309,6 +5319,12 @@ export type FriendView_Deserialize = {
 	 *  Always sent; optional for the page's types, whose older views (and tests) never had it.
 	 */
 	live?: boolean,
+	/**
+	 *  CREW-PLUS: while they play, when their game session began (Unix seconds, this computer's
+	 *  clock): the row says how long ("25 dk"). None: not playing, or they keep "last seen" to
+	 *  themselves. Optional for the page's types, as `live`.
+	 */
+	playingSince?: number | null,
 };
 
 export type FriendView_Serialize = {
@@ -5344,6 +5360,12 @@ export type FriendView_Serialize = {
 	 *  Always sent; optional for the page's types, whose older views (and tests) never had it.
 	 */
 	live?: boolean,
+	/**
+	 *  CREW-PLUS: while they play, when their game session began (Unix seconds, this computer's
+	 *  clock): the row says how long ("25 dk"). None: not playing, or they keep "last seen" to
+	 *  themselves. Optional for the page's types, as `live`.
+	 */
+	playingSince?: number | null,
 };
 
 export type Game = Game_Serialize | Game_Deserialize;
@@ -7615,6 +7637,11 @@ export type OverlayConfig = {
 	 */
 	next?: SocNextPrefs | null,
 	/**
+	 *  CREW-PLUS: the player's own crew plan templates (the launcher's plan form keeps them): the
+	 *  game's plan form shows them after its built-in ones. Optional for the page's types.
+	 */
+	planTemplates?: PlanTemplate[],
+	/**
 	 *  The mod's client tweaks (DIALOG-FOCUS, each on by default): small fixes to the game's own
 	 *  screens, which the mod runs whatever the other two switches say ([`crate::tweaks`]). A
 	 *  game started now gets them on its command line; one running keeps those it started with.
@@ -7929,6 +7956,27 @@ export type PlanAnswer = "yes" | "maybe" | "no";
 export type PlanAnswerView = {
 	id: string,
 	answer: PlanAnswer,
+};
+
+/**
+ *  CREW-PLUS: one of the player's own crew plan templates ("Şablonlara Ekle" in the launcher's
+ *  plan form): a day relative to the day it is used, a time of day and a note. Never a date.
+ */
+export type PlanTemplate = {
+	/**  Its name on the chip (1–24 characters). */
+	name: string,
+	/**
+	 *  `today`, `tomorrow`, or the next of a weekday: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`,
+	 *  `sun` (today when it is that day and the time is still ahead).
+	 */
+	day: string,
+	/**  Minutes after midnight, a whole quarter of an hour (0–1425). */
+	time: number,
+	/**
+	 *  The plan's note, one line of at most 80 characters ("": none). Always there, both ways: the
+	 *  page's types stay one (serde attributes that differ by direction split them in two).
+	 */
+	note: string,
 };
 
 /**  "Planlar": a time to meet on Projects in one of the player's crews. */
@@ -11487,6 +11535,11 @@ export type TeamInviteView = {
 	motto: string,
 	/**  How many are in the team. */
 	members: number,
+	/**
+	 *  CREW-CAP: the crew's cap (none from a service before crew caps): shown beside `members`
+	 *  once the crew is nearly full.
+	 */
+	maxMembers: number | null,
 	/**  The friend who invited. */
 	from: ProfileView,
 	/**  Unix seconds. */
@@ -11503,6 +11556,11 @@ export type TeamLookupView = {
 	frame: string,
 	motto: string,
 	members: number,
+	/**
+	 *  CREW-CAP: the crew's cap (none from a service before crew caps): shown beside `members`
+	 *  once the crew is nearly full.
+	 */
+	maxMembers: number | null,
 	relation: TeamRelation,
 	/**  `EKP-XXXX-XXXX`, for joining (empty when it was looked up by its invite link). */
 	code: string,
@@ -11665,6 +11723,11 @@ export type TeamRequestView = {
 	frame: string,
 	motto: string,
 	members: number,
+	/**
+	 *  CREW-CAP: the crew's cap (none from a service before crew caps): shown beside `members`
+	 *  once the crew is nearly full.
+	 */
+	maxMembers: number | null,
 	/**  Unix seconds. */
 	sentAt: number,
 };
@@ -11713,7 +11776,10 @@ export type TeamView_Deserialize = {
 	members: TeamMemberView_Deserialize[],
 	/**  Friends the player invited who have not answered yet. */
 	invited: string[],
-	/**  How many may be in a team. */
+	/**
+	 *  How many may be in this crew: its cap from a service with crew caps (CREW-CAP), else the
+	 *  service's `limits.teamMembers`, else 30.
+	 */
 	limit: number,
 	/**
 	 *  The player's own mute of this crew as it reads now (never muted from a service without
@@ -11788,7 +11854,10 @@ export type TeamView_Serialize = {
 	members: TeamMemberView_Serialize[],
 	/**  Friends the player invited who have not answered yet. */
 	invited: string[],
-	/**  How many may be in a team. */
+	/**
+	 *  How many may be in this crew: its cap from a service with crew caps (CREW-CAP), else the
+	 *  service's `limits.teamMembers`, else 30.
+	 */
 	limit: number,
 	/**
 	 *  The player's own mute of this crew as it reads now (never muted from a service without

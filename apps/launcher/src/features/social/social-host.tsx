@@ -40,7 +40,7 @@ import { usePrefs } from "@/stores/prefs";
 import { attempt, notifyOutside } from "./actions";
 import { sayJoined } from "./badge-actions";
 import { useChat } from "./chat/chat-store";
-import { chatMutedNow, crewOf } from "./chat/conversations";
+import { chatMutedNow } from "./chat/conversations";
 import {
   ChatNotices,
   type ChatNoticeWay,
@@ -84,8 +84,16 @@ import { NoticeDialog } from "./notice-dialog";
 import { MarkedSentence } from "./person-mark";
 import { PersonAskDialog } from "./person-menu";
 import { PlanReminders } from "./plan-reminders";
+import { plainTemplates, usePlanTemplates } from "./plan-templates";
+import { usePlayedTicker } from "./played";
 import { ReportDialog } from "./report-dialog";
-import { friendListShown, useSocialPrefs, useSocialUi } from "./store";
+import {
+  conversationShown,
+  crewPageShown,
+  friendListShown,
+  useSocialPrefs,
+  useSocialUi,
+} from "./store";
 import { useCallTicker } from "./use-call-clock";
 
 /** A friend coming online or joining projects.gg notifies at most this often. */
@@ -186,7 +194,6 @@ function showCrew(id: string) {
   const ui = useSocialUi.getState();
   ui.openPanel({ page: "team" });
   ui.setCrewTab(id);
-  ui.setCrewPane("crew");
 }
 
 /** A click on a friend's or an invite's system notification: the friends list. */
@@ -203,13 +210,7 @@ function showCalledCrew(crews: string[]) {
 
 /** That crew's page is on screen (the panel open on it). */
 function crewInView(id: string): boolean {
-  const ui = useSocialUi.getState();
-  if (!ui.open || ui.page !== "team" || ui.crewPane !== "crew") return false;
-  const crews = ui.view.crews;
-  const shown = ui.view.crew.multi
-    ? (crews.find((crew) => crew.id === ui.crewTab) ?? crews[0])
-    : crews[0];
-  return shown?.id === id;
+  return crewPageShown(useSocialUi.getState(), id);
 }
 
 function handleNotice(notice: SocialNotice) {
@@ -457,18 +458,9 @@ function handleNotice(notice: SocialNotice) {
   }
 }
 
-/** A conversation is on screen: a friend's chat page, or the crew page on that crew's "Sohbet". */
+/** A conversation is on screen: the chat page shows it (a friend's or, CREW-UI, a crew's). */
 function chatOnScreen(conv: string): boolean {
-  const ui = useSocialUi.getState();
-  if (!ui.open) return false;
-  if (ui.page === "chat") return ui.chatConv === conv;
-  const team = crewOf(conv);
-  if (ui.page !== "team" || ui.crewPane !== "chat" || !team) return false;
-  const shown =
-    ui.crewTab && ui.view.crews.some((c) => c.id === ui.crewTab)
-      ? ui.crewTab
-      : ui.view.crews[0]?.id;
-  return shown === team;
+  return conversationShown(useSocialUi.getState(), conv);
 }
 
 /** A new chat message from someone else: a toast, a system notification, or nothing (notify.ts);
@@ -681,6 +673,8 @@ async function currentBackup() {
       // SOC-NEXT: who the player ignores and the pinned conversations (ids only).
       ignored: useSocNextPrefs.getState().ignored,
       pinnedChats: useSocNextPrefs.getState().pinnedChats,
+      // CREW-PLUS: the player's own crew plan templates.
+      planTemplates: plainTemplates(usePlanTemplates.getState().own),
     },
     voice,
   );
@@ -745,6 +739,10 @@ function useBackupSync() {
         schedule(BACKUP_DEBOUNCE_MS);
       }
     });
+    // CREW-PLUS: a template saved, renamed or deleted.
+    const stopTemplates = usePlanTemplates.subscribe((now, before) => {
+      if (now.own !== before.own) schedule(BACKUP_DEBOUNCE_MS);
+    });
     // Voice chat's settings and per-person choices, changed here or in the game's overlay.
     const stopVoice = useVoiceUi.subscribe((now, before) => {
       if (now.state.backupRev !== before.state.backupRev) schedule(BACKUP_DEBOUNCE_MS);
@@ -754,6 +752,7 @@ function useBackupSync() {
       stopPrefs();
       stopSocial();
       stopNext();
+      stopTemplates();
       stopVoice();
     };
   }, [ready, enabled]);
@@ -819,6 +818,10 @@ function RestoreDialog() {
         ignored: read.friends.ignored,
         pinnedChats: read.friends.pinnedChats,
       });
+      // CREW-PLUS: the player's own plan templates (a backup from before has none: kept as they are).
+      if (read.friends.planTemplates) {
+        usePlanTemplates.getState().replace(read.friends.planTemplates);
+      }
       // "Sesli sohbet": the launcher reads and bounds it (this computer's devices stay); a part it
       // cannot read leaves the rest applied.
       if (read.voice) await voiceApi.restore(read.voice).catch(() => undefined);
@@ -867,6 +870,8 @@ export function SocialHost() {
   useSocialSync();
   useBackupSync();
   useCallTicker();
+  // CREW-PLUS: friends' play time, redrawn only while the panel shows it.
+  usePlayedTicker();
   // The in-game overlay follows the friends notification choices (features/overlay).
   useOverlaySync();
   // "Yazıyor…" frames are kept from the start, so a list or a conversation that opens shows who

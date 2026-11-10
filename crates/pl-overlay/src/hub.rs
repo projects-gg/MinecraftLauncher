@@ -78,6 +78,10 @@ pub struct OverlayConfig {
     /// `features.socNext` is on (the page's `useSocNext`); none: nothing of SOC-NEXT reaches the
     /// game and everything is as before.
     pub next: Option<SocNextPrefs>,
+    /// CREW-PLUS: the player's own crew plan templates (the launcher's plan form keeps them): the
+    /// game's plan form shows them after its built-in ones. Optional for the page's types.
+    #[specta(optional)]
+    pub plan_templates: Vec<crate::protocol::PlanTemplate>,
     /// The mod's client tweaks (DIALOG-FOCUS, each on by default): small fixes to the game's own
     /// screens, which the mod runs whatever the other two switches say ([`crate::tweaks`]). A
     /// game started now gets them on its command line; one running keeps those it started with.
@@ -113,6 +117,7 @@ impl Default for OverlayConfig {
             reduced_motion: false,
             emoji: true,
             next: None,
+            plan_templates: Vec::new(),
             tweaks: ClientTweaks::default(),
         }
     }
