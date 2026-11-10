@@ -168,6 +168,12 @@ export interface Friend extends SocialProfile {
   voiceLive?: boolean;
   /** SOC-NOTE: their status note while they are online and notes are on (`chat.socNote.notes`). */
   note?: StatusNote;
+  /**
+   * CREW-PLUS: while they play, when their game session began (Unix seconds, this computer's
+   * clock, down to five minutes): the line says how long ("25 dk"). Absent: not playing, or they
+   * keep "last seen" to themselves (the service then sends nothing).
+   */
+  playingSince?: number;
 }
 
 /** SOC-NOTE: a status note, one line of at most 40 characters for friends; `until`: Unix seconds

@@ -6,6 +6,7 @@ import { useSocNext } from "@/features/social/next/flag";
 import { useSocNextPrefs } from "@/features/social/next/prefs";
 import { useStreamerOn } from "@/features/social/next/streamer";
 import { useWaitPrefs } from "@/features/social/next/wait-prefs";
+import { plainTemplates, usePlanTemplates } from "@/features/social/plan-templates";
 import { changeStatus, changeStatusFor } from "@/features/social/status-menu";
 import { useSocialPrefs, useSocialUi } from "@/features/social/store";
 import { api } from "@/lib/api";
@@ -48,6 +49,9 @@ export function useOverlaySync() {
   const ignored = useSocNextPrefs((s) => s.ignored);
   const timer = useSocNextPrefs((s) => s.statusTimer);
   const streamer = useStreamerOn();
+  // CREW-PLUS: the player's own crew plan templates, beside the game's built-in ones.
+  const ownTemplates = usePlanTemplates((s) => s.own);
+  const planTemplates = useMemo(() => plainTemplates(ownTemplates), [ownTemplates]);
   const next = useMemo(
     () =>
       socNext
@@ -79,6 +83,7 @@ export function useOverlaySync() {
           joinRequests,
         },
         next,
+        planTemplates,
       })
       .catch(() => {
         // The next change (or the next start) tells it again.
@@ -96,6 +101,7 @@ export function useOverlaySync() {
     joinRequests,
     reducedMotion,
     next,
+    planTemplates,
   ]);
 
   useEffect(() => {

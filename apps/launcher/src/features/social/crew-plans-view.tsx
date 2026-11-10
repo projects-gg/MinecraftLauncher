@@ -13,6 +13,8 @@
 // plan. Who answered opens under the faces (the chevron): coming, maybe, can't come, five each and
 // "N kişi daha", every person with the menu they have everywhere. The card glides to its new size
 // (a transform layout animation) while what comes fades in and what goes fades out.
+//
+// CREW-PLUS: template chips over the form fill its day, time and note (plan-template-chips.tsx).
 import {
   CalendarBlank,
   CalendarPlus,
@@ -84,6 +86,7 @@ import {
   planNoteLength,
   planNoteProblem,
 } from "./plan-note";
+import { TemplateChips } from "./plan-template-chips";
 import { SocialAvatar, SocialFace } from "./social-face";
 import { useSocialUi } from "./store";
 import { RoleBadge } from "./team-member";
@@ -937,6 +940,20 @@ function PlanForm({
         void submit();
       }}
     >
+      {/* CREW-PLUS: a template fills the day, the time and the note; anything stays editable. */}
+      <TemplateChips
+        days={days}
+        day={day}
+        opened={opened}
+        at={at}
+        note={note}
+        notes={notes}
+        onFill={(next, nextNote) => {
+          move(next);
+          if (notes) setNote(nextNote);
+        }}
+        onRefuse={setError}
+      />
       <Segmented<string>
         value={day.key}
         onValueChange={(key) => {
