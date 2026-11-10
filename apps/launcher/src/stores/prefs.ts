@@ -62,6 +62,13 @@ interface PrefsState {
    */
   chatEmoji: boolean;
   /**
+   * Settings → Genel "Sunucu Pencerelerinde İlk Yazı Kutusunu Seç" (DIALOG-FOCUS), one of the
+   * overlay mod's client tweaks: a server window with a text box opens with its first box ready
+   * to type in. The mod goes into an install for it too, with the two switches above off as well
+   * (features/overlay/tweaks.ts, Rust's `ClientTweaks`).
+   */
+  dialogFocus: boolean;
+  /**
    * Settings → Genel "Hızlı kaynak paketi yükleme" (FASTPACK): the official pack installs its
    * fast-pack mods while Studio's `features.fastPacks` is on too (features/fastpack, src-tauri
    * fastpack.rs).
@@ -142,6 +149,7 @@ export const usePrefs = create<PrefsState>()(
       copyScreenshots: false,
       inGameOverlay: true,
       chatEmoji: true,
+      dialogFocus: true,
       fastPacks: true,
       updateChannel: "stable",
       autoDownloadUpdates: true,
@@ -177,7 +185,7 @@ export const usePrefs = create<PrefsState>()(
         }),
       setPerformanceMode: (performanceMode) => set({ performanceMode, perfTouched: true }),
     }),
-    { name: "pl.prefs", version: 4, migrate: migratePrefs },
+    { name: "pl.prefs", version: 5, migrate: migratePrefs },
   ),
 );
 
@@ -194,6 +202,12 @@ export const usePrefs = create<PrefsState>()(
  * default "quit". The store saves every value, so a saved `true` cannot tell the untouched
  * default from a choice; nearly all of them are the default, and a saved `false` already meant
  * quitting.
+ *
+ * Version 5 (DIALOG-FOCUS, 10 Nov 2026): the overlay mod's client tweaks come on by default and
+ * bring the mod into an install by themselves. A player with "Oyun içi katman" and "Sohbette
+ * emoji seçici" both off took the mod out of their games (or the crash help did): the tweaks start
+ * off for them, so the mod stays out (Rust's saved copy moves the same way,
+ * `OverlayConfig::from_saved`).
  */
 export function migratePrefs(persisted: unknown, version: number): PrefValues {
   const prefs = {
@@ -203,6 +217,9 @@ export function migratePrefs(persisted: unknown, version: number): PrefValues {
   if (version < 4) {
     delete prefs.closeToTray;
     prefs.closeBehavior = "quit";
+  }
+  if (version < 5 && prefs.inGameOverlay === false && prefs.chatEmoji === false) {
+    prefs.dialogFocus = false;
   }
   return prefs as PrefValues;
 }

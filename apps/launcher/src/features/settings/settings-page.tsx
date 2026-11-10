@@ -48,7 +48,7 @@ import { FastPackRow } from "@/features/fastpack/settings-row";
 import { HelpSection } from "@/features/help/help-panel";
 import { platformName } from "@/features/home/community-links";
 import { SOURCE_URL } from "@/features/home/stars";
-import { EmojiRow, OverlayRow } from "@/features/overlay/settings-row";
+import { DialogFocusRow, EmojiRow, OverlayRow } from "@/features/overlay/settings-row";
 import { FriendsSettingsSection } from "@/features/social/settings-section";
 import { useSocialUi } from "@/features/social/store";
 import { UpdateChannelRow } from "@/features/updates/channel-row";
@@ -219,6 +219,9 @@ function General() {
       <OverlayRow />
       {/* The same mod's emoji picker in the game's chat (CHAT-EMOJI), right under its switch. */}
       <EmojiRow />
+      {/* The same mod's client tweaks (DIALOG-FOCUS): not under the overlay's switch, so a player
+          with the panel off keeps them. */}
+      <DialogFocusRow />
       {/* The official pack's other launcher-owned mods (FASTPACK; only while Studio's flag is on). */}
       <FastPackRow />
       <Row title={t("shotCopy.setting")} help={t("shotCopy.settingHelp")}>

@@ -60,13 +60,17 @@ export const REPORT_SCHEMA = 1;
 export const LABEL = "overlay-auto";
 export const LABEL_READY = "overlay-ready";
 export const LABEL_COMPAT = "overlay-compat";
-/** The screenshots the game test takes (src/gametest): all of them, or it did not run through. */
+/**
+ * The screenshots the game test takes (src/gametest): all of them, or it did not run through. The last is the client
+ * tweaks' test (DIALOG-FOCUS: a server window's first text box with the typing in it).
+ */
 export const GAMETEST_SHOTS = [
   "overlay-title",
   "overlay-world",
   "overlay-pause",
   "overlay-panel",
   "overlay-emoji",
+  "overlay-dialog",
 ];
 
 /**

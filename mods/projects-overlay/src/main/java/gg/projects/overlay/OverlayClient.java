@@ -87,6 +87,7 @@ import org.slf4j.LoggerFactory;
  * Entry point. Without the launcher's bridge properties (another launcher, or an old Projects Launcher) the
  * mod registers nothing at all: no key, no threads, no HUD layer. With "Oyun içi katman" off and "Sohbette emoji seçici"
  * on (CHAT-EMOJI: {@code -Dprojects.overlay.panel=off}) it runs the chat's emoji picker alone ({@link #startPickerOnly}).
+ * The client tweaks the launcher switched on (DIALOG-FOCUS, their own property) start first, bridge or not.
  */
 public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.Host {
     public static final String MOD_ID = "projects_overlay";
@@ -176,6 +177,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
 
     @Override
     public void onInitializeClient() {
+        // DIALOG-FOCUS: the client tweaks need nothing else of the mod (no bridge, no panel) and never stop it.
+        gg.projects.overlay.tweaks.ClientTweaks.start();
         BridgeConfig config = BridgeConfig.fromSystemProperties();
         if (config == null) {
             LOG.info("Not started by Projects Launcher; the overlay stays off.");
@@ -331,7 +334,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
      * The launcher's overlay switch is off and its emoji picker on (CHAT-EMOJI, E2): the mod runs the chat's emoji picker
      * alone, with what the launcher's "Devam et" needs of it (the world opened after the title screen, and its note when the
      * world is gone). No key, panel, friends' toasts, pause menu button, world sharing or linking; the launcher counts the
-     * game as not connected and tells it only its words and the emojis.
+     * game as not connected and tells it only its words and the emojis. With the picker off as well the launcher passes
+     * the jar for its client tweaks alone (DIALOG-FOCUS): the same, the picker hidden.
      */
     private void startPickerOnly(BridgeConfig config) {
         toasts = new ToastLayer();

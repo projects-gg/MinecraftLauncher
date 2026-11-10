@@ -2778,6 +2778,18 @@ export type ClientStep =
  */
 { step: "failed"; problem: ClientProblem };
 
+/**
+ *  The player's switches of the client tweaks ([`crate::OverlayConfig::tweaks`]). A field the page
+ *  does not send keeps its default.
+ */
+export type ClientTweaks = {
+	/**
+	 *  "Sunucu Pencerelerinde İlk Yazı Kutusunu Seç" (on by default): a server window (the game's
+	 *  dialogs) with a text box opens with its first box ready to type in.
+	 */
+	dialogFocus?: boolean,
+};
+
 /**  How a screenshot reached the clipboard. */
 export type ClipboardCopy = 
 /**  The picture itself. */
@@ -6408,6 +6420,11 @@ export type LaunchSettings = {
 	 */
 	emoji?: boolean | null,
 	/**
+	 *  The overlay's client tweaks as the page shows them (DIALOG-FOCUS): the mod's jar is there
+	 *  for them too, and the game gets the ones on (`crate::overlay::tweaks_arg`).
+	 */
+	tweaks?: ClientTweaks | null,
+	/**
 	 *  The account to play with (its id) instead of the selected one: a game "Bağlan" closes and
 	 *  starts again keeps the account it played with (PLAY-ACCT). An account that is gone falls
 	 *  back to the selected one.
@@ -7624,6 +7641,12 @@ export type OverlayConfig = {
 	 *  game's plan form shows them after its built-in ones. Optional for the page's types.
 	 */
 	planTemplates?: PlanTemplate[],
+	/**
+	 *  The mod's client tweaks (DIALOG-FOCUS, each on by default): small fixes to the game's own
+	 *  screens, which the mod runs whatever the other two switches say ([`crate::tweaks`]). A
+	 *  game started now gets them on its command line; one running keeps those it started with.
+	 */
+	tweaks?: ClientTweaks,
 };
 
 /**  What the page shows at its start. */

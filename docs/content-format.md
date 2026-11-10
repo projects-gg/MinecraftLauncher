@@ -492,7 +492,8 @@ news feed, the launcher's built-in recommended Minecraft version.
   "Doğrudan sunucuya bağlan" offers the sub-servers of the instance's Projects server (the entry
   with the same host, else the first Projects entry that has any) beside the lobby, the default;
   the player's pick is kept per instance. Only a Fabric instance whose game gets the launcher's
-  own overlay mod (the in-game overlay or the chat's emoji picker on) is offered them. Pressing
+  own overlay mod (the in-game overlay, the chat's emoji picker or one of the mod's client tweaks
+  on) is offered them. Pressing
   OYNA with a pick passes its `command` to the overlay mod at the game's start (and only then:
   not "Devam et", invites or event "Katıl"); the mod sends it once, as if the player typed it,
   after the lobby's script says on the `projects:route` channel that its login, two-factor check

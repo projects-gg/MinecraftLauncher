@@ -74,6 +74,7 @@ import { enTeams } from "./en-teams";
 import { enTelemetry } from "./en-telemetry";
 import { enTray } from "./en-tray";
 import { enTuning } from "./en-tuning";
+import { enTweaks } from "./en-tweaks";
 import { enUpdates } from "./en-updates";
 import { enVerify } from "./en-verify";
 import { enVoice } from "./en-voice";
@@ -370,6 +371,7 @@ export const en: DeepPartial<Strings> = {
   socNote: enSocNote,
   telemetry: enTelemetry,
   crewUi: enCrewUi,
+  tweaks: enTweaks,
   nav: {
     home: "Home",
     library: "Library",
@@ -1305,14 +1307,14 @@ export const en: DeepPartial<Strings> = {
     general: {
       language: "Language",
       languageAuto: "Automatic",
-      onGameStart: "When the game starts",
+      onGameStart: "When the Game Starts",
       onGameStartHelp: "The launcher never closes while AFK accounts are running.",
       keep: "Stay open",
       minimize: "Minimise",
       tray: "Hide in the tray",
       close: "Close",
-      startOnBoot: "Launch at startup",
-      notifications: "Desktop notifications",
+      startOnBoot: "Launch at Startup",
+      notifications: "Desktop Notifications",
       startOnBootFailed: "Couldn't change this setting right now. Try again.",
     },
     appearance: {

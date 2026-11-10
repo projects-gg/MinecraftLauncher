@@ -35,6 +35,7 @@ use crate::session::{
     CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, EmojiFn, KindsFn, LangFn, Msg,
     PeopleChange, PeopleFn, Session, SocialActions, ThumbFn, VoiceActFn, VoiceHooks,
 };
+use crate::tweaks::ClientTweaks;
 use crate::voice::{VoiceAct, VoiceFuture};
 
 /// How long [`Overlay::stop`] waits for the goodbye to leave.
@@ -81,6 +82,10 @@ pub struct OverlayConfig {
     /// game's plan form shows them after its built-in ones. Optional for the page's types.
     #[specta(optional)]
     pub plan_templates: Vec<crate::protocol::PlanTemplate>,
+    /// The mod's client tweaks (DIALOG-FOCUS, each on by default): small fixes to the game's own
+    /// screens, which the mod runs whatever the other two switches say ([`crate::tweaks`]). A
+    /// game started now gets them on its command line; one running keeps those it started with.
+    pub tweaks: ClientTweaks,
 }
 
 /// SOC-NEXT's choices the page keeps that the game follows (OVL-SOC 2): friends' nicknames (this
@@ -113,14 +118,31 @@ impl Default for OverlayConfig {
             emoji: true,
             next: None,
             plan_templates: Vec::new(),
+            tweaks: ClientTweaks::default(),
         }
     }
 }
 
 impl OverlayConfig {
-    /// The mod is wanted in a game: for its panel, its emoji picker or both.
+    /// The mod is wanted in a game: for its panel, its emoji picker or a client tweak. With the
+    /// first two off the mod runs as for the picker alone, with the picker hidden: its tweaks, the
+    /// "Devam et" world and the picked sub-server need nothing more.
     pub fn wants_mod(&self) -> bool {
-        self.enabled || self.emoji
+        self.enabled || self.emoji || self.tweaks.any()
+    }
+
+    /// The choices kept in the launcher's data folder (`overlay.json`), none when the file cannot
+    /// be read. A file from before the client tweaks (DIALOG-FOCUS) has none: they come on with
+    /// their defaults, except for a player who had both other switches off, so the mod they took
+    /// out of their games stays out (the page's preferences move the same way, `migratePrefs`).
+    pub fn from_saved(bytes: &[u8]) -> Option<Self> {
+        let value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
+        let has_tweaks = value.get("tweaks").is_some();
+        let mut config: Self = serde_json::from_value(value).ok()?;
+        if !has_tweaks && !config.enabled && !config.emoji {
+            config.tweaks = ClientTweaks::OFF;
+        }
+        Some(config)
     }
 }
 
@@ -1244,9 +1266,60 @@ mod tests {
         assert!(!config.enabled && config.reduced_motion && config.notify.crew_chat);
         // CHAT-EMOJI: a file from before the emoji picker has it on; the mod is wanted for it.
         assert!(config.emoji && config.wants_mod());
+        // DIALOG-FOCUS: the page's push names its tweaks; one that names none has them on.
         let config: OverlayConfig =
             serde_json::from_str(r#"{"enabled":false,"emoji":false}"#).unwrap();
+        assert!(config.tweaks.dialog_focus && config.wants_mod());
+        let config: OverlayConfig = serde_json::from_str(
+            r#"{"enabled":false,"emoji":false,"tweaks":{"dialogFocus":false}}"#,
+        )
+        .unwrap();
         assert!(!config.wants_mod());
+    }
+
+    #[test]
+    fn a_tweak_alone_wants_the_mod() {
+        let config = OverlayConfig {
+            enabled: false,
+            emoji: false,
+            ..OverlayConfig::default()
+        };
+        assert!(config.wants_mod(), "the third mode: tweaks only");
+        let config = OverlayConfig {
+            tweaks: ClientTweaks::OFF,
+            ..config
+        };
+        assert!(!config.wants_mod());
+    }
+
+    #[test]
+    fn a_saved_file_from_before_the_tweaks_keeps_a_mod_taken_out_out() {
+        // Both switches off: the player took the mod out of their games (or the crash help did).
+        let config = OverlayConfig::from_saved(br#"{"enabled":false,"emoji":false}"#).unwrap();
+        assert_eq!(config.tweaks, ClientTweaks::OFF);
+        assert!(!config.wants_mod());
+        // Either one on: the tweaks come with their defaults.
+        let config = OverlayConfig::from_saved(br#"{"enabled":false,"emoji":true}"#).unwrap();
+        assert_eq!(config.tweaks, ClientTweaks::ON);
+        let config = OverlayConfig::from_saved(br#"{"enabled":true}"#).unwrap();
+        assert_eq!(config.tweaks, ClientTweaks::ON);
+        // A file that names them keeps them as they are, the tweak alone too.
+        let alone = OverlayConfig {
+            enabled: false,
+            emoji: false,
+            ..OverlayConfig::default()
+        };
+        let saved = serde_json::to_vec(&alone).unwrap();
+        assert_eq!(OverlayConfig::from_saved(&saved), Some(alone));
+        let off = OverlayConfig {
+            tweaks: ClientTweaks::OFF,
+            ..OverlayConfig::default()
+        };
+        let saved = serde_json::to_vec(&off).unwrap();
+        assert_eq!(OverlayConfig::from_saved(&saved), Some(off));
+        // Unreadable: none (the launcher's defaults).
+        assert_eq!(OverlayConfig::from_saved(b"{"), None);
+        assert_eq!(OverlayConfig::from_saved(b"null"), None);
     }
 
     #[test]

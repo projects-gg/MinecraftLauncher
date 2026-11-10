@@ -78,8 +78,9 @@ dependencies {
 }
 
 // The client game test (OVL-AUTO): one smoke test (src/gametest) that Fabric's client game test API runs in a real
-// game: the mod loads, the pause menu, its panel key and the chat's emoji picker work. Its own small mod, never in the
-// jar players get. CI runs it against that jar (runProductionClientGameTest below) before Studio may publish the jar.
+// game: the mod loads, the pause menu, its panel key and the chat's emoji picker work; then the client tweaks' test
+// (DIALOG-FOCUS: where a server window's focus goes). Its own small mod, never in the jar players get. CI runs it
+// against that jar (runProductionClientGameTest below) before Studio may publish the jar.
 fabricApi {
     configureTests {
         createSourceSet = true
@@ -104,6 +105,8 @@ tasks.register('runProductionClientGameTest', net.fabricmc.loom.task.prod.Client
     jvmArgs.add('-Dfabric.client.gametest.disableNetworkSynchronizer=true')
     jvmArgs.add('-Dprojects.overlay.port=47652')
     jvmArgs.add('-Dprojects.overlay.token=gametest-gametest-gametest-gametest')
+    // The client tweaks the launcher switches on by default (DIALOG-FOCUS), as it passes them.
+    jvmArgs.add('-Dprojects.overlay.tweaks=dialog-focus')
     runDir = layout.buildDirectory.dir('run/productionClientGameTest').get().asFile
     // CI starts its own 24-bit virtual display around Gradle (-Povl.xvfb=false): Loom's xvfb-run has an 8-bit screen,
     // which offers the game's SDL3 window no OpenGL visual.
@@ -167,6 +170,8 @@ loom {
                 'emoji'     : 'ovl.emoji',
                 'dev.emoji' : 'ovl.devEmoji',
                 'dev.packart': 'ovl.packart',
+                // DIALOG-FOCUS: the client tweaks on, as the launcher names them (-Povl.tweaks=dialog-focus).
+                'tweaks'    : 'ovl.tweaks',
             ].each { name, property ->
                 def value = providers.gradleProperty(property)
                 if (value.isPresent()) {

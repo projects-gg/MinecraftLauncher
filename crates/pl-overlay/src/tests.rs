@@ -2257,12 +2257,23 @@ async fn a_game_with_the_emoji_picker_alone_hears_only_its_words_and_list() {
     );
     assert!(!overlay.connected());
 
-    // The panel switched on during the game changes nothing for it; the picker switched off ends
-    // the session, since nothing is left for the game.
+    // The picker switched off while a client tweak is on (DIALOG-FOCUS) keeps the session: the game
+    // hides its picker, and could show it again.
+    overlay.configure(OverlayConfig {
+        enabled: false,
+        emoji: false,
+        ..OverlayConfig::default()
+    });
+    assert_eq!(game.next_of("emojis").await["on"], false);
+    assert!(overlay.wants_mod() && overlay.active());
+
+    // The panel switched on during the game changes nothing for it; with everything off nothing is
+    // left for the game, and the session ends.
     overlay.configure(OverlayConfig::default());
     overlay.configure(OverlayConfig {
         enabled: false,
         emoji: false,
+        tweaks: crate::tweaks::ClientTweaks::OFF,
         ..OverlayConfig::default()
     });
     assert_eq!(game.next_of("bye").await["reason"], "disabled");

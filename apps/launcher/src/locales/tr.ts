@@ -76,6 +76,7 @@ import { trTeams } from "./tr-teams";
 import { trTelemetry } from "./tr-telemetry";
 import { trTray } from "./tr-tray";
 import { trTuning } from "./tr-tuning";
+import { trTweaks } from "./tr-tweaks";
 import { trUpdates } from "./tr-updates";
 import { trVerify } from "./tr-verify";
 import { trVoice } from "./tr-voice";
@@ -163,6 +164,7 @@ export const tr = {
   socNote: trSocNote,
   telemetry: trTelemetry,
   crewUi: trCrewUi,
+  tweaks: trTweaks,
   nav: {
     home: "Ana sayfa",
     library: "Kütüphane",
@@ -1068,14 +1070,14 @@ export const tr = {
     general: {
       language: "Dil",
       languageAuto: "Otomatik",
-      onGameStart: "Oyun açılınca launcher",
+      onGameStart: "Oyun Açılınca Launcher",
       onGameStartHelp: "AFK hesapları çalışırken launcher hiçbir zaman kapanmaz.",
       keep: "Açık kalsın",
       minimize: "Simge durumuna küçülsün",
       tray: "Tepsiye gizlensin",
       close: "Kapansın",
-      startOnBoot: "Bilgisayar açılınca başlat",
-      notifications: "Masaüstü bildirimleri",
+      startOnBoot: "Bilgisayar Açılınca Başlat",
+      notifications: "Masaüstü Bildirimleri",
       startOnBootFailed: "Bu ayar şu an değiştirilemedi. Tekrar dene.",
     },
     appearance: {

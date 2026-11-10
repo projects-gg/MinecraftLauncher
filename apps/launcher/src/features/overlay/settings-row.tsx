@@ -9,7 +9,15 @@ import { Row } from "@/features/settings/row";
 import { api, type InstanceSummary } from "@/lib/api";
 import { usePrefs } from "@/stores/prefs";
 import { overlayApi } from "./api";
-import { modRows, OVERLAY_LINES, type OverlayLineKind, overlayHome, versionRange } from "./line";
+import {
+  modRows,
+  OVERLAY_LINES,
+  type OverlayLineKind,
+  overlayHome,
+  tweakRow,
+  versionRange,
+} from "./line";
+import type { TweakKey } from "./tweaks";
 
 /** Before the instance list is read. */
 const NO_INSTANCES: InstanceSummary[] = [];
@@ -65,6 +73,60 @@ export function OverlayRow() {
  */
 export function EmojiRow() {
   return <ModSwitchRow which="emoji" />;
+}
+
+/**
+ * Settings → Genel "Sunucu Pencerelerinde İlk Yazı Kutusunu Seç" (DIALOG-FOCUS, on by default),
+ * right under the emoji picker's switch: the first of the mod's client tweaks. A server window with
+ * a text box opens with its first box ready to type in. Not under "Oyun içi katman": a player with
+ * the panel off keeps it.
+ */
+export function DialogFocusRow() {
+  return <TweakSwitchRow tweak="dialogFocus" />;
+}
+
+/**
+ * A client tweak's switch (`tweak`): the mod's jar carries it and it needs no launcher during the
+ * game, so it follows the picker's rule (`tweakRow`): held off and dimmed where the mod cannot go,
+ * the player's choice kept; the overlay's or the picker's line above says why. Its name says what
+ * it does, so it has no line of its own. A game that runs keeps the tweaks it started with; the
+ * switch counts from the next start.
+ */
+function TweakSwitchRow({ tweak }: { tweak: TweakKey }) {
+  const { t } = useTranslation();
+  const on = usePrefs((s) => s[tweak]);
+  const set = usePrefs((s) => s.set);
+  // The overlay's rows ask the same (one request each, shared).
+  const { data: instances } = useQuery({
+    queryKey: ["instances"],
+    queryFn: () => api.instances(),
+  });
+  const { data: official } = useQuery(officialStatusQuery);
+  const { data: overlay } = useQuery({
+    queryKey: ["overlay-state"],
+    queryFn: () => overlayApi.state(),
+  });
+  const { instance: play, busy } = usePlayInstance(instances ?? NO_INSTANCES);
+  const row = tweakRow({
+    on,
+    instances,
+    official,
+    versions: overlay?.versions,
+    play,
+    locked: busy,
+  });
+  const title = t(`tweaks.${tweak}`);
+  return (
+    <Row title={title}>
+      <Switch
+        checked={row.checked}
+        onCheckedChange={(v) => set(tweak, v)}
+        label={title}
+        hideLabel
+        disabled={row.held}
+      />
+    </Row>
+  );
 }
 
 /**

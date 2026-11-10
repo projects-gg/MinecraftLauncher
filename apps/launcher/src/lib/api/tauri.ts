@@ -95,6 +95,8 @@ function storedPrefs(): {
   copyScreenshots?: boolean;
   inGameOverlay?: boolean;
   chatEmoji?: boolean;
+  /** DIALOG-FOCUS: the overlay mod's client tweak (features/overlay/tweaks.ts). */
+  dialogFocus?: boolean;
   defaultMaxMemoryMb?: number | null;
   defaultJvmArgs?: string;
 } {
@@ -752,6 +754,7 @@ export const tauriApi: LauncherApi = {
           copyScreenshots: prefs.copyScreenshots ?? false,
           overlay: prefs.inGameOverlay ?? true,
           emoji: prefs.chatEmoji ?? true,
+          tweaks: { dialogFocus: prefs.dialogFocus ?? true },
           account: options?.account?.id ?? null,
           // AUTOJOIN: Rust keeps it only for OYNA to the instance's own server.
           route: prefs.autoJoinRoutes?.[instanceId] ?? null,

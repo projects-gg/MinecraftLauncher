@@ -240,7 +240,7 @@ test("a jar counts as tested only when both suites ran green", () => {
   assert.ok(testsPassed(GREEN));
   assert.ok(!testsPassed({ ...GREEN, gametest: { passed: 0, failed: 1, skipped: 0 } }));
   assert.ok(!testsPassed({ ...GREEN, junit: { passed: 0, failed: 0, skipped: 3 } }));
-  assert.deepEqual(GAMETEST_SHOTS.length, 5);
+  assert.deepEqual(GAMETEST_SHOTS.length, 6);
 });
 
 test("the game test ran through when all its screenshots are there, as Fabric numbers them", () => {
@@ -249,6 +249,8 @@ test("the game test ran through when all its screenshots are there, as Fabric nu
   assert.ok(gametestRanThrough(fabric));
   assert.ok(gametestRanThrough(GAMETEST_SHOTS.map((shot) => `${shot}.png`)));
   assert.ok(!gametestRanThrough(fabric.slice(0, 4)));
+  // DIALOG-FOCUS's test is part of it: a run that stopped before its window did not run through.
+  assert.ok(!gametestRanThrough(fabric.slice(0, 5)));
   assert.ok(!gametestRanThrough([]));
   assert.ok(!gametestRanThrough(fabric.map((file) => file.replace(".png", ".jpg"))));
 });
@@ -359,21 +361,21 @@ test("the workflow keeps to its permissions and never signs", () => {
     /- id: upload\n\s+name: Artifact for Studio\n\s+if: github\.ref == 'refs\/heads\/v2'/,
   );
   assert.match(workflow, /DRY_RUN: .*github\.ref != 'refs\/heads\/v2'/);
-  // The game test's screenshots are the ones the report counts.
-  const smoke = readFileSync(
-    join(
-      MOD_DIR,
-      "src",
-      "gametest",
-      "java",
-      "gg",
-      "projects",
-      "overlay",
-      "gametest",
-      "OverlaySmokeTest.java",
-    ),
-    "utf8",
+  // The game test's screenshots are the ones the report counts: its smoke test's, then the client
+  // tweaks' (DIALOG-FOCUS).
+  const gametest = join(
+    MOD_DIR,
+    "src",
+    "gametest",
+    "java",
+    "gg",
+    "projects",
+    "overlay",
+    "gametest",
   );
+  const sources = ["OverlaySmokeTest.java", "DialogFocusTest.java"]
+    .map((file) => readFileSync(join(gametest, file), "utf8"))
+    .join("\n");
   for (const shot of GAMETEST_SHOTS)
-    assert.match(smoke, new RegExp(`takeScreenshot\\("${shot}"\\)`));
+    assert.match(sources, new RegExp(`takeScreenshot\\("${shot}"\\)`));
 });

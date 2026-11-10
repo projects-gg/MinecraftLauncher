@@ -202,6 +202,10 @@ pub struct LaunchSettings {
     /// is also there for it alone.
     #[serde(default)]
     pub emoji: Option<bool>,
+    /// The overlay's client tweaks as the page shows them (DIALOG-FOCUS): the mod's jar is there
+    /// for them too, and the game gets the ones on (`crate::overlay::tweaks_arg`).
+    #[serde(default)]
+    pub tweaks: Option<pl_overlay::ClientTweaks>,
     /// The account to play with (its id) instead of the selected one: a game "Bağlan" closes and
     /// starts again keeps the account it played with (PLAY-ACCT). An account that is gone falls
     /// back to the selected one.
@@ -395,6 +399,9 @@ pub async fn launch_instance(
     }
     if let Some(on) = settings.emoji {
         crate::overlay::set_emoji(&app, on);
+    }
+    if let Some(tweaks) = settings.tweaks {
+        crate::overlay::set_tweaks(&app, tweaks);
     }
     let cancel = CancellationToken::new();
     let id = NEXT_LAUNCH.fetch_add(1, Ordering::Relaxed);
@@ -1224,6 +1231,11 @@ async fn prepare_and_spawn(
     if let Some(endpoint) = overlay.endpoint() {
         options.launcher_jvm_args.extend(endpoint.jvm_args());
         options.secrets.push(endpoint.secret().to_owned());
+    }
+    // The overlay's client tweaks (DIALOG-FOCUS): on their own property, so they run without the
+    // bridge too.
+    if let Some(arg) = crate::overlay::tweaks_arg(state, overlay_mod) {
+        options.launcher_jvm_args.push(arg);
     }
     // "Hızlı kaynak paketi yükleme" within one connection (FASTPACK-LEAVE): our overlay mod keeps
     // a server pack that comes again unchanged instead of reloading it. Only for the official

@@ -1,9 +1,9 @@
 // English for tr-overlay.ts. Missing keys fall back to Turkish. A line never wraps, and English
 // needs more room: the switch to a player's own install names it bare ("Switch to Survival").
 export const enOverlay = {
-  setting: "In-game overlay",
+  setting: "In-Game Overlay",
   settingHelp: "Messages, friends and crew calls open in game. The default key is {{key}}.",
-  emojiSetting: "Emoji picker in chat",
+  emojiSetting: "Emoji Picker in Chat",
   emojiHelp: "Emojis go into chat with one click. The default key is {{key}}.",
   closeHelp: "Won't work: the launcher closes when the game starts.",
   toMinimize: "Minimise instead",
