@@ -661,6 +661,9 @@ pub enum CallAnswer {
 }
 
 /// Frames to the mod.
+// A frame is made and written to the socket at once (CREW-PLUS's templates grew `lists` past the
+// lint's line): a box per frame would buy nothing.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "t", rename_all = "kebab-case")]
 pub enum ToGame {
@@ -1080,6 +1083,65 @@ pub struct ListsExtra {
     /// ones are left out). Only to a mod that said `mates`.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub mates: BTreeMap<String, &'static str>,
+    /// CREW-PLUS (`plans`): the player's own plan templates, in their order, while they may plan
+    /// somewhere: the plan form's chips after the mod's built-in ones (a mod from before ignores it).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub templates: Vec<PlanTemplate>,
+}
+
+/// CREW-PLUS: one of the player's own crew plan templates ("Şablonlara Ekle" in the launcher's
+/// plan form): a day relative to the day it is used, a time of day and a note. Never a date.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct PlanTemplate {
+    /// Its name on the chip (1–24 characters).
+    pub name: String,
+    /// `today`, `tomorrow`, or the next of a weekday: `mon`, `tue`, `wed`, `thu`, `fri`, `sat`,
+    /// `sun` (today when it is that day and the time is still ahead).
+    pub day: String,
+    /// Minutes after midnight, a whole quarter of an hour (0–1425).
+    pub time: u16,
+    /// The plan's note, one line of at most 80 characters ("": none). Always there, both ways: the
+    /// page's types stay one (serde attributes that differ by direction split them in two).
+    pub note: String,
+}
+
+/// CREW-PLUS: the player may keep this many plan templates of their own.
+pub const MAX_PLAN_TEMPLATES: usize = 5;
+/// CREW-PLUS: a template's name on its chip at most (characters).
+pub const PLAN_TEMPLATE_NAME: usize = 24;
+
+impl PlanTemplate {
+    /// The days a template may name.
+    pub const DAYS: [&str; 9] = [
+        "today", "tomorrow", "mon", "tue", "wed", "thu", "fri", "sat", "sun",
+    ];
+
+    /// The template as the game may take it (the page's own rules again: a name, a known day, a
+    /// whole quarter, a one-line note of at most 80), or None for one that breaks them.
+    pub fn checked(&self) -> Option<Self> {
+        let clean = |text: &str| -> String {
+            text.chars()
+                .map(|c| if c.is_control() { ' ' } else { c })
+                .collect::<String>()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let name = clean(&self.name);
+        let note = clean(&self.note);
+        let fits = !name.is_empty()
+            && name.chars().count() <= PLAN_TEMPLATE_NAME
+            && note.chars().count() <= 80
+            && Self::DAYS.contains(&self.day.as_str())
+            && self.time < 24 * 60
+            && self.time.is_multiple_of(15);
+        fits.then(|| Self {
+            name,
+            day: self.day.clone(),
+            time: self.time,
+            note,
+        })
+    }
 }
 
 /// OVL-SOC2: a crew invite waiting for the player (`lists`' `invites`).
@@ -1262,6 +1324,11 @@ pub struct FriendView {
     /// a crew room `voice-crews` showed).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub live: bool,
+    /// CREW-PLUS: while they play, when their game session began (Unix ms, this computer's clock,
+    /// down to five minutes): the row says how long ("25 dk"). Only from a friend who shares "last
+    /// seen" (the service sends nothing otherwise).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub since: Option<i64>,
 }
 
 /// Someone who asked the player to be friends (OVL-SOC 2, `lists`' `requests`).
@@ -1373,6 +1440,16 @@ pub enum Place {
     /// In game, where is not known (the game's menus).
     Game,
     Offline,
+}
+
+impl Place {
+    /// In a game: Projects, another server, a singleplayer world or the game's menus.
+    pub fn in_game(self) -> bool {
+        matches!(
+            self,
+            Self::Projects | Self::Server | Self::Single | Self::Game
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -2634,6 +2711,7 @@ mod tests {
             dnd: true,
             real: None,
             live: false,
+            since: None,
         })
         .unwrap();
         assert_eq!(marked["marks"], serde_json::json!(["admin", "premium"]));
@@ -2723,6 +2801,7 @@ mod tests {
             dnd: false,
             real: None,
             live: false,
+            since: None,
         }))
         .unwrap();
         assert_eq!(friend["where"], "projects");
@@ -2771,6 +2850,7 @@ mod tests {
             dnd: false,
             real: None,
             live: false,
+            since: None,
         }))
         .unwrap();
         assert_eq!(inviting["world"], serde_json::json!({"guests":1,"max":7}));
