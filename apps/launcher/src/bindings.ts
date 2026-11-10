@@ -4594,6 +4594,11 @@ export type CrewBadgeView = {
 	/**  How many are in the crew. */
 	members: number,
 	/**
+	 *  CREW-CAP: the crew's cap (none from a service before crew caps): shown beside `members`
+	 *  once the crew is nearly full.
+	 */
+	maxMembers: number | null,
+	/**
 	 *  The crew takes join requests from its tag's card now (always false while the service does
 	 *  not offer them). "Katılma isteği gönder" shows only when, besides, the wearer is the
 	 *  player's friend, the player is not in the crew, invited to it or waiting for its answer,
@@ -4864,6 +4869,11 @@ export type DiscoverCrew = {
 	tags?: string[],
 	join?: JoinMode,
 	members: number,
+	/**
+	 *  CREW-CAP: the crew's cap when the listing was made (its own, else the service's default);
+	 *  none from a service before crew caps (its cap was 30).
+	 */
+	maxMembers?: number | null,
 	/**  At least 3 members (all of a smaller crew) were on in the last 7 days. */
 	active?: boolean,
 };
@@ -11464,6 +11474,11 @@ export type TeamInviteView = {
 	motto: string,
 	/**  How many are in the team. */
 	members: number,
+	/**
+	 *  CREW-CAP: the crew's cap (none from a service before crew caps): shown beside `members`
+	 *  once the crew is nearly full.
+	 */
+	maxMembers: number | null,
 	/**  The friend who invited. */
 	from: ProfileView,
 	/**  Unix seconds. */
@@ -11480,6 +11495,11 @@ export type TeamLookupView = {
 	frame: string,
 	motto: string,
 	members: number,
+	/**
+	 *  CREW-CAP: the crew's cap (none from a service before crew caps): shown beside `members`
+	 *  once the crew is nearly full.
+	 */
+	maxMembers: number | null,
 	relation: TeamRelation,
 	/**  `EKP-XXXX-XXXX`, for joining (empty when it was looked up by its invite link). */
 	code: string,
@@ -11642,6 +11662,11 @@ export type TeamRequestView = {
 	frame: string,
 	motto: string,
 	members: number,
+	/**
+	 *  CREW-CAP: the crew's cap (none from a service before crew caps): shown beside `members`
+	 *  once the crew is nearly full.
+	 */
+	maxMembers: number | null,
 	/**  Unix seconds. */
 	sentAt: number,
 };
@@ -11690,7 +11715,10 @@ export type TeamView_Deserialize = {
 	members: TeamMemberView_Deserialize[],
 	/**  Friends the player invited who have not answered yet. */
 	invited: string[],
-	/**  How many may be in a team. */
+	/**
+	 *  How many may be in this crew: its cap from a service with crew caps (CREW-CAP), else the
+	 *  service's `limits.teamMembers`, else 30.
+	 */
 	limit: number,
 	/**
 	 *  The player's own mute of this crew as it reads now (never muted from a service without
@@ -11765,7 +11793,10 @@ export type TeamView_Serialize = {
 	members: TeamMemberView_Serialize[],
 	/**  Friends the player invited who have not answered yet. */
 	invited: string[],
-	/**  How many may be in a team. */
+	/**
+	 *  How many may be in this crew: its cap from a service with crew caps (CREW-CAP), else the
+	 *  service's `limits.teamMembers`, else 30.
+	 */
 	limit: number,
 	/**
 	 *  The player's own mute of this crew as it reads now (never muted from a service without

@@ -4627,6 +4627,7 @@ fn lookup_view(lookup: TeamLookup, code: String, link: Option<String>) -> TeamLo
         frame: lookup.team.frame,
         motto: lookup.team.motto,
         members: lookup.team.members,
+        max_members: lookup.team.max_members,
         relation: lookup.relation,
         code,
         link,
