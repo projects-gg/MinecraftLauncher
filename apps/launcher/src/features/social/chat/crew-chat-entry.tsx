@@ -4,6 +4,9 @@
 // unread (the gold chip of the "Mesajlar" row: the same conversation, the same mark, with SOC-NEXT's
 // "Okunmadı say" and its "@") and the caret of a page one step deeper. The chat opens on the
 // panel's chat page, sliding in from the right; its "Geri" comes back here, and so does the focus.
+// (Reading the messages ahead, on hover, was tried and left: the page then mounts with every row in
+// the press's frame and its slide loses its start; light, it slides at once and the rows follow
+// while it moves, as a friend's chat does.)
 import { CaretRight, ChatsCircle } from "@phosphor-icons/react";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,6 +16,14 @@ import { useMentionShown } from "../next/mention-marks";
 import { useSocialUi } from "../store";
 import { crewConversation } from "./conversations";
 import { UnreadChip } from "./unread-chip";
+
+/** The crew chat the player just left with "Geri" for its crew page (the page it left is gone, so
+ * the focus would fall to the panel): that page's "Sohbete Git" takes it back, once. */
+let backFrom: { conv: string; at: number } | null = null;
+
+export function noteBackToCrew(conv: string) {
+  backFrom = { conv, at: Date.now() };
+}
 
 export function CrewChatEntry({ team }: { team: SocialTeam }) {
   const { t } = useTranslation();
@@ -25,12 +36,12 @@ export function CrewChatEntry({ team }: { team: SocialTeam }) {
   const mentioned = useMentionShown(conversation, count > 0, team, me);
   const ref = useRef<HTMLButtonElement>(null);
 
-  // Back from this crew's chat, the focus comes back here (the page it left is gone).
+  // Back from this crew's chat, the focus comes back here (a later visit leaves it alone).
   useEffect(() => {
-    const s = useSocialUi.getState();
-    if (s.page === "team" && s.direction < 0 && s.chatConv === conv) {
-      ref.current?.focus({ preventScroll: true });
-    }
+    const back = backFrom;
+    if (!back || back.conv !== conv) return;
+    backFrom = null;
+    if (Date.now() - back.at < 2000) ref.current?.focus({ preventScroll: true });
   }, [conv]);
 
   const label = t("crewUi.goToChat");

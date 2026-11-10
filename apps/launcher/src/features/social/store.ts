@@ -226,6 +226,11 @@ export function crewPageShown(
   return shown?.id === id;
 }
 
+/** The list page's tab the player last picked (a value this version does not know: friends). */
+function rememberedTab(): ListTab {
+  return useSocialPrefs.getState().listTab === "messages" ? "messages" : "friends";
+}
+
 /** The same badge catalogue (BADGES-UI) in two snapshots. */
 function sameMarkDefs(a: readonly MarkDef[] | undefined, b: readonly MarkDef[] | undefined) {
   return a === b || (a !== undefined && b !== undefined && JSON.stringify(a) === JSON.stringify(b));
@@ -268,11 +273,7 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
       prefillCode: options?.code ?? s.prefillCode,
       // A tab asked for shows for this visit only; a fresh opening shows the player's own pick
       // (CREW-UI: kept across starts), one already open stays where it is.
-      ...(options?.tab
-        ? { listTab: options.tab }
-        : s.open
-          ? {}
-          : { listTab: useSocialPrefs.getState().listTab }),
+      ...(options?.tab ? { listTab: options.tab } : s.open ? {} : { listTab: rememberedTab() }),
       // An invite link opens "Ekip kur ya da katıl", where it is looked up.
       ...(options?.link ? { prefillLink: options.link, crewTab: "new" } : {}),
       returnFocus:

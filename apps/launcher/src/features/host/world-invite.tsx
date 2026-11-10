@@ -164,7 +164,8 @@ export function HomeWorldLine({ invite }: { invite: WorldInvite }) {
         <button
           type="button"
           aria-label={`${text}. ${t("social.home.open")}`}
-          onClick={() => openPanel({ page: "list" })}
+          // The invite waits on "Arkadaşlar", whichever tab the player keeps (CREW-UI).
+          onClick={() => openPanel({ page: "list", tab: "friends" })}
           onKeyDown={(event) => {
             openMenuFromKey(event);
           }}

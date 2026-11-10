@@ -29,6 +29,7 @@ import { useCrewItems } from "../team-section";
 import { useComposerNotice, useComposerState, usePeople } from "./chat-page";
 import { type ChatLine, Conversation, useUnreadAtOpen } from "./conversation";
 import { chatMutedNow, crewConversation, crewOf } from "./conversations";
+import { noteBackToCrew } from "./crew-chat-entry";
 import { messageLine } from "./preview";
 
 /** The crew whose chat the chat page shows (undefined for a friend's, or a crew the player left). */
@@ -59,7 +60,10 @@ export function CrewChatHeader({ team }: { team: SocialTeam }) {
         label={t("social.actions.back")}
         icon={<CaretLeft size={18} weight="bold" />}
         className="-ml-2"
-        onClick={() => back(from === "chat" ? "list" : from)}
+        onClick={() => {
+          if (from === "team") noteBackToCrew(conv);
+          back(from === "chat" ? "list" : from);
+        }}
       />
       <ContextMenu items={items}>
         <div className="flex min-w-0 flex-1 items-center gap-2.5">

@@ -13,7 +13,7 @@ import {
   type SocialTeam,
   type TeamMember,
 } from "@/lib/api/social-types";
-import { CrewChatEntry } from "./chat/crew-chat-entry";
+import { CrewChatEntry, noteBackToCrew } from "./chat/crew-chat-entry";
 import { useSocNextFlag } from "./next/flag";
 import { useSocNextPrefs } from "./next/prefs";
 import {
@@ -159,6 +159,12 @@ describe("the list page's tab", () => {
     expect(fresh.useSocialPrefs.getState().listTab).toBe("messages");
     fresh.useSocialUi.getState().openPanel();
     expect(fresh.useSocialUi.getState().listTab).toBe("messages");
+  });
+
+  it("opens on Arkadaşlar when the kept value is one this version does not know", () => {
+    useSocialPrefs.setState({ listTab: "groups" as never });
+    useSocialUi.getState().openPanel();
+    expect(useSocialUi.getState().listTab).toBe("friends");
   });
 
   it("falls back to the friend list while chat is off", () => {
@@ -320,8 +326,17 @@ describe("Sohbete Git", () => {
     useSocialUi.getState().openPanel({ page: "team" });
     useSocialUi.getState().setCrewTab(A.id);
     useSocialUi.getState().openChat(convA, { from: "team" });
+    noteBackToCrew(convA);
     useSocialUi.getState().goTo("team");
     render(<CrewChatEntry team={A} />);
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Sohbete Git" }));
+  });
+
+  it("leaves the focus alone on a later visit (the panel opened again on the crew)", () => {
+    useSocialUi.getState().openChat(convA, { from: "team" });
+    useSocialUi.getState().closePanel();
+    useSocialUi.getState().openPanel({ page: "team" });
+    render(<CrewChatEntry team={A} />);
+    expect(document.activeElement).not.toBe(screen.getByRole("button", { name: "Sohbete Git" }));
   });
 });
