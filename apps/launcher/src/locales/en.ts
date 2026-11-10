@@ -19,6 +19,7 @@ import { enCloudAfkMove } from "./en-cloud-afk-move";
 import { enCloudStale } from "./en-cloud-stale";
 import { enCrewWave2 } from "./en-crew-wave2";
 import { enCrews } from "./en-crews";
+import { enDiscordPlace } from "./en-discord-place";
 import { enDiscover } from "./en-discover";
 import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
@@ -305,6 +306,7 @@ export const en: DeepPartial<Strings> = {
   teams: enTeams,
   minecraft: enMinecraft,
   eventJoin: enEventJoin,
+  discordPlace: enDiscordPlace,
   shotCopy: enShotCopy,
   placement: enPlacement,
   playOpen: enPlayOpen,
@@ -1349,16 +1351,6 @@ export const en: DeepPartial<Strings> = {
       ready: "A new version is ready. It installs when you restart.",
       restart: "Restart",
       unavailable: "Can't reach the update server. Try again in a bit.",
-    },
-    discord: {
-      enabled: "Show game activity on Discord",
-      showServer: "Show the server I'm on",
-      preview: "Preview",
-      previewDetails: "Playing on Projects",
-      previewDetailsPlain: "Playing Minecraft",
-      previewState: "Fabric 26.1.2",
-      previewStateParty: "Fabric 26.1.2 (214 of 500)",
-      previewElapsed: "00:42 elapsed",
     },
     about: {
       version: "Version",

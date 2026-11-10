@@ -20,6 +20,7 @@ import { trCloudAfkMove } from "./tr-cloud-afk-move";
 import { trCloudStale } from "./tr-cloud-stale";
 import { trCrewWave2 } from "./tr-crew-wave2";
 import { trCrews } from "./tr-crews";
+import { trDiscordPlace } from "./tr-discord-place";
 import { trDiscover } from "./tr-discover";
 import { trDisk } from "./tr-disk";
 import { trEventJoin } from "./tr-event-join";
@@ -98,6 +99,7 @@ export const tr = {
   teams: trTeams,
   minecraft: trMinecraft,
   eventJoin: trEventJoin,
+  discordPlace: trDiscordPlace,
   shotCopy: trShotCopy,
   placement: trPlacement,
   playOpen: trPlayOpen,
@@ -1112,16 +1114,6 @@ export const tr = {
       ready: "Yeni sürüm hazır. Yeniden başlatınca kurulur.",
       restart: "Yeniden başlat",
       unavailable: "Güncelleme sunucusuna ulaşılamadı. Biraz sonra tekrar dene.",
-    },
-    discord: {
-      enabled: "Discord'da oyun durumunu göster",
-      showServer: "Bağlandığım sunucuyu göster",
-      preview: "Önizleme",
-      previewDetails: "Projects'te oynuyor",
-      previewDetailsPlain: "Minecraft oynuyor",
-      previewState: "Fabric 26.1.2",
-      previewStateParty: "Fabric 26.1.2 (214 / 500)",
-      previewElapsed: "00:42 geçti",
     },
     about: {
       version: "Sürüm",
