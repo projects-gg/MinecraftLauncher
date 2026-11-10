@@ -465,7 +465,8 @@ function previewTeam(founder: boolean, moderator = false): SocialTeam {
       teamMember(undefined, { id: "703", name: "TasDevi", avatar: "preset:wolf" }),
     ],
     invited: ["305"],
-    limit: 30,
+    // CREW-CAP: the service's default cap.
+    limit: 100,
     mute: NOT_MUTED,
     join: "open",
     requests: [],

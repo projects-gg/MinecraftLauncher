@@ -40,6 +40,11 @@ export interface DiscoverCrew {
   tags: DiscoverTag[];
   join: JoinMode;
   members: number;
+  /**
+   * CREW-CAP: its cap when the listing was made (absent from a service before crew caps, whose
+   * crews held 30); shown beside `members` once nearly full.
+   */
+  maxMembers?: number;
   /** "Bu hafta aktif": enough members were on in the last 7 days. */
   active: boolean;
 }

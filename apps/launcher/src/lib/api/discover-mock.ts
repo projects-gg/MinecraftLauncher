@@ -190,6 +190,9 @@ function listing(): DiscoverListing {
       tags,
       join,
       members,
+      // CREW-CAP: the default cap; Mor Bulut has a small one of its own, so its card shows the
+      // cap beside the count (nearly full).
+      maxMembers: id === "18293a4b5c6d7e8f" ? 28 : 100,
       active,
     }),
   );

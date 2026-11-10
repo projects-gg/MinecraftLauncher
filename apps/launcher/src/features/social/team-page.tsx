@@ -111,6 +111,7 @@ import {
   cleanCrewText,
   crewAnniversary,
   crewRights,
+  crewSize,
   formatTeamCodeInput,
   localDay,
   membersMayHave,
@@ -427,7 +428,7 @@ function JoinCrew({ first = false }: { first?: boolean }) {
                 tag={found.lookup.tag}
                 look={found.lookup}
                 motto={found.lookup.motto}
-                meta={t("teams.members", { count: found.lookup.members })}
+                meta={crewSize(t, found.lookup.members, found.lookup.maxMembers)}
                 size={52}
               />
               <FoundOffer
@@ -664,7 +665,7 @@ function EditCrew({ team, onDone }: { team: SocialTeam; onDone: () => void }) {
       onChange={setDraft}
       look={crew.look}
       texts={texts}
-      meta={t("teams.membersOf", { count: team.members.length, limit: team.limit })}
+      meta={crewSize(t, team.members.length, team.limit)}
       showErrors
       onSubmit={() => void save()}
       footer={
@@ -845,7 +846,7 @@ function CrewCard({
             <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12.5px] text-ash-400">
               <span className="inline-flex items-center gap-1">
                 <UsersThree size={14} aria-hidden />
-                {t("teams.membersOf", { count: team.members.length, limit: team.limit })}
+                {crewSize(t, team.members.length, team.limit)}
               </span>
               {/* On the day of a month's or a year's anniversary the founding date says so, in the
                   line's own words, a shade brighter (SMALL12: a gold line with a sparkle was a

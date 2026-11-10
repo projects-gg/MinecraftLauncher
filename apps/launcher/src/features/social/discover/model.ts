@@ -35,7 +35,7 @@ export const NO_FILTER: DiscoverFilter = {
   size: "any",
 };
 
-/** Small 2-9, mid 10-19, big 20 and more (a crew holds 30). */
+/** Small 2-9, mid 10-19, big 20 and more (a crew holds up to its cap, 100 by default). */
 export function sizeOf(members: number): Exclude<CrewSize, "any"> {
   return members >= 20 ? "big" : members >= 10 ? "mid" : "small";
 }

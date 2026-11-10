@@ -389,7 +389,7 @@ export function CrewEditor({
   onChange: (draft: CrewDraft) => void;
   look: boolean;
   texts: boolean;
-  /** Under the preview's name ("1 üye", "12/30 üye"). */
+  /** Under the preview's name ("1 üye", once nearly full "92/100 üye"). */
   meta: string;
   /** Problems show once the player tried to send (or right away while editing). */
   showErrors: boolean;

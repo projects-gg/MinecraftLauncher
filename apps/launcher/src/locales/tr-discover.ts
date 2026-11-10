@@ -38,6 +38,8 @@ export const trDiscover = {
     members_other: "{{count}} üye",
     membersActive_one: "{{count}} üye, bu hafta aktif",
     membersActive_other: "{{count}} üye, bu hafta aktif",
+    membersOf: "{{count}}/{{limit}} üye",
+    membersOfActive: "{{count}}/{{limit}} üye, bu hafta aktif",
     join: "Katıl",
     ask: "Katılma isteği gönder",
     member: "Ekibindesin",
