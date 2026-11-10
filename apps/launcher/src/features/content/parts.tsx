@@ -50,7 +50,10 @@ export function formatCompact(n: number): string {
 
 /** The category's name in the interface's language; unknown (English) slugs are prettified. */
 export function categoryLabel(t: TFunction, name: string): string {
-  const fallback = name.replace(/-/g, " ").replace(/^./, (c) => c.toLocaleUpperCase("en"));
+  // A category's name, so Title Case like the known ones ("path-tracing" → "Path Tracing").
+  const fallback = name
+    .replace(/-/g, " ")
+    .replace(/(^|\s)(\p{Ll})/gu, (_, gap, c) => gap + c.toLocaleUpperCase("en"));
   return t(`content.categories.${name}`, { defaultValue: fallback });
 }
 

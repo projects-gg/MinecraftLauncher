@@ -70,11 +70,16 @@ export function usePlusItemData(minecraft: string | null): ItemDataState {
   return { data, failed, retry };
 }
 
-/** An item id read plainly, for an item the data does not know: "netherite_sword" → "Netherite sword". */
+/**
+ * An item id read plainly, for an item the data does not know: "netherite_sword" → "Netherite Sword"
+ * (an item's name, so Title Case; ids are English, so English casing).
+ */
 function plainName(id: string): string {
   const path = id.split(":").pop() ?? id;
   const words = path.replace(/_/g, " ").trim();
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : id;
+  return words
+    ? words.replace(/(^|\s)(\p{Ll})/gu, (_, gap, c) => gap + c.toLocaleUpperCase("en"))
+    : id;
 }
 
 /** A custom item as the panel names and draws it: a stored one, or one a draft or a pick adds. */
