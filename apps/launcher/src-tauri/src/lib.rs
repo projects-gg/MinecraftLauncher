@@ -743,6 +743,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_chat_unfurl,
             commands::social::social_chat_link_card,
             commands::social::social_set_chat_privacy,
+            commands::social::social_set_play_time_privacy,
             commands::social::social_set_badge,
             commands::social::social_team_hidden,
             commands::social::social_team_badge_requests,

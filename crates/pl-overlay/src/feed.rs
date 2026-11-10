@@ -2607,6 +2607,7 @@ pub(crate) mod tests {
                 share_last_seen: true,
                 share_read: None,
                 share_typing: None,
+                share_play_time: None,
             },
             backup: None,
             limited: None,

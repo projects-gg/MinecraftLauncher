@@ -201,6 +201,8 @@ function me(v: MeView): SocialMe {
       // CHAT2: none from a service without the chat extras (the switches do not show).
       shareRead: opt(v.privacy.shareRead),
       shareTyping: opt(v.privacy.shareTyping),
+      // CREW-PLUS: none from a service without "Oynama Süremi Göster" (the switch does not show).
+      sharePlayTime: opt(v.privacy.sharePlayTime),
     },
     backup: opt(v.backup),
     limited: v.limited
@@ -760,6 +762,10 @@ export const tauriSocial: SocialApi = {
     // CHAT2's two switches ("Görüldü bilgisi", "Yazıyor bilgisi").
     if (change.shareRead !== undefined || change.shareTyping !== undefined) {
       await ok(commands.socialSetChatPrivacy(change.shareRead ?? null, change.shareTyping ?? null));
+    }
+    // CREW-PLUS: "Oynama Süremi Göster".
+    if (change.sharePlayTime !== undefined) {
+      await ok(commands.socialSetPlayTimePrivacy(change.sharePlayTime));
     }
   },
   async setAvatar(avatar) {

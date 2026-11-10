@@ -21,6 +21,10 @@ export const enCrewPlus = {
     removed: "Template deleted",
     undo: "Undo",
   },
+  privacy: {
+    playTime: "Show My Play Time",
+    playTimeNeedsSeen: "Shows only while your last seen is on.",
+  },
   played: {
     minutes: "{{count}} min",
     hours: "{{count}} h",

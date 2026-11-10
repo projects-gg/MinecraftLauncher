@@ -242,6 +242,9 @@ export interface SocialMe extends SocialProfile {
     shareLastSeen: boolean;
     shareRead?: boolean;
     shareTyping?: boolean;
+    /** CREW-PLUS: "Oynama Süremi Göster" (friends see it only with `shareLastSeen` on too);
+     * absent on a service without it. */
+    sharePlayTime?: boolean;
   };
   backup?: BackupMeta;
   /** A limited account ("Sınırlı hesap", a new Discord account); only the player sees it. */
@@ -1198,6 +1201,7 @@ export interface SocialApi {
     shareLastSeen?: boolean;
     shareRead?: boolean;
     shareTyping?: boolean;
+    sharePlayTime?: boolean;
   }): Promise<void>;
   setAvatar(avatar: string): Promise<void>;
   /** "Rozetlerim" (BADGES): the badges the player keeps off their profile, every one of them (`[]`
