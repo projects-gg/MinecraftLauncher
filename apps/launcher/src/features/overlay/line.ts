@@ -134,6 +134,25 @@ export function modRows(input: ModRowsInput): { overlay: ModRow; emoji: ModRow }
   };
 }
 
+/** A client tweak's switch as its row draws it (DIALOG-FOCUS): it has no line of its own. */
+export interface TweakRow {
+  /** The player's choice, held off where the mod cannot go. */
+  checked: boolean;
+  /** Held off and dimmed: the mod cannot go into the install Play opens. */
+  held: boolean;
+}
+
+/**
+ * A client tweak of the mod (DIALOG-FOCUS) by the emoji picker's rule: it lives in the mod's jar
+ * and needs no launcher during the game, so it is held off and dimmed exactly where the picker is
+ * (never for "Kapansın"), the player's choice kept. Its row has no line: whenever it is held, the
+ * overlay's line or the picker's above it says why (`modRows` says each reason once).
+ */
+export function tweakRow(input: Omit<OverlayLineInput, "leaves">): TweakRow {
+  const held = HELD_LINES.includes(overlayLine({ ...input, leaves: false }).kind);
+  return { checked: input.on && !held, held };
+}
+
 /**
  * Whether `minecraft` is a release newer than every one of `versions` (OVL-AUTO's "henüz yok":
  * its tested jar is still to come). Snapshots and an empty list are not.

@@ -20,6 +20,7 @@ function connected(): boolean {
 let config: OverlayConfig = {
   enabled: true,
   emoji: true,
+  tweaks: { dialogFocus: true },
   reducedMotion: false,
   notify: {
     crewCalls: true,
@@ -72,6 +73,9 @@ export const mockOverlay: OverlayApi = {
     return () => {};
   },
   onEmoji() {
+    return () => {};
+  },
+  onTweaks() {
     return () => {};
   },
 };

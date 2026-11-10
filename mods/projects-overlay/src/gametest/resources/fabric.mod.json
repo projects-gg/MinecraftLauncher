@@ -3,11 +3,14 @@
   "id": "projects_overlay_gametest",
   "version": "0.0.0",
   "name": "Projects Overlay game test",
-  "description": "Test only: the overlay's smoke test for a Minecraft version (OVL-AUTO). Never shipped.",
+  "description": "Test only: the overlay's smoke test for a Minecraft version (OVL-AUTO) and its client tweaks' (DIALOG-FOCUS). Never shipped.",
   "license": "GPL-3.0-only",
   "environment": "client",
   "entrypoints": {
-    "fabric-client-gametest": ["gg.projects.overlay.gametest.OverlaySmokeTest"]
+    "fabric-client-gametest": [
+      "gg.projects.overlay.gametest.OverlaySmokeTest",
+      "gg.projects.overlay.gametest.DialogFocusTest"
+    ]
   },
   "depends": {
     "projects_overlay": "*"

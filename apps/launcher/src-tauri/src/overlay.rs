@@ -8,7 +8,9 @@
 //! "Sohbette emoji seçici" (CHAT-EMOJI) is on and it is a Fabric instance the mod supports,
 //! official pack or not ([`prepare_mod`]), and then a bridge ([`for_launch`]); the game's exit,
 //! "Oyun açılınca launcher: Kapansın", quitting and the switches going off end it. With only the
-//! emoji picker on, the mod runs the picker alone. Between games the overlay costs nothing.
+//! emoji picker on, the mod runs the picker alone. The mod's client tweaks (DIALOG-FOCUS) bring
+//! the jar too, and reach the game on their own launch property ([`tweaks_arg`]), bridge or not.
+//! Between games the overlay costs nothing.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -24,7 +26,7 @@ use pl_mc::modrinth::ModrinthResolveTarget;
 use pl_net::CancellationToken;
 use pl_overlay::install::{BUNDLE_DIR, Bundle, ContentJar, Jars, Outcome, Pick, Request};
 use pl_overlay::protocol::{ByeReason, PROTO};
-use pl_overlay::{ConnectOutcome, Endpoint, Overlay, OverlayConfig};
+use pl_overlay::{ClientTweaks, ConnectOutcome, Endpoint, Overlay, OverlayConfig};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -41,6 +43,9 @@ pub const PEOPLE_EVENT: &str = "overlay-people";
 /// The chat's emoji picker was switched in the overlay's settings (CHAT-EMOJI): the page keeps the
 /// switch, which its Settings → Genel shows too.
 pub const EMOJI_EVENT: &str = "overlay-emoji";
+/// The client tweaks' switches changed without the page (DIALOG-FOCUS; the crash help's "Bu modu
+/// kapat" takes them off with the rest of the mod): the page keeps them (`ClientTweaks`).
+pub const TWEAKS_EVENT: &str = "overlay-tweaks";
 /// The choices, in the data folder.
 const CONFIG_FILE: &str = "overlay.json";
 /// How long a start waits for the Fabric API the overlay's jar needs: past it, the game starts
@@ -53,9 +58,9 @@ const EMOJI_WAIT: Duration = Duration::from_secs(3);
 /// game starts without the overlay this time.
 const JAR_WAIT: Duration = Duration::from_secs(20);
 
-/// Whether the mod is wanted ("Oyun içi katman" or "Sohbette emoji seçici"), for the code that
-/// plans pack syncs far from the app state (the mod center, repairs, version switches, background
-/// preparation). Follows the hub's settings.
+/// Whether the mod is wanted ("Oyun içi katman", "Sohbette emoji seçici" or a client tweak), for
+/// the code that plans pack syncs far from the app state (the mod center, repairs, version
+/// switches, background preparation). Follows the hub's settings.
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
 /// CHAT-EMOJI: the newest content index applied whose chat emojis the overlay does not have yet
@@ -84,9 +89,10 @@ fn content_jars() -> Vec<ContentJar> {
 /// Reads the shipped jars' index too.
 pub fn create(app: &AppHandle, root: &Path) -> Overlay {
     let _ = BUNDLE.set(load_bundle(app));
+    // A file from before the client tweaks keeps a mod the player took out of their games out.
     let config: OverlayConfig = std::fs::read(root.join(CONFIG_FILE))
         .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .and_then(|bytes| OverlayConfig::from_saved(&bytes))
         .unwrap_or_default();
     ENABLED.store(config.wants_mod(), Ordering::Relaxed);
     let overlay = Overlay::new(config);
@@ -284,6 +290,19 @@ pub fn set_emoji(app: &AppHandle, emoji: bool) {
     apply(&state, config);
 }
 
+/// The client tweaks' switches alone (a launch's settings, DIALOG-FOCUS): the rest of the choices
+/// stay.
+pub fn set_tweaks(app: &AppHandle, tweaks: ClientTweaks) {
+    let state = app.state::<AppState>();
+    let mut config = state.overlay.config();
+    if config.tweaks == tweaks {
+        return;
+    }
+    config.tweaks = tweaks;
+    tracing::info!(on = ?tweaks.ids(), "the overlay's client tweaks switched");
+    apply(&state, config);
+}
+
 /// A content snapshot was applied (a refresh, the cache at the start): its chat emojis go to the
 /// overlay with the next [`sync_emojis`] (CHAT-EMOJI), and its overlay jars count from the next
 /// start on while `features.overlayJars` is on (OVL-AUTO).
@@ -345,15 +364,21 @@ pub fn launcher_language(app: &AppHandle, lang: pl_lang::Lang) {
 }
 
 /// The overlay's mod was switched outside Settings (the crash help's "Bu modu kapat"): the mod as a
-/// whole, so both its switches follow ("Oyun içi katman" and "Sohbette emoji seçici", CHAT-EMOJI;
-/// with the picker still on the jar would come back), and so do the page's. The next start removes
-/// or brings back the mod.
+/// whole, so all its switches follow ("Oyun içi katman", "Sohbette emoji seçici", CHAT-EMOJI, and
+/// the client tweaks, DIALOG-FOCUS; with any one still on the jar would come back), and so do the
+/// page's. The next start removes or brings back the mod.
 pub fn switched_elsewhere(app: &AppHandle, enabled: bool) {
     let state = app.state::<AppState>();
     let mut config = state.overlay.config();
-    if config.enabled != enabled || config.emoji != enabled {
+    let tweaks = if enabled {
+        ClientTweaks::ON
+    } else {
+        ClientTweaks::OFF
+    };
+    if config.enabled != enabled || config.emoji != enabled || config.tweaks != tweaks {
         config.enabled = enabled;
         config.emoji = enabled;
+        config.tweaks = tweaks;
         tracing::info!(
             enabled,
             "the in-game overlay's mod switched outside Settings"
@@ -362,6 +387,7 @@ pub fn switched_elsewhere(app: &AppHandle, enabled: bool) {
     }
     let _ = app.emit(ENABLED_EVENT, enabled);
     let _ = app.emit(EMOJI_EVENT, enabled);
+    let _ = app.emit(TWEAKS_EVENT, tweaks);
 }
 
 /// The overlay jars the launcher put in this game folder (lowercase file names without
@@ -454,7 +480,8 @@ pub async fn prepare_mod(
 
 /// AUTOJOIN: whether a start of `instance` would get this launcher's own overlay jar, as far as
 /// the settings and the shipped jars tell before the start (Fabric, a jar for its Minecraft
-/// version, the overlay or the chat's emoji picker on): only then is a sub-server offered beside
+/// version, the overlay, the chat's emoji picker or a client tweak on: with the first two off the
+/// mod runs as for the picker alone, sub-server and all): only then is a sub-server offered beside
 /// "Doğrudan sunucuya bağlan". The start itself decides again ([`PreparedMod::ours`]).
 pub fn fits(state: &AppState, instance: &Instance) -> bool {
     let content = content_jars();
@@ -481,6 +508,16 @@ pub fn present_mod(state: &AppState, game_dir: &Path) -> PreparedMod {
         present: ours,
         ours,
     }
+}
+
+/// The client tweaks the player keeps on (DIALOG-FOCUS), for the command line of a game whose
+/// overlay mod is in place (`prepared`): the mod reads them on its own, with or without a bridge.
+/// None while every tweak is off, or without the mod. A mod from before the tweaks ignores it.
+pub fn tweaks_arg(state: &AppState, prepared: PreparedMod) -> Option<String> {
+    if !prepared.present {
+        return None;
+    }
+    state.overlay.config().tweaks.jvm_arg()
 }
 
 /// Fabric API for the overlay's jar: its newest version for the instance's Minecraft, installed

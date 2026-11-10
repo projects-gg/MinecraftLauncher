@@ -1,4 +1,5 @@
 import {
+  type ClientTweaks,
   commands,
   type OverlayConfig,
   type OverlayStateView,
@@ -29,6 +30,11 @@ export interface OverlayApi {
    * keeps the switch, which Settings → Genel shows too.
    */
   onEmoji(listener: (on: boolean) => void): () => void;
+  /**
+   * The client tweaks' switches changed without the page (DIALOG-FOCUS: the crash help took the
+   * overlay's mod out as a whole): the page keeps them, as its own switches would.
+   */
+  onTweaks(listener: (tweaks: ClientTweaks) => void): () => void;
 }
 
 function subscribe<T>(event: string, listener: (payload: T) => void): () => void {
@@ -45,6 +51,7 @@ const tauriOverlay: OverlayApi = {
   onEnabled: (listener) => subscribe<boolean>("overlay-enabled", listener),
   onPeople: (listener) => subscribe<PeopleChange>("overlay-people", listener),
   onEmoji: (listener) => subscribe<boolean>("overlay-emoji", listener),
+  onTweaks: (listener) => subscribe<ClientTweaks>("overlay-tweaks", listener),
 };
 
 export const overlayApi: OverlayApi = isTauri() ? tauriOverlay : mockOverlay;

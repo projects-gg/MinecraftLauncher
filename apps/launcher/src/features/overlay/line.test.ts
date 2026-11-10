@@ -6,6 +6,7 @@ vi.mock("@/lib/api", () => ({ api: {} }));
 
 const {
   carriesOverlay,
+  HELD_LINES,
   modRows,
   newerThanAll,
   OVERLAY_LINES,
@@ -14,6 +15,7 @@ const {
   overlayHome,
   overlayLine,
   shipsFor,
+  tweakRow,
   versionRange,
 } = await import("./line");
 
@@ -255,6 +257,63 @@ describe("the mod's two switches, by FASTPACK's rule (TASTE-SWEEP OVL-AUTO r2)",
       checked: false,
       held: false,
     });
+  });
+});
+
+describe("a client tweak's switch, by the picker's rule (DIALOG-FOCUS)", () => {
+  const next = instance("next", { mcVersion: "26.4" });
+  const known = {
+    instances: [projects, vanilla, forge, oldFabric],
+    official: status({ instanceId: "projects" }),
+    versions: VERSIONS,
+    locked: false,
+  };
+
+  it("follows the player's choice where the mod goes, Kapansın or not", () => {
+    expect(tweakRow({ ...known, on: true, play: projects })).toEqual({
+      checked: true,
+      held: false,
+    });
+    expect(tweakRow({ ...known, on: false, play: projects })).toEqual({
+      checked: false,
+      held: false,
+    });
+  });
+
+  it("is held off where the mod cannot go, and keeps the choice", () => {
+    for (const play of [next, vanilla, forge, oldFabric]) {
+      expect(tweakRow({ ...known, on: true, play })).toEqual({ checked: false, held: true });
+    }
+    expect(tweakRow({ ...known, on: true, play: next, versions: [...VERSIONS, "26.4"] })).toEqual({
+      checked: true,
+      held: false,
+    });
+  });
+
+  it("decides nothing while a list is unknown", () => {
+    expect(tweakRow({ ...known, on: true, play: undefined })).toEqual({
+      checked: true,
+      held: false,
+    });
+    expect(tweakRow({ ...known, on: true, play: vanilla, versions: undefined })).toEqual({
+      checked: true,
+      held: false,
+    });
+  });
+
+  it("has its reason said on the overlay's or the picker's line whenever it is held", () => {
+    for (const play of [projects, next, vanilla, forge, oldFabric]) {
+      for (const leaves of [false, true]) {
+        for (const overlayOn of [false, true]) {
+          const tweak = tweakRow({ ...known, on: true, play });
+          const rows = modRows({ ...known, overlayOn, emojiOn: true, leaves, play });
+          const said = [rows.overlay.line.kind, rows.emoji.line.kind].some((kind) =>
+            HELD_LINES.includes(kind),
+          );
+          expect(said).toBe(tweak.held);
+        }
+      }
+    }
   });
 });
 

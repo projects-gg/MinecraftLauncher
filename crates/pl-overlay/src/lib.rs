@@ -18,7 +18,8 @@
 //! tasks wait on their channels and sockets (no timers, no polling).
 //!
 //! The mod itself ships with the launcher, one jar per Minecraft version; [`install`] keeps the
-//! right one in the instance a game starts from (OVL-B).
+//! right one in the instance a game starts from (OVL-B). Its client tweaks ([`tweaks`],
+//! DIALOG-FOCUS) need no bridge: one launch property names the ones on.
 
 mod afk;
 pub mod avatar;
@@ -36,6 +37,7 @@ mod session;
 #[cfg(test)]
 mod tests;
 mod token;
+pub mod tweaks;
 pub mod voice;
 
 pub use feed::{MAX_CONVS, MAX_FRIENDS};
@@ -52,4 +54,5 @@ pub use server::{
 };
 pub use session::{CONNECT_WAIT, ConnectOutcome, Manage, Managed, PeopleChange, SocialActions};
 pub use token::SessionToken;
+pub use tweaks::{ClientTweaks, TWEAKS_ARG};
 pub use voice::{ThumbFuture, VoiceAct, VoiceFuture};
