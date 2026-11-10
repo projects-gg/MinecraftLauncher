@@ -306,6 +306,7 @@ describe("settings backup", () => {
     autoDownloadUpdates: true,
     discordEnabled: true,
     discordShowServer: false,
+    discordShowAddress: true,
     concurrentDownloads: 24,
     verifyOnLaunch: false,
     showSnapshots: true,

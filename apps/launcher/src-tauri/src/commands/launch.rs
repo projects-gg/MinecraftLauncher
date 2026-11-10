@@ -1357,6 +1357,7 @@ async fn prepare_and_spawn(
     // Friends see the game: in game once its window shows, the server read from the log, exited
     // (with several games, the oldest on screen).
     let game_presence = crate::commands::social::GamePresence::new(
+        app,
         &state.social,
         game_id,
         options.quick_play.as_ref(),

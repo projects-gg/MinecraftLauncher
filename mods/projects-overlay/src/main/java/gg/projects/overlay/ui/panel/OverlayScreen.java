@@ -3001,6 +3001,10 @@ public final class OverlayScreen extends Screen {
 
     @Override
     public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+        if (minecraft != null && minecraft.level == null) {
+            // OVL-RPC: opened from the game's menus there is no world behind: the menus' own background first.
+            super.extractBackground(g, mouseX, mouseY, partialTick);
+        }
         float t = Math.min(1f, (now() - openedAt) / (float) ENTER_MS);
         drawScrim(g, Ease.OUT.at(t));
     }

@@ -9411,7 +9411,8 @@ export type PrepareStatusView =
 
 /**
  *  What the player is doing, sent by the UI whenever it changes. The backend turns it into a
- *  Rich Presence activity (templates from the content config come later).
+ *  Rich Presence activity; where the game is comes from the game's log (OVL-RPC), so a server
+ *  change shows while the launcher's page rests in the tray.
  */
 export type PresenceContext = {
 	/**
@@ -9422,12 +9423,15 @@ export type PresenceContext = {
 	instanceName: string | null,
 	mcVersion: string | null,
 	loader: string | null,
-	server: string | null,
+	/**  Projects' player count, shown only while the game is on Projects. */
 	players: number | null,
 	maxPlayers: number | null,
 	percent: number | null,
 	startedAtMs: number | null,
+	/**  "Bağlandığım Sunucuyu Göster": where the game is (Projects, singleplayer, a server). */
 	showServer: boolean,
+	/**  "Sunucu Adresini Göster": another server's address too (Projects' is always public). */
+	showAddress: boolean,
 };
 
 export type PresenceState = "offline" | "launcher" | "playing";

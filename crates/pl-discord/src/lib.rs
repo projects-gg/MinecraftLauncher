@@ -15,6 +15,7 @@ mod error;
 mod frame;
 mod ipc;
 mod manager;
+mod place;
 
 pub use activity::{
     Activity, ActivityType, Assets, BUTTON_LABEL_MAX, BUTTON_URL_MAX, Button, MAX_BUTTONS, Party,
@@ -25,3 +26,4 @@ pub use error::{Error, Result};
 pub use frame::{Frame, HEADER_LEN, MAX_PAYLOAD, Opcode, read_frame, write_frame};
 pub use ipc::default_endpoints;
 pub use manager::{PresenceConfig, PresenceManager, PresenceStatus};
+pub use place::{GamePlace, PlacePrivacy, ShownPlace, shown_place};
