@@ -14,6 +14,7 @@ import gg.projects.overlay.ui.LiveChip;
 import gg.projects.overlay.ui.LiveTip;
 import gg.projects.overlay.ui.MarkTip;
 import gg.projects.overlay.ui.Marks;
+import gg.projects.overlay.ui.PlayTime;
 import gg.projects.overlay.ui.PresenceDot;
 import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
@@ -170,6 +171,14 @@ public final class FriendList extends PanelWidget {
         float pillX;
         float pillW;
         Icon icon;
+        /**
+         * CREW-PLUS: when their game session began (Unix ms; 0: none shown), the line's words without how long, the
+         * room for them, and the play time the line was last laid out with ({@link PlayTime#bucket}).
+         */
+        long since;
+        String whereText = "";
+        int whereRoom;
+        long playedBucket = -1;
     }
 
     private final Actions actions;
@@ -510,6 +519,26 @@ public final class FriendList extends PanelWidget {
         return y + 4;
     }
 
+    /**
+     * CREW-PLUS: a row's line with how long they have been playing ("Projects'te · 25 dk"), laid out again only when
+     * that changes (each five minutes under an hour, then each hour; drawn only while the panel is open), the place
+     * fitted first so the time always shows.
+     */
+    private static FormattedCharSequence whereOf(Row row, Font small) {
+        long bucket = row.since > 0 ? PlayTime.bucket(row.since, System.currentTimeMillis()) : -1;
+        if (bucket != row.playedBucket) {
+            row.playedBucket = bucket;
+            if (bucket < 0) {
+                row.where = Texts.visual(Texts.fit(small, row.whereText, row.whereRoom));
+            } else {
+                String tail = " · " + PlayTime.text(bucket);
+                int room = Math.max(0, row.whereRoom - small.width(tail));
+                row.where = Texts.visual(Texts.fit(small, row.whereText, room) + tail);
+            }
+        }
+        return row.where;
+    }
+
     /** An answer row whose answer is on its way: its chip and × wait. */
     private boolean waiting(Row row) {
         if (state == null) {
@@ -577,6 +606,15 @@ public final class FriendList extends PanelWidget {
             row.lone = world == null && (f.where().equals("game") && f.inGame()
                 || f.where().equals("offline") && !f.online() && f.seen() == null);
             row.where = Texts.visual(row.lone ? "" : Texts.fit(small, where, nameRoom));
+            // CREW-PLUS: a line with a place says how long they have been playing too (a lone row stays lone: its name
+            // never moves when the time comes).
+            row.since = !row.lone && world == null && f.inGame() ? f.since() : 0;
+            row.whereText = where;
+            row.whereRoom = nameRoom;
+            String played = row.since > 0 ? PlayTime.spoken(row.since, System.currentTimeMillis()) : null;
+            if (played != null) {
+                where = where + ", " + played;
+            }
             row.face = Face.of(f.name(), f.id());
             row.joinWidth = joinWidth;
             row.y = y;
@@ -1013,7 +1051,7 @@ public final class FriendList extends PanelWidget {
                 liveChip.draw(g, liveX(row, nameX), y + nameMid);
             }
             if (!row.lone) {
-                Draw.text(g, small, row.where, tx, Fonts.centeredY(Fonts.Face.SMALL, y + 17), row.inGame
+                Draw.text(g, small, whereOf(row, small), tx, Fonts.centeredY(Fonts.Face.SMALL, y + 17), row.inGame
                     ? Theme.ASH_300 : Theme.ASH_400);
             }
             if (row.request) {

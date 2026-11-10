@@ -388,7 +388,9 @@ public final class OverlayScreen extends Screen {
                 openSenderMenu(id, name, badge, at, keys);
             }
         });
-        quick = new QuickReplies(this::sendText);
+        // CREW-PLUS: "Konumum" beside the replies, only where the game shows coordinates.
+        quick = new QuickReplies(this::sendText, gg.projects.overlay.chat.MyLocation::available,
+            gg.projects.overlay.chat.MyLocation::now);
         field = new ComposerField(Texts.tr("chat.field"));
         field.setMaxLength(Protocol.MAX_MESSAGE_CHARS);
         send = new SendButton(this::canSend, this::sendDraft);
@@ -2565,9 +2567,11 @@ public final class OverlayScreen extends Screen {
             }
             // Crew chat's quick replies (CHAT2-O2 follow-up: they always took a row): not while a reply or an edit is
             // written (one would go as a new message; the launcher hides them too), not under the sticker picker, and
-            // only while the conversation keeps room for a few messages.
+            // only while the conversation keeps room for a few messages. CREW-PLUS: a direct conversation has the row
+            // for "Konumum" alone, while the game shows coordinates.
             int qy = above - 6 - QuickReplies.HEIGHT;
-            if (isCrew(conversation) && !replying() && editing == null && !pickerOpen()
+            quick.setCrew(isCrew(conversation));
+            if (quick.hasChips() && !replying() && editing == null && !pickerOpen()
                 && qy - 6 - y >= MIN_LIST_WITH_QUICK) {
                 quick.visible = true;
                 PanelWidget.place(quick, x0, qy, cw, QuickReplies.HEIGHT);
