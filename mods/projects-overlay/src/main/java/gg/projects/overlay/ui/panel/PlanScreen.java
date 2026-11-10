@@ -433,6 +433,10 @@ public final class PlanScreen extends Screen {
 
     @Override
     public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+        if (minecraft != null && minecraft.level == null) {
+            // OVL-RPC: over the panel opened from the game's menus, no world behind: the menus' background first.
+            super.extractBackground(g, mouseX, mouseY, partialTick);
+        }
         long now = System.nanoTime() / 1_000_000L;
         panel.drawStill(g, now);
         float t = Ease.OUT.at(Math.min(1f, (now - openedAt) / 180f));

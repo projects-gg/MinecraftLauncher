@@ -74,6 +74,8 @@ import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.client.gui.screens.multiplayer.JoinMultiplayerScreen;
+import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.multiplayer.ClientPacketListener;
@@ -861,10 +863,12 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
      * it (and the old rule "only from the game" was Shift+Tab's, which those screens use to move the focus). There it
      * opens the panel now; every other screen keeps its keys: the options, Controls while a key is being picked, a sign
      * or a book, the death screen, a mod's own screen. In the chat, where the pointer is free, a toast is pressed too.
+     * OVL-RPC (the owner, 10 Nov 2026: the panel should open anywhere in the game, not only in a world): the title
+     * screen and the game's server and world lists open it too, and closing it goes back there.
      */
     private void attachKey(Screen screen) {
         if (screen instanceof PauseScreen || screen instanceof ChatScreen
-            || screen instanceof AbstractContainerScreen<?>) {
+            || screen instanceof AbstractContainerScreen<?> || isMenu(screen)) {
             ScreenKeyboardEvents.allowKeyPress(screen).register((s, event) -> !keyOnScreen(s, event));
         }
         if (screen instanceof ChatScreen) {
@@ -877,6 +881,15 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         }
     }
 
+    /**
+     * The game's menus outside a world where the overlay key opens the panel (OVL-RPC): the title screen, the server
+     * list and the world list. Their only text field (the world list's search) takes no function key.
+     */
+    private static boolean isMenu(Screen screen) {
+        return screen instanceof TitleScreen || screen instanceof JoinMultiplayerScreen
+            || screen instanceof SelectWorldScreen;
+    }
+
     /** The overlay key on the pause menu, the chat or an inventory: true when it opened the panel (or was its repeat). */
     private boolean keyOnScreen(Screen screen, KeyEvent event) {
         if (!key.opensFrom(event)) {
@@ -886,8 +899,9 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             // The held press that closed the panel back to the pause menu, repeating.
             return true;
         }
-        if (screen instanceof PauseScreen) {
+        if (screen instanceof PauseScreen || isMenu(screen)) {
             // Closing goes back to the pause menu, the game paused as it was: the menu's Projects button does the same.
+            // From the game's menus, back to that menu.
             openPanelFrom(screen);
         } else {
             if (screen instanceof AbstractContainerScreen<?>) {
