@@ -36,7 +36,7 @@ const LOGO: &str = "logo";
 /// OVL-RPC: a generic Minecraft block, the picture on singleplayer and on servers that are not
 /// Projects' (never the server's own icon). An asset of the Discord application, uploaded in its
 /// developer portal.
-const BLOCK: &str = "block";
+const BLOCK: &str = "discord-block";
 
 /// The last context the UI sent, so a language change or a move in the game says the same thing
 /// anew.
