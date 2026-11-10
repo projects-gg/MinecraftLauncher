@@ -13,11 +13,11 @@ export const trFix2 = {
   /** The same menu for a person or a crew wherever they show. */
   menu: {
     chat: "Mesaj",
-    addFriend: "Arkadaş ekle",
-    requestSent: "İstek gönderildi",
+    addFriend: "Arkadaş Ekle",
+    requestSent: "İstek Gönderildi",
     requestSentTo: "Arkadaşlık isteği gönderildi",
-    acceptFriend: "İsteği kabul et",
-    crewChat: "Sohbeti aç",
+    acceptFriend: "İsteği Kabul Et",
+    crewChat: "Sohbeti Aç",
     you: "Sen",
   },
   /** A crew plan's note. */
@@ -28,9 +28,9 @@ export const trFix2 = {
     link: "Notta bağlantı olamaz.",
     phone: "Notta telefon numarası olamaz.",
     long: "Not en çok 80 karakter olabilir.",
-    write: "Not ekle",
-    edit: "Notu düzenle",
-    clear: "Notu kaldır",
+    write: "Not Ekle",
+    edit: "Notu Düzenle",
+    clear: "Notu Kaldır",
     save: "Kaydet",
     cancel: "Vazgeç",
     saved: "Not kaydedildi",
@@ -45,14 +45,14 @@ export const trFix2 = {
     yes: "Geliyor",
     maybe: "Belki",
     no: "Gelemiyor",
-    more_one: "{{count}} kişi daha",
-    more_other: "{{count}} kişi daha",
-    less: "Daha az göster",
+    more_one: "{{count}} Kişi Daha",
+    more_other: "{{count}} Kişi Daha",
+    less: "Daha Az Göster",
   },
   /** "Rapor et" on a plan card: its maker, the plan as evidence. */
   report: {
     plan: "Plan: {{when}}",
-    noteReason: "Uygunsuz not",
+    noteReason: "Uygunsuz Not",
   },
   /**
    * "Bağlan" (a call, an invite, a plan, a friend on Projects) while a game is open: the game
@@ -75,8 +75,8 @@ export const trFix2 = {
     closingBody: "Oyun kapanınca {{server}} sunucusunda yeniden açılacak.",
     overdueTitle: "Oyun henüz kapanmadı",
     overdueBody: "Zorla kapatırsan dünyandaki kaydedilmemiş ilerleme kaybolabilir.",
-    wait: "Beklemeye devam et",
-    force: "Zorla kapat",
+    wait: "Beklemeye Devam Et",
+    force: "Zorla Kapat",
     forcingTitle: "Oyun kapatılıyor",
     connecting: "{{server}} sunucusuna bağlanılıyor",
   },

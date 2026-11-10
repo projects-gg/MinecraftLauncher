@@ -1,5 +1,5 @@
 // SMALL7: the shader switch in Settings → Grafik ve FPS, and the line under "Oyun açılınca
-// launcher" while "Kapansın" is chosen. Short, sentence case.
+// launcher" while "Kapansın" is chosen. Short, titles in Title Case.
 export const trSmall7 = {
   /** Settings → Grafik ve FPS: Iris's shader of the instance Play launches, on or off. */
   shader: {

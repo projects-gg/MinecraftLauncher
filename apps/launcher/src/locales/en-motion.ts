@@ -1,6 +1,6 @@
 // BETA-FB: English counterpart of tr-motion.ts (the same keys). Root key `motion`.
 export const enMotion = {
-  title: "Reduce animations",
+  title: "Reduce Animations",
   help: "Panels and menus open without sliding.",
   perfOn: "Stays on while Performance mode is on.",
   systemOn: "Stays on while {{system}} reduces motion.",

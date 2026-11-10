@@ -1,4 +1,5 @@
-// Graphics presets (Akıcı, Dengeli, Güzel) and the instance settings they live in. Short, sentence case.
+// Graphics presets (Akıcı, Dengeli, Güzel) and the instance settings they live in. Short, titles in
+// Title Case.
 export const trGraphics = {
   /** Instance settings group. */
   title: "Grafik",
@@ -16,7 +17,7 @@ export const trGraphics = {
   /** Command palette item: the selected instance's graphics. */
   palette: "Grafik ayarı",
   /** Collapsible part of the instance settings: JVM arguments, commands, wrapper. */
-  advanced: "İleri düzey",
+  advanced: "İleri Düzey",
   /** Under the JVM arguments, inside "İleri düzey" (the title says the rest). */
   jvmHelp: "Boş bırakmak çoğu zaman en iyisidir.",
 };

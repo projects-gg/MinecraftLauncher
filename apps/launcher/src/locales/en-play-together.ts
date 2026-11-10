@@ -8,7 +8,7 @@ export const enPlayTogether: typeof trPlayTogether = {
   no: "No",
   openTitle: "Minecraft is open",
   openBody: "Join {{server}} from Multiplayer in the game.",
-  copyAddress: "Copy address",
+  copyAddress: "Copy Address",
   addressCopied: "Address copied",
   ok: "OK",
   already: "You're already on this server",

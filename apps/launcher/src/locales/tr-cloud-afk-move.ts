@@ -1,6 +1,6 @@
 // 7/24 Bulut's movement (FEAT-L, CAFK-FEAT §3.7): the account's "Hareket" switch and panel. The
 // contract's words (services/cloud-afk README "Movement" → texts), the same as the phone's, so they
-// read as one product. Short, sentence case, "sen". Root key `cloudAfkMove`.
+// read as one product. Short, titles in Title Case, "sen". Root key `cloudAfkMove`.
 export const trCloudAfkMove = {
   tab: "Hareket",
   setting: {
@@ -31,25 +31,25 @@ export const trCloudAfkMove = {
     space: "Boşluk",
   },
   goto: {
-    title: "Koordinata git",
+    title: "Koordinata Git",
     go: "Git",
   },
   main: {
-    go: "Ana hesabının yanına git",
-    follow: "Ana hesabını takip et",
+    go: "Ana Hesabının Yanına Git",
+    follow: "Ana Hesabını Takip Et",
   },
   // The contract's short words of a walk (with the account's name beside them), and what the
   // account is to the player or why its walks wait.
   walk: {
     title: "Hesapların",
-    go: "Yanına git",
-    follow: "Takip et",
+    go: "Yanına Git",
+    follow: "Takip Et",
     main: "Ana hesabın",
     notInGame: "Oyunda değil",
   },
   own: {
-    goNamed: "{{name}} hesabının yanına git",
-    followNamed: "{{name}} hesabını takip et",
+    goNamed: "{{name}} Hesabının Yanına Git",
+    followNamed: "{{name}} Hesabını Takip Et",
   },
   stop: "Dur",
   going: "Gidiyor: {{x}}, {{y}}, {{z}}",
@@ -82,5 +82,5 @@ export const trCloudAfkMove = {
   tradeStarted: "Takas başladı, durdu.",
   machineAway: "7/24 Bulut'a şu an ulaşılamıyor.",
   unreachable: "Hesaba şu an ulaşılamıyor.",
-  reconnect: "Şimdi yeniden bağlan",
+  reconnect: "Şimdi Yeniden Bağlan",
 };

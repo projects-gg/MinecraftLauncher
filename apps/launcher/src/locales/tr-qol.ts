@@ -1,4 +1,4 @@
-// QOL-L: the launcher's quality-of-life pass (docs/tasks/qol-l.md). Short, sentence case, no codes.
+// QOL-L: the launcher's quality-of-life pass (docs/tasks/qol-l.md). Short, titles in Title Case, no codes.
 export const trQol = {
   launch: {
     /**
@@ -14,7 +14,7 @@ export const trQol = {
      * The Microsoft sign-in's main button after "Bu hesapta Minecraft yok": the sign-in lets the
      * player pick the account, so it signs in with another one.
      */
-    otherAccount: "Başka hesapla giriş yap",
+    otherAccount: "Başka Hesapla Giriş Yap",
   },
   welcome: {
     /**
@@ -66,6 +66,6 @@ export const trQol = {
      * A desktop AFK account the login plugin kept turning away (its time ran out: no or wrong
      * login commands): the card's button opens its settings on Komutlar ("Bağla" ran the loop).
      */
-    fixLogin: "Girişi düzelt",
+    fixLogin: "Girişi Düzelt",
   },
 };

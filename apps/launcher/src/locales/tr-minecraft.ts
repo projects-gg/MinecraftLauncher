@@ -4,7 +4,7 @@
 export const trMinecraft = {
   label: "Minecraft",
   // The reader's button and source link: the official article opens in the browser.
-  readOn: "minecraft.net'te oku",
+  readOn: "minecraft.net'te Oku",
   // Settings → Hakkında, one quiet line under the credits: the Minecraft usage guidelines' words, the
   // same on every surface (lead, 28 Oct; docs/product.md → Minecraft haberleri).
   notAffiliated:

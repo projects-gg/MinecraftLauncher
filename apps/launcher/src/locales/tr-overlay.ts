@@ -1,4 +1,4 @@
-// The in-game overlay's switch (Settings → Genel, OVL2). Short, sentence case, "sen"; the
+// The in-game overlay's switch (Settings → Genel, OVL2). Short, titles in Title Case, "sen"; the
 // switches' names in Title Case (the owner, 7 Nov 2026), as the mod's client tweaks'
 // (tr-tweaks.ts). The overlay's own words (its cards, its panel, its settings) live in the mod's
 // language files. A line that says it will not work says where and what it needs, then its
@@ -24,7 +24,7 @@ export const trOverlay = {
   /** In its place while "Oyun açılınca launcher: Kapansın" is chosen, before `toMinimize`. */
   closeHelp: "Oyun açılınca launcher kapandığı için çalışmaz.",
   /** Sets "Oyun açılınca launcher" back to its default ("Simge durumuna küçülsün"). */
-  toMinimize: "Kapanmak yerine küçülsün",
+  toMinimize: "Kapanmak Yerine Küçülsün",
   /**
    * In its place while no install can carry it (LIB1: the official pack deleted, no Fabric install
    * of the player's on a version it is made for), before "Resmî paketi kur".
@@ -42,9 +42,9 @@ export const trOverlay = {
    */
   notYet: "Minecraft {{version}} için henüz yok.",
   /** Selects the official pack for Play. */
-  toOfficial: "Resmî pakete geç",
+  toOfficial: "Resmî Pakete Geç",
   /** Selects the player's own install the overlay works in (the official pack is gone). */
-  toInstall: "{{name}} kurulumuna geç",
+  toInstall: "{{name}} Kurulumuna Geç",
   /**
    * In their place while that install's game is prepared or open: the command bar's picker is
    * locked until the game is over.

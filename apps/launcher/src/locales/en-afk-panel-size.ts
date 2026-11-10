@@ -4,6 +4,6 @@ export const enAfkPanelSize = {
   edge: "Panel width",
   full: "Full width",
   narrow: "Normal width",
-  toFull: "Widen panel",
-  toNarrow: "Narrow panel",
+  toFull: "Widen Panel",
+  toNarrow: "Narrow Panel",
 };

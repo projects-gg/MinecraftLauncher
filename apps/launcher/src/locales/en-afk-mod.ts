@@ -38,7 +38,7 @@ export const enAfkMod = {
   },
   refused: "This row seems to contain {{kind}}. Fix or delete it.",
   report: {
-    link: "Report this as a mistake",
+    link: "Report This as a Mistake",
     sending: "Sending",
     sent: "Thanks, a staff member will look at it. Meanwhile, you can fix the line and save.",
     limited: "You've reported 3 times today. You can report again tomorrow.",

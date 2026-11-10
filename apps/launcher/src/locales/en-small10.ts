@@ -1,10 +1,10 @@
 // SMALL10: the launcher's small findings.
 export const enSmall10 = {
   menu: {
-    dismissInvite: "Dismiss invite",
-    hideInvite: "Hide invite",
-    hideCall: "Hide call",
-    hidePlan: "Hide plan",
+    dismissInvite: "Dismiss Invite",
+    hideInvite: "Hide Invite",
+    hideCall: "Hide Call",
+    hidePlan: "Hide Plan",
   },
   crew: {
     online: "online",

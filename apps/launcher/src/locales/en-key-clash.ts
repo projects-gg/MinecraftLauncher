@@ -6,7 +6,7 @@ export const enKeyClash = {
   fixedTitle: "Mod keys fixed",
   fixedLead: "Your other keys stay as they were.",
   fix: "Fix",
-  anyway: "Start anyway",
+  anyway: "Start Anyway",
   undo: "Undo",
   play: "Play",
   unbound: "Not bound",

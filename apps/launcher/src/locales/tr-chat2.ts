@@ -1,10 +1,10 @@
 // Chat extras (CHAT2): the emoji and sticker picker, stickers, replies, reactions, "yazıyor…",
-// "Görüldü", links and their cards. Short, sentence case. Names are never followed by a suffix
+// "Görüldü", links and their cards. Short, titles in Title Case. Names are never followed by a suffix
 // (tr-chat.ts rule): sentences put them where none is needed. Emoji names come from CLDR, sticker
 // names from the sticker manifest; neither is here.
 export const trChat2 = {
   picker: {
-    open: "Emoji ve çıkartmalar",
+    open: "Emoji ve Çıkartmalar",
     openEmoji: "Emoji",
     label: "Emoji ve çıkartmalar",
     tabs: {
@@ -15,7 +15,7 @@ export const trChat2 = {
     search: "Emoji ara",
     clear: "Aramayı temizle",
     grid: "Emoji",
-    recent: "Son kullanılanlar",
+    recent: "Son Kullanılanlar",
     empty: "Emoji bulunamadı",
     results_one: "{{count}} emoji bulundu",
     results_other: "{{count}} emoji bulundu",
@@ -23,31 +23,31 @@ export const trChat2 = {
     react: "Tepki ver",
   },
   groups: {
-    smileys: "İfadeler ve duygular",
+    smileys: "İfadeler ve Duygular",
     people: "İnsanlar",
-    nature: "Hayvanlar ve doğa",
-    food: "Yiyecek ve içecek",
-    travel: "Seyahat ve yerler",
+    nature: "Hayvanlar ve Doğa",
+    food: "Yiyecek ve İçecek",
+    travel: "Seyahat ve Yerler",
     activities: "Etkinlikler",
     objects: "Nesneler",
     symbols: "Semboller",
     flags: "Bayraklar",
   },
   tone: {
-    label: "Cilt tonu",
+    label: "Cilt Tonu",
     current: "Cilt tonu: {{tone}}",
     options: {
       default: "Varsayılan",
       light: "Açık",
-      mediumLight: "Orta açık",
+      mediumLight: "Orta Açık",
       medium: "Orta",
-      mediumDark: "Orta koyu",
+      mediumDark: "Orta Koyu",
       dark: "Koyu",
     },
   },
   stickers: {
     grid: "Çıkartmalar",
-    recent: "Son kullanılanlar",
+    recent: "Son Kullanılanlar",
     label: "{{name}} çıkartması",
     unknown: "Çıkartma",
     preview: "Çıkartma: {{name}}",
@@ -57,13 +57,13 @@ export const trChat2 = {
   },
   toolbar: {
     label: "Mesaj",
-    react: "Tepki ver",
+    react: "Tepki Ver",
     reply: "Yanıtla",
     more: "Seçenekler",
   },
   reply: {
     replying: "Yanıtlanıyor: {{name}}",
-    cancel: "Yanıtı kaldır",
+    cancel: "Yanıtı Kaldır",
     earlier: "Önceki bir mesaj",
     deleted: "Mesaj silindi",
     sticker: "Çıkartma",
@@ -73,7 +73,7 @@ export const trChat2 = {
   },
   reactions: {
     give: "{{emoji}} ile tepki ver",
-    more: "Başka bir emoji",
+    more: "Başka Bir Emoji",
     chip_one: "{{emoji}}, {{count}} kişi",
     chip_other: "{{emoji}}, {{count}} kişi",
     chipMineAlone: "{{emoji}}, sen",
@@ -83,7 +83,7 @@ export const trChat2 = {
     people_other: "{{count}} kişi",
     you: "Sen",
     meToo: "Ben de {{emoji}}",
-    remove: "Tepkimi kaldır",
+    remove: "Tepkimi Kaldır",
     full: "Bir mesaja en çok 5 tepki verebilirsin.",
     kinds: "Bu mesajda yeni bir tepkiye yer yok.",
     refused: "Bu emoji tepki olarak verilemez.",
@@ -102,7 +102,7 @@ export const trChat2 = {
     open: "Aç",
     cancel: "Vazgeç",
     refused: "Bu bağlantı açılamaz.",
-    copy: "Bağlantıyı kopyala",
+    copy: "Bağlantıyı Kopyala",
     copied: "Bağlantı kopyalandı",
     card: "{{site}}: {{title}}, bağlantı",
     cardPlain: "{{site}}, bağlantı",
@@ -129,7 +129,7 @@ export const trChat2 = {
   },
   report: {
     reaction: "Tepkisi: {{emoji}}",
-    reactionReason: "Uygunsuz tepki",
+    reactionReason: "Uygunsuz Tepki",
   },
   /** The limited account's list ("Sınırlı hesap"): CHAT2's items. */
   limited: {
@@ -140,8 +140,8 @@ export const trChat2 = {
     chatReactions_other: "Günde en çok {{count}} tepki verebilirsin",
   },
   privacy: {
-    seen: "Görüldü bilgisi",
-    typing: "Yazıyor bilgisi",
+    seen: "Görüldü Bilgisi",
+    typing: "Yazıyor Bilgisi",
     note: "Kapatırsan sen de göremezsin.",
     both: "İkisi de karşılıklı: kapatırsan sen de göremezsin.",
   },

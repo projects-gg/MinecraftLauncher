@@ -1,21 +1,21 @@
 // SOC-NOTE (SOC-GAP §3.5, §3.8): the status note friends see, and the pinned messages of a crew's
-// chat. Short, sentence case.
+// chat. Short, titles in Title Case.
 export const enSocNote = {
   note: {
-    add: "Add a note",
-    edit: "Edit note",
-    title: "Status note",
+    add: "Add a Note",
+    edit: "Edit Note",
+    title: "Status Note",
     placeholder: "What are you up to?",
     hint: "Only your friends see it.",
     count: "{{count}}/40",
-    lengthLabel: "Clear after",
+    lengthLabel: "Clear After",
     lengths: {
-      hour: "1 hour",
+      hour: "1 Hour",
       today: "Today",
-      keep: "Don't clear",
+      keep: "Don't Clear",
     },
     save: "Save",
-    remove: "Remove note",
+    remove: "Remove Note",
     saved: "Note saved",
     removed: "Note removed",
     long: "Up to 40 characters.",
@@ -30,7 +30,7 @@ export const enSocNote = {
     unpin: "Unpin",
     strip: "Pinned message",
     position: "{{at}}/{{count}}",
-    list: "Pinned messages",
+    list: "Pinned Messages",
     listHint: "Leaders and moderators can pin up to 3 messages.",
     jump: "Go to message",
     pinned: "{{name}} pinned a message.",
@@ -43,6 +43,6 @@ export const enSocNote = {
     gone: "This message isn't on this computer.",
   },
   report: {
-    reason: "Inappropriate status note",
+    reason: "Inappropriate Status Note",
   },
 };

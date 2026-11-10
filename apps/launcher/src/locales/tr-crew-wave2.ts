@@ -1,25 +1,25 @@
 // Crews' second wave (TEAM5): the join setting and join requests, the invite link, plans and the
-// time played together. Short, sentence case; suffixes follow "ekip" and "plan", never a crew's or a
+// time played together. Short, titles in Title Case; suffixes follow "ekip" and "plan", never a crew's or a
 // player's own name.
 export const trCrewWave2 = {
   join: {
     title: "Kodla ya da bağlantıyla katıl",
-    field: "Ekip kodu ya da davet bağlantısı",
+    field: "Ekip Kodu ya da Davet Bağlantısı",
     invalid: "Bu bir ekip kodu ya da davet bağlantısı değil.",
-    ask: "Katılma isteği gönder",
+    ask: "Katılma İsteği Gönder",
     askNote: "Liderler onaylayınca katılırsın.",
     sent: "İsteğin gönderildi. Liderler onaylayınca katılırsın.",
     waiting: "İsteğin bekliyor",
-    withdraw: "Geri çek",
+    withdraw: "Geri Çek",
     withdrawn: "İsteğin geri çekildi",
     askLimit: "Bekleyen 3 isteğin var. Önce birini geri çek.",
   },
   mine: {
-    title: "Katılma isteklerin",
+    title: "Katılma İsteklerin",
     sent: "{{when}} istedin",
   },
   requests: {
-    title: "Katılma istekleri",
+    title: "Katılma İstekleri",
     asked: "{{when}} istedi",
     accepted: "{{name}} ekibe katıldı",
     declined: "İstek reddedildi",
@@ -28,9 +28,9 @@ export const trCrewWave2 = {
     waiting_other: "{{count}} katılma isteği bekliyor",
   },
   link: {
-    label: "Davet bağlantısı",
+    label: "Davet Bağlantısı",
     copied: "Davet bağlantısı kopyalandı",
-    create: "Bağlantı oluştur",
+    create: "Bağlantı Oluştur",
     renew: "Yenile",
     renewAsk: "Eski bağlantı hemen çalışmaz olur.",
     renewed: "Yeni davet bağlantısı hazır",
@@ -48,11 +48,11 @@ export const trCrewWave2 = {
     approvalLine: "Kodla ya da bağlantıyla gelenler istek gönderir.",
     saved: "Katılım ayarı kaydedildi",
   },
-  admit: "İstekleri ve bağlantıyı yönetebilir",
+  admit: "İstekleri ve Bağlantıyı Yönetebilir",
   plans: {
     title: "Planlar",
     none: "Henüz plan yok.",
-    make: "Plan yap",
+    make: "Plan Yap",
     today: "Bugün {{time}}",
     tomorrow: "Yarın {{time}}",
     todayIn: "bugün {{time}}",
@@ -71,7 +71,7 @@ export const trCrewWave2 = {
     nobody: "Henüz yanıt yok",
     live: "Başladı",
     event: "Etkinlik: {{title}}",
-    cancel: "Planı sil",
+    cancel: "Planı Sil",
     cancelAsk: "Plan herkesten silinir.",
     gone: "Bu plan artık yok.",
     canceled: "Plan silindi",
@@ -101,15 +101,15 @@ export const trCrewWave2 = {
   together: {
     week: "Bu hafta birlikte {{time}}",
     month: "Bu ay birlikte {{time}}",
-    setting: "Birlikte oynanan süre",
+    setting: "Birlikte Oynanan Süre",
     settingNote: "Yalnız bu bilgisayarda tutulur. Kapatınca silinir.",
-    clear: "Süreleri sil",
+    clear: "Süreleri Sil",
     clearAsk: "Bu bilgisayarda tutulan süreler silinir.",
     cleared: "Birlikte oynanan süreler silindi",
   },
   notify: {
-    requests: "Katılma istekleri",
-    plans: "Plan hatırlatmaları",
+    requests: "Katılma İstekleri",
+    plans: "Plan Hatırlatmaları",
   },
   limited: {
     crewLink: "Davet bağlantısı oluşturamazsın",

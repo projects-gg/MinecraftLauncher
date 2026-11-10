@@ -5,7 +5,7 @@ export const enChatCalm = {
   crowded: "{{crew}} is a big crew, so it's muted for you.",
   chatTitle: "Chat",
   slow: {
-    title: "Slow mode",
+    title: "Slow Mode",
     off: "Off",
     spanSeconds_one: "{{count}} second",
     spanSeconds_other: "{{count}} seconds",

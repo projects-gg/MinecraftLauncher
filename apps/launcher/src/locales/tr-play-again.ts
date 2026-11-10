@@ -13,9 +13,9 @@ export const trPlayAgain = {
   /** Before any extra game, when the computer's free memory would not hold it (its own line). */
   memory: "Bilgisayarında boş bellek az, oyunlar takılabilir.",
   /** The answer to the title's question, after "Bir oyun daha aç" and after OYNA alike. */
-  confirm: "Yine de aç",
+  confirm: "Yine de Aç",
   /** OYNA while it says "Oyunda": under the pointer it says what a press does (a verb: third look). */
-  runningHover: "Bir oyun daha aç",
+  runningHover: "Bir Oyun Daha Aç",
   /** OYNA's name for screen readers while it says "Oyunda": what a press does. */
   runningAria: "Oyunda, bir oyun daha aç",
   /** The command bar's quiet line while other accounts play and the selected one does not. */
@@ -42,10 +42,10 @@ export const trPlayAgain = {
   forcingTitleAccount: "{{name}} hesabının oyunu kapatılıyor",
   /** "Bağlan"'s answer when the game on screen closes first, and the way out while it closes (the
    * game closes anyway; what the press changes is the reopening, fifth look). */
-  closeAndConnect: "Kapat ve bağlan",
-  stopConnecting: "Yeniden açılmasın",
+  closeAndConnect: "Kapat ve Bağlan",
+  stopConnecting: "Yeniden Açılmasın",
   /** "Bağlan" when the game did not close in time: the way out that leaves it as it is. */
-  keepOpen: "Oyunu açık bırak",
+  keepOpen: "Oyunu Açık Bırak",
   /** A game crashed while another game is on screen: the notification that brings the help. */
   crashBody: "Ne olduğunu görmek için tıkla.",
 };

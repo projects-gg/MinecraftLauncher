@@ -8,11 +8,11 @@ export const trIdentity = {
   },
   consent: {
     body: "Discord ya da Microsoft hesabınla giriş yaparsın. Arkadaşların senin adını, profil fotoğrafını ve ne oynadığını görür. E-postan ve şifren bize gelmez.",
-    microsoft: "Microsoft ile giriş yap",
+    microsoft: "Microsoft ile Giriş Yap",
     /** Over Microsoft while it signs in only the accounts it is linked to. */
     linkedWay: "Microsoft hesabını bağladıysan",
     /** Home's invitation once Microsoft opens accounts too (no brand). */
-    signIn: "Giriş yap",
+    signIn: "Giriş Yap",
     waitingMicrosoft: "Tarayıcıda Microsoft'a giriş yap",
     waitingMicrosoftNote: "Giriş yapınca burada devam edersin.",
     password: "Şifreni yalnız Microsoft'un kendi sayfasında gir.",
@@ -24,8 +24,8 @@ export const trIdentity = {
     title: "Arkadaşların seni hangi adla görsün?",
     label: "Adın",
     rules: "3–16 karakter: harf, rakam, boşluk ya da alt çizgi (_)",
-    save: "Devam et",
-    close: "Şimdi değil",
+    save: "Devam Et",
+    close: "Şimdi Değil",
     invalid: "Adın 3–16 karakter olmalı: harf, rakam, boşluk ya da alt çizgi (_).",
     rejected: "Bu ad kullanılamıyor.",
     tooMany: "Adını bugün daha fazla değiştiremezsin.",
@@ -35,16 +35,16 @@ export const trIdentity = {
     saved: "Adın kaydedildi.",
   },
   settings: {
-    name: "Profil adı",
+    name: "Profil Adı",
     change: "Değiştir",
     save: "Kaydet",
     cancel: "Vazgeç",
-    linked: "Bağlı hesaplar",
+    linked: "Bağlı Hesaplar",
     linkedOn: "{{date}} bağlandı",
     remove: "Kaldır",
     link: {
-      discord: "Discord hesabını bağla",
-      microsoft: "Microsoft hesabını bağla",
+      discord: "Discord Hesabını Bağla",
+      microsoft: "Microsoft Hesabını Bağla",
     },
     /** A session's line: "Son kullanım dün, Microsoft ile girildi". */
     viaMicrosoft: "Microsoft ile girildi",
@@ -65,7 +65,7 @@ export const trIdentity = {
     discord: "Tarayıcıda Discord'u onayla",
     discordNote: "Onaylayınca burada devam edersin.",
     password: "Şifreni yalnız Microsoft'un kendi sayfasında gir.",
-    reopen: "Tarayıcıyı yeniden aç",
+    reopen: "Tarayıcıyı Yeniden Aç",
     cancel: "Vazgeç",
   },
   done: {
@@ -91,7 +91,7 @@ export const trIdentity = {
     linked: "Sen yapmadıysan kaldır ve diğer cihazlardan çıkış yap.",
     removedTitle: "Hesabından {{provider}} bağlantısı kaldırıldı",
     removed: "Sen yapmadıysan diğer cihazlardan çıkış yap.",
-    open: "Bağlı hesaplara bak",
+    open: "Bağlı Hesaplara Bak",
     ok: "Tamam",
   },
   /** A limited account that is new itself (opened with Microsoft): its own words. */

@@ -3,6 +3,6 @@
 export const trQaFix = {
   bar: {
     /** "Doğrudan sunucuya bağlan" in a narrow command bar (1024 px): one line beside OYNA. */
-    autoJoinShort: "Sunucuya bağlan",
+    autoJoinShort: "Sunucuya Bağlan",
   },
 };

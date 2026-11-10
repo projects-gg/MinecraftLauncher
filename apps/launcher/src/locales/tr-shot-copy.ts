@@ -1,4 +1,4 @@
-// Screenshots to the clipboard while playing (Settings → Genel). Short, sentence case, "sen"; the
+// Screenshots to the clipboard while playing (Settings → Genel). Short, titles in Title Case, "sen"; the
 // setting's name in Title Case (the owner, 7 Nov 2026).
 export const trShotCopy = {
   /** The switch: off by default. */

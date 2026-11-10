@@ -5,7 +5,7 @@ export const enQol = {
     noAccount: "You need an account to play.",
   },
   login: {
-    otherAccount: "Use another account",
+    otherAccount: "Use Another Account",
   },
   welcome: {
     later: "The instance will be set up later",
@@ -31,6 +31,6 @@ export const enQol = {
     copying: "Duplicating {{name}}",
   },
   afk: {
-    fixLogin: "Fix login",
+    fixLogin: "Fix Login",
   },
 };

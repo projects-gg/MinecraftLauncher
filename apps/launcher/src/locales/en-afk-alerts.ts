@@ -6,9 +6,9 @@ export const enAfkAlerts = {
   show: "Show",
   update: {
     more: "+{{count}}",
-    stopAndUpdate: "Stop and update",
+    stopAndUpdate: "Stop and Update",
     stopping: "Stopping AFK accounts",
     installing: "Installing the update",
-    quitGame: "Quit the game to update",
+    quitGame: "Quit the Game to Update",
   },
 };

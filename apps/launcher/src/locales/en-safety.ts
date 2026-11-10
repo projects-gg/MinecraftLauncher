@@ -1,7 +1,7 @@
 // Limited accounts and moderators' measures (SPAM1, MOD1). Dates read "28 October".
 export const enSafety = {
   limited: {
-    chip: "Limited account",
+    chip: "Limited Account",
     title: "Your Discord account is new, so until {{date}}:",
     items: {
       crewFound: "You can't found a crew",
@@ -28,7 +28,7 @@ export const enSafety = {
     // BAN-TYPES: what still works (the game, offline and on servers).
     play: "You can still play. Friends, chat and voice chat are off until then.",
     playForever: "You can still play. Friends, chat and voice chat are off.",
-    rules: "Community rules",
+    rules: "Community Rules",
   },
   signupsClosed: "No new accounts can be made right now. Try again tomorrow.",
   notice: {
@@ -48,7 +48,7 @@ export const enSafety = {
       // BAN-TYPES: a warning for a voice room report.
       voice: "Voice chat violation",
     },
-    ok: "Got it",
+    ok: "Got It",
   },
   crewReset: {
     body: "Your crew's name and motto were reset because they went against the community rules.",

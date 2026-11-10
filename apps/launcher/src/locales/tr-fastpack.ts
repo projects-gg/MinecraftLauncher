@@ -1,4 +1,4 @@
-// Settings → Genel "Hızlı Kaynak Paketi Yükleme" (FASTPACK). Short, sentence case, "sen" (the
+// Settings → Genel "Hızlı Kaynak Paketi Yükleme" (FASTPACK). Short, titles in Title Case, "sen" (the
 // setting's name in Title Case, the owner, 7 Nov 2026). The line
 // under the switch says what it does; where it does nothing, the reason takes its place and names
 // the thing, and the switch is held off and dimmed (lead, 29 Oct, TASTE-SWEEP FASTPACK-L r1:

@@ -3,5 +3,5 @@ export const enPlayOpen = {
   opening: "Starting",
   status: "Starting the game",
   firstStart: "The first start can take a while.",
-  preparing: "Getting ready",
+  preparing: "Getting Ready",
 };

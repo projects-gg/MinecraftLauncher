@@ -7,6 +7,6 @@ export const trAfkPanelSize = {
   full: "Tam genişlik",
   narrow: "Normal genişlik",
   /** The header's button. */
-  toFull: "Paneli genişlet",
-  toNarrow: "Paneli daralt",
+  toFull: "Paneli Genişlet",
+  toNarrow: "Paneli Daralt",
 };

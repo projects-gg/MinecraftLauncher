@@ -6,7 +6,7 @@ export const trPlayTogether = {
   no: "Hayır",
   openTitle: "Minecraft açık",
   openBody: "Oyunda Çok Oyunculu'dan {{server}} sunucusuna bağlan.",
-  copyAddress: "Adresi kopyala",
+  copyAddress: "Adresi Kopyala",
   addressCopied: "Adres kopyalandı",
   ok: "Tamam",
   already: "Zaten bu sunucudasın",
