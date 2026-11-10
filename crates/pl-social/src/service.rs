@@ -4492,6 +4492,13 @@ impl SocialService {
         matches!(&self.lock().activity, LocalStatus::Playing { host: Some(host) } if is_projects_host(host))
     }
 
+    /// OVL-RPC: where the game this launcher started is now, read from its log (in the launcher,
+    /// a server, singleplayer, or in the game with no server known), whether or not the player
+    /// is signed in to the friends service. Discord's activity follows it.
+    pub fn game_place(&self) -> LocalStatus {
+        self.lock().activity.clone()
+    }
+
     /// The presence socket is connected (its `mc` messages arrive).
     pub(crate) fn socket_online(&self) -> bool {
         self.lock().state.connection() == Connection::Online

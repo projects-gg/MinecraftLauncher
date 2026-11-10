@@ -156,6 +156,7 @@ static GAME_LEAD: std::sync::LazyLock<parking_lot::Mutex<pl_social::GameLead>> =
 /// the player is still in the launcher), the log, exited. With several games the friends' status
 /// follows the oldest on screen and moves to the next when it ends.
 pub struct GamePresence {
+    app: AppHandle,
     social: SocialService,
     game: u64,
 }
@@ -163,6 +164,7 @@ pub struct GamePresence {
 impl GamePresence {
     /// `version`: the instance's Minecraft version (SOC9: friends see it next to where it plays).
     pub fn new(
+        app: &AppHandle,
         social: &SocialService,
         game: u64,
         quick_play: Option<&QuickPlay>,
@@ -180,6 +182,7 @@ impl GamePresence {
             lead.set_version(game, version.map(str::to_owned));
         }
         Self {
+            app: app.clone(),
             social: social.clone(),
             game,
         }
@@ -195,6 +198,7 @@ impl GamePresence {
             GameEvent::Exited { .. } => GAME_LEAD.lock().exited(self.game),
             _ => return,
         };
+        let moved = !steps.is_empty();
         for step in steps {
             match step {
                 pl_social::PresenceStep::Started { quick_play } => {
@@ -205,6 +209,11 @@ impl GamePresence {
                 pl_social::PresenceStep::Line(line) => self.social.game_line(&line),
                 pl_social::PresenceStep::Stopped => self.social.game_stopped(),
             }
+        }
+        // OVL-RPC: Discord follows the game too (another server, singleplayer, the menus), also
+        // while the launcher's page rests in the tray.
+        if moved {
+            crate::commands::discord::refresh(&self.app);
         }
     }
 }

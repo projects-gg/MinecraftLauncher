@@ -42,6 +42,7 @@ import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import grass from "@/assets/art/icons/icon-grass.webp";
 import logo from "@/assets/brand/logo-96.webp";
 import { FastPackRow } from "@/features/fastpack/settings-row";
 import { HelpSection } from "@/features/help/help-panel";
@@ -487,52 +488,108 @@ function Discord() {
   const p = usePrefs();
   return (
     <>
-      <Row title={t("settings.discord.enabled")}>
+      <Row title={t("discordPlace.enabled")}>
         <Switch
           checked={p.discordEnabled}
           onCheckedChange={(v) => p.set("discordEnabled", v)}
-          label={t("settings.discord.enabled")}
+          label={t("discordPlace.enabled")}
           hideLabel
         />
       </Row>
-      <Row title={t("settings.discord.showServer")}>
+      <Row title={t("discordPlace.showPlace")}>
         <Switch
           checked={p.discordShowServer}
           onCheckedChange={(v) => p.set("discordShowServer", v)}
-          label={t("settings.discord.showServer")}
+          label={t("discordPlace.showPlace")}
           hideLabel
           disabled={!p.discordEnabled}
         />
       </Row>
+      {/* OVL-RPC: another server's address is the player's to share; Projects' always shows. */}
+      <Row title={t("discordPlace.showAddress")} help={t("discordPlace.showAddressHelp")}>
+        <Switch
+          checked={p.discordShowAddress}
+          onCheckedChange={(v) => p.set("discordShowAddress", v)}
+          label={t("discordPlace.showAddress")}
+          hideLabel
+          disabled={!p.discordEnabled || !p.discordShowServer}
+        />
+      </Row>
       {p.discordEnabled ? (
         <div className="mt-5">
-          <p className="mb-2 text-[12px] text-ash-400">{t("settings.discord.preview")}</p>
-          <div className="flex w-fit items-center gap-3 rounded-lg bg-[#232428] p-3 pr-6 ring-1 ring-white/5">
-            <div className="relative">
-              <img src={logo} alt="" className="size-16 rounded-lg bg-obsidian-900 p-1" />
-              <span className="absolute -right-1 -bottom-1 flex size-6 items-center justify-center rounded-md bg-gold-700 text-[11px] font-bold text-gold-200 ring-2 ring-[#232428]">
-                E
-              </span>
+          <p className="mb-2 text-[12px] text-ash-400">{t("discordPlace.preview")}</p>
+          {p.discordShowServer ? (
+            <div className="flex flex-wrap gap-3">
+              <DiscordCard
+                caption={t("discordPlace.onProjects")}
+                picture={logo}
+                details={t("discordPlace.playingProjects")}
+                state={t("discordPlace.projectsState")}
+              />
+              <DiscordCard
+                caption={t("discordPlace.onServer")}
+                picture={grass}
+                badge
+                details={t("discordPlace.playingServer")}
+                state={
+                  p.discordShowAddress ? t("discordPlace.serverAddress") : t("discordPlace.version")
+                }
+              />
             </div>
-            {/* What Discord shows while playing, with "Bağlandığım sunucuyu göster" as it is. */}
-            <div className="text-[13px] leading-snug">
-              <p className="font-semibold text-white">Projects Launcher</p>
-              <p className="text-[#dbdee1]">
-                {p.discordShowServer
-                  ? t("settings.discord.previewDetails")
-                  : t("settings.discord.previewDetailsPlain")}
-              </p>
-              <p className="text-[#b5bac1] tabular-nums">
-                {p.discordShowServer
-                  ? t("settings.discord.previewStateParty")
-                  : t("settings.discord.previewState")}
-              </p>
-              <p className="text-[#b5bac1] tabular-nums">{t("settings.discord.previewElapsed")}</p>
-            </div>
-          </div>
+          ) : (
+            <DiscordCard
+              picture={logo}
+              details={t("discordPlace.playingMinecraft")}
+              state={t("discordPlace.version")}
+            />
+          )}
         </div>
       ) : null}
     </>
+  );
+}
+
+/**
+ * What Discord shows while playing (the lines `commands/discord.rs` builds): the picture (Projects'
+ * logo, or the generic block with the logo in its corner), the application's name on Discord, the
+ * place, the address or the version, the time.
+ */
+function DiscordCard({
+  caption,
+  picture,
+  badge = false,
+  details,
+  state,
+}: {
+  caption?: string;
+  picture: string;
+  badge?: boolean;
+  details: string;
+  state: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div>
+      {caption ? <p className="mb-1.5 text-[12px] text-ash-500">{caption}</p> : null}
+      <div className="flex w-fit items-center gap-3 rounded-lg bg-[#232428] p-3 pr-6 ring-1 ring-white/5">
+        <div className="relative shrink-0">
+          <img src={picture} alt="" className="size-16 rounded-lg bg-obsidian-900 p-1" />
+          {badge ? (
+            <img
+              src={logo}
+              alt=""
+              className="absolute -right-1 -bottom-1 size-6 rounded-full bg-obsidian-900 p-0.5 ring-2 ring-[#232428]"
+            />
+          ) : null}
+        </div>
+        <div className="text-[13px] leading-snug">
+          <p className="font-semibold text-white">projects.gg</p>
+          <p className="text-[#dbdee1]">{details}</p>
+          <p className="text-[#b5bac1] tabular-nums">{state}</p>
+          <p className="text-[#b5bac1] tabular-nums">{t("discordPlace.elapsed")}</p>
+        </div>
+      </div>
+    </div>
   );
 }
 

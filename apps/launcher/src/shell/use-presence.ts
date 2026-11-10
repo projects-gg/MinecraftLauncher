@@ -7,7 +7,11 @@ import { isOpening, useLaunch } from "@/stores/launch";
 import { runningPhase } from "@/stores/launch-owner";
 import { usePrefs } from "@/stores/prefs";
 
-/** Keeps Discord Rich Presence in sync with what the player is doing in the launcher. */
+/**
+ * Keeps Discord Rich Presence in sync with what the player is doing in the launcher. Where the
+ * game is (Projects, another server, singleplayer) the backend reads from the game's log itself
+ * (OVL-RPC), so it follows the game while this page rests in the tray.
+ */
 export function usePresenceSync() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // The followed launch; with a game on screen while another launch is on its way, that game
@@ -21,12 +25,13 @@ export function usePresenceSync() {
     shownGame && followedPhase.kind !== "running" ? shownGame.instanceId : followedId;
   const enabled = usePrefs((s) => s.discordEnabled);
   const showServer = usePrefs((s) => s.discordShowServer);
-  const autoJoin = usePrefs((s) => s.autoJoin);
+  const showAddress = usePrefs((s) => s.discordShowAddress);
   const { data: instances } = useQuery({
     queryKey: ["instances"],
     queryFn: () => api.instances(),
     enabled: isTauri(),
   });
+  // Projects' player count: the backend shows it only while the game is on Projects.
   const { data: server } = useQuery({
     queryKey: ["server-status"],
     queryFn: () => api.serverStatus(),
@@ -49,19 +54,19 @@ export function usePresenceSync() {
     const page = pathname === "/" ? "home" : (pathname.split("/")[1] ?? "home");
     const activity =
       since !== null ? "playing" : opening ? "starting" : percent !== null ? "downloading" : page;
-    const joinsServer = Boolean(since !== null && autoJoin && instance?.autoJoin);
+    const playing = since !== null;
     void api.updatePresence({
       activity,
       instanceName: instance?.name ?? null,
       mcVersion: instance?.mcVersion ?? null,
       loader: instance?.loader ?? null,
-      server: joinsServer ? (instance?.autoJoin ?? null) : null,
-      players: joinsServer ? (server?.players ?? null) : null,
-      maxPlayers: joinsServer ? (server?.maxPlayers ?? null) : null,
+      players: playing && server?.online ? server.players : null,
+      maxPlayers: playing && server?.online ? server.maxPlayers : null,
       percent,
       startedAtMs: since,
       showServer,
+      showAddress,
     });
     // Percent updates are coalesced by the backend's rate limiter.
-  }, [pathname, percent, since, opening, enabled, showServer, autoJoin, instance, server]);
+  }, [pathname, percent, since, opening, enabled, showServer, showAddress, instance, server]);
 }

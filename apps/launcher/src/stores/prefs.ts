@@ -71,6 +71,11 @@ interface PrefsState {
   autoDownloadUpdates: boolean;
   discordEnabled: boolean;
   discordShowServer: boolean;
+  /**
+   * OVL-RPC "Sunucu Adresini Göster": Discord shows the address of a server other than Projects'
+   * (off: Discord shows it to everyone who sees the player, not only friends).
+   */
+  discordShowAddress: boolean;
   concurrentDownloads: number;
   verifyOnLaunch: boolean;
   /** Settings → İndirmeler: the selected instance downloads while the launcher is idle. */
@@ -132,6 +137,7 @@ export const usePrefs = create<PrefsState>()(
       autoDownloadUpdates: true,
       discordEnabled: true,
       discordShowServer: true,
+      discordShowAddress: false,
       concurrentDownloads: 16,
       verifyOnLaunch: false,
       backgroundPrepare: true,

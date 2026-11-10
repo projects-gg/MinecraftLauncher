@@ -482,6 +482,7 @@ export const BACKUP_PREFS = {
   autoDownloadUpdates: "boolean",
   discordEnabled: "boolean",
   discordShowServer: "boolean",
+  discordShowAddress: "boolean",
   concurrentDownloads: "downloads",
   verifyOnLaunch: "boolean",
   showSnapshots: "boolean",
