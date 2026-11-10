@@ -179,7 +179,14 @@ public final class FriendList extends PanelWidget {
         String whereText = "";
         int whereRoom;
         long playedBucket = -1;
+        /** CREW-PLUS: how long, after the clock ("25 dk"), and where the place's words end; null: none. */
+        String played;
+        float placeW;
     }
+
+    /** CREW-PLUS: the clock before a friend's play time, and its room on each side. */
+    private static final int PLAYED_ICON = 8;
+    private static final int PLAYED_GAP = 4;
 
     private final Actions actions;
     /** The state the list was last laid out from (a request's answer on its way, OVL-SOC 2). */
@@ -520,23 +527,22 @@ public final class FriendList extends PanelWidget {
     }
 
     /**
-     * CREW-PLUS: a row's line with how long they have been playing ("Projects'te · 25 dk"), laid out again only when
-     * that changes (each five minutes under an hour, then each hour; drawn only while the panel is open), the place
-     * fitted first so the time always shows.
+     * CREW-PLUS: a row's line with how long they have been playing, as the launcher's: the place, a small clock, "25 dk"
+     * (the clock says "for", where a bare time could read as "ago"). Laid out again only when that changes (each five
+     * minutes under an hour, then each hour; drawn only while the panel is open), the place fitted first so the time
+     * always shows.
      */
-    private static FormattedCharSequence whereOf(Row row, Font small) {
+    private static void layoutPlayed(Row row, Font small) {
         long bucket = row.since > 0 ? PlayTime.bucket(row.since, System.currentTimeMillis()) : -1;
-        if (bucket != row.playedBucket) {
-            row.playedBucket = bucket;
-            if (bucket < 0) {
-                row.where = Texts.visual(Texts.fit(small, row.whereText, row.whereRoom));
-            } else {
-                String tail = " · " + PlayTime.text(bucket);
-                int room = Math.max(0, row.whereRoom - small.width(tail));
-                row.where = Texts.visual(Texts.fit(small, row.whereText, room) + tail);
-            }
+        if (bucket == row.playedBucket) {
+            return;
         }
-        return row.where;
+        row.playedBucket = bucket;
+        row.played = PlayTime.text(bucket);
+        int tail = row.played == null ? 0 : PLAYED_GAP + PLAYED_ICON + 2 + small.width(row.played);
+        String place = Texts.fit(small, row.whereText, Math.max(0, row.whereRoom - tail));
+        row.where = Texts.visual(place);
+        row.placeW = small.width(place);
     }
 
     /** An answer row whose answer is on its way: its chip and × wait. */
@@ -1051,8 +1057,15 @@ public final class FriendList extends PanelWidget {
                 liveChip.draw(g, liveX(row, nameX), y + nameMid);
             }
             if (!row.lone) {
-                Draw.text(g, small, whereOf(row, small), tx, Fonts.centeredY(Fonts.Face.SMALL, y + 17), row.inGame
-                    ? Theme.ASH_300 : Theme.ASH_400);
+                layoutPlayed(row, small);
+                float ly = Fonts.centeredY(Fonts.Face.SMALL, y + 17);
+                Draw.text(g, small, row.where, tx, ly, row.inGame ? Theme.ASH_300 : Theme.ASH_400);
+                if (row.played != null) {
+                    float ix = tx + row.placeW + PLAYED_GAP;
+                    Draw.icon(g, Icon.CLOCK, PLAYED_ICON, Draw.snap(ix), Draw.snap(y + 17 - PLAYED_ICON / 2f),
+                        Theme.ASH_400);
+                    Draw.text(g, small, row.played, ix + PLAYED_ICON + 2, ly, Theme.ASH_400);
+                }
             }
             if (row.request) {
                 // OVL-SOC 2: "Kabul et" (gold words while lit, as "Katıl") and the × that declines, always there;
