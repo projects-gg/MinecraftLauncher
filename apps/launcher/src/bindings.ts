@@ -9410,9 +9410,10 @@ export type PrepareStatusView =
 { state: "ready"; instanceId: string };
 
 /**
- *  What the player is doing, sent by the UI whenever it changes. The backend turns it into a
- *  Rich Presence activity; where the game is comes from the game's log (OVL-RPC), so a server
- *  change shows while the launcher's page rests in the tray.
+ *  What the player is doing and what they let Discord show, sent by the UI whenever it changes.
+ *  The backend turns it into a Rich Presence activity; where the game is comes from the game's
+ *  log (OVL-RPC) and the crew from the friends service (RPC-PLUS), so both follow the game while
+ *  the launcher's page rests in the tray.
  */
 export type PresenceContext = {
 	/**
@@ -9420,7 +9421,11 @@ export type PresenceContext = {
 	 *  window is not on screen yet) | "playing"
 	 */
 	activity: string,
-	instanceName: string | null,
+	/**
+	 *  The pack's name, only for an instance the launcher keeps from a pack (the official
+	 *  Projects pack); a name the player gave their own instance never goes to Discord.
+	 */
+	packName: string | null,
 	mcVersion: string | null,
 	loader: string | null,
 	/**  Projects' player count, shown only while the game is on Projects. */
@@ -9428,10 +9433,20 @@ export type PresenceContext = {
 	maxPlayers: number | null,
 	percent: number | null,
 	startedAtMs: number | null,
-	/**  "Bağlandığım Sunucuyu Göster": where the game is (Projects, singleplayer, a server). */
+	/**  "Oynadığım Yeri Göster": where the game is (Projects, singleplayer, a server). */
 	showServer: boolean,
 	/**  "Sunucu Adresini Göster": another server's address too (Projects' is always public). */
 	showAddress: boolean,
+	/**  "Ekibimle Oynadığımı Göster" (RPC-PLUS). */
+	showCrew: boolean,
+	/**  "Kaç Kişi Olduğumuzu Göster": the crewmates together, of the crew's size. */
+	showCrewCount: boolean,
+	/**  "Ekibimin Adını Göster": the name of the crew whose tag the player wears. */
+	showCrewName: boolean,
+	/**  "Paketi ve Sürümü Göster". */
+	showPack: boolean,
+	/**  "Oyun Süresini Göster". */
+	showElapsed: boolean,
 };
 
 export type PresenceState = "offline" | "launcher" | "playing";

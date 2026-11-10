@@ -26,4 +26,6 @@ pub use error::{Error, Result};
 pub use frame::{Frame, HEADER_LEN, MAX_PAYLOAD, Opcode, read_frame, write_frame};
 pub use ipc::default_endpoints;
 pub use manager::{PresenceConfig, PresenceManager, PresenceStatus};
-pub use place::{GamePlace, PlacePrivacy, ShownPlace, shown_place};
+pub use place::{
+    CrewNow, CrewPrivacy, GamePlace, PlacePrivacy, ShownCrew, ShownPlace, shown_crew, shown_place,
+};

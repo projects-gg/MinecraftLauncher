@@ -1,10 +1,19 @@
-// English for tr-discord-place.ts (Settings → Discord, OVL-RPC).
+// English for tr-discord-place.ts (Settings → Discord, OVL-RPC, RPC-PLUS).
 export const enDiscordPlace = {
   enabled: "Show Game Activity on Discord",
+  groupGame: "Game",
+  groupCrew: "Crew",
   showPlace: "Show Where I Play",
   showAddress: "Show the Server Address",
   showAddressHelp:
     "Everyone who sees you on Discord sees the address of servers other than Projects.",
+  showPack: "Show the Pack and Version",
+  showElapsed: "Show Time Played",
+  showCrew: "Show When I Play with My Crew",
+  showCrewHelp: "Shows only while crewmates are on Projects with you.",
+  showCrewCount: "Show How Many of Us Play",
+  showCrewName: "Show My Crew's Name",
+  showCrewNameHelp: "The name of the crew whose tag you wear.",
   preview: "Preview",
   onProjects: "On Projects",
   onServer: "On Another Server",
@@ -14,5 +23,9 @@ export const enDiscordPlace = {
   projectsState: "play.projects.gg (214 of 500)",
   serverAddress: "mc.examplecraft.net",
   version: "Fabric 26.1.2",
+  withCrew: "With their crew",
+  withCrewNamed: "With the {{name}} crew",
+  crewName: "Dragons",
+  crewCount: "(3 of 5)",
   elapsed: "00:42 elapsed",
 };

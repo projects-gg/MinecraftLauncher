@@ -66,9 +66,96 @@ pub fn shown_place(place: GamePlace<'_>, privacy: PlacePrivacy) -> ShownPlace<'_
     }
 }
 
+/// RPC-PLUS: the crew the player plays with now (the friends service's count; no crewmate's name).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CrewNow<'a> {
+    /// The crew's own name, when the player wears its tag.
+    pub name: Option<&'a str>,
+    /// Members in the game together, the player included.
+    pub together: u32,
+    /// The crew's members.
+    pub size: u32,
+}
+
+/// The player's crew choices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CrewPrivacy {
+    /// "Ekibimle Oynadığımı Göster".
+    pub show_crew: bool,
+    /// "Kaç Kişi Olduğumuzu Göster": together / the crew's size as Discord's party.
+    pub show_count: bool,
+    /// "Ekibimin Adını Göster": the worn crew's name.
+    pub show_name: bool,
+}
+
+/// What the crew line says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShownCrew<'a> {
+    pub name: Option<&'a str>,
+    /// Discord's party size: together, of the crew's size.
+    pub party: Option<(u32, u32)>,
+}
+
+/// The crew line, only while at least one crewmate plays with the player (alone is never "with the
+/// crew").
+pub fn shown_crew(crew: Option<CrewNow<'_>>, privacy: CrewPrivacy) -> Option<ShownCrew<'_>> {
+    let crew = crew.filter(|crew| privacy.show_crew && crew.together >= 2)?;
+    Some(ShownCrew {
+        name: crew.name.filter(|_| privacy.show_name),
+        party: privacy
+            .show_count
+            .then_some((crew.together, crew.size.max(crew.together))),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const CREW_ALL: CrewPrivacy = CrewPrivacy {
+        show_crew: true,
+        show_count: true,
+        show_name: true,
+    };
+
+    #[test]
+    fn the_crew_line_needs_a_crewmate_and_the_players_choice() {
+        let three = CrewNow {
+            name: Some("Ejderler"),
+            together: 3,
+            size: 5,
+        };
+        assert_eq!(
+            shown_crew(Some(three), CREW_ALL),
+            Some(ShownCrew {
+                name: Some("Ejderler"),
+                party: Some((3, 5))
+            })
+        );
+        let alone = CrewNow {
+            together: 1,
+            ..three
+        };
+        assert_eq!(shown_crew(Some(alone), CREW_ALL), None);
+        assert_eq!(shown_crew(None, CREW_ALL), None);
+        let off = CrewPrivacy {
+            show_crew: false,
+            ..CREW_ALL
+        };
+        assert_eq!(shown_crew(Some(three), off), None);
+        let plain = CrewPrivacy {
+            show_crew: true,
+            show_count: false,
+            show_name: false,
+        };
+        assert_eq!(
+            shown_crew(Some(three), plain),
+            Some(ShownCrew {
+                name: None,
+                party: None
+            })
+        );
+    }
 
     const ALL: PlacePrivacy = PlacePrivacy {
         show_place: true,

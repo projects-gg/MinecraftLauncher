@@ -1,11 +1,20 @@
-// Settings → Discord (OVL-RPC): what the Discord activity shows. Setting names in Title Case,
-// the one help line a sentence. The preview's lines are what Discord shows (the launcher's
-// Discord texts in `commands/discord.rs` say the same); its server address is a made-up one.
+// Settings → Discord (OVL-RPC, RPC-PLUS): what the Discord activity shows. Setting names in Title
+// Case, help lines a sentence. The preview's lines are what Discord shows (the launcher's Discord
+// texts in `commands/discord.rs` say the same); its server address and crew are made up.
 export const trDiscordPlace = {
   enabled: "Discord'da Oyun Durumunu Göster",
+  groupGame: "Oyun",
+  groupCrew: "Ekip",
   showPlace: "Oynadığım Yeri Göster",
   showAddress: "Sunucu Adresini Göster",
   showAddressHelp: "Projects dışındaki sunucuların adresini seni Discord'da gören herkes görür.",
+  showPack: "Paketi ve Sürümü Göster",
+  showElapsed: "Oyun Süresini Göster",
+  showCrew: "Ekibimle Oynadığımı Göster",
+  showCrewHelp: "Yalnız ekip arkadaşların seninle Projects'teyken görünür.",
+  showCrewCount: "Kaç Kişi Olduğumuzu Göster",
+  showCrewName: "Ekibimin Adını Göster",
+  showCrewNameHelp: "Etiketini taktığın ekibin adı görünür.",
   preview: "Önizleme",
   onProjects: "Projects'te",
   onServer: "Başka Sunucuda",
@@ -15,5 +24,9 @@ export const trDiscordPlace = {
   projectsState: "play.projects.gg (214 / 500)",
   serverAddress: "mc.ornekzanaat.net",
   version: "Fabric 26.1.2",
+  withCrew: "Ekibiyle",
+  withCrewNamed: "{{name}} ekibiyle",
+  crewName: "Ejderler",
+  crewCount: "(3 / 5)",
   elapsed: "00:42 geçti",
 };

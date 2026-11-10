@@ -57,6 +57,8 @@ pub fn create(
         crate::host::on_social(&emitter, &update);
         // Voice chat reads who the player is and the names its notifications show (VOICE).
         crate::voice::on_social(&emitter, &update);
+        // Discord's crew line follows the crewmates on Projects (RPC-PLUS).
+        crate::commands::discord::on_social(&emitter, &update);
         overlay.on_social(update);
     });
     let tokens: Arc<dyn pl_social::TokenStore> =
