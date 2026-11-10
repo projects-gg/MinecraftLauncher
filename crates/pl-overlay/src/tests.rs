@@ -2914,6 +2914,7 @@ fn soc2_view() -> SocialView {
         frame: "f1".into(),
         motto: String::new(),
         members: 4,
+        max_members: Some(100),
         from: profile("f-mert", "Mert"),
         sent_at: 5,
     });

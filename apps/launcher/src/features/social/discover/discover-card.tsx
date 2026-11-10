@@ -17,10 +17,11 @@ import { openCrewPage, sayJoined } from "../badge-actions";
 import { swap, useSocialMotion } from "../motion";
 import { useSocialUi } from "../store";
 import { CrewMark, TeamTag } from "../team-emblem";
+import { nearlyFull } from "../teams";
 import { discoverOff, dropFromListing } from "./listing";
 
-/** A crew holds 30 (the service's limit). */
-const FULL = 30;
+/** A crew's cap from a service before crew caps (CREW-CAP): every crew held 30. */
+const CAP_BEFORE = 30;
 
 type Slot = "join" | "ask" | "member" | "waiting" | "full" | "limit";
 
@@ -31,11 +32,12 @@ export function DiscoverCard({ crew, canAdd }: { crew: DiscoverCrew; canAdd: boo
   const waiting = useSocialUi((s) => s.view.teamRequests.some((r) => r.teamId === crew.id));
   const openReport = useSocialUi((s) => s.openReport);
   const [busy, setBusy] = useState(false);
+  const cap = crew.maxMembers ?? CAP_BEFORE;
   const slot: Slot = member
     ? "member"
     : waiting
       ? "waiting"
-      : crew.members >= FULL
+      : crew.members >= cap
         ? "full"
         : !canAdd
           ? "limit"
@@ -88,9 +90,15 @@ export function DiscoverCard({ crew, canAdd }: { crew: DiscoverCrew; canAdd: boo
               <TeamTag tag={crew.tag} color={crew.color} />
             </div>
             <p className="mt-0.5 text-[12.5px] text-ash-400">
-              {crew.active
-                ? t("discover.card.membersActive", { count: crew.members })
-                : t("discover.card.members", { count: crew.members })}
+              {/* CREW-CAP: the cap beside the count only once the crew is nearly full. */}
+              {nearlyFull(crew.members, crew.maxMembers)
+                ? t(crew.active ? "discover.card.membersOfActive" : "discover.card.membersOf", {
+                    count: crew.members,
+                    limit: cap,
+                  })
+                : crew.active
+                  ? t("discover.card.membersActive", { count: crew.members })
+                  : t("discover.card.members", { count: crew.members })}
             </p>
           </div>
           <Menu

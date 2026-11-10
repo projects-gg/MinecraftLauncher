@@ -58,6 +58,10 @@ pub struct DiscoverCrew {
     #[serde(default)]
     pub join: JoinMode,
     pub members: u32,
+    /// CREW-CAP: the crew's cap when the listing was made (its own, else the service's default);
+    /// none from a service before crew caps (its cap was 30).
+    #[serde(default)]
+    pub max_members: Option<u32>,
     /// At least 3 members (all of a smaller crew) were on in the last 7 days.
     #[serde(default)]
     pub active: bool,

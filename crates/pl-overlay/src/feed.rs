@@ -4007,6 +4007,7 @@ pub(crate) mod tests {
             motto: " Gece bizimdir ".into(),
             created_on: "2026-09-14".into(),
             members: 12,
+            max_members: Some(100),
             requests: true,
         })
     }

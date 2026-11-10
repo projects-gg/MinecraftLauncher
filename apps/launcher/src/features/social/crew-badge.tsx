@@ -79,7 +79,7 @@ import { markedName, useMarks } from "./person-mark";
 import { useSocialUi } from "./store";
 import { CrewMark, type TagSize, TeamTag } from "./team-emblem";
 import { useCrewItems } from "./team-section";
-import { localDay } from "./teams";
+import { crewSize, localDay } from "./teams";
 
 /**
  * How a row names someone who wears a tag: "Ayşe, etiket GK" (the chip itself is not read); with
@@ -427,9 +427,10 @@ function BadgeCard({ badge, wearer, chip }: { badge: CrewBadge; wearer: string; 
     });
 
   const founded = localDay(badge.createdOn);
+  // CREW-CAP: the cap beside the count only once the crew is nearly full.
   const members = team
-    ? t("teams.membersOf", { count: team.members.length, limit: team.limit })
-    : t("teams.members", { count: badge.members });
+    ? crewSize(t, team.members.length, team.limit)
+    : crewSize(t, badge.members, badge.maxMembers);
 
   const cell = (kind: Cell): ReactNode => {
     switch (kind) {

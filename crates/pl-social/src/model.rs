@@ -101,6 +101,10 @@ pub struct CrewBadge {
     /// How many are in the crew.
     #[serde(default)]
     pub members: u32,
+    /// CREW-CAP: the most members the crew may have (its own cap from Studio, else the service's
+    /// default), from a service with crew caps; none from an older one (its cap was 30).
+    #[serde(default)]
+    pub max_members: Option<u32>,
     /// The crew takes join requests from its tag's card now (its setting and Studio's are on, it
     /// is not full and its day's 10 are not used up; a service with
     /// [`TEAM_FEATURE_BADGE_REQUESTS`]). It may be stale: pressing then gets a refusal.
@@ -968,6 +972,10 @@ pub struct Team {
     /// member's messages, 0 when off. The leader and moderators never wait.
     #[serde(default)]
     pub slow: u32,
+    /// CREW-CAP: the most members the crew may have (its own cap from Studio, else the service's
+    /// default), from a service with crew caps; none from an older one (its cap was 30).
+    #[serde(default)]
+    pub max_members: Option<u32>,
 }
 
 fn badge_requests_on() -> bool {
@@ -989,6 +997,10 @@ pub struct TeamSummary {
     pub motto: String,
     /// How many are in it.
     pub members: u32,
+    /// CREW-CAP: the most members the crew may have (its own cap from Studio, else the service's
+    /// default), from a service with crew caps; none from an older one (its cap was 30).
+    #[serde(default, rename = "maxMembers")]
+    pub max_members: Option<u32>,
     /// How newcomers get in (`open` from an older service).
     #[serde(default)]
     pub join: JoinMode,
@@ -2321,6 +2333,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!((plain.team.join, plain.request), (JoinMode::Open, None));
+        // CREW-CAP: the cap comes with a summary (none from an older service).
+        assert_eq!(plain.team.max_members, None);
+        let capped: TeamLookup = serde_json::from_str(
+            r#"{"team":{"id":"x","name":"PvP","tag":"PVP","emblem":"bolt","members":92,
+                "maxMembers":100},"relation":"none","request":null}"#,
+        )
+        .unwrap();
+        assert_eq!(capped.team.max_members, Some(100));
 
         // The join setting and `admit` go only where the service takes them.
         let edit = TeamEdit {

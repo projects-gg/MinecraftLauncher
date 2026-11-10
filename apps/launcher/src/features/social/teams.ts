@@ -2,6 +2,7 @@
 // (teams.test.ts): crew codes as the player types them, names, tags and mottos checked the way
 // the service checks them, who sits where on the crew page, what the player's role may do, and the
 // crew's days. The look's data lives in crew-look.ts.
+import type { TFunction } from "i18next";
 import type {
   PermissionLevel,
   SocialTeam,
@@ -11,6 +12,22 @@ import type {
 import { isJoinable } from "./model";
 
 export { EMBLEMS, type Emblem } from "./crew-look";
+
+/**
+ * CREW-CAP: whether a crew of `members` is nearly full: from 90% of its cap (90 of 100, 27 of 30).
+ * Only then does the launcher show the cap beside the count; without a cap (an older service's
+ * invite, card or listing) never.
+ */
+export function nearlyFull(members: number, cap: number | undefined): boolean {
+  return cap !== undefined && cap > 0 && members * 10 >= cap * 9;
+}
+
+/** A crew's size as players read it: "12 üye", or once it is nearly full "92/100 üye". */
+export function crewSize(t: TFunction, members: number, cap: number | undefined): string {
+  return cap !== undefined && nearlyFull(members, cap)
+    ? t("teams.membersOf", { count: members, limit: cap })
+    : t("teams.members", { count: members });
+}
 
 export const TEAM_NAME_MIN = 3;
 export const TEAM_NAME_MAX = 24;

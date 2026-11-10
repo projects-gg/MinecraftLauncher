@@ -35,7 +35,8 @@ const MAX_INVITES: usize = 30;
 const MAX_TEAM_INVITES: usize = 20;
 /// "Selam ver" stays this long after someone came in (TEAM6).
 pub const GREET_WINDOW_SECS: i64 = 600;
-/// "Ekibe katıldı" lines kept per crew (TEAM6): a crew has at most 30 members.
+/// "Ekibe katıldı" lines kept per crew (TEAM6): the latest 30 (a crew may have up to 100 members
+/// since CREW-CAP; older lines go).
 const MAX_CREW_JOINS: usize = 30;
 /// A tag that came off live (its `badge` message) and its crew's message saying the crew was
 /// hidden belong together within this long, in either order (TEAM6).
@@ -1767,7 +1768,11 @@ impl SocialState {
             permissions: team.permissions,
             members,
             invited: entry.invited.clone(),
-            limit: overview.limits.team_members.unwrap_or(30),
+            // CREW-CAP: the crew's own cap; from an older service its single one, else 30.
+            limit: team
+                .max_members
+                .or(overview.limits.team_members)
+                .unwrap_or(30),
             notifications: entry.notifications.at(now),
             text_locked_until: team.text_locked_until.filter(|until| *until > now),
             join: team.join,
@@ -2092,6 +2097,7 @@ fn team_invite_view(invite: &TeamInvite) -> TeamInviteView {
         frame: invite.team.frame.clone(),
         motto: invite.team.motto.clone(),
         members: invite.team.members,
+        max_members: invite.team.max_members,
         from: ProfileView::from(&invite.from),
         sent_at: invite.sent_at,
     }
@@ -2136,6 +2142,7 @@ fn team_request_view(request: &TeamRequest) -> TeamRequestView {
         frame: team.frame.clone(),
         motto: team.motto.clone(),
         members: team.members,
+        max_members: team.max_members,
         sent_at: request.sent_at,
     }
 }
@@ -2845,7 +2852,31 @@ mod tests {
             hidden: false,
             badge_requests: true,
             slow: 0,
+            max_members: None,
         }
+    }
+
+    #[test]
+    fn a_crew_shows_its_own_cap_else_the_services_one() {
+        let mut state = loaded();
+        let members = [
+            ("100000000000000000", "Ben", TeamRole::Founder),
+            ("1", "Ayse_07", TeamRole::Member),
+        ];
+        // A service before crew caps: its one limit (30 in `loaded`).
+        state.team_answer(TeamAnswer {
+            team: Some(team(&members)),
+            invited: Vec::new(),
+        });
+        assert_eq!(crew_view(&state).unwrap().limit, 30);
+        // CREW-CAP: the crew's own cap wins.
+        let mut capped = team(&members);
+        capped.max_members = Some(60);
+        state.team_answer(TeamAnswer {
+            team: Some(capped),
+            invited: Vec::new(),
+        });
+        assert_eq!(crew_view(&state).unwrap().limit, 60);
     }
 
     #[test]
@@ -3390,6 +3421,7 @@ mod tests {
                 frame: "hex".into(),
                 motto: String::new(),
                 members: 4,
+                max_members: None,
                 join: crate::model::JoinMode::Open,
             },
             from: profile("2", "Bora"),
@@ -3977,6 +4009,7 @@ mod tests {
             frame: "hex".into(),
             motto: String::new(),
             members: 4,
+            max_members: Some(100),
             join: crate::model::JoinMode::Approval,
         };
         state.join_requested(TeamRequest {
@@ -4249,6 +4282,7 @@ mod tests {
             motto: "Gece bizimdir".into(),
             created_on: "2026-09-20".into(),
             members: 3,
+            max_members: None,
             requests: true,
         }
     }
