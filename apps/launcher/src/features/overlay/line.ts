@@ -56,7 +56,7 @@ export interface OverlayLineInput {
   versions: readonly string[] | undefined;
   /** The install Play opens: the command bar's rule (`usePlayInstance`). */
   play: InstanceSummary | undefined;
-  /** A game is prepared or open: the command bar's picker is locked, so nothing switches. */
+  /** A launch is on its way: the command bar's picker is locked, so nothing switches. */
   locked: boolean;
 }
 

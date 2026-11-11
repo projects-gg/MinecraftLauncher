@@ -11,6 +11,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { newJobId, showError } from "@/features/content/jobs";
+import { useGameRunning } from "@/features/library/use-game-running";
 import {
   api,
   type InstanceSummary,
@@ -219,6 +220,10 @@ export function VersionDialog({
     retry: false,
   });
 
+  // Live from the launch store, not the list's answer: that one is kept for 30 s and still said
+  // "Oyun açıkken sürüm değiştirilemez." after the game had closed (VER-SWITCH).
+  const gameRunning = useGameRunning(instance.id);
+
   const trashed = preview.data?.trashedSet;
   const restoring = Boolean(trashed && restoreOld);
 
@@ -286,7 +291,7 @@ export function VersionDialog({
   if (step === "list") {
     body = (
       <div>
-        {versions.data?.gameRunning ? (
+        {gameRunning ? (
           <p className="mb-3 text-[13px] text-gold-200">{t("modCenter.switch.gameRunning")}</p>
         ) : null}
         {(versions.data?.options.length ?? 0) > 10 ? (
@@ -446,7 +451,7 @@ export function VersionDialog({
               </Line>
             ))}
           </ul>
-          {versions.data?.gameRunning ? (
+          {gameRunning ? (
             <p className="mt-4 text-[13px] text-gold-200">{t("modCenter.switch.gameRunning")}</p>
           ) : null}
         </div>
@@ -485,7 +490,7 @@ export function VersionDialog({
               </Button>
               <Button
                 variant="primary"
-                disabled={!preview.data || versions.data?.gameRunning}
+                disabled={!preview.data || gameRunning}
                 onClick={() => void run()}
               >
                 {t("modCenter.switch.confirm", { version: target ?? "" })}

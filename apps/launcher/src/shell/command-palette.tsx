@@ -47,7 +47,11 @@ import { AccountFace } from "@/features/accounts/account-face";
 import { sortAccounts } from "@/features/accounts/account-order";
 import { type CenterFocus, useAccountsUi } from "@/features/accounts/store";
 import { ACCOUNTS_KEY, switchAccount } from "@/features/accounts/use-accounts";
-import { useOwnLaunchInstance, useOwnLaunchKind } from "@/features/accounts/use-own-launch";
+import {
+  useOwnLaunchInstance,
+  useOwnLaunchKind,
+  useOwnLaunchOnItsWay,
+} from "@/features/accounts/use-own-launch";
 import type { CloudPageData } from "@/features/afk/cloud/api";
 import { foldedIds } from "@/features/afk/cloud/twins";
 import { CLOUD_KEY, useConnectAll } from "@/features/afk/cloud/use-cloud";
@@ -206,10 +210,12 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
   const friendsOn = useSocialUi((s) => s.view.enabled);
   const friendsSignedIn = useSocialUi((s) => s.view.auth === "signedIn");
   const projectsSkin = useProjectsSkinOverview().data;
-  // The command bar's instance: the one a game is prepared or played for, else the selected.
+  // The command bar's instance: the one a launch is on its way for, else the selected (with this
+  // account's game on screen too: another instance starts beside it, VER-SWITCH).
+  const onItsWay = useOwnLaunchOnItsWay();
   const busy = phaseKind === "working" || phaseKind === "launching" || phaseKind === "running";
   const selected =
-    (busy ? instances.find((i) => i.id === launchId) : undefined) ??
+    (onItsWay ? instances.find((i) => i.id === launchId) : undefined) ??
     instances.find((i) => i.id === selectedId) ??
     instances[0];
   // World sharing (HOST1): the open world's sheet, else the Worlds tab of the command bar's
@@ -307,8 +313,12 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
             {
               extra: [instance.mcVersion, t(`loaders.${instance.loader}`)],
               hint: instance.mcVersion,
-              // Ctrl+Enter presses OYNA: the command bar's instance, while nothing runs.
-              shortcut: !busy && instance.id === selected?.id ? "play" : undefined,
+              // Ctrl+Enter presses OYNA: the command bar's instance, unless this account's launch
+              // or game is of it.
+              shortcut:
+                !(busy && instance.id === launchId) && instance.id === selected?.id
+                  ? "play"
+                  : undefined,
             },
           ),
         ),
