@@ -28,7 +28,9 @@ pub use memory::{
     auto_memory, auto_memory_at_least, available_memory_mb, clamp_memory, fits_another_game,
     memory_limits, recommended_memory, system_memory_mb, validate_memory,
 };
-pub use mod_configs::{ModConfig, configs_for, mod_configs, seed_mod_configs};
+pub use mod_configs::{
+    ModConfig, configs_for, fix_mod_settings_once, mod_configs, seed_mod_configs,
+};
 pub use model::{
     Hooks, INSTANCE_SCHEMA_VERSION, Instance, InstanceIcon, InstanceLoader, ManagedPack,
     MemorySettings, NewInstance, ServerAddress, WindowSettings,
