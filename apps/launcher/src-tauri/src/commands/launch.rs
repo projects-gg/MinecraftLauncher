@@ -936,7 +936,8 @@ pub(crate) async fn ready_game_files(
     }
     lap(clock, "room");
 
-    // Mod loaders install their profile (and run Forge/NeoForge installer steps) first.
+    // Mod loaders install their profile (and run Forge/NeoForge installer steps) first. Fabric's
+    // and Quilt's game files are left to the install below, so they are checked once.
     if modded {
         bar.enter(LaunchPart::Loader);
     }
@@ -944,7 +945,7 @@ pub(crate) async fn ready_game_files(
         None => instance.mc_version.clone(),
         Some(loader_version) => {
             step(cancel, async {
-                pl_mc::loaders::install_loader(
+                pl_mc::loaders::install_loader_profile(
                     ctx,
                     &instance.mc_version,
                     instance.loader.kind,
@@ -973,8 +974,12 @@ pub(crate) async fn ready_game_files(
     lap(clock, "resolve");
 
     // 2. Install / verify files. Full hashing only on first install; size checks otherwise
-    //    (loader installs above already verified their files, so a size check suffices then).
-    let verify = if first_install && instance.loader.kind == LoaderKind::Vanilla {
+    //    (Forge and NeoForge installs above already verified their files, so a size check
+    //    suffices then).
+    let verify = if first_install
+        && (instance.loader.kind == LoaderKind::Vanilla
+            || pl_mc::loaders::profile_only(instance.loader.kind))
+    {
         VerifyMode::Full
     } else {
         VerifyMode::Size
