@@ -345,6 +345,65 @@ fn checkpoint(cancel: &CancellationToken) -> CmdResult<()> {
     }
 }
 
+/// Where the time between OYNA and the game's start goes (LAUNCH-SPEED): every step's
+/// milliseconds, written to the launcher's log as one line when the launch ends. Background
+/// preparation keeps none.
+pub(crate) struct LaunchClock {
+    started: Instant,
+    laps: parking_lot::Mutex<Laps>,
+}
+
+struct Laps {
+    last: Instant,
+    steps: Vec<(&'static str, u64)>,
+}
+
+impl LaunchClock {
+    fn start() -> Self {
+        let now = Instant::now();
+        Self {
+            started: now,
+            laps: parking_lot::Mutex::new(Laps {
+                last: now,
+                steps: Vec::new(),
+            }),
+        }
+    }
+
+    /// The step `name` ended now (it began where the previous one ended).
+    fn lap(&self, name: &'static str) {
+        let now = Instant::now();
+        let mut laps = self.laps.lock();
+        let ms = now.saturating_duration_since(laps.last).as_millis() as u64;
+        laps.last = now;
+        laps.steps.push((name, ms));
+    }
+
+    fn report(&self, outcome: &str) {
+        let steps = {
+            let laps = self.laps.lock();
+            laps.steps
+                .iter()
+                .map(|(name, ms)| format!("{name}={ms}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        tracing::info!(
+            total_ms = self.started.elapsed().as_millis() as u64,
+            %steps,
+            outcome,
+            "launch timings"
+        );
+    }
+}
+
+/// [`LaunchClock::lap`] for the steps shared with background preparation (no clock there).
+fn lap(clock: Option<&LaunchClock>, name: &'static str) {
+    if let Some(clock) = clock {
+        clock.lap(name);
+    }
+}
+
 /// Runs a preparation step that is safe to stop half-way (metadata, downloads, installs, a hook
 /// process). Once the launch is cancelled the step gets [`CANCEL_GRACE`] to stop on its own
 /// (the crates check the token) and is dropped after that, so a cancel never waits for a slow
@@ -380,6 +439,7 @@ pub async fn launch_instance(
     settings: LaunchSettings,
     on_event: Channel<LaunchEventView>,
 ) -> CmdResult<()> {
+    let clock = LaunchClock::start();
     // Games already running stay (PLAY-AGAIN): the page asked whatever there was to ask.
     // A desktop shortcut or the tray can start a game while the data folder is being copied;
     // the game would write into the old folder, which goes after the restart.
@@ -418,6 +478,7 @@ pub async fn launch_instance(
     // the launch.
     crate::prepare::yield_to_launch(&app).await;
     crate::commands::java::yield_to_launch(&app).await;
+    clock.lap("yield");
     let started = Instant::now();
     let result = prepare_and_spawn(
         &app,
@@ -427,8 +488,14 @@ pub async fn launch_instance(
         settings,
         &on_event,
         &cancel,
+        &clock,
     )
     .await;
+    clock.report(match &result {
+        Ok(()) => "done",
+        Err(_) if cancel.is_cancelled() => "cancelled",
+        Err(_) => "error",
+    });
     {
         // Only this launch's own entry: a newer launch may have taken its place.
         let mut current = state.launch_cancel.lock();
@@ -628,12 +695,12 @@ pub(crate) type EventSink = Arc<dyn Fn(LaunchEventView) + Send + Sync>;
 /// Who gets the game files ready.
 pub(crate) enum Readying<'a> {
     /// The player pressed OYNA: their download settings, the Java question, offline play. The
-    /// launch holds the instance lock all along.
-    Launch(&'a LaunchSettings),
+    /// launch holds the instance lock all along. The clock times its steps.
+    Launch(&'a LaunchSettings, &'a LaunchClock),
     /// OYNA while another game runs in the instance's folder (PLAY-AGAIN): that game holds the
     /// folder's files, so nothing in it changes (no version switch, no pack step); the shared game
     /// files are only checked. As [`Readying::Launch`] otherwise.
-    Beside(&'a LaunchSettings),
+    Beside(&'a LaunchSettings, &'a LaunchClock),
     /// Background preparation (`crate::prepare`): gentle downloads, a disk reserve, no questions
     /// and nothing without the network. It takes the instance lock only to change the instance
     /// (its version, its install marker, its pack's files); the shared game files download
@@ -681,10 +748,10 @@ pub(crate) async fn ready_game_files(
     sink: &EventSink,
     cancel: &CancellationToken,
 ) -> CmdResult<Option<ReadyGame>> {
-    let (settings, background_lock, beside) = match readying {
-        Readying::Launch(settings) => (Some(settings), None, false),
-        Readying::Beside(settings) => (Some(settings), None, true),
-        Readying::Background { lock } => (None, Some(lock), false),
+    let (settings, background_lock, beside, clock) = match readying {
+        Readying::Launch(settings, clock) => (Some(settings), None, false, Some(clock)),
+        Readying::Beside(settings, clock) => (Some(settings), None, true, Some(clock)),
+        Readying::Background { lock } => (None, Some(lock), false, None),
     };
     let background_ctx;
     let ctx = match settings {
@@ -706,13 +773,24 @@ pub(crate) async fn ready_game_files(
         versions::ensure_switch_finished(state, instance).await?;
     }
     checkpoint(cancel)?;
+    lap(clock, "switch");
 
-    // 1. Version metadata, falling back to offline mode when the network is gone.
+    // 1. Version metadata, falling back to offline mode when the network is gone. The player's
+    //    launch of a managed instance refreshes the pack's content at the same time (two round
+    //    trips at once, LAUNCH-SPEED); offline, the pack follows the cached content as before.
     let mut offline = false;
-    let fetched = step(cancel, async {
+    let manifest_step = step(cancel, async {
         Ok(pl_mc::version::manifest::load_manifest(ctx, false).await)
-    })
-    .await?;
+    });
+    let (fetched, refreshed) = if settings.is_some() && !beside && instance.managed_pack.is_some() {
+        let (fetched, refreshed) = tokio::join!(
+            manifest_step,
+            step(cancel, async { Ok(official::latest(state, false).await) }),
+        );
+        (fetched?, Some(refreshed?))
+    } else {
+        (manifest_step.await?, None)
+    };
     let manifest = match fetched {
         Ok(m) => Some(m),
         Err(e) if e.is_offline() => {
@@ -727,6 +805,7 @@ pub(crate) async fn ready_game_files(
         }
         Err(e) => return Err(e.into()),
     };
+    lap(clock, "manifest");
 
     // Official pack: Minecraft and loader versions follow the family member of the instance's
     // version. Not beside a running game of this folder: its pack's files are in use (they move
@@ -734,11 +813,33 @@ pub(crate) async fn ready_game_files(
     let pack = if beside {
         None
     } else {
-        let prepared = step(
-            cancel,
-            official::prepare_pack(state, instance, game_dir, offline, &launcher_version),
-        )
-        .await?;
+        let prepared = match refreshed {
+            Some(content) => {
+                let content = if offline {
+                    official::latest(state, true).await
+                } else {
+                    content
+                };
+                step(
+                    cancel,
+                    official::prepare_pack_from(
+                        state,
+                        instance,
+                        game_dir,
+                        content,
+                        &launcher_version,
+                    ),
+                )
+                .await?
+            }
+            None => {
+                step(
+                    cancel,
+                    official::prepare_pack(state, instance, game_dir, offline, &launcher_version),
+                )
+                .await?
+            }
+        };
         if prepared.content_changed {
             let _ = app.emit("content-changed", ());
         }
@@ -750,6 +851,7 @@ pub(crate) async fn ready_game_files(
         }
         prepared.manifest
     };
+    lap(clock, "pack");
     // Background: the shared game files download without the instance lock (what the instance
     // follows now tells a change made meanwhile).
     drop(background_guard.take());
@@ -806,6 +908,7 @@ pub(crate) async fn ready_game_files(
             return Ok(None);
         }
     }
+    lap(clock, "java_check");
     let concurrency = ctx.concurrency(settings.map_or(BACKGROUND_CONCURRENCY, |s| {
         s.concurrent_downloads.clamp(4, 48) as usize
     }));
@@ -852,6 +955,7 @@ pub(crate) async fn ready_game_files(
             })?,
         }),
     };
+    lap(clock, "loader_list");
 
     // Before anything big is downloaded: room on the disk for what this launch still needs.
     if !offline {
@@ -869,8 +973,10 @@ pub(crate) async fn ready_game_files(
         )
         .await?;
     }
+    lap(clock, "room");
 
-    // Mod loaders install their profile (and run Forge/NeoForge installer steps) first.
+    // Mod loaders install their profile (and run Forge/NeoForge installer steps) first. Fabric's
+    // and Quilt's game files are left to the install below, so they are checked once.
     if modded {
         bar.enter(LaunchPart::Loader);
     }
@@ -878,7 +984,7 @@ pub(crate) async fn ready_game_files(
         None => instance.mc_version.clone(),
         Some(loader_version) => {
             step(cancel, async {
-                pl_mc::loaders::install_loader(
+                pl_mc::loaders::install_loader_profile(
                     ctx,
                     &instance.mc_version,
                     instance.loader.kind,
@@ -895,6 +1001,7 @@ pub(crate) async fn ready_game_files(
             .await?
         }
     };
+    lap(clock, "loader");
 
     bar.enter(LaunchPart::Game);
     let resolved = step(cancel, async {
@@ -903,10 +1010,15 @@ pub(crate) async fn ready_game_files(
             .map_err(CmdError::from)
     })
     .await?;
+    lap(clock, "resolve");
 
     // 2. Install / verify files. Full hashing only on first install; size checks otherwise
-    //    (loader installs above already verified their files, so a size check suffices then).
-    let verify = if first_install && instance.loader.kind == LoaderKind::Vanilla {
+    //    (Forge and NeoForge installs above already verified their files, so a size check
+    //    suffices then).
+    let verify = if first_install
+        && (instance.loader.kind == LoaderKind::Vanilla
+            || pl_mc::loaders::profile_only(instance.loader.kind))
+    {
         VerifyMode::Full
     } else {
         VerifyMode::Size
@@ -917,6 +1029,7 @@ pub(crate) async fn ready_game_files(
             .map_err(CmdError::from)
     })
     .await?;
+    lap(clock, "files");
 
     // Background: the instance lock again for its own files; an instance whose version changed
     // (or that went) meanwhile is left alone (the change brings its own preparation).
@@ -961,6 +1074,7 @@ pub(crate) async fn ready_game_files(
         )
         .await?;
     }
+    lap(clock, "pack_sync");
     drop(background_guard);
     Ok(Some(ReadyGame {
         resolved,
@@ -978,6 +1092,7 @@ async fn world_entry(game_dir: &Path, overlay_opens: bool) -> WorldEntry {
     pl_mc::launch::world_entry(false, &mods)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn prepare_and_spawn(
     app: &AppHandle,
     state: &AppState,
@@ -986,6 +1101,7 @@ async fn prepare_and_spawn(
     settings: LaunchSettings,
     on_event: &Channel<LaunchEventView>,
     cancel: &CancellationToken,
+    clock: &LaunchClock,
 ) -> CmdResult<()> {
     let mut instance = state
         .instances
@@ -1026,6 +1142,7 @@ async fn prepare_and_spawn(
         _ = cancel.cancelled() => return Err(cancelled()),
         guard = lock.lock() => guard,
     };
+    clock.lap("lock");
     let sink: EventSink = {
         let channel = on_event.clone();
         Arc::new(move |event| {
@@ -1041,9 +1158,9 @@ async fn prepare_and_spawn(
         &mut instance,
         (instance_dir.as_path(), game_dir.as_path()),
         if beside {
-            Readying::Beside(&settings)
+            Readying::Beside(&settings, clock)
         } else {
-            Readying::Launch(&settings)
+            Readying::Launch(&settings, clock)
         },
         &sink,
         cancel,
@@ -1099,6 +1216,7 @@ async fn prepare_and_spawn(
     if !beside {
         crate::commands::modsets::activate_pending_packs(&game_dir).await;
     }
+    clock.lap("options");
     // The in-game overlay's jar for this Fabric instance (OVL-B), before the mod check sees the
     // folder: put in place only when nothing about it would stop or warn, else taken away.
     checkpoint(cancel)?;
@@ -1114,6 +1232,7 @@ async fn prepare_and_spawn(
         )
         .await
     };
+    clock.lap("overlay");
     // The mods are checked with the Java that will run, after the pack sync: problems that
     // would certainly stop the game stop the launch here instead.
     checkpoint(cancel)?;
@@ -1123,6 +1242,7 @@ async fn prepare_and_spawn(
     {
         let _ = on_event.send(LaunchEventView::ModsAutoFixed(fixed));
     }
+    clock.lap("autofix");
     checkpoint(cancel)?;
     let health = if beside {
         modhealth::Prelaunch::Clear
@@ -1136,6 +1256,7 @@ async fn prepare_and_spawn(
         )
         .await
     };
+    clock.lap("mods");
     checkpoint(cancel)?;
     match health {
         modhealth::Prelaunch::Blocked(check) => {
@@ -1185,6 +1306,7 @@ async fn prepare_and_spawn(
             .map_err(CmdError::from)?,
         Err(e) => return Err(e.into()),
     };
+    clock.lap("account");
     checkpoint(cancel)?;
     // Who is in game from the start on: the account center's id and the name the game plays as.
     let game_account = GameAccount {
@@ -1341,6 +1463,7 @@ async fn prepare_and_spawn(
         .await?;
     }
 
+    clock.lap("command");
     // 5. Spawn and supervise. The last moment a cancel can still stop the game.
     checkpoint(cancel)?;
     let _ = on_event.send(LaunchEventView::Launching);
@@ -1435,6 +1558,7 @@ async fn prepare_and_spawn(
     )
     .await
     .map_err(CmdError::from)?;
+    clock.lap("spawn");
     // World sharing (HOST1): the gate key of the game's worlds comes from its bridge's token.
     let host_token = overlay
         .endpoint()
