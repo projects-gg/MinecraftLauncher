@@ -1220,6 +1220,13 @@ async fn prepare_and_spawn(
     // on now, once (a file read when there are none waiting).
     if !beside {
         crate::commands::modsets::activate_pending_packs(&game_dir).await;
+        // Better PvP's off hand armor status, which hides the inventory's off hand item, off
+        // once in instances from before the pack's settings had it (XAERO-OFFHAND).
+        match pl_mc::instance::fix_mod_settings_once(&game_dir).await {
+            Ok(true) => tracing::info!("turned a mod setting off once"),
+            Ok(false) => {}
+            Err(error) => tracing::warn!(%error, "could not fix a mod setting"),
+        }
     }
     clock.lap("options");
     // The in-game overlay's jar for this Fabric instance (OVL-B), before the mod check sees the
