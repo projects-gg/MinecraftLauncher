@@ -1,13 +1,13 @@
 // The home page's news column: its link to the news page, the patch notes box's action, the event
 // card's heading while its event runs and the times on the card and in the other events list.
-// Short, sentence case.
+// Short, titles in Title Case.
 export const trNewsColumn = {
   /** The column's link to the news page. */
   allNews: "Tümü",
   /** The patch notes box's action: the box shows an excerpt, this opens the whole article. */
-  readNotes: "Tamamını oku",
+  readNotes: "Tamamını Oku",
   /** The event card's heading while its event runs ("Sıradaki etkinlik" before it starts). */
-  liveEvent: "Süren etkinlik",
+  liveEvent: "Süren Etkinlik",
   /**
    * When an upcoming event starts, a sentence like "2 saat 14 dakika kaldı": "Bugün 20:00'de
    * başlıyor", "Cumartesi 20:00'de başlıyor", "25 Ekim 20:00'de başlıyor". `ending` is the

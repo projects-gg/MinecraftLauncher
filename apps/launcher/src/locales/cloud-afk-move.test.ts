@@ -57,12 +57,12 @@ describe("movement texts", () => {
       "Eğil",
     ]);
     expect([trCloudAfkMove.walk.go, trCloudAfkMove.walk.follow]).toEqual([
-      "Yanına git",
-      "Takip et",
+      "Yanına Git",
+      "Takip Et",
     ]);
-    expect([enCloudAfkMove.walk.go, enCloudAfkMove.walk.follow]).toEqual(["Go to", "Follow"]);
-    expect(trCloudAfkMove.main.go).toBe("Ana hesabının yanına git");
-    expect(trCloudAfkMove.main.follow).toBe("Ana hesabını takip et");
+    expect([enCloudAfkMove.walk.go, enCloudAfkMove.walk.follow]).toEqual(["Go To", "Follow"]);
+    expect(trCloudAfkMove.main.go).toBe("Ana Hesabının Yanına Git");
+    expect(trCloudAfkMove.main.follow).toBe("Ana Hesabını Takip Et");
     expect(trCloudAfkMove.far).toBe("En çok 256 blok uzağa gidebilir.");
     expect(trCloudAfkMove.noSlot).toBe("Şu an hareket için yer yok.");
     expect(trCloudAfkMove.oneAccount).toBe("Hareket aynı anda yalnız bir hesabında açık olabilir.");

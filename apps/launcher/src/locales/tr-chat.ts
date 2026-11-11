@@ -1,4 +1,4 @@
-// Crew chat and direct messages (CHAT1). Short, sentence case. Names are never followed by a
+// Crew chat and direct messages (CHAT1). Short, titles in Title Case. Names are never followed by a
 // suffix ("Ayşe'ye" would need the name's vowels): sentences put them where none is needed.
 export const trChat = {
   tabs: {
@@ -19,27 +19,27 @@ export const trChat = {
   },
   actions: {
     message: "Mesaj",
-    discord: "Discord'dan mesaj at",
+    discord: "Discord'dan Mesaj At",
     send: "Gönder",
-    retry: "Tekrar dene",
+    retry: "Tekrar Dene",
     discard: "Sil",
     copy: "Kopyala",
     copied: "Mesaj kopyalandı",
     edit: "Düzenle",
     save: "Kaydet",
     cancel: "Vazgeç",
-    delete: "Herkesten sil",
+    delete: "Herkesten Sil",
     deleteAsk: "Bu mesaj herkesten silinsin mi?",
     deleted: "Mesaj silindi",
-    report: "Rapor et",
-    clear: "Geçmişi temizle",
+    report: "Rapor Et",
+    clear: "Geçmişi Temizle",
     clearAsk: "Bu konuşmanın geçmişi bu bilgisayardan silinsin mi?",
     cleared: "Geçmiş temizlendi",
-    mute: "Sessize al",
-    unmute: "Sesi aç",
-    newest: "Son mesajlara in",
+    mute: "Sessize Al",
+    unmute: "Sesi Aç",
+    newest: "Son Mesajlara İn",
     menu: "Mesaj seçenekleri",
-    conversation: "Konuşma seçenekleri",
+    conversation: "Konuşma Seçenekleri",
   },
   composer: {
     placeholder: "Mesaj yaz",
@@ -86,7 +86,7 @@ export const trChat = {
     today: "Bugün",
     yesterday: "Dün",
   },
-  divider: "Yeni mesajlar",
+  divider: "Yeni Mesajlar",
   notices: {
     direct: "{{name}}: {{text}}",
     crew: "{{name}} ({{crew}}): {{text}}",
@@ -94,7 +94,7 @@ export const trChat = {
   },
   settings: {
     // Under the crew's own notification group: the group says whose.
-    crewChat: "Sohbet mesajları",
+    crewChat: "Sohbet Mesajları",
   },
   consent: "Sohbet mesajların yalnız iletilmek için sunucuda en çok 7 gün tutulur.",
   waiting_one: "{{count}} okunmamış mesaj",

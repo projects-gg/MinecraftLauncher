@@ -26,9 +26,12 @@ function itemOf(notice: AfkNotice, lang: Lang): string | null {
   if (named.trim()) return named.trim();
   const id = notice.data.item;
   if (!id) return null;
-  if (id.startsWith("custom:")) return lang === "en" ? "Custom item" : "Özel eşya";
+  // An item's name, so Title Case (as `afkPlus.form.customItem`); ids are English, so English casing.
+  if (id.startsWith("custom:")) return lang === "en" ? "Custom Item" : "Özel Eşya";
   const words = (id.split(":").pop() ?? id).replace(/_/g, " ").trim();
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : null;
+  return words
+    ? words.replace(/(^|\s)(\p{Ll})/gu, (_, gap, c) => gap + c.toLocaleUpperCase("en"))
+    : null;
 }
 
 const whole = (text: string | undefined): number | null =>

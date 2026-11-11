@@ -52,11 +52,11 @@ export async function inviteFriend(friend: Pick<Friend, "id" | "name">): Promise
     const result = await api.social.invite(friend.id);
     ui.coolDown(friend.id, Date.now() + INVITE_COOLDOWN_MS);
     if (result === "delivered") {
-      toast.success(i18n.t("social.actions.invited"));
+      toast.success(i18n.t("social.actions.inviteSent"));
     } else {
       toast(i18n.t("social.actions.inviteQueued", { name: friend.name }));
     }
-    announce(i18n.t("social.actions.invited"));
+    announce(i18n.t("social.actions.inviteSent"));
   } catch (error) {
     if (code(error) === "SOSYAL-SINIR") {
       ui.coolDown(friend.id, Date.now() + INVITE_COOLDOWN_MS);

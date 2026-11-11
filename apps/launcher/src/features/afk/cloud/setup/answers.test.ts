@@ -278,7 +278,7 @@ describe("AFK+ answers", () => {
       ctx("en"),
       en,
     );
-    expect(friends.talk).toBe("Short and clear");
+    expect(friends.talk).toBe("Short and Clear");
     expect(friends.who).toBe(
       "Answers every private message from your friends. You blocked 1 player.",
     );

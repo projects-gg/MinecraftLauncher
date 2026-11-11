@@ -1,6 +1,6 @@
 // BETA-GATE: the beta update channel is for Ar-Ge members (Settings → Güncellemeler). One line
 // under "Güncelleme kanalı" with its action right after it; a quiet toast when an update look
-// moved the launcher back to Kararlı. Short, sentence case. What is checked is the Discord role
+// moved the launcher back to Kararlı. Short, titles in Title Case. What is checked is the Discord role
 // ("Discord'daki Ar-Ge rolün": whose and where, Discord's own word; "denetle" as the screen says).
 // Never "ekip" here: "Ekip" is the players' crew (QA-COPY), the role is "Ar-Ge Üyesi".
 export const trBetaGate = {
@@ -8,13 +8,13 @@ export const trBetaGate = {
   checking: "Discord'daki Ar-Ge rolün denetleniyor.",
   notMember: "Beta yalnız Ar-Ge üyelerine açık.",
   // Opens the application page in the browser.
-  apply: "Ar-Ge'ye başvur",
+  apply: "Ar-Ge'ye Başvur",
   // Followed by the action and a full stop: "… Ar-Ge'deysen Discord ile giriş yap." (the friends
   // panel's own words for its sign-in).
   signIn: "Beta yalnız Ar-Ge üyelerine açık. Ar-Ge'deysen",
-  signInAction: "Discord ile giriş yap",
+  signInAction: "Discord ile Giriş Yap",
   unknown: "Discord'daki Ar-Ge rolün şu an denetlenemedi.",
-  retry: "Tekrar dene",
+  retry: "Tekrar Dene",
   // The toasts after an update look moved the launcher back to Kararlı (it keeps its version). They
   // only tell, what to do stays in Settings' line; "Güncelleme kanalın … oldu" as "Grafik ayarı …
   // oldu" says it. "şimdilik" only where the launcher comes back by itself (after a sign-in).

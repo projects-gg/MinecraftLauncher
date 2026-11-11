@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // "Sohbete ilan" as the service plans it: the minutes (the ones under the server's floor wait, said
-// once), the next ad drawn as a line of the game's chat with "Başka örnek" going through the next
+// once), the next ad drawn as a line of the game's chat with "Başka Örnek" going through the next
 // few, a spam warning, today's stop, no active order, and nothing at all from an older service.
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -66,8 +66,8 @@ describe("Sohbete ilan", () => {
     expect(chips()).toEqual([
       ["30 dk", false, true],
       ["45 dk", false, true],
-      ["1 saat", true, true],
-      ["2 saat", false, true],
+      ["1 Saat", true, true],
+      ["2 Saat", false, true],
     ]);
     expect(screen.queryByText(/Bu sunucuda en az/)).toBeNull();
     fireEvent.click(screen.getByRole("radio", { name: "45 dk" }));
@@ -86,7 +86,7 @@ describe("Sohbete ilan", () => {
   it("draws the next ad as a chat line and goes through the next few", () => {
     const { container } = show(plan());
     expect(said(container)).toBe("Örnek ilan: Neon_Drift: Alıyorum: 4 Elytra, PM at");
-    const next = () => fireEvent.click(screen.getByRole("button", { name: "Başka örnek" }));
+    const next = () => fireEvent.click(screen.getByRole("button", { name: "Başka Örnek" }));
     next();
     expect(said(container)).toBe("Örnek ilan: Neon_Drift: Alıyorum: 3 Ölümsüzlük Totemi, PM at");
     next();
@@ -98,7 +98,7 @@ describe("Sohbete ilan", () => {
   it("has no other example to show with one line", () => {
     const { container } = show(plan({ lines: ["Satıyorum: 64 Elmas"] }));
     expect(said(container)).toBe("Örnek ilan: Neon_Drift: Satıyorum: 64 Elmas");
-    expect(screen.queryByRole("button", { name: "Başka örnek" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Başka Örnek" })).toBeNull();
   });
 
   it("says a spam warning doubled the minutes, and when today's ads stopped", () => {

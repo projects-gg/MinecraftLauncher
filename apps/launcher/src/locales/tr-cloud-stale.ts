@@ -1,6 +1,6 @@
 // CLOUD-STALE: 7/24 Bulut while its machine cannot be reached. The page says what it knew last, dim
 // and in the past with its time, never as live, and the actions that need the machine wait. Short,
-// sentence case, "sen". Root key `cloudStale`.
+// titles in Title Case, "sen". Root key `cloudStale`.
 export const trCloudStale = {
   /** One line over the 7/24 Bulut list (QA-FIX-L's words for the machine away). */
   line: "7/24 Bulut'a şu an ulaşılamıyor.",

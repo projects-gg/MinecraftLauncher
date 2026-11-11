@@ -43,7 +43,7 @@ import {
   Waves,
 } from "@phosphor-icons/react";
 import { Chip, cn } from "@pl/ui";
-import { useId } from "react";
+import { type CSSProperties, useId } from "react";
 import type { CrewLook } from "@/lib/api/social-types";
 import {
   CREW_COLORS,
@@ -104,10 +104,13 @@ export function CrewMark({
   look,
   size = 36,
   className,
+  style,
 }: {
   look: Partial<CrewLook> & Pick<CrewLook, "emblem">;
   size?: number;
   className?: string;
+  /** Extra box styles, e.g. the margin of `crewMarkInset`. */
+  style?: CSSProperties;
 }) {
   const colors = CREW_COLORS[crewColor(look.color)];
   const shape = FRAME_SHAPES[crewFrame(look.frame)];
@@ -119,7 +122,7 @@ export function CrewMark({
     <span
       aria-hidden
       className={cn("relative inline-flex shrink-0", className)}
-      style={{ width: size, height: size }}
+      style={{ ...style, width: size, height: size }}
     >
       <svg
         aria-hidden="true"

@@ -1,12 +1,12 @@
 // English for tr-overview.ts. Missing keys fall back to Turkish.
 export const enOverview = {
-  resumeLabel: "Where you left off",
+  resumeLabel: "Where You Left Off",
   nothing: "No worlds or servers yet",
   worlds: "Worlds",
-  otherWorlds: "Other worlds",
+  otherWorlds: "Other Worlds",
   servers: "Servers",
-  shots: "Recent screenshots",
-  all: "See all",
+  shots: "Recent Screenshots",
+  all: "See All",
   details: "Instance details",
   health: {
     ok: "No mod problems",
@@ -20,6 +20,6 @@ export const enOverview = {
   },
   facts: {
     minecraft: "Minecraft",
-    size: "Space used",
+    size: "Space Used",
   },
 };

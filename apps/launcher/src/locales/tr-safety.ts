@@ -2,7 +2,7 @@
 // technical. Dates read "28 Ekim"; they come before "tarihine kadar".
 export const trSafety = {
   limited: {
-    chip: "Sınırlı hesap",
+    chip: "Sınırlı Hesap",
     title: "Discord hesabın yeni olduğu için {{date}} tarihine kadar:",
     items: {
       crewFound: "Ekip kuramazsın",
@@ -29,7 +29,7 @@ export const trSafety = {
     // BAN-TYPES: what still works (the game, offline and on servers).
     play: "Oyunu oynamaya devam edebilirsin. Arkadaşlar, sohbet ve sesli sohbet bu sürede kapalı.",
     playForever: "Oyunu oynamaya devam edebilirsin. Arkadaşlar, sohbet ve sesli sohbet kapalı.",
-    rules: "Topluluk kuralları",
+    rules: "Topluluk Kuralları",
   },
   signupsClosed: "Şu an yeni hesap açılamıyor. Yarın tekrar dene.",
   notice: {

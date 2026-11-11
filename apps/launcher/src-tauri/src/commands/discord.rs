@@ -86,11 +86,11 @@ fn build(
         .large_image(LOGO)
         .large_text("Projects Launcher")
         .button(
-            lang.pick("Launcher'ı indir", "Get the launcher"),
+            lang.pick("Launcher'ı İndir", "Get the Launcher"),
             "https://projects.gg/indir",
         )
         .button(
-            lang.pick("Discord'a katıl", "Join the Discord"),
+            lang.pick("Discord'a Katıl", "Join the Discord"),
             "https://projects.gg/discord",
         );
 

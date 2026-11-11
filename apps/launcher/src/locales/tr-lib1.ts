@@ -1,5 +1,5 @@
 // LIB1: every instance can be deleted, the official pack too, and the library offers the pack again
-// when it is gone. Short, sentence case; the toast after installing is `official.added`.
+// when it is gone. Short, titles in Title Case; the toast after installing is `official.added`.
 export const trLib1 = {
   /** The library with no instance at all, and the offer when OYNA has nothing to play. */
   empty: {
@@ -8,7 +8,7 @@ export const trLib1 = {
     question: "Resmî paketi kuralım mı?",
   },
   /** Installs the official pack again (made at once; its files download at the first play). */
-  install: "Resmî paketi kur",
+  install: "Resmî Paketi Kur",
   /** The same on the library's "not installed" card, under the pack's name. */
   installShort: "Kur",
   /** While it is being made. */
@@ -22,11 +22,11 @@ export const trLib1 = {
   offer: {
     /** Other instances are there; only the official pack is missing. */
     missingTitle: "Resmî paket kurulu değil",
-    play: "Kur ve oyna",
-    join: "Kur ve katıl",
+    play: "Kur ve Oyna",
+    join: "Kur ve Katıl",
     /** Joins with the instance OYNA would start instead. */
-    joinWith: "{{name}} ile katıl",
+    joinWith: "{{name}} ile Katıl",
     /** Opens "Yeni kurulum". */
-    create: "Yeni kurulum",
+    create: "Yeni Kurulum",
   },
 };

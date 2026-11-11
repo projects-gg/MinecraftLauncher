@@ -4,6 +4,6 @@ export const enTray = {
   hint: "The launcher keeps running in the tray.",
   hintAfk: "Your AFK accounts are on, so the launcher keeps running in the tray.",
   closeSetting: "When You Close the Window",
-  closeQuit: "Quit unless a game is open",
-  closeTray: "Keep running in the tray",
+  closeQuit: "Quit Unless a Game Is Open",
+  closeTray: "Keep Running in the Tray",
 };

@@ -545,7 +545,7 @@ fn tray_menu<R: tauri::Runtime, M: Manager<R>>(
 ) -> tauri::Result<tauri::menu::Menu<R>> {
     use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem};
 
-    let open = lang.pick("Projects Launcher'ı aç", "Open Projects Launcher");
+    let open = lang.pick("Projects Launcher'ı Aç", "Open Projects Launcher");
     let open = MenuItem::with_id(manager, "open", open, true, None::<&str>)?;
     let in_game = TRAY_IN_GAME.load(Ordering::Relaxed);
     let play = MenuItem::with_id(
@@ -559,7 +559,7 @@ fn tray_menu<R: tauri::Runtime, M: Manager<R>>(
         !in_game,
         None::<&str>,
     )?;
-    let afk = lang.pick("AFK hesapları", "AFK accounts");
+    let afk = lang.pick("AFK Hesapları", "AFK Accounts");
     let afk = MenuItem::with_id(manager, "afk", afk, true, None::<&str>)?;
     let quit = lang.pick("Çıkış", "Quit");
     let quit_item = MenuItem::with_id(manager, "quit", quit, true, None::<&str>)?;
@@ -572,9 +572,9 @@ fn tray_menu<R: tauri::Runtime, M: Manager<R>>(
         manager,
         "voice-mute",
         if muted {
-            lang.pick("Mikrofonu aç", "Unmute")
+            lang.pick("Mikrofonu Aç", "Unmute")
         } else {
-            lang.pick("Mikrofonu kapat", "Mute")
+            lang.pick("Mikrofonu Kapat", "Mute")
         },
         true,
         None::<&str>,
@@ -591,7 +591,7 @@ fn tray_menu<R: tauri::Runtime, M: Manager<R>>(
     let stop_share = MenuItem::with_id(
         manager,
         "share-stop",
-        lang.pick("Paylaşımı durdur", "Stop sharing"),
+        lang.pick("Paylaşımı Durdur", "Stop Sharing"),
         true,
         None::<&str>,
     )?;

@@ -10,8 +10,8 @@ export const trKeyClash = {
   fixedTitle: "Mod tuşları düzeltildi",
   fixedLead: "Diğer tuşların olduğu gibi kaldı.",
   fix: "Düzelt",
-  anyway: "Yine de başlat",
-  undo: "Geri al",
+  anyway: "Yine de Başlat",
+  undo: "Geri Al",
   play: "Oyna",
   /** A binding left without a key (the game's own word). */
   unbound: "Atanmamış",

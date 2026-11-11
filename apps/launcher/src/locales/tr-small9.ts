@@ -1,4 +1,4 @@
-// SMALL9: HOST1's small launcher leftovers. Short, sentence case, no codes; the feature's name is
+// SMALL9: HOST1's small launcher leftovers. Short, titles in Title Case, no codes; the feature's name is
 // "Dünyanı arkadaşlarına aç" (host1.md §1.1).
 export const trSmall9 = {
   backups: {
@@ -25,18 +25,18 @@ export const trSmall9 = {
   },
   palette: {
     /** Ctrl+K: the Worlds tab of the command bar's instance, where "Arkadaşlarınla oyna" is. */
-    openWorld: "Dünyanı arkadaşlarına aç",
+    openWorld: "Dünyanı Arkadaşlarına Aç",
     /** Ctrl+K while the player's world is open to friends: its sheet (never "açık dünya", the
      * game genre, and not the Worlds tab beside it). */
-    manageWorld: "Paylaştığın dünyayı yönet",
+    manageWorld: "Paylaştığın Dünyayı Yönet",
   },
   settings: {
     /** Settings → Arkadaşlar: the feature by its name, with what it shares and what it keeps. */
-    worlds: "Dünyanı arkadaşlarına aç",
+    worlds: "Dünyanı Arkadaşlarına Aç",
     worldsPrivacy:
       "IP adresin arkadaşlarına görünmez. Açık dünyanı yalnız çağırdığın arkadaşların görür.",
     /** The way to do it, under the two sentences (CHAT-PROD leftovers: the feature's name read as a
      * button that was not there): Oyna's install's Worlds tab, where "Arkadaşlarınla oyna" is. */
-    worldsGo: "Dünyalarına git",
+    worldsGo: "Dünyalarına Git",
   },
 };

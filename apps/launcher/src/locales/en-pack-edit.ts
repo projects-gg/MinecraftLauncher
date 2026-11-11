@@ -11,8 +11,8 @@ export const enPackEdit = {
   dialog: {
     title: "{{name}} Versions",
     description: "The version you pick is used until the pack moves to a newer one.",
-    inPack: "In the pack",
-    inUse: "In use",
+    inPack: "In the Pack",
+    inUse: "In Use",
     beta: "Beta",
     use: "Use This Version",
     useBack: "Back to Pack Version",

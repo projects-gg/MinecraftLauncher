@@ -1,4 +1,4 @@
-// Event reminders and the marker on news the player has not seen yet. Short, sentence case.
+// Event reminders and the marker on news the player has not seen yet. Short, titles in Title Case.
 export const trReminders = {
   /** The bell on the event card and in the other events list (pressed while a reminder is set). */
   bell: "Hatırlat",

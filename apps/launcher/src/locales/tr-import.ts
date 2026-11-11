@@ -6,7 +6,7 @@ export const trImport = {
     title: "Başka bir launcher'dan geldiğini gördük",
     body: "Alıştığın ayarları, sunucuları ve kurulumları buraya aktarabilirsin. Oradaki dosyaların olduğu gibi kalır.",
     import: "Aktar",
-    skip: "Aktarmadan devam et",
+    skip: "Aktarmadan Devam Et",
   },
   /**
    * Group headings: where the rows under them go, as a sentence (LANDING-L: "Oynandıkları sürümün
@@ -20,7 +20,7 @@ export const trImport = {
   },
   rows: {
     /** One row above the launchers: the game settings come from one place (IMPORT-SET). */
-    options: "Oyun ayarları",
+    options: "Oyun Ayarları",
     optionsMeta: "Tuşlar, görüntü ve ses",
     /** An earlier import brought them from the place shown: unticked, so later changes stay. */
     optionsBefore: "Daha önce aktarıldı",
@@ -30,15 +30,15 @@ export const trImport = {
     optionsFromLabel: "Nereden",
     /** The only place, an instance of another launcher ("TLauncher'dan" names a launcher). */
     optionsFromInstance: "{{name}} kurulumundan",
-    servers: "Sunucu listesi",
+    servers: "Sunucu Listesi",
     serversMeta: "{{count}} sunucu",
     worlds: "Dünyalar",
     worldsMeta: "{{count}} dünya",
-    resourcePacks: "Kaynak paketleri",
+    resourcePacks: "Kaynak Paketleri",
     resourcePacksMeta: "{{count}} paket",
     shaderPacks: "Shader'lar",
     shaderPacksMeta: "{{count}} paket",
-    screenshots: "Ekran görüntüleri",
+    screenshots: "Ekran Görüntüleri",
     screenshotsMeta: "{{count}} görüntü",
   },
   profile: {
@@ -68,8 +68,8 @@ export const trImport = {
     title: "Aktarılıyor",
     preparing: "Hazırlanıyor",
     label: "Aktarım ilerlemesi",
-    cancel: "İptal et",
-    stopping: "İptal ediliyor",
+    cancel: "İptal Et",
+    stopping: "İptal Ediliyor",
   },
   done: {
     title: "Aktarım tamamlandı",
@@ -182,14 +182,14 @@ export const trImport = {
     cancelled: "Kalanlar iptal edildi.",
   },
   settings: {
-    title: "Başka launcher'dan aktar",
+    title: "Başka Launcher'dan Aktar",
     help: "TLauncher, CurseForge, Modrinth, Prism ve resmî launcher'daki ayarların, dünyaların ve kurulumların buraya gelir.",
     /** The dialog it opens says "Aktar" too (IMPORT-POLISH). */
     action: "Aktar",
     dialogBody: "Seçtiklerin buraya kopyalanır. Oradaki dosyaların olduğu gibi kalır.",
     notFound: "Bu bilgisayarda başka bir launcher'ın verisi bulunamadı.",
     later: "Vazgeç",
-    background: "Arka planda sürsün",
+    background: "Arka Planda Sürsün",
   },
   /** The notification when a long import ends while the launcher is out of sight. */
   attention: {
@@ -198,7 +198,7 @@ export const trImport = {
   },
   /** The game settings' "Geri al" in a summary: every file back as it was before the import. */
   undo: {
-    action: "Geri al",
+    action: "Geri Al",
     done: "Oyun ayarların aktarımdan önceki hâline döndü.",
     /** A newer import replaced it, or its copies are gone. */
     gone: "Artık geri alamazsın.",
@@ -220,11 +220,11 @@ export const trImport = {
     },
     /** Its choices, as the picker's rows are written: a title and a quiet second line. */
     choices: {
-      premium: "Microsoft hesabın",
-      nickname: "Oyuncu adı",
-      afk: "AFK hesapları",
+      premium: "Microsoft Hesabın",
+      nickname: "Oyuncu Adı",
+      afk: "AFK Hesapları",
       afkMeta: "{{count}} hesap",
-      gameData: "Oyun ayarları ve dosyaları",
+      gameData: "Oyun Ayarları ve Dosyaları",
       gameDataMeta: "Sunucu listesi, ekran görüntüleri, kaynak ve shader paketleri",
       worlds: "Dünyalar",
       worldsMeta: "{{count}} dünya, {{size}}",

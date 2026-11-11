@@ -1,6 +1,6 @@
 // English for tr-launcher-reset.ts. Missing keys fall back to Turkish.
 export const enLauncherReset = {
-  title: "Reset the launcher",
+  title: "Reset the Launcher",
   help: "Removes the accounts you added and the launcher's settings, without touching your installations and worlds.",
   action: "Reset",
   dialogTitle: "Reset the launcher?",

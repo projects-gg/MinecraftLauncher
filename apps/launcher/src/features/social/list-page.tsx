@@ -597,8 +597,8 @@ export function ListPage() {
     const invite = (crew: SocialTeam) => () => {
       void attempt(() => api.social.inviteToTeam(crew.id, friendId)).then((done) => {
         if (done !== undefined) {
-          announce(t("teams.invite.sent"));
-          toast.success(t("teams.invite.sent"));
+          announce(t("teams.invite.sentToast"));
+          toast.success(t("teams.invite.sentToast"));
         }
       });
     };

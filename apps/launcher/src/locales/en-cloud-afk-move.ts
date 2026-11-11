@@ -30,16 +30,16 @@ export const enCloudAfkMove = {
     space: "Space",
   },
   goto: {
-    title: "Go to coordinates",
+    title: "Go to Coordinates",
     go: "Go",
   },
   main: {
-    go: "Go to your main account",
-    follow: "Follow your main account",
+    go: "Go to Your Main Account",
+    follow: "Follow Your Main Account",
   },
   walk: {
     title: "Your accounts",
-    go: "Go to",
+    go: "Go To",
     follow: "Follow",
     main: "Your main account",
     notInGame: "Not in game",
@@ -79,5 +79,5 @@ export const enCloudAfkMove = {
   tradeStarted: "A trade started, so it stopped.",
   machineAway: "Can't reach 24/7 Cloud right now.",
   unreachable: "Can't reach the account right now.",
-  reconnect: "Reconnect now",
+  reconnect: "Reconnect Now",
 };

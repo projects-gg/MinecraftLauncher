@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// "Yanlışsa bildir" under a refused row (README "Saving" → Refusal reports): one answer in the
+// "Yanlışsa Bildir" under a refused row (README "Saving" → Refusal reports): one answer in the
 // link's place; "the text saves now" lifts the refusal and stays while the row keeps that text.
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -20,11 +20,11 @@ function answering(kind: CloudReportOutcome["kind"]) {
 
 async function report() {
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Yanlışsa bildir" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yanlışsa Bildir" }));
   });
 }
 
-describe("Yanlışsa bildir", () => {
+describe("Yanlışsa Bildir", () => {
   it("sends the refused text and says staff will look", async () => {
     const sent = answering("sent");
     const saveable = vi.fn();
@@ -36,7 +36,7 @@ describe("Yanlışsa bildir", () => {
     expect(screen.getByRole("status").textContent).toBe(
       "Sağ ol, bir yetkili bakacak. Bu arada satırı düzeltip kaydedebilirsin.",
     );
-    expect(screen.queryByRole("button", { name: "Yanlışsa bildir" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Yanlışsa Bildir" })).toBeNull();
     expect(saveable).not.toHaveBeenCalled();
   });
 
@@ -68,7 +68,7 @@ describe("Yanlışsa bildir", () => {
     expect(saveable).toHaveBeenCalledTimes(1);
     rerender(line(null, AD));
     expect(screen.getByRole("status").textContent).toBe("Bu satır artık kaydedilebilir.");
-    expect(screen.queryByRole("button", { name: "Yanlışsa bildir" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Yanlışsa Bildir" })).toBeNull();
     // Another text: the answer was about the old one.
     rerender(line(null, "Selam herkese"));
     expect(screen.queryByRole("status")).toBeNull();

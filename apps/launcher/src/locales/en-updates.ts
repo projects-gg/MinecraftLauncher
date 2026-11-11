@@ -1,7 +1,7 @@
 // English for tr-updates.ts. Missing keys fall back to Turkish.
 export const enUpdates = {
-  available: "Update available",
-  download: "Download the update",
+  available: "Update Available",
+  download: "Download the Update",
   downloading: "Downloading {{percent}}%",
   afterGame: "Updates when the game closes",
   afkComeBack_one: "Your AFK account reconnects after the update.",

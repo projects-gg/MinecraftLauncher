@@ -1,6 +1,6 @@
-// "Launcher'ı sıfırla" (Settings → Veri, INSTALL-UX). Short, sentence case, "sen".
+// "Launcher'ı sıfırla" (Settings → Veri, INSTALL-UX). Short, titles in Title Case, "sen".
 export const trLauncherReset = {
-  title: "Launcher'ı sıfırla",
+  title: "Launcher'ı Sıfırla",
   help: "Kurulumlarına ve dünyalarına dokunmadan launcher'a eklediğin hesapları ve ayarları siler.",
   action: "Sıfırla",
   dialogTitle: "Launcher sıfırlansın mı?",

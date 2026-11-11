@@ -5,7 +5,7 @@ export const enSetup = {
   change: "Change",
   close: "Hide",
   advanced: "Advanced",
-  other: "Other settings",
+  other: "Other Settings",
   unsaved: "Unsaved changes",
   marked: "A field needs fixing",
   chatCaption: "How it looks in chat",
@@ -14,17 +14,17 @@ export const enSetup = {
   back: "Back",
   next: "Next",
   count: "{{step}} / {{total}}",
-  questionsLabel: "Setting questions",
+  questionsLabel: "Setting Questions",
   stepsLabel: "Setup steps",
 
   plus: {
-    title: "Set up ProBot AI",
+    title: "Set Up ProBot AI",
     railFoot: "It messages no one until you start it.",
     start: "Start",
     starting: "Starting",
     started: "ProBot AI has started",
     changeLater: "You can change all of it later in Settings.",
-    resume: "Continue setup",
+    resume: "Continue Setup",
     where: "It talks and trades on {{server}}.",
     previewPlayer: "Kuzgun_21",
     chatThem: "selling elytra",
@@ -57,7 +57,7 @@ export const enSetup = {
       chat: "If you like, it posts your active orders in public chat.",
       talk: "It answers private messages in this tone. If asked, it says it's an AI.",
     },
-    buy: "Let it buy",
+    buy: "Let It Buy",
     buyHelp: "While it's off, it only tells you when it finds what you want.",
     required: 'Enter both amounts or turn off "Let it buy".',
     totalHelp:
@@ -78,7 +78,7 @@ export const enSetup = {
       buy: "Turn it off and it buys nothing.",
       sell: "Turn it off and it sells nothing.",
     },
-    writeSellers: "Write to the seller once when an item you want is for sale",
+    writeSellers: "Write to the Seller Once When an Item You Want Is for Sale",
     answers: {
       orders_one: "{{count}} order: {{names}}",
       orders_other: "{{count}} orders: {{names}}",
@@ -141,8 +141,8 @@ export const enSetup = {
   },
 
   account: {
-    title: "Get your account ready",
-    finish: "Continue setup",
+    title: "Get Your Account Ready",
+    finish: "Continue Setup",
     done: "Done",
     reconnects: "Saving reconnects the account.",
     questions: {
@@ -173,12 +173,12 @@ export const enSetup = {
       more: "Anti-AFK, repeated commands, console language, player name",
     },
     ownerFirst: "First enter the name you play with under Advanced.",
-    loginAdd: "Add a login command",
+    loginAdd: "Add a Login Command",
     loginPlaceholder: "/login yourpassword",
     loginEmpty: "If the server doesn't ask for a password, you can leave this empty.",
-    repeatTitle: "Repeated commands",
+    repeatTitle: "Repeated Commands",
     behaviourTitle: "Behaviour",
-    ready: "Ready-made rules",
+    ready: "Ready-Made Rules",
     templates: {
       away: {
         title: 'Say you\'re away when someone writes "hi"',

@@ -296,7 +296,12 @@ function Row({
               {last ? listStamp(last.at, nowMs, t("chat.day.yesterday")) : null}
             </span>
           ) : null}
-          <UnreadChip count={count} mentioned={mentioned} />
+          {/* The chip's place is kept on read rows too: the time stays on the name's line whether
+              the row is read or not, and reading it never changes the row's height (CREW-UI
+              review: the time column moved ~10 px between read and unread rows). */}
+          <span className="flex h-[18px] items-center">
+            <UnreadChip count={count} mentioned={mentioned} />
+          </span>
         </span>
       </button>
     </RowMenu>

@@ -678,7 +678,7 @@ export function CloudCard({
                 </h3>
                 {/* A moderation stop says its category on the state line, not who stopped it. */}
                 {account.hold?.kind === "suspended" && !isModerationStop(account) ? (
-                  <Chip className="shrink-0">{t("cloudAfk.state.suspended")}</Chip>
+                  <Chip className="shrink-0">{t("cloudAfk.state.suspendedChip")}</Chip>
                 ) : null}
               </div>
               <p

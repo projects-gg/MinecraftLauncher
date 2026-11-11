@@ -49,7 +49,7 @@ describe("the crew's room list", () => {
     });
     // No entry at all: "Genel" alone, empty.
     expect(crewRoomList(CREW, undefined)).toEqual([room(GENERAL)]);
-    // A room being deleted (waiting for "Geri al") is not listed.
+    // A room being deleted (waiting for "Geri Al") is not listed.
     expect(crewRoomList(CREW, { rooms: [room(GENERAL), b, a] }, [b.id]).map((r) => r.id)).toEqual([
       GENERAL,
       a.id,
@@ -159,11 +159,11 @@ describe("the room's menu", () => {
     expect(words(menu)).toEqual([
       "Katıl",
       "—",
-      "Odayı düzenle",
-      "Yukarı taşı (off)",
-      "Aşağı taşı",
+      "Odayı Düzenle",
+      "Yukarı Taşı (off)",
+      "Aşağı Taşı",
       "—",
-      "Odayı sil",
+      "Odayı Sil",
     ]);
     expect(menu[6]?.danger).toBe(true);
     expect(menu[4]?.shortcut).toBe("Alt ↓");
@@ -184,7 +184,7 @@ describe("the room's menu", () => {
       },
       t,
     );
-    expect(words(menu)).toEqual(["Katıl", "—", "Sola taşı (off)", "Sağa taşı"]);
+    expect(words(menu)).toEqual(["Katıl", "—", "Sola Taşı (off)", "Sağa Taşı"]);
     expect(menu.every((item) => item === null || item.shortcut === undefined)).toBe(true);
   });
 
@@ -222,12 +222,12 @@ describe("the room's menu", () => {
           t,
         ),
       ),
-    ).toEqual(["Katıl", "—", "Odayı düzenle", "—", "Odayı sil"]);
+    ).toEqual(["Katıl", "—", "Odayı Düzenle", "—", "Odayı Sil"]);
   });
 });
 
 // OVL-NEXT: push-to-talk-only rooms.
-describe("Yalnız bas-konuş", () => {
+describe("Yalnız Bas-Konuş", () => {
   it("is the leader's and moderators' to set, only while the service allows it", () => {
     const allowed = { manage: true, ptt: true };
     expect(mayMakePushToTalk(leader, allowed)).toBe(true);

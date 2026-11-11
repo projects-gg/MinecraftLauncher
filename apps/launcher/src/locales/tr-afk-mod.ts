@@ -26,7 +26,7 @@ export const trAfkMod = {
     restrict_rows: "Bir satır durduruldu: {{kind}}",
     pause_ai: "AFK+ yapay zekâsı durduruldu: {{kind}}",
     suspend: "Durduruldu: {{kind}}",
-    appeal: "İtiraz et",
+    appeal: "İtiraz Et",
     appealOpen: "İtirazın inceleniyor.",
   },
   /**
@@ -51,7 +51,7 @@ export const trAfkMod = {
   refused: "Bu satır {{kind}} içeriyor gibi görünüyor. Düzelt ya da sil.",
   /** Under a refused save: the player tells staff it was wrong (README "Refusal reports"). */
   report: {
-    link: "Yanlışsa bildir",
+    link: "Yanlışsa Bildir",
     sending: "Gönderiliyor",
     sent: "Sağ ol, bir yetkili bakacak. Bu arada satırı düzeltip kaydedebilirsin.",
     limited: "Bugün 3 kez bildirdin, yarın yeniden bildirebilirsin.",

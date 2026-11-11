@@ -11,26 +11,26 @@ export const trSetup = {
   close: "Gizle",
   advanced: "Gelişmiş",
   // The list's last row before the launcher's own "Bildirimler": what no question holds.
-  other: "Diğer ayarlar",
+  other: "Diğer Ayarlar",
   unsaved: "Kaydedilmemiş değişiklik var",
   marked: "Düzeltilecek alan var",
   chatCaption: "Sohbette böyle görünür",
   pmCaption: "Özel mesajda böyle görünür",
-  later: "Daha sonra",
+  later: "Daha Sonra",
   back: "Geri",
   next: "Devam",
   count: "{{step}} / {{total}}",
-  questionsLabel: "Ayar soruları",
+  questionsLabel: "Ayar Soruları",
   stepsLabel: "Kurulum adımları",
 
   plus: {
-    title: "ProBot AI'ı kur",
+    title: "ProBot AI'ı Kur",
     railFoot: "Başlatana kadar kimseye yazmaz.",
     start: "Başlat",
     starting: "Başlatılıyor",
     started: "ProBot AI çalışmaya başladı",
     changeLater: "Hepsini sonra Ayarlar'dan değiştirebilirsin.",
-    resume: "Kuruluma devam et",
+    resume: "Kuruluma Devam Et",
     // Under the title: where it works, in one line (the old first step's place).
     where: "{{server}} sunucusunda konuşur ve anlaşır.",
     // The talk preview: another player sells what the first buy order buys (an elytra without
@@ -71,7 +71,7 @@ export const trSetup = {
     },
     // "Limits or no buying" is one choice, said the positive way (the phone's switch, TASTE-SWEEP
     // SETUP-UX-L r1): off, the amounts wait quietly and typing one turns it back on.
-    buy: "Alım yapsın",
+    buy: "Alım Yapsın",
     buyHelp: "Kapalıyken aradığını bulunca yalnız haber verir.",
     required: 'İki tutarı da yaz ya da "Alım yapsın"ı kapat.',
     // Under the total limit, always (the site's and the phone's words); in Ayarlar the reset sits
@@ -96,7 +96,7 @@ export const trSetup = {
     sidesHelp: { buy: "Kapatırsan hiçbir şey almaz.", sell: "Kapatırsan hiçbir şey satmaz." },
     // "Sohbette ne yapsın?": on means it scans the chat and writes to a seller once (both on by
     // default, said, not hidden); off keeps the scan and stops the writing.
-    writeSellers: "Aradığın eşya satılığa çıkınca satıcıya bir kez yazsın",
+    writeSellers: "Aradığın Eşya Satılığa Çıkınca Satıcıya Bir Kez Yazsın",
     // The answers under each question.
     answers: {
       orders: "{{count}} sipariş: {{names}}",
@@ -163,8 +163,8 @@ export const trSetup = {
   },
 
   account: {
-    title: "Hesabını hazırla",
-    finish: "Kuruluma devam et",
+    title: "Hesabını Hazırla",
+    finish: "Kuruluma Devam Et",
     done: "Bitir",
     // Under "Bitir" while the account runs: saving reconnects it.
     reconnects: "Kaydedince hesap yeniden bağlanır.",
@@ -197,14 +197,14 @@ export const trSetup = {
     },
     // Under "Yalnız bana yanıt versin" while the name it listens to is not written yet.
     ownerFirst: "Önce Gelişmiş'te oynadığın hesabın adını yaz.",
-    loginAdd: "Giriş komutu ekle",
+    loginAdd: "Giriş Komutu Ekle",
     // In an empty login row: what such a command looks like.
     loginPlaceholder: "/login şifren",
     loginEmpty: "Sunucu şifre sormuyorsa boş bırakabilirsin.",
-    repeatTitle: "Tekrarlanan komutlar",
+    repeatTitle: "Tekrarlanan Komutlar",
     behaviourTitle: "Davranış",
     // Two ready-made rules: the replies players set up most.
-    ready: "Hazır kurallar",
+    ready: "Hazır Kurallar",
     templates: {
       away: {
         title: 'Biri "selam" yazınca uzakta olduğunu söylesin',

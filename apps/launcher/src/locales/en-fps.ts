@@ -2,7 +2,7 @@
 export const enFps = {
   title: "Graphics and FPS",
   instance: "Instance",
-  preset: "Graphics preset",
+  preset: "Graphics Preset",
   effect: {
     smooth: "Highest FPS.",
     balanced: "A balance of FPS and looks.",

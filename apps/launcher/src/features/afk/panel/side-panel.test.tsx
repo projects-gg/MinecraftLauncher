@@ -115,12 +115,12 @@ describe("the panel's edge and button", () => {
 
   it("says what its button does and does it", async () => {
     render(<Panel />);
-    const widen = await screen.findByRole("button", { name: "Paneli genişlet" });
+    const widen = await screen.findByRole("button", { name: "Paneli Genişlet" });
     act(() => {
       fireEvent.click(widen);
     });
     expect(useAfkPanelSize.getState().full).toBe(true);
-    const narrow = screen.getByRole("button", { name: "Paneli daralt" });
+    const narrow = screen.getByRole("button", { name: "Paneli Daralt" });
     act(() => {
       fireEvent.click(narrow);
     });
@@ -156,7 +156,7 @@ describe("the panel's edge and button", () => {
     render(<Panel />);
     const edge = await screen.findByRole("separator");
     expect(edge.getAttribute("aria-valuetext")).toBe("Tam genişlik");
-    expect(screen.getByRole("button", { name: "Paneli daralt" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Paneli Daralt" })).toBeTruthy();
     const stored = JSON.parse(localStorage.getItem("pl.afkPanel") ?? "{}");
     expect(stored.state?.full).toBe(true);
   });

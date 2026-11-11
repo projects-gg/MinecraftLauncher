@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Screen sharing on the room panel and the pill (SHARE): "Ekranını paylaş" where the room shares;
+// Screen sharing on the room panel and the pill (SHARE): "Ekranını Paylaş" where the room shares;
 // "Yayında" with who watches and "Durdur" while the player shares; a person who shares has the mark
 // and "İzle"; nothing of it in a room that does not share or on a computer that cannot.
 import { setAppReducedMotion, TooltipProvider } from "@pl/ui";
@@ -35,10 +35,10 @@ function show(state: VoiceState, node: ReactNode) {
 describe("screen sharing on the panel", () => {
   it("offers sharing only where the room shares and this computer can", () => {
     show(scenario("room"), <ShareFooterRow />);
-    expect(screen.queryByText("Ekranını paylaş")).toBeNull();
+    expect(screen.queryByText("Ekranını Paylaş")).toBeNull();
     cleanup();
     show(scenario("shareOffer"), <ShareFooterRow />);
-    fireEvent.click(screen.getByText("Ekranını paylaş"));
+    fireEvent.click(screen.getByText("Ekranını Paylaş"));
     expect(useShareUi.getState().picker).toBe(true);
     cleanup();
     const state = scenario("shareOffer");
@@ -46,7 +46,7 @@ describe("screen sharing on the panel", () => {
       { ...state, share: state.share && { ...state.share, canShare: false } },
       <ShareFooterRow />,
     );
-    expect(screen.queryByText("Ekranını paylaş")).toBeNull();
+    expect(screen.queryByText("Ekranını Paylaş")).toBeNull();
   });
 
   it("says who watches the player's share and stops it", () => {
@@ -61,7 +61,7 @@ describe("screen sharing on the panel", () => {
 
   it("asks for nothing while the room keeps sharing to its leaders", () => {
     show(scenario("shareNotAllowed"), <ShareFooterRow />);
-    const button = screen.getByText("Ekranını paylaş").closest("button");
+    const button = screen.getByText("Ekranını Paylaş").closest("button");
     expect(button?.getAttribute("aria-disabled")).toBe("true");
     if (button) fireEvent.click(button);
     expect(useShareUi.getState().picker).toBe(false);
@@ -83,6 +83,6 @@ describe("screen sharing on the panel", () => {
     expect(screen.getByRole("button", { name: "Yayındasın, 2 kişi izliyor" })).toBeTruthy();
     cleanup();
     show(scenario("shareOffer"), <SharePillPart />);
-    expect(screen.getByRole("button", { name: "Ekranını paylaş" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Ekranını Paylaş" })).toBeTruthy();
   });
 });

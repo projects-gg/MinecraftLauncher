@@ -1,4 +1,4 @@
-// Crew chat and direct messages (CHAT1). Short, friendly, sentence case.
+// Crew chat and direct messages (CHAT1). Short, friendly, titles in Title Case.
 export const enChat = {
   tabs: {
     friends: "Friends",
@@ -20,25 +20,25 @@ export const enChat = {
     message: "Message",
     discord: "Message on Discord",
     send: "Send",
-    retry: "Try again",
+    retry: "Try Again",
     discard: "Delete",
     copy: "Copy",
     copied: "Message copied",
     edit: "Edit",
     save: "Save",
     cancel: "Cancel",
-    delete: "Delete for everyone",
+    delete: "Delete for Everyone",
     deleteAsk: "Delete this message for everyone?",
     deleted: "Message deleted",
     report: "Report",
-    clear: "Clear history",
+    clear: "Clear History",
     clearAsk: "Clear this conversation's history from this computer?",
     cleared: "History cleared",
     mute: "Mute",
     unmute: "Unmute",
-    newest: "Jump to latest",
+    newest: "Jump to Latest",
     menu: "Message options",
-    conversation: "Conversation options",
+    conversation: "Conversation Options",
   },
   composer: {
     placeholder: "Write a message",
@@ -85,14 +85,14 @@ export const enChat = {
     today: "Today",
     yesterday: "Yesterday",
   },
-  divider: "New messages",
+  divider: "New Messages",
   notices: {
     direct: "{{name}}: {{text}}",
     crew: "{{name}} ({{crew}}): {{text}}",
     reply: "Reply",
   },
   settings: {
-    crewChat: "Chat messages",
+    crewChat: "Chat Messages",
   },
   consent: "Chat messages stay on our server only to be delivered, for at most 7 days.",
   waiting_one: "{{count}} unread message",

@@ -1,5 +1,5 @@
 // Calm chat (CHAT-CALM): a conversation's messages told in one notice ("Kaan: 5 yeni mesaj"), a
-// crowded crew that starts muted, and crew chat's "Yavaş mod". Short, sentence case; a crew's or a
+// crowded crew that starts muted, and crew chat's "Yavaş mod". Short, titles in Title Case; a crew's or a
 // player's name never takes a suffix. Spans in a sentence take whole words ("30 saniye"), labels
 // the short units of `units` ("30 sn").
 export const trChatCalm = {
@@ -9,7 +9,7 @@ export const trChatCalm = {
   // The crew page's section of the chat's rules (the leader and moderators).
   chatTitle: "Sohbet",
   slow: {
-    title: "Yavaş mod",
+    title: "Yavaş Mod",
     off: "Kapalı",
     spanSeconds_one: "{{count}} saniye",
     spanSeconds_other: "{{count}} saniye",

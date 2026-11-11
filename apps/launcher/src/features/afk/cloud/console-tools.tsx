@@ -98,7 +98,7 @@ export function ConsoleTools({
       <div className="flex shrink-0 items-center gap-0.5">
         {searching ? null : (
           <IconButton
-            label={t("cloudAfkFeat.console.search")}
+            label={t("cloudAfkFeat.console.searchOpen")}
             icon={<MagnifyingGlass size={16} />}
             size="sm"
             onClick={() => setSearching(true)}

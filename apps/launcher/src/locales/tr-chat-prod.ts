@@ -1,7 +1,7 @@
-// The chat's text size and its daily-use polish (CHAT-PROD). Short, sentence case.
+// The chat's text size and its daily-use polish (CHAT-PROD). Short, titles in Title Case.
 export const trChatProd = {
   zoom: {
-    label: "Yazı boyutu",
+    label: "Yazı Boyutu",
     reset: "Sıfırla",
     resetLabel: "Yazı boyutunu sıfırla",
     announce: "Yazı boyutu {{level}}",

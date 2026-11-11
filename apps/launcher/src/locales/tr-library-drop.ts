@@ -1,4 +1,4 @@
-// Dropping files onto an instance card in the library. Short, sentence case.
+// Dropping files onto an instance card in the library. Short, titles in Title Case.
 export const trLibraryDrop = {
   /** Under the library's title while files are dragged over the cards. */
   guide_one: "Dosyayı bir kurulumun üstüne bırak",

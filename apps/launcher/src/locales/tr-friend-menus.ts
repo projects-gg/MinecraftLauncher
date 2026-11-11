@@ -2,16 +2,16 @@
 // Rows that exist elsewhere reuse those words (social.actions, friendGroups, teams).
 export const trFriendMenus = {
   /** The panel's "…" button. */
-  more: "Diğer seçenekler",
+  more: "Diğer Seçenekler",
   /** A friend's, a category's or the crew's "…" button. */
-  options: "{{name}} seçenekleri",
-  copyCode: "Kodumu kopyala",
+  options: "{{name}} Seçenekleri",
+  copyCode: "Kodumu Kopyala",
   codeCopied: "Kodun kopyalandı",
   status: "Durum",
-  notifyOnline: "Çevrimiçi olunca bildir",
+  notifyOnline: "Çevrimiçi Olunca Bildir",
   collapse: "Daralt",
   expand: "Genişlet",
-  copyTeamCode: "Ekip kodunu kopyala",
+  copyTeamCode: "Ekip Kodunu Kopyala",
   teamCodeCopied: "Ekip kodu kopyalandı",
-  editTeam: "Ekibi düzenle",
+  editTeam: "Ekibi Düzenle",
 };

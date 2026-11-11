@@ -1,28 +1,28 @@
 // Crew tags (TEAM6): the tag a player wears before their name, its card, hidden crews and the crew
-// chat's "Hoş geldin" line. Short, sentence case; suffixes follow "etiket" and "ekip", never a tag,
+// chat's "Hoş geldin" line. Short, titles in Title Case; suffixes follow "etiket" and "ekip", never a tag,
 // a crew's or a player's own name ("GK etiketini", "Ayşe aracılığıyla"). Words the crews already
 // have stay theirs ("Ekibi aç", "Kabul et", "Katılma isteği gönder", "Ana ekip", "Kuruluş").
 export const trTeam6 = {
-  wear: "Etiketi tak",
-  takeOff: "Etiketi çıkar",
+  wear: "Etiketi Tak",
+  takeOff: "Etiketi Çıkar",
   woreToast: "{{tag}} etiketini taktın.",
   switchedToast: "Etiketin {{tag}} oldu.",
   offToast: "Etiketini çıkardın.",
-  undo: "Geri al",
-  choose: "Ekip etiketi",
+  undo: "Geri Al",
+  choose: "Ekip Etiketi",
   none: "Yok",
-  noTag: "Etiket yok",
+  noTag: "Etiket Yok",
   whoSees: "Arkadaşların ve ekip arkadaşların adının önünde görür.",
   rowLabel: "{{name}}, etiket {{tag}}",
   chipLabel: "{{crew}} ekibinin etiketi",
-  hiddenChip: "Gizli ekip",
+  hiddenChip: "Gizli Ekip",
   hiddenWhy: "Lider ekibi gizledi.",
-  hiddenShort: "gizli ekip",
+  hiddenShort: "Gizli Ekip",
   lockedWhy: "Etiket {{date}} tarihine kadar takılamaz.",
-  lockedShort: "kilitli",
+  lockedShort: "Kilitli",
   lockedUntil: "{{date}} tarihine kadar kilitli",
   hiddenToast: "Lider ekibi gizledi, etiketin çıkarıldı.",
-  joinedAction: "Etiketi tak",
+  joinedAction: "Etiketi Tak",
   card: {
     member: "Sen de bu ekiptesin",
     invited: "Bu ekibe davetlisin",
@@ -51,7 +51,7 @@ export const trTeam6 = {
     saved: "Görünürlük kaydedildi",
   },
   badgeRequests: {
-    label: "Etiketten istek",
+    label: "Etiketten İstek",
     on: "Açık",
     off: "Kapalı",
     onLine: "Etiketi gören herkes katılma isteği gönderebilir, forumda da.",
@@ -60,6 +60,6 @@ export const trTeam6 = {
   },
   welcome: {
     you: "Ekibe katıldın",
-    sayHi: "Selam ver",
+    sayHi: "Selam Ver",
   },
 };

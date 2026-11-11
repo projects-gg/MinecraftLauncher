@@ -1,6 +1,6 @@
 // Connecting an AFK account whose client has to be fetched first (the card's state line, the line
 // under it and the notices elsewhere), and the launch failures the general failure words
-// (afk.failure) do not cover. Short, sentence case; the retry button is common.retry.
+// (afk.failure) do not cover. Short, titles in Title Case; the retry button is common.retry.
 export const trAfkConnect = {
   /** The state line while the client is looked up in the content or unpacked. */
   preparing: "AFK istemcisi hazırlanıyor",
@@ -9,7 +9,7 @@ export const trAfkConnect = {
   /** Turkish puts the sign before the figure. */
   percent: "%{{value}}",
   /** Replaces "Bağla" while the client is fetched: stops the download for this account. */
-  cancel: "İptal et",
+  cancel: "İptal Et",
   /**
    * Why the client could not be had: what happened (the state line) and what to do (the line
    * under it).

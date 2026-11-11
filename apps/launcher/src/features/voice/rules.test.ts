@@ -234,7 +234,7 @@ describe("what a card offers", () => {
   });
 });
 
-describe("Davet et", () => {
+describe("Davet Et", () => {
   it("lists the player's friends who may be called, never someone in the room", () => {
     const state = on({
       room: room({ people: [person("302")], ringing: [{ to: "305", until: 0 }] }),
@@ -473,7 +473,7 @@ describe("shortcut keys", () => {
     expect(skippedLine([], t)).toBeNull();
     expect(skippedLine(["deafen"], t)).toBe("Discord'daki Sağırlaştır tuşu burada çalışmaz.");
     expect(skippedLine(["pushToTalk", "deafen"], t)).toBe(
-      "Discord'daki Bas-konuş ve Sağırlaştır tuşları burada çalışmaz.",
+      "Discord'daki Bas-Konuş ve Sağırlaştır tuşları burada çalışmaz.",
     );
   });
 });

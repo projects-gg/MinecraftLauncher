@@ -1,5 +1,5 @@
 // Projects skins for username accounts and the game account link on Projects (SKIN1; skin1.md
-// §12). Short, sentence case, plain verbs; no codes or ids. Commands come in as `{{command}}`
+// §12). Short, titles in Title Case, plain verbs; no codes or ids. Commands come in as `{{command}}`
 // (the real command, the same in both languages). Microsoft's Görünüm panel keeps its own words
 // (`skins.*`); the Projects panel reuses them where the same thing is meant (the file, the arm
 // model, the preview, leaving unsaved).
@@ -12,9 +12,9 @@ export const trProjectsSkin = {
     inLine: "Sırada",
   },
   source: {
-    label: "Skin kaynağı",
-    png: "PNG yükle",
-    name: "Oyuncu adı",
+    label: "Skin Kaynağı",
+    png: "PNG Yükle",
+    name: "Oyuncu Adı",
   },
   file: {
     pending: "Kaydettiğinde Projects'e gönderilir.",
@@ -26,18 +26,18 @@ export const trProjectsSkin = {
     empty: "Bu skin boş görünüyor.",
   },
   name: {
-    label: "Premium oyuncu adı",
+    label: "Premium Oyuncu Adı",
     found: "{{name}} oyuncusunun skini",
     own: "Bu zaten varsayılan skinin.",
     noAccount: "Bu adda bir Minecraft hesabı yok.",
     noSkin: "Bu oyuncu Minecraft'ın varsayılan skinini kullanıyor.",
     unreachable: "Şu an bakılamıyor. Biraz sonra tekrar dene.",
     looking: "Aranıyor",
-    clear: "Adı temizle",
+    clear: "Adı Temizle",
   },
   save: "Kaydet",
   sending: "Gönderiliyor",
-  reset: "Varsayılana dön",
+  reset: "Varsayılana Dön",
   note: {
     unreachable: "Şu an bağlanılamıyor. Biraz sonra tekrar dene.",
     session: "Discord oturumun kapandı. Yeniden giriş yap.",
@@ -80,29 +80,29 @@ export const trProjectsSkin = {
     savedDefault: "Skinin Projects'te varsayılana döndü",
     rejoin: "Yeniden girince görünür.",
     join: "Projects'e girince görünür.",
-    undo: "Geri al",
-    open: "Görünümü aç",
+    undo: "Geri Al",
+    open: "Görünümü Aç",
     linked: "Discord hesabın {{name}} ile eşlendi",
     unlinked: "Eşleme kaldırıldı",
   },
   connect: {
     title: "Projects skini Discord hesabınla çalışır",
     sessionTitle: "Discord oturumun kapandı",
-    action: "Discord ile giriş yap",
-    again: "Yeniden giriş yap",
+    action: "Discord ile Giriş Yap",
+    again: "Yeniden Giriş Yap",
   },
   link: {
-    title: "Hesabını eşle",
+    title: "Hesabını Eşle",
     body: "Oyunda {{command}} yaz, çıkan 6 haneli kodu buraya gir.",
     codeLabel: "Eşleme kodu, 6 hane",
     linking: "Eşleniyor",
-    label: "Discord eşlemesi",
+    label: "Discord Eşlemesi",
     linked: "Discord eşlemesi · {{name}}",
     checking: "Eşleme denetleniyor",
     other: "Discord hesabın {{name}} hesabına eşli.",
-    linkThis: "Bu hesabı eşle",
-    more: "Eşleme seçenekleri",
-    remove: "Eşlemeyi kaldır",
+    linkThis: "Bu Hesabı Eşle",
+    more: "Eşleme Seçenekleri",
+    remove: "Eşlemeyi Kaldır",
     removeTitle: "Eşleme kaldırılsın mı?",
     moveTitle: "{{name}} eşlemesi kaldırılsın mı?",
     removeBody: "Discord'daki doğrulanmış rolün kalkar. Projects skinin aynen kalır.",
@@ -110,10 +110,10 @@ export const trProjectsSkin = {
     removeCancel: "Vazgeç",
   },
   row: {
-    title: "Projects eşlemesi",
-    linkTitle: "Projects hesabını eşle",
+    title: "Projects Eşlemesi",
+    linkTitle: "Projects Hesabını Eşle",
     linkBody: "Oyunda {{command}} yaz, kodu gir.",
-    setSkin: "Projects skinini ayarla",
+    setSkin: "Projects Skinini Ayarla",
     account: "Hesap",
     close: "Kapat",
     appearance: "Görünüm",
@@ -128,8 +128,8 @@ export const trProjectsSkin = {
     forever: "Skin değiştirmen kapatıldı.",
   },
   palette: {
-    skin: "Projects skinini ayarla",
-    link: "Projects hesabını eşle",
-    linked: "Projects eşlemesi",
+    skin: "Projects Skinini Ayarla",
+    link: "Projects Hesabını Eşle",
+    linked: "Projects Eşlemesi",
   },
 };

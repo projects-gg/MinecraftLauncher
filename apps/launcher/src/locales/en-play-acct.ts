@@ -12,7 +12,7 @@ export const enPlayAcct = {
     openingGame: "The game that's starting will stop.",
     preparingGame: "Getting the game ready will stop.",
     cancel: "Cancel",
-    stop: "Stop and play",
+    stop: "Stop and Play",
     closingTitle: "The game is closing",
     closingAccount: "Once it closes, it'll start as {{name}}.",
     closingInstance: "Once it closes, {{instance}} will start.",

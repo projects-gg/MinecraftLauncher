@@ -1,19 +1,19 @@
 // AFK-CLEAR: the English of tr-afk-clear.ts. Root key `afkClear`.
 export const enAfkClear = {
-  fixPassword: "Fix password",
-  saveConnect: "Save and connect",
-  saveStart: "Save and start",
+  fixPassword: "Fix Password",
+  saveConnect: "Save and Connect",
+  saveStart: "Save and Start",
   savedConnecting: "The account is connecting.",
   savedStarting: "The account is starting.",
   stoppedBecause: "Stopped: {{reason}}",
   here: {
-    title: "On this PC",
+    title: "On This PC",
     none: "No accounts",
     noneRunning: "No account runs here now",
   },
   bulk: {
-    stopHere: "Stop all on this PC",
-    connectHere: "Connect all on this PC",
+    stopHere: "Stop All on This PC",
+    connectHere: "Connect All on This PC",
     skipped:
       "An account the server stopped isn't connected with the others. Fix it on its card first.",
   },
@@ -24,18 +24,18 @@ export const enAfkClear = {
     countOnlineHere_other: "{{count}} cloud accounts, {{online}} in game, {{here}} on this PC",
   },
   twin: {
-    runHere: "Run on this PC",
-    runInCloud: "Run in the cloud",
+    runHere: "Run on This PC",
+    runInCloud: "Run in the Cloud",
     moveTitle: "Run {{name}} on this PC?",
     moveBody:
       "It stops in the cloud and its time keeps running. It leaves the game when this PC or the launcher closes.",
     timeLeft: "{{time}} in the cloud",
-    hereSettings: "Settings on this PC",
-    cloudSettings: "Cloud settings",
-    copyCloud: "Copy cloud settings",
-    hereTitle: "{{name}}'s settings on this PC",
-    cloudTitle: "{{name}}'s cloud settings",
-    removeHere: "Remove from this PC",
+    hereSettings: "Settings on This PC",
+    cloudSettings: "Cloud Settings",
+    copyCloud: "Copy Cloud Settings",
+    hereTitle: "{{name}}'s Settings on This PC",
+    cloudTitle: "{{name}}'s Cloud Settings",
+    removeHere: "Remove from This PC",
     removeTitle: "Remove {{name}} from this PC?",
     removeBody:
       "Its settings and saved login commands on this PC are deleted. The 24/7 Cloud account stays as it is. This can't be undone.",

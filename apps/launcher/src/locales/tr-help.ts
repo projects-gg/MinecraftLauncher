@@ -1,12 +1,12 @@
 // Settings → Sorun yardımcısı (HELP1): one place that checks why the game won't start or connect,
-// with one-tap fixes and a support summary to copy. Short, sentence case; no codes on screen (they
+// with one-tap fixes and a support summary to copy. Short, titles in Title Case; no codes on screen (they
 // go only into the copied summary). The fixes that already have a name elsewhere keep it ("Yer aç",
 // "Kur ve oyna", "Onar", "Kurulum ayarlarını aç"): the panel uses those keys.
 export const trHelp = {
   /** The Settings section, the palette item and the crash dialog's button. */
-  title: "Sorun yardımcısı",
+  title: "Sorun Yardımcısı",
   /** A launch error's action: opens the troubleshooter. */
-  find: "Sorunu bul",
+  find: "Sorunu Bul",
   verdict: {
     checking: "Denetleniyor",
     checkingLine: "Birkaç saniye sürer.",
@@ -19,30 +19,30 @@ export const trHelp = {
     /** Screen readers, when a run ends ("Denetim bitti. 2 sorun bulundu."). */
     done: "Denetim bitti.",
   },
-  recheck: "Tekrar denetle",
+  recheck: "Tekrar Denetle",
   /** The launch that failed before the troubleshooter opened; its own message is the line. */
   lastLaunch: "Son açılış",
   groups: {
     connection: "Bağlantı",
-    computer: "Bu bilgisayar",
+    computer: "Bu Bilgisayar",
     game: "Oyun",
   },
   checks: {
     internet: "İnternet",
-    server: "Projects sunucusu",
+    server: "Projects Sunucusu",
     /** The signed content: the pack's updates, news, the launcher's settings from Studio. */
-    content: "Paket güncellemeleri",
+    content: "Paket Güncellemeleri",
     friends: "Arkadaşlar",
-    microsoft: "Microsoft girişi",
+    microsoft: "Microsoft Girişi",
     discord: "Discord",
     clock: "Saat",
     /** The team's word on the servers: Studio's maintenance notice or the status page. */
-    notice: "Sunucu durumu",
-    disk: "Disk alanı",
+    notice: "Sunucu Durumu",
+    disk: "Disk Alanı",
     java: "Java",
     memory: "Bellek",
     mods: "Modlar",
-    crash: "Son çökme",
+    crash: "Son Çökme",
   },
   /** Heard before each row's words, and written in the copied summary. */
   states: {
@@ -122,9 +122,9 @@ export const trHelp = {
   fixes: {
     showMods: "Göster",
     crashDetails: "Ayrıntılar",
-    memoryAuto: "Otomatik yap",
-    clockSettings: "Saat ayarları",
-    statusPage: "Durum sayfası",
+    memoryAuto: "Otomatik Yap",
+    clockSettings: "Saat Ayarları",
+    statusPage: "Durum Sayfası",
   },
   /** A fix that did not go through. */
   fixFailed: "Bu düzeltme şu an yapılamadı.",
@@ -132,13 +132,13 @@ export const trHelp = {
   memorySet: "Bellek Otomatik oldu.",
   footer: {
     stuck: "Çözülmedi mi?",
-    copy: "Destek için özeti kopyala",
+    copy: "Destek için Özeti Kopyala",
     copied: "Özet kopyalandı. Destek kanalına yapıştırabilirsin.",
-    discord: "Discord destek kanalına git",
+    discord: "Discord Destek Kanalına Git",
     /** This computer cannot reach Discord: the forum instead. */
-    forum: "Forumda destek iste",
+    forum: "Forumda Destek İste",
     /** The support link is a web page, not Discord. */
-    support: "Destek sayfasına git",
+    support: "Destek Sayfasına Git",
   },
   /** The copied summary (plain text; codes in brackets for support). */
   summary: {

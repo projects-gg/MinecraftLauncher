@@ -2,6 +2,6 @@
 export const enPrepare = {
   preparing: "Getting ready {{percent}}%",
   ready: "Ready to play",
-  setting: "Prepare in the background",
+  setting: "Prepare in the Background",
   settingHelp: "Downloads the selected instance's files before you press Play.",
 };

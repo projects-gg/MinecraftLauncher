@@ -270,7 +270,7 @@ describe("the Ayarlar draft", () => {
       ...shown,
       who: { ...shown.who, friends: ["Ece_", "Kaan_07"] },
     }));
-    // Meanwhile "Arkadaşlarıma ekle" added one (and the same name in another case).
+    // Meanwhile "Arkadaşlarıma Ekle" added one (and the same name in another case).
     const latest = settingsPart(
       config({ who: { mode: "friends", friends: ["Ece_", "Mert", "Baris_TR", "kaan_07"] } }),
     );
@@ -459,7 +459,7 @@ describe("the first start (AFK+ never starts by itself)", () => {
     });
     expect(trAfkPlus.ai.ready).toBe("ProBot AI hazır. Başlatınca çalışır.");
     // Never a bare "Başlat": beside the account's "Durdur" it read as the account's (SITE-W2).
-    expect(trAfkPlus.control.start).toBe("ProBot AI'ı başlat");
+    expect(trAfkPlus.control.start).toBe("ProBot AI'ı Başlat");
     expect(enAfkPlus.control.start).toBe("Start ProBot AI");
   });
 

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 // "YAYINDA" and its card (SHARE-LIVE): resting on the tag opens the card after 350 ms with the
 // stream's picture, what it shows and "İzle"; a room the player may not join shows a lock and one
-// line and asks for no picture; "Katıl ve izle" joins the crew room and watches once it is there; a
+// line and asks for no picture; "Katıl ve İzle" joins the crew room and watches once it is there; a
 // press from the keyboard takes the focus into the card.
 import { setAppReducedMotion, TooltipProvider } from "@pl/ui";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -150,7 +150,7 @@ describe("the live tag's card", () => {
     await rest(screen.getByRole("button", { name: "KorAtesi yayında" }));
     expect(screen.getByText("Oda dolu.")).toBeTruthy();
     expect(screen.queryByRole("img", { name: /son görüntü/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Katıl ve izle" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Katıl ve İzle" })).toBeNull();
     expect(thumb).not.toHaveBeenCalled();
     cleanup();
     const call: LiveTarget = { ...crewTarget(state), room: null, crew: null, offer: "private" };
@@ -166,7 +166,7 @@ describe("the live tag's card", () => {
     show(state, <LiveTagButton targets={[crewTarget(state)]} placement={PLACE} />);
     await rest(screen.getByRole("button", { name: "KorAtesi yayında" }));
     expect(screen.getByText("Bu odaya katılamazsın.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Katıl ve izle" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Katıl ve İzle" })).toBeNull();
   });
 
   it("joins the crew room and watches the share once the room lists it", async () => {
@@ -180,7 +180,7 @@ describe("the live tag's card", () => {
     // No picture yet: the card waits calmly, its action is there.
     expect(screen.getByText("Taş Ocağı")).toBeTruthy();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Katıl ve izle" }));
+      fireEvent.click(screen.getByRole("button", { name: "Katıl ve İzle" }));
       await Promise.resolve();
     });
     expect(join).toHaveBeenCalledWith(target.crew, "c00000000000000b2");

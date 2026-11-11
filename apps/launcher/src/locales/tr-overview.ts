@@ -1,14 +1,14 @@
-// The instance's Genel (overview) tab. Short, sentence case.
+// The instance's Genel (overview) tab. Short, titles in Title Case.
 export const trOverview = {
   /** Over the name of the world or server "Devam et" goes back to. */
-  resumeLabel: "Kaldığın yer",
+  resumeLabel: "Kaldığın Yer",
   /** A played instance without worlds, screenshots or servers. */
   nothing: "Henüz dünya ya da sunucu yok",
   worlds: "Dünyalar",
   /** The worlds under the "Devam et" card, which shows the last one. */
-  otherWorlds: "Diğer dünyalar",
+  otherWorlds: "Diğer Dünyalar",
   servers: "Sunucular",
-  shots: "Son ekran görüntüleri",
+  shots: "Son Ekran Görüntüleri",
   /** Opens the tab with the whole list. */
   all: "Tümü",
   /** The side panel (screen readers). */
@@ -31,6 +31,6 @@ export const trOverview = {
   },
   facts: {
     minecraft: "Minecraft",
-    size: "Kapladığı yer",
+    size: "Kapladığı Yer",
   },
 };

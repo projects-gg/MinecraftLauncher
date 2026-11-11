@@ -2,7 +2,7 @@
 // fades only. Performance mode and the system's own setting turn it on too, and then the embers
 // stay off. Root key `motion`.
 export const trMotion = {
-  title: "Animasyonları azalt",
+  title: "Animasyonları Azalt",
   /** What it does, apart from Performance mode right above it (which also drops the effects). */
   help: "Pencereler ve menüler kaymadan açılır.",
   /** Under the switch while Performance mode keeps it on. */

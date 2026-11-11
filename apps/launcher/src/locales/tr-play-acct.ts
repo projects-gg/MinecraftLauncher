@@ -19,7 +19,7 @@ export const trPlayAcct = {
     preparingGame: "Oyunun hazırlığı durdurulacak.",
     cancel: "Vazgeç",
     /** The answer while the game opens or its files are prepared: nothing to save yet. */
-    stop: "Durdur ve oyna",
+    stop: "Durdur ve Oyna",
     /** On the way: the game closes (its words stay until it has). */
     closingTitle: "Oyun kapanıyor",
     closingAccount: "Kapanınca {{name}} hesabıyla açılacak.",

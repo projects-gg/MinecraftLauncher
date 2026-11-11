@@ -1,8 +1,8 @@
 // Chat extras (CHAT2): the emoji and sticker picker, stickers, replies, reactions, typing, "Seen",
-// links and their cards. Short, friendly, sentence case.
+// links and their cards. Short, friendly, titles in Title Case.
 export const enChat2 = {
   picker: {
-    open: "Emoji and stickers",
+    open: "Emoji and Stickers",
     openEmoji: "Emoji",
     label: "Emoji and stickers",
     tabs: {
@@ -13,7 +13,7 @@ export const enChat2 = {
     search: "Search emoji",
     clear: "Clear search",
     grid: "Emoji",
-    recent: "Recently used",
+    recent: "Recently Used",
     empty: "No emoji found",
     results_one: "{{count}} emoji found",
     results_other: "{{count}} emoji found",
@@ -21,31 +21,31 @@ export const enChat2 = {
     react: "React",
   },
   groups: {
-    smileys: "Smileys and emotion",
+    smileys: "Smileys and Emotion",
     people: "People",
-    nature: "Animals and nature",
-    food: "Food and drink",
-    travel: "Travel and places",
+    nature: "Animals and Nature",
+    food: "Food and Drink",
+    travel: "Travel and Places",
     activities: "Activities",
     objects: "Objects",
     symbols: "Symbols",
     flags: "Flags",
   },
   tone: {
-    label: "Skin tone",
+    label: "Skin Tone",
     current: "Skin tone: {{tone}}",
     options: {
       default: "Default",
       light: "Light",
-      mediumLight: "Medium-light",
+      mediumLight: "Medium-Light",
       medium: "Medium",
-      mediumDark: "Medium-dark",
+      mediumDark: "Medium-Dark",
       dark: "Dark",
     },
   },
   stickers: {
     grid: "Stickers",
-    recent: "Recently used",
+    recent: "Recently Used",
     label: "{{name}} sticker",
     unknown: "Sticker",
     preview: "Sticker: {{name}}",
@@ -61,7 +61,7 @@ export const enChat2 = {
   },
   reply: {
     replying: "Replying to {{name}}",
-    cancel: "Remove reply",
+    cancel: "Remove Reply",
     earlier: "An earlier message",
     deleted: "Message deleted",
     sticker: "Sticker",
@@ -71,7 +71,7 @@ export const enChat2 = {
   },
   reactions: {
     give: "React with {{emoji}}",
-    more: "Another emoji",
+    more: "Another Emoji",
     chip_one: "{{emoji}}, {{count}} person",
     chip_other: "{{emoji}}, {{count}} people",
     chipMineAlone: "{{emoji}}, you",
@@ -80,8 +80,8 @@ export const enChat2 = {
     people_one: "{{count}} person",
     people_other: "{{count}} people",
     you: "You",
-    meToo: "Me too {{emoji}}",
-    remove: "Remove my reaction",
+    meToo: "Me Too {{emoji}}",
+    remove: "Remove My Reaction",
     full: "You can give a message at most 5 reactions.",
     kinds: "This message has no room for a new reaction.",
     refused: "This emoji can't be a reaction.",
@@ -100,7 +100,7 @@ export const enChat2 = {
     open: "Open",
     cancel: "Cancel",
     refused: "This link can't be opened.",
-    copy: "Copy link",
+    copy: "Copy Link",
     copied: "Link copied",
     card: "{{site}}: {{title}}, link",
     cardPlain: "{{site}}, link",
@@ -127,7 +127,7 @@ export const enChat2 = {
   },
   report: {
     reaction: "Reaction: {{emoji}}",
-    reactionReason: "Inappropriate reaction",
+    reactionReason: "Inappropriate Reaction",
   },
   /** The limited account's list: CHAT2's items. */
   limited: {
@@ -138,8 +138,8 @@ export const enChat2 = {
     chatReactions_other: "Up to {{count}} reactions a day",
   },
   privacy: {
-    seen: "Seen receipts",
-    typing: "Typing indicator",
+    seen: "Seen Receipts",
+    typing: "Typing Indicator",
     note: "If you turn it off, you won't see it either.",
     both: "Both work both ways: turn one off and you won't see it either.",
   },

@@ -15,13 +15,13 @@ export const enSmall9 = {
     homeMissingMods: "You need the same mods as {{name}} to join",
   },
   palette: {
-    openWorld: "Open your world to friends",
-    manageWorld: "Manage your shared world",
+    openWorld: "Open Your World to Friends",
+    manageWorld: "Manage Your Shared World",
   },
   settings: {
-    worlds: "Open your world to friends",
+    worlds: "Open Your World to Friends",
     worldsPrivacy:
       "Friends never see your IP address. Only the friends you invite see your open world.",
-    worldsGo: "Go to your worlds",
+    worldsGo: "Go to Your Worlds",
   },
 };
