@@ -679,6 +679,7 @@ pub async fn cleanup_delete_shared(
 #[serde(rename_all = "camelCase")]
 pub enum LeftoverKindView {
     Cache,
+    StartCache,
     Downloads,
     Logs,
     CrashReports,
@@ -688,6 +689,7 @@ impl LeftoverKindView {
     fn kind(self) -> LeftoverKind {
         match self {
             Self::Cache => LeftoverKind::Cache,
+            Self::StartCache => LeftoverKind::StartCache,
             Self::Downloads => LeftoverKind::Downloads,
             Self::Logs => LeftoverKind::Logs,
             Self::CrashReports => LeftoverKind::CrashReports,
@@ -697,6 +699,7 @@ impl LeftoverKindView {
     fn of(kind: LeftoverKind) -> Self {
         match kind {
             LeftoverKind::Cache => Self::Cache,
+            LeftoverKind::StartCache => Self::StartCache,
             LeftoverKind::Downloads => Self::Downloads,
             LeftoverKind::Logs => Self::Logs,
             LeftoverKind::CrashReports => Self::CrashReports,

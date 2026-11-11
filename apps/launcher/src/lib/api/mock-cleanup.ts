@@ -111,6 +111,7 @@ function shared(): { items: SharedItem[]; groups: SharedGroup[] } {
 function leftovers(): Leftover[] {
   return [
     { kind: "cache", bytes: Math.round(18.4 * MB), files: 312 },
+    { kind: "startCache", bytes: Math.round(174 * MB), files: 2 },
     { kind: "downloads", bytes: Math.round(6.1 * MB), files: 9 },
     { kind: "logs", bytes: Math.round(41.7 * MB), files: 23 },
     { kind: "crashReports", bytes: Math.round(1.2 * MB), files: 7 },

@@ -11,11 +11,13 @@
 //! - **Captured game logs** (`logs/game-*.log`): over [`Policy::captured_logs_max_bytes`] the
 //!   oldest go first, never the newest few.
 //! - **Thumbnails of deleted instances** (`cache/thumbs/<instance>/` without
-//!   `instances/<instance>/`).
+//!   `instances/<instance>/`), and their Java AOT caches (`cache/aot/<instance>.*`).
 //!
 //! On request, with a size preview first ([`scan_leftovers`], [`clean_leftovers`]):
 //! - [`LeftoverKind::Cache`]: Modrinth icons (they download again) and screenshot thumbnails
 //!   (made again when the gallery shows them);
+//! - [`LeftoverKind::StartCache`]: Java's AOT caches of game starts (`cache/aot`, AOT-CACHE; made
+//!   again after the next start);
 //! - [`LeftoverKind::Downloads`]: the junk above;
 //! - [`LeftoverKind::Logs`]: captured game logs older than 14 days (or over the cap; the newest
 //!   five sessions always stay, support needs the last one whatever its age), and the game's own
@@ -40,6 +42,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use pl_mc::gamefiles::{
     INCOMPLETE_SLOT_AGE, LauncherTrash, PurgeReport, TRASH_RETENTION, TrashLimits,
 };
+use pl_mc::launch::aot::DIR_NAME as AOT_DIR;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
@@ -138,6 +141,8 @@ pub struct InUse {
 pub enum LeftoverKind {
     /// Modrinth icons and screenshot thumbnails.
     Cache,
+    /// Java's AOT caches of game starts.
+    StartCache,
     /// Unfinished downloads, temporary files, scratch folders, old update installers.
     Downloads,
     /// Old captured game logs and the game's own archived logs.
@@ -146,8 +151,9 @@ pub enum LeftoverKind {
     CrashReports,
 }
 
-pub const ALL_LEFTOVERS: [LeftoverKind; 4] = [
+pub const ALL_LEFTOVERS: [LeftoverKind; 5] = [
     LeftoverKind::Cache,
+    LeftoverKind::StartCache,
     LeftoverKind::Downloads,
     LeftoverKind::Logs,
     LeftoverKind::CrashReports,
@@ -317,6 +323,21 @@ fn candidates(
                     file(entry.path().to_path_buf(), &meta, LeftoverKind::Cache);
                 }
             }
+        }
+    }
+
+    // Java's AOT caches (`<instance>.<key>.<ext>`): all on request, those of instances that no
+    // longer exist automatically. A running game's cache cannot be removed and stays.
+    for entry in read_dir(&cache.join(AOT_DIR)) {
+        let Ok(meta) = entry.metadata() else { continue };
+        if !meta.is_file() || !older(&meta, Duration::ZERO) {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let instance = name.split('.').next().unwrap_or_default();
+        let orphan = !instance.is_empty() && !root.join("instances").join(instance).is_dir();
+        if !automatic || orphan {
+            file(entry.path(), &meta, LeftoverKind::StartCache);
         }
     }
 
@@ -731,6 +752,47 @@ mod tests {
         );
         assert!(root.join("cache/thumbs/a/1.jpg").is_file());
         assert!(!root.join("cache/thumbs/gone").exists());
+    }
+
+    #[test]
+    fn aot_caches_go_on_request_and_with_their_instance() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::create_dir_all(root.join("instances/a/minecraft")).unwrap();
+        for path in [
+            "cache/aot/a.0123456789abcdef.aot",
+            "cache/aot/gone.0123456789abcdef.aotconf",
+        ] {
+            write(&root.join(path), 10);
+            age(&root.join(path), 1);
+        }
+        // Just written (a cache being made): left alone.
+        write(&root.join("cache/aot/a.0123456789abcdef.tries"), 1);
+        let policy = Policy::default();
+        let none = InUse::default();
+        let now = SystemTime::now();
+        assert_eq!(
+            kinds(&scan_leftovers(&places(root), &policy, &none, now)),
+            [(LeftoverKind::StartCache, 20, 2)]
+        );
+        // Automatically only a deleted instance's files go.
+        let report = tidy(&places(root), &policy, &none, now, None);
+        assert_eq!(report.junk.removed_files, 1);
+        assert!(root.join("cache/aot/a.0123456789abcdef.aot").is_file());
+        assert!(
+            !root
+                .join("cache/aot/gone.0123456789abcdef.aotconf")
+                .exists()
+        );
+        let cleaned = clean_leftovers(
+            &places(root),
+            &policy,
+            &none,
+            now,
+            &[LeftoverKind::StartCache],
+        );
+        assert_eq!(cleaned.removed_files, 1);
+        assert!(!root.join("cache/aot/a.0123456789abcdef.aot").exists());
     }
 
     #[test]

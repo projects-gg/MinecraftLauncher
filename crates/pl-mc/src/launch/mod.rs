@@ -3,10 +3,11 @@
 //! analysis ([`crash`]), where "Devam et" joins ([`resume`]) and how it enters a world
 //! ([`world_entry`]), whether a world is open in another game ([`world_lock`]), how long a game
 //! played next to others ([`sessions`]), and the games the launcher left running when it quit
-//! ([`detached`]).
+//! ([`detached`]), and Java's AOT cache for faster Fabric starts ([`aot`]).
 //!
 //! Typical flow: `install::install_version` → [`build_launch_command`] → [`GameProcess::spawn`].
 
+pub mod aot;
 pub mod command;
 pub mod crash;
 pub mod detached;

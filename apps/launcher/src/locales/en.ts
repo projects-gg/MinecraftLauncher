@@ -1486,6 +1486,7 @@ export const en: DeepPartial<Strings> = {
         caption: "{{count}} files",
         caption_one: "{{count}} file",
         cache: "Mod Icons and Screenshot Previews",
+        startCache: "Game Start Cache",
         downloads: "Unfinished Downloads",
         logs: "Old Game Logs",
         crashReports: "Old Crash Reports",

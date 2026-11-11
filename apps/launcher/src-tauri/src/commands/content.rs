@@ -292,6 +292,8 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
     crate::telemetry::apply_flag(snapshot.config.features.telemetry);
     // "Sürümü Değiştir" (PACK-EDIT): the upgrades before a launch and in repairs follow it.
     crate::commands::packedit::apply_flag(snapshot.config.features.pack_edit);
+    // "Hızlı oyun açılışı" (AOT-CACHE): the next launches follow it.
+    crate::aot::apply_flag(snapshot.config.features.aot_cache);
     state
         .afk
         .set_client_release(afk_client_release(state, snapshot));

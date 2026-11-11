@@ -15,6 +15,7 @@ use pl_mc::install::{
     install_version,
 };
 use pl_mc::instance::Instance;
+use pl_mc::launch::aot::{self, AotPlan};
 use pl_mc::launch::{
     GameAccount, GameEvent, GameProcess, LaunchIdentity, QuickPlay, SpawnOptions, UserType,
     WorldEntry, build_launch_command,
@@ -1143,6 +1144,8 @@ async fn prepare_and_spawn(
         guard = lock.lock() => guard,
     };
     clock.lap("lock");
+    // A cache being made below normal priority (AOT-CACHE) waits until this game ends.
+    crate::aot::pause();
     let sink: EventSink = {
         let channel = on_event.clone();
         Arc::new(move |event| {
@@ -1429,8 +1432,47 @@ async fn prepare_and_spawn(
             }
         }
     }
-    let command = build_launch_command(&state.mc.dirs, &resolved, &installed, &identity, &options)
-        .map_err(CmdError::from)?;
+    let mut command =
+        build_launch_command(&state.mc.dirs, &resolved, &installed, &identity, &options)
+            .map_err(CmdError::from)?;
+    // "Hızlı oyun açılışı" (AOT-CACHE): this setup's AOT cache, or a recording of this start when
+    // it has none (the client jar then goes to Fabric by a property, `pl_mc::launch::aot`).
+    let mut aot = crate::aot::for_launch(
+        state,
+        &instance.id,
+        &installed,
+        &command,
+        options.wrapper.is_some(),
+    )
+    .await;
+    match aot.as_ref().map(|aot| &aot.plan) {
+        Some(AotPlan::Use { cache }) => {
+            options.launcher_jvm_args.extend(aot::use_jvm_args(cache));
+            command =
+                build_launch_command(&state.mc.dirs, &resolved, &installed, &identity, &options)
+                    .map_err(CmdError::from)?;
+        }
+        Some(AotPlan::Train { config }) => {
+            let mut trained = installed.clone();
+            trained.classpath.pop();
+            let mut training = options.clone();
+            training
+                .launcher_jvm_args
+                .extend(aot::training_jvm_args(config, &installed.client_jar));
+            let recorded =
+                build_launch_command(&state.mc.dirs, &resolved, &trained, &identity, &training)
+                    .map_err(CmdError::from)?;
+            if aot
+                .as_ref()
+                .is_some_and(|aot| aot.begin_training(&installed.java.path, &recorded))
+            {
+                command = recorded;
+            } else {
+                aot = None;
+            }
+        }
+        Some(AotPlan::Off) | None => {}
+    }
     tracing::info!(command = %command.display_redacted(), "launching");
 
     let hook_env: BTreeMap<String, String> = [
@@ -1687,6 +1729,11 @@ async fn prepare_and_spawn(
             crate::commands::java::game_exited(&app);
             // Background preparation looks again once the player is done with the launcher.
             crate::prepare::game_exited(&app);
+        }
+        // AOT-CACHE: a training's recording waits for its create step (or the key is given up),
+        // a cache that crashed its game while it opened is dropped.
+        if let Some(aot) = aot {
+            crate::aot::game_ended(&app, aot, exit.crash.is_some(), exit.play_time().is_some());
         }
         if let Some(diagnosis) = exit.crash.clone() {
             // Usage data: only the crash's kind (TELEMETRY).
