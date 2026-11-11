@@ -7,7 +7,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useOwnLaunchInstance, useOwnLaunchKind } from "@/features/accounts/use-own-launch";
+import {
+  useOwnLaunchInstance,
+  useOwnLaunchKind,
+  useOwnLaunchOnItsWay,
+} from "@/features/accounts/use-own-launch";
 import { showError } from "@/features/content/jobs";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
 import { GraphicsPicker } from "@/features/library/tabs/graphics-picker";
@@ -36,8 +40,10 @@ export function usePlayInstance(instances: InstanceSummary[]) {
   // The selected account's launch or game (PLAY-AGAIN: other accounts' games run beside it).
   const phaseKind = useOwnLaunchKind();
   const launchId = useOwnLaunchInstance();
-  // While a game is prepared or played the command bar stays on that instance.
-  const busy = phaseKind === "working" || phaseKind === "launching" || phaseKind === "running";
+  // While a launch is on its way the command bar stays on its instance; once the game is on
+  // screen the player's pick (VER-SWITCH: another instance starts beside it).
+  const busy = useOwnLaunchOnItsWay();
+  const ownGame = phaseKind === "working" || phaseKind === "launching" || phaseKind === "running";
   const instance =
     (busy ? instances.find((i) => i.id === launchId) : undefined) ??
     instances.find((i) => i.id === selectedId) ??
@@ -49,7 +55,7 @@ export function usePlayInstance(instances: InstanceSummary[]) {
   return {
     instance,
     busy,
-    gameOpen: (busy && instance !== undefined && launchId === instance.id) || anyGame,
+    gameOpen: (ownGame && instance !== undefined && launchId === instance.id) || anyGame,
   };
 }
 
@@ -61,7 +67,7 @@ function InstanceRow({
 }: {
   instances: InstanceSummary[];
   instance: InstanceSummary;
-  /** A game is prepared or played: the command bar stays on it. */
+  /** A launch is on its way: the command bar stays on it. */
   locked: boolean;
 }) {
   const { t } = useTranslation();

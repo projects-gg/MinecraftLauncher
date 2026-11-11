@@ -7,7 +7,13 @@ import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { api } from "@/lib/api";
 import { type LaunchPhase, useLaunch } from "@/stores/launch";
-import { type OwnLaunch, othersInGame, ownLaunch, playingAccountIds } from "@/stores/launch-owner";
+import {
+  inProgress,
+  type OwnLaunch,
+  othersInGame,
+  ownLaunch,
+  playingAccountIds,
+} from "@/stores/launch-owner";
 import { ACCOUNTS_KEY } from "./use-accounts";
 
 /** The selected account's id: `undefined` while the accounts load, `null` with none. */
@@ -51,6 +57,16 @@ export function useOwnLaunchKind(): LaunchPhase["kind"] {
 export function useOwnLaunchInstance(): string | null {
   const selected = useSelectedAccountId();
   return useLaunch((s) => ownLaunch(s, selected).instanceId);
+}
+
+/**
+ * This account's launch is on its way (files prepared, the game opening): the command bar stays on
+ * its instance until the game is on screen. From then on the player may pick another instance and
+ * start it beside the game (VER-SWITCH).
+ */
+export function useOwnLaunchOnItsWay(): boolean {
+  const selected = useSelectedAccountId();
+  return useLaunch((s) => inProgress(ownLaunch(s, selected).phase));
 }
 
 /** The accounts whose game is on screen: their rows say "Oyunda" (account center, account menu). */

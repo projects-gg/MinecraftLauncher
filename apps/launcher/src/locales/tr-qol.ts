@@ -29,8 +29,8 @@ export const trQol = {
      * off, and this says how to free them (the bar's "İptal et").
      */
     lockedPreparing: "Başka kurulum seçmek için önce hazırlığı iptal et.",
-    /** The same menu while the game opens or runs. */
-    lockedPlaying: "Oyun kapanınca başka kurulum seçebilirsin.",
+    /** The same menu while the game opens (once it is on screen every row is free again). */
+    lockedOpening: "Oyun açılınca başka kurulum seçebilirsin.",
   },
   mods: {
     /** Modlar → Önerilenler while a game of the instance prepares or runs: every switch is off. */

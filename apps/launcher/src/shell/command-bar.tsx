@@ -41,6 +41,7 @@ import { formatCount, formatDuration, formatRelative, formatSpeed } from "@/lib/
 import { detectOs } from "@/lib/platform";
 import { ariaKeyShortcuts } from "@/lib/shortcuts";
 import { isOpening, type LaunchPhase, useLaunch } from "@/stores/launch";
+import { barPhase, inProgress } from "@/stores/launch-owner";
 import { usePrefs } from "@/stores/prefs";
 import { type PrepareHint, usePrepare } from "@/stores/prepare";
 import { InstanceIcon, prewarmInstanceIcons } from "./instance-icon";
@@ -159,10 +160,11 @@ function InstancePicker({
   /** Still loading the list (an empty list then reads "Kurulum seç", not "Yükleniyor"). */
   loading: boolean;
   /**
-   * A game is being prepared or played: the bar stays on it until it ends, and the menu says why
-   * the other rows are off (and how to free them while it prepares).
+   * A launch is on its way (files prepared, the game opening): the bar stays on it, and the menu
+   * says why the other rows are off (and how to free them while it prepares). Once the game is on
+   * screen every row is free: another instance starts beside it (VER-SWITCH).
    */
-  lock: "preparing" | "playing" | null;
+  lock: "preparing" | "opening" | null;
   /** Background preparation of the selected instance, when there is something to show. */
   hint: PrepareHint | null;
   onSelect: (id: string) => void;
@@ -220,7 +222,7 @@ function InstancePicker({
         >
           {lock && ordered.length > 1 ? (
             <DropdownMenu.Label className="px-2 pt-1.5 pb-1 text-[12px] leading-snug text-ash-400">
-              {t(lock === "preparing" ? "qol.picker.lockedPreparing" : "qol.picker.lockedPlaying")}
+              {t(lock === "preparing" ? "qol.picker.lockedPreparing" : "qol.picker.lockedOpening")}
             </DropdownMenu.Label>
           ) : null}
           {/* A long library scrolls here; the two actions below always stay in view. */}
@@ -683,25 +685,40 @@ export function CommandBar() {
   const navigate = useNavigate();
   // Only what the bar shows: the rest of the launch store (crash, notes, screenshots) changes
   // without it.
-  const { phase, instanceId: launchId } = useOwnLaunch();
+  const { phase: ownPhase, instanceId: launchId } = useOwnLaunch();
   // Other accounts in game while this one is not: the quiet "X oyunda" (PLAY-AGAIN).
   const others = useOthersInGame();
   const play = useLaunch((s) => s.play);
   const cancel = useLaunch((s) => s.cancel);
   const reset = useLaunch((s) => s.reset);
   const queryClient = useQueryClient();
-  // While a game is prepared or played the bar shows that one: its progress, its session.
-  const busy = phase.kind === "working" || phase.kind === "launching" || phase.kind === "running";
+  // A launch on its way stays in view (one at a time). Once its game is on screen the player may
+  // pick another instance and start it beside the game (VER-SWITCH; owner, 11 Nov 2026: several
+  // games run at once, the next one may want another version).
+  const onItsWay = inProgress(ownPhase);
   // The picker and the Ctrl+K palette show every instance icon at once on their first opening.
   useEffect(() => prewarmInstanceIcons(), []);
+  // A new launch or game of this account (OYNA, the tray, a shortcut, one an earlier start left
+  // running) takes the selection, so the bar shows it; the player may pick another one after.
+  const follow = ownPhase.kind === "idle" || ownPhase.kind === "error" ? null : launchId;
+  const followed = useRef<string | null>(null);
+  useEffect(() => {
+    if (follow && follow !== followed.current) selectInstance(follow);
+    followed.current = follow;
+  }, [follow, selectInstance]);
 
   const selected = useMemo(
     () =>
-      (busy ? instances.find((i) => i.id === launchId) : undefined) ??
+      (onItsWay ? instances.find((i) => i.id === launchId) : undefined) ??
       instances.find((i) => i.id === selectedId) ??
       instances[0],
-    [instances, selectedId, busy, launchId],
+    [instances, selectedId, onItsWay, launchId],
   );
+  // What the bar shows: this account's launch or game when it is of the instance in view; another
+  // instance picked while the game plays is ready to start beside it.
+  const phase = barPhase({ phase: ownPhase, instanceId: launchId }, selected?.id ?? null);
+  // While a game is prepared or played the bar shows that one: its progress, its session.
+  const busy = phase.kind === "working" || phase.kind === "launching" || phase.kind === "running";
   // The instance OYNA plays is the one the launcher prepares in the background; its hint gives
   // way to the launch's own progress.
   usePrepareSync(selected, !instancesLoading);
@@ -829,7 +846,7 @@ export function CommandBar() {
         instances={instances}
         selected={selected}
         loading={instancesLoading}
-        lock={phase.kind === "working" ? "preparing" : busy ? "playing" : null}
+        lock={ownPhase.kind === "working" ? "preparing" : onItsWay ? "opening" : null}
         hint={hint}
         onSelect={selectInstance}
       />

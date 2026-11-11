@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LaunchPhase, RunningGame } from "./launch";
 import {
+  barPhase,
   gameStage,
   inProgress,
   type LaunchView,
@@ -182,5 +183,22 @@ describe("Oyunda on the accounts, and the bar's quiet line (PLAY-AGAIN)", () => 
     expect(othersInGame(view, null)).toEqual([]);
     // A game still opening is not "in game" yet.
     expect(othersInGame(playing(game(1, ejder, "projects", false)), "a2")).toEqual([]);
+  });
+});
+
+describe("barPhase (VER-SWITCH): another instance picked while the game plays", () => {
+  it("shows the game for its own instance", () => {
+    expect(barPhase({ phase: open, instanceId: "projects" }, "projects")).toBe(open);
+  });
+  it("shows another picked instance as ready to start beside the game", () => {
+    expect(barPhase({ phase: open, instanceId: "projects" }, "fabric")).toEqual(idle);
+  });
+  it("keeps a launch on its way, and its error, whatever is picked", () => {
+    for (const phase of [preparing, launching, opening, failed]) {
+      expect(barPhase({ phase, instanceId: "projects" }, "fabric")).toBe(phase);
+    }
+  });
+  it("lets the picked instance start beside this account's game (the same name asks first)", () => {
+    expect(planPlay(playing(game(1, ejder, "projects")), "fabric", "a1")).toBe("again");
   });
 });
