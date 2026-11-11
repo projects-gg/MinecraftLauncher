@@ -1425,7 +1425,10 @@ export const commands = {
 	cleanupSummary: (olderThanDays: number) => typedError<CleanupSummaryView, CmdError>(__TAURI_INVOKE("cleanup_summary", { olderThanDays })),
 	/**  Whether "Otomatik Temizlik" is on (the default). */
 	cleanupAuto: () => typedError<boolean, CmdError>(__TAURI_INVOKE("cleanup_auto")),
-	/**  Turns "Otomatik Temizlik" on or off; returns what is kept. */
+	/**
+	 *  Turns "Otomatik Temizlik" on or off (off also stops a round that is deleting game files);
+	 *  returns what is kept.
+	 */
 	cleanupSetAuto: (on: boolean) => typedError<boolean, CmdError>(__TAURI_INVOKE("cleanup_set_auto", { on })),
 	/**
 	 *  The instance's logs, newest first: the sessions the launcher captured, then the game's own
