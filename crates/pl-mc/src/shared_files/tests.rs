@@ -16,7 +16,28 @@ fn later() -> ScanOptions {
         now: SystemTime::now() + 2 * DAY,
         min_age: DAY,
         protected: Vec::new(),
+        keep: Vec::new(),
     }
+}
+
+/// Makes `link` a folder link to `target`: a junction on Windows (no extra rights needed), a
+/// symbolic link elsewhere.
+fn folder_link(link: &Path, target: &Path) {
+    #[cfg(windows)]
+    {
+        // `mklink` reads a `/` as the start of a switch.
+        let native = |path: &Path| path.to_string_lossy().replace('/', "\\");
+        let status = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(native(link))
+            .arg(native(target))
+            .stdout(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success(), "mklink /J failed");
+    }
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(target, link).unwrap();
 }
 
 fn fabric(mc: &str, loader: &str) -> GameRef {
@@ -536,4 +557,163 @@ fn names_and_ordering_helpers() {
             "Com/Example/X.jar"
         }
     });
+}
+
+#[test]
+fn kept_versions_keep_what_they_need() {
+    let fx = fixture();
+    let refs = [fabric("1.21.1", "0.16.5")];
+    // The old Fabric profile was started recently: it, its game version, natives, Java, its
+    // libraries and its assets stay although no instance refers to it.
+    let options = ScanOptions {
+        keep: vec!["fabric-loader-0.15.0-1.20.1".to_owned()],
+        ..later()
+    };
+    let scan = scan(&fx.dirs, &refs, &options).unwrap();
+    assert_eq!(
+        ids(&scan),
+        [
+            "version:1.20.1-forge-47.2.0",
+            "runtime:jre-legacy",
+            "libraries",
+            "assets",
+        ]
+    );
+    let plan = plan(&fx.dirs, &refs, &options).unwrap();
+    let names = |id: &str| -> Vec<String> {
+        plan.removals[id]
+            .iter()
+            .map(|r| r.path.file_name().unwrap().to_string_lossy().into_owned())
+            .collect()
+    };
+    assert!(!names("libraries").contains(&"fabric-loader-0.15.0.jar".to_owned()));
+    assert!(names("libraries").contains(&"orphan-1.0.jar".to_owned()));
+    assert!(!names("assets").contains(&"bb22".to_owned()));
+    assert!(names("assets").contains(&"dd44".to_owned()));
+}
+
+#[test]
+fn links_are_never_followed() {
+    let fx = fixture();
+    let refs = [fabric("1.21.1", "0.16.5")];
+    let elsewhere = fx._tmp.path().join("elsewhere");
+
+    // A version folder that is a link: read for references, never offered or deleted.
+    let target = elsewhere.join("old-version");
+    write(&target.join("old-link.json"), br#"{"id":"old-link"}"#);
+    write(&target.join("old-link.jar"), &[7u8; 50]);
+    folder_link(&fx.dirs.versions().join("old-link"), &target);
+    // A runtime and a natives folder that are links.
+    let java = elsewhere.join("java");
+    write(
+        &java.join("windows-x64").join("bin").join("javaw.exe"),
+        &[0u8; 10],
+    );
+    folder_link(&fx.dirs.runtimes().join("java-runtime-other"), &java);
+    let natives = elsewhere.join("natives");
+    write(&natives.join("x.dll"), &[0u8; 10]);
+    folder_link(&fx.dirs.natives().join("1.19.4-3333333333"), &natives);
+    // A folder link inside the libraries: its files are not ours.
+    let shared_libs = elsewhere.join("libs");
+    write(&shared_libs.join("other.jar"), &[0u8; 10]);
+    folder_link(&fx.lib("org/other"), &shared_libs);
+
+    let found = scan(&fx.dirs, &refs, &later()).unwrap();
+    assert!(!ids(&found).contains(&"version:old-link"));
+    assert!(!ids(&found).contains(&"runtime:java-runtime-other"));
+    let all: Vec<String> = ids(&found).iter().map(|id| (*id).to_owned()).collect();
+    delete(
+        &fx.dirs,
+        &refs,
+        &later(),
+        &all,
+        &CancellationToken::new(),
+        &|_, _| {},
+    )
+    .unwrap();
+    for file in [
+        target.join("old-link.jar"),
+        java.join("windows-x64").join("bin").join("javaw.exe"),
+        natives.join("x.dll"),
+        shared_libs.join("other.jar"),
+    ] {
+        assert!(file.is_file(), "{} must stay", file.display());
+    }
+    assert!(fx.dirs.versions().join("old-link").exists());
+
+    // Shared folders that are links themselves: nothing in them is judged.
+    let fx = fixture();
+    let real_assets = fx._tmp.path().join("real-assets");
+    fs::rename(fx.dirs.assets(), &real_assets).unwrap();
+    folder_link(&fx.dirs.assets(), &real_assets);
+    let real_libraries = fx._tmp.path().join("real-libraries");
+    fs::rename(fx.dirs.libraries(), &real_libraries).unwrap();
+    folder_link(&fx.dirs.libraries(), &real_libraries);
+    let found = scan(&fx.dirs, &refs, &later()).unwrap();
+    assert!(!ids(&found).contains(&"assets"));
+    // Only the natives of a version that is gone remain in the libraries item.
+    assert_eq!(item(&found, "libraries").files, 1);
+    let all: Vec<String> = ids(&found).iter().map(|id| (*id).to_owned()).collect();
+    delete(
+        &fx.dirs,
+        &refs,
+        &later(),
+        &all,
+        &CancellationToken::new(),
+        &|_, _| {},
+    )
+    .unwrap();
+    assert!(
+        real_assets
+            .join("objects")
+            .join("dd")
+            .join("dd44")
+            .is_file()
+    );
+    assert!(
+        real_libraries
+            .join("com/example/orphan/1.0/orphan-1.0.jar")
+            .is_file()
+    );
+}
+
+#[test]
+fn an_interrupted_deletion_is_finished_next_time() {
+    let fx = fixture();
+    let refs = [fabric("1.21.1", "0.16.5")];
+    // A deletion that stopped half-way: the folders were moved out of sight first, so the
+    // launcher never sees a half-deleted version or Java.
+    let buried = fx.dirs.versions().join(".1.20.1.gone");
+    fs::rename(fx.version("1.20.1"), &buried).unwrap();
+    let buried_java = fx.dirs.runtimes().join(".jre-legacy.gone2");
+    fs::rename(fx.dirs.runtimes().join("jre-legacy"), &buried_java).unwrap();
+    let scan_now = scan(&fx.dirs, &refs, &later()).unwrap();
+    assert!(!ids(&scan_now).iter().any(|id| id.contains(".gone")));
+    assert!(!ids(&scan_now).contains(&"version:1.20.1"));
+    assert!(
+        !crate::java::managed::list_managed(&fx.dirs, crate::platform::Os::Windows)
+            .iter()
+            .any(|runtime| runtime.component.contains("legacy"))
+    );
+    // The next delete (whatever it was asked for) finishes them.
+    delete(
+        &fx.dirs,
+        &refs,
+        &later(),
+        &[],
+        &CancellationToken::new(),
+        &|_, _| {},
+    )
+    .unwrap();
+    assert!(!buried.exists());
+    assert!(!buried_java.exists());
+
+    // A folder moves away whole before its files go.
+    assert_eq!(
+        bury(&fx.version("fabric-loader-0.15.0-1.20.1")).unwrap(),
+        Some(fx.dirs.versions().join(".fabric-loader-0.15.0-1.20.1.gone"))
+    );
+    assert_eq!(bury(&fx.version("missing")).unwrap(), None);
+    assert!(is_buried(".x.gone") && is_buried(".x.gone12"));
+    assert!(!is_buried("x.gone") && !is_buried(".x.gone-a"));
 }
