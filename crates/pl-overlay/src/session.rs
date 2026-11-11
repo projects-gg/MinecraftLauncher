@@ -3574,8 +3574,8 @@ impl<S: SocialActions> Session<S> {
     /// A crew row from the game (OVL-UX3, U2–U4), checked again against the view as it is now
     /// (the mod's rows came from `lists.roles`, which may be a little older), by the launcher's own
     /// rules: "Moderatör yap" / "Moderatörlükten al" and "Liderliği devret" only in a crew the
-    /// player leads (moderators only while the service offers roles, at most
-    /// [`feed::MAX_MODERATORS`]), "Ekipten çıkar" as [`feed::may_remove`] says. Never the leader
+    /// player leads (moderators only while the service offers roles, as many as the leader likes),
+    /// "Ekipten çıkar" as [`feed::may_remove`] says. Never the leader
     /// nor the player. A moderator row that asks for what already is answers that it went.
     fn on_crew_row(&mut self, crew: &str, friend: String, row: CrewRow) {
         let action = row.action();
@@ -3600,13 +3600,7 @@ impl<S: SocialActions> Session<S> {
             let lead = team.role == TeamRole::Founder && member.role != TeamRole::Founder;
             match row {
                 CrewRow::Moderator(on) if member.moderator == on => (lead && roles, true),
-                CrewRow::Moderator(on) => {
-                    let moderators = team.members.iter().filter(|m| m.moderator).count();
-                    (
-                        lead && roles && (!on || moderators < feed::MAX_MODERATORS),
-                        false,
-                    )
-                }
+                CrewRow::Moderator(_) => (lead && roles, false),
                 CrewRow::Lead => (lead, false),
                 CrewRow::Remove => (feed::may_remove(team, member, roles), false),
             }

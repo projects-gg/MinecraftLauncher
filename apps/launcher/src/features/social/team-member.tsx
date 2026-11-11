@@ -56,7 +56,7 @@ import { withPlayed } from "./played";
 import { PresenceText } from "./presence-text";
 import { SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
-import { afterHandingOn, canRemove, daysSince, MAX_MODERATORS } from "./teams";
+import { afterHandingOn, canRemove, daysSince } from "./teams";
 import { togetherTime } from "./together";
 
 type Question = "founder" | "remove" | "removeFriend" | "block" | "unblock";
@@ -134,7 +134,6 @@ function cardPlan(team: SocialTeam, member: TeamMember, roles: boolean) {
           roles,
           leader: team.role === "founder",
           moderator: member.moderator,
-          moderatorsFull: team.members.filter((m) => m.moderator).length >= MAX_MODERATORS,
           removable: canRemove(team, member, roles),
         },
   }).filter((row): row is NonNullable<typeof row> => row !== null && CARD_ACTIONS.has(row.action));
@@ -268,7 +267,7 @@ function MemberCard({
 
   const asks: Record<Question, string> = {
     founder:
-      afterHandingOn(team, member.id, roles) === "moderator"
+      afterHandingOn(roles) === "moderator"
         ? t("teams.member.makeFounderAskModerator", { name: member.name })
         : t("teams.member.makeFounderAsk", { name: member.name }),
     remove: t("teams.member.removeAsk", { name: member.name }),

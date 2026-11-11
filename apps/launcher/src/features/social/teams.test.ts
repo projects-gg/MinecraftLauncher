@@ -267,20 +267,9 @@ describe("rights", () => {
   });
 
   it("says who the leader becomes after handing on", () => {
-    const crew = {
-      members: [
-        member("1", "Ben", { me: true, role: "founder" }),
-        member("2", "A", { moderator: true }),
-        member("3", "B", { moderator: true }),
-        member("4", "C", { moderator: true }),
-        member("5", "D", { moderator: true }),
-        member("6", "E"),
-      ],
-    };
-    // Four other moderators: no room, a member. Handing on to one of them frees a place.
-    expect(afterHandingOn(crew, "6", true)).toBe("member");
-    expect(afterHandingOn(crew, "2", true)).toBe("moderator");
-    expect(afterHandingOn(crew, "2", false)).toBe("member");
+    // No cap on moderators: on a service with roles the old leader always stays a moderator.
+    expect(afterHandingOn(true)).toBe("moderator");
+    expect(afterHandingOn(false)).toBe("member");
   });
 });
 

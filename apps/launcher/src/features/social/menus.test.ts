@@ -129,7 +129,7 @@ describe("personMenu", () => {
     blocked: false,
     discord: true,
     addFriend: "ready",
-    crew: { roles: true, leader: false, moderator: false, moderatorsFull: false, removable: false },
+    crew: { roles: true, leader: false, moderator: false, removable: false },
     report: true,
   };
 
@@ -156,7 +156,6 @@ describe("personMenu", () => {
       roles: true,
       leader: true,
       moderator: false,
-      moderatorsFull: false,
       removable: true,
     };
     expect(words(personMenu({ ...friend, categories: false, crew: leader }))).toEqual([
@@ -178,9 +177,8 @@ describe("personMenu", () => {
     expect(words(personMenu({ ...friend, crew: { ...leader, moderator: true } }))).toContain(
       "unmakeModerator",
     );
-    expect(words(personMenu({ ...friend, crew: { ...leader, moderatorsFull: true } }))).toContain(
-      "makeModerator(off)",
-    );
+    // No cap on moderators: "Moderatör Yap" is never dimmed.
+    expect(words(personMenu({ ...friend, crew: leader }))).not.toContain("makeModerator(off)");
     // A service without roles: no moderators at all, the leadership still goes on.
     const plain = words(personMenu({ ...friend, crew: { ...leader, roles: false } }));
     expect(plain).not.toContain("makeModerator");
