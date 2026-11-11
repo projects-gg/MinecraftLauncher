@@ -187,18 +187,28 @@ describe("Oyunda on the accounts, and the bar's quiet line (PLAY-AGAIN)", () => 
 });
 
 describe("barPhase (VER-SWITCH): another instance picked while the game plays", () => {
+  const alfa = game(1, ejder, "alfa");
+  const beta = game(2, ejder, "beta");
   it("shows the game for its own instance", () => {
-    expect(barPhase({ phase: open, instanceId: "projects" }, "projects")).toBe(open);
+    expect(barPhase(playing(alfa), "a1", "alfa")).toBe(runningPhase(alfa));
   });
   it("shows another picked instance as ready to start beside the game", () => {
-    expect(barPhase({ phase: open, instanceId: "projects" }, "fabric")).toEqual(idle);
+    expect(barPhase(playing(alfa), "a1", "beta")).toEqual(idle);
+  });
+  it("shows each of this account's games on its own instance, not only the newest", () => {
+    expect(barPhase(playing(alfa, beta), "a1", "alfa")).toBe(runningPhase(alfa));
+    expect(barPhase(playing(alfa, beta), "a1", "beta")).toBe(runningPhase(beta));
+    expect(barPhase(playing(alfa, beta), "a1", "projects")).toEqual(idle);
+  });
+  it("leaves another account's games out", () => {
+    expect(barPhase(playing(game(1, kor, "alfa")), "a1", "alfa")).toEqual(idle);
   });
   it("keeps a launch on its way, and its error, whatever is picked", () => {
     for (const phase of [preparing, launching, opening, failed]) {
-      expect(barPhase({ phase, instanceId: "projects" }, "fabric")).toBe(phase);
+      expect(barPhase(starting(phase, ejder, "alfa"), "a1", "beta")).toBe(phase);
     }
   });
   it("lets the picked instance start beside this account's game (the same name asks first)", () => {
-    expect(planPlay(playing(game(1, ejder, "projects")), "fabric", "a1")).toBe("again");
+    expect(planPlay(playing(alfa), "beta", "a1")).toBe("again");
   });
 });

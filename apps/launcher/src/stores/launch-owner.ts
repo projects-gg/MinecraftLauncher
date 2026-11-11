@@ -130,12 +130,21 @@ export function ownLaunch(view: LaunchView, selected: string | null | undefined)
  * What the command bar shows for the instance in view (`shownId`; VER-SWITCH, owner, 11 Nov 2026:
  * several games run at once, the next one may want another instance). A launch on its way keeps
  * its own instance in view, so it is always the one shown then. Once this account's game is on
- * screen the player may pick another instance: that one shows as ready, and its OYNA starts it
- * beside the game ("again": the same name asks first).
+ * screen the player may pick another instance: an instance with one of this account's games on
+ * screen shows its newest one ("Oyunda" and its session), any other shows as ready, and its OYNA
+ * starts it beside the games ("again": the same name asks first).
  */
-export function barPhase(own: Pick<OwnLaunch, "phase" | "instanceId">, shownId: string | null) {
-  if (own.phase.kind === "running" && own.phase.shown && shownId !== own.instanceId) return IDLE;
-  return own.phase;
+export function barPhase(
+  view: LaunchView,
+  selected: string | null | undefined,
+  shownId: string | null,
+): LaunchPhase {
+  const own = ownLaunch(view, selected);
+  if (own.phase.kind !== "running" || !own.phase.shown) return own.phase;
+  const game = ownGames(view, selected)
+    .filter((g) => g.instanceId === shownId)
+    .at(-1);
+  return game ? runningPhase(game) : IDLE;
 }
 
 /** What "Oyna" for an instance does with the selected account. */

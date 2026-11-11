@@ -24,7 +24,11 @@ import { useTranslation } from "react-i18next";
 import { AccountFace, type FaceAccount } from "@/features/accounts/account-face";
 import { useAccountsUi } from "@/features/accounts/store";
 import { useAccounts } from "@/features/accounts/use-accounts";
-import { useOthersInGame, useOwnLaunch } from "@/features/accounts/use-own-launch";
+import {
+  useOthersInGame,
+  useOwnLaunch,
+  useSelectedAccountId,
+} from "@/features/accounts/use-own-launch";
 import { RoutePicker } from "@/features/autojoin/route-picker";
 import { useRoute } from "@/features/autojoin/use-route";
 import { launchErrorAction, WORLD_OPEN } from "@/features/disk/launch-error";
@@ -716,7 +720,9 @@ export function CommandBar() {
   );
   // What the bar shows: this account's launch or game when it is of the instance in view; another
   // instance picked while the game plays is ready to start beside it.
-  const phase = barPhase({ phase: ownPhase, instanceId: launchId }, selected?.id ?? null);
+  const selectedAccount = useSelectedAccountId();
+  const shownId = selected?.id ?? null;
+  const phase = useLaunch((s) => barPhase(s, selectedAccount, shownId));
   // While a game is prepared or played the bar shows that one: its progress, its session.
   const busy = phase.kind === "working" || phase.kind === "launching" || phase.kind === "running";
   // The instance OYNA plays is the one the launcher prepares in the background; its hint gives
