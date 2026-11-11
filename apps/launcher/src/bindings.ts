@@ -1751,6 +1751,11 @@ export const commands = {
 	/**  "Görüldü bilgisi" and "Yazıyor bilgisi" (both ways: off, the player sees none either). */
 	socialSetChatPrivacy: (shareRead: boolean | null, shareTyping: boolean | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_chat_privacy", { shareRead, shareTyping })),
 	/**
+	 *  "Oynama Süremi Göster" (CREW-PLUS): friends see how long the player has been playing (with
+	 *  "Son görülme" on too); the service never sends it while it is off.
+	 */
+	socialSetPlayTimePrivacy: (sharePlayTime: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_play_time_privacy", { sharePlayTime })),
+	/**
 	 *  Puts on the tag of one of the player's crews (`team`), in place of any other, or takes the
 	 *  tag off (`null`). "Geri al" is the same command with what was worn before. The view changes
 	 *  once the service answers.
@@ -9543,6 +9548,11 @@ export type Privacy = {
 	 *  without chat extras.
 	 */
 	shareTyping?: boolean | null,
+	/**
+	 *  "Oynama Süremi Göster" (CREW-PLUS): friends see how long the player has been playing (with
+	 *  "last seen" on too). On by default; None from a service without the switch (0037).
+	 */
+	sharePlayTime?: boolean | null,
 };
 
 /**  What one profile brings, read on demand. */

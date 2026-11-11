@@ -21,6 +21,10 @@ export const trCrewPlus = {
     removed: "Şablon silindi",
     undo: "Geri Al",
   },
+  privacy: {
+    playTime: "Oynama Süremi Göster",
+    playTimeNeedsSeen: "Son görülmen açıkken görünür.",
+  },
   played: {
     minutes: "{{count}} dk",
     hours: "{{count}} sa",

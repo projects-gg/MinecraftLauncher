@@ -254,6 +254,10 @@ pub struct Privacy {
     /// without chat extras.
     #[serde(default)]
     pub share_typing: Option<bool>,
+    /// "Oynama Süremi Göster" (CREW-PLUS): friends see how long the player has been playing (with
+    /// "last seen" on too). On by default; None from a service without the switch (0037).
+    #[serde(default)]
+    pub share_play_time: Option<bool>,
 }
 
 impl Privacy {
@@ -1340,6 +1344,9 @@ pub struct ProfileUpdate {
     /// "Yazıyor bilgisi" (CHAT2; an older service turns the field away).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub share_typing: Option<bool>,
+    /// "Oynama Süremi Göster" (CREW-PLUS; an older service turns the field away).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub share_play_time: Option<bool>,
     /// The crew tag worn (TEAM6): `Some(Some(team id))` puts that crew's on in place of any
     /// other, `Some(None)` takes it off (`null`). Only to a service with [`TEAM_FEATURE_BADGES`]:
     /// an older one turns the field away.
@@ -1383,6 +1390,12 @@ impl ProfileUpdate {
 
     pub fn share_typing(mut self, share: bool) -> Self {
         self.share_typing = Some(share);
+        self
+    }
+
+    /// "Oynama Süremi Göster" (CREW-PLUS).
+    pub fn share_play_time(mut self, share: bool) -> Self {
+        self.share_play_time = Some(share);
         self
     }
 
@@ -2541,6 +2554,11 @@ mod tests {
             serde_json::to_string(&chat).unwrap(),
             r#"{"shareRead":false,"shareTyping":true}"#
         );
+        // CREW-PLUS: "Oynama Süremi Göster" goes only when set too.
+        assert_eq!(
+            serde_json::to_string(&ProfileUpdate::default().share_play_time(false)).unwrap(),
+            r#"{"sharePlayTime":false}"#
+        );
         // TEAM6: a tag put on names its crew; taking it off is `null`; untouched, nothing goes.
         assert_eq!(
             serde_json::to_string(&ProfileUpdate::default().badge(Some("0a1b2c3d4e5f6a7b")))
@@ -2732,6 +2750,13 @@ mod tests {
         )
         .unwrap();
         assert!(!off.shares_read() && off.shares_typing());
+        // CREW-PLUS: the play time switch, absent from a service before 0037.
+        assert_eq!(older.share_play_time, None);
+        let hidden: Privacy = serde_json::from_str(
+            r#"{"shareServer":false,"shareLastSeen":true,"sharePlayTime":false}"#,
+        )
+        .unwrap();
+        assert_eq!(hidden.share_play_time, Some(false));
         // A rule this version does not know is `other`, and every rule comes back as it went.
         for (wire, rule) in [
             ("\"shortener\"", LinkRule::Shortener),

@@ -1357,6 +1357,20 @@ pub async fn social_set_chat_privacy(
     Ok(state.social.update_profile(update).await?)
 }
 
+/// "Oynama Süremi Göster" (CREW-PLUS): friends see how long the player has been playing (with
+/// "Son görülme" on too); the service never sends it while it is off.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_set_play_time_privacy(
+    state: State<'_, AppState>,
+    share_play_time: bool,
+) -> CmdResult<()> {
+    Ok(state
+        .social
+        .update_profile(ProfileUpdate::default().share_play_time(share_play_time))
+        .await?)
+}
+
 // --- crew tags (TEAM6) ------------------------------------------------------------------------
 
 /// "Ekip etiketleri şu an kapalı.": Studio switched them off, or the service does not offer them.

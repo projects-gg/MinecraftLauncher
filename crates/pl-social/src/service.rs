@@ -380,6 +380,9 @@ impl Core {
             if let Some(share) = update.share_typing {
                 me.privacy.share_typing = Some(share);
             }
+            if let Some(share) = update.share_play_time {
+                me.privacy.share_play_time = Some(share);
+            }
             if let Some(name) = &update.name {
                 me.profile.display_name = Some(name.clone());
             }
@@ -5445,6 +5448,7 @@ fn profile_fields(update: &ProfileUpdate) -> u16 {
         | (u16::from(update.badge.is_some()) << 6)
         | (u16::from(update.name.is_some()) << 7)
         | (u16::from(update.marks_hidden.is_some()) << 8)
+        | (u16::from(update.share_play_time.is_some()) << 9)
 }
 
 /// BADGES: a read's `marksRev` names another catalogue than the one held (read it again).
