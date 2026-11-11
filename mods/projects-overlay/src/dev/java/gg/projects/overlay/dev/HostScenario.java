@@ -136,7 +136,7 @@ public final class HostScenario implements ClientModInitializer {
             return true;
         });
         act("shot-pause", 0.8, mc -> {
-            results.addProperty("pauseButton", hasButton(Compat.screen(mc), "Arkadaşlarını çağır", "Invite friends"));
+            results.addProperty("pauseButton", hasButton(Compat.screen(mc), "Arkadaşlarını Çağır", "Invite Friends"));
             shot(mc, "pause");
             return true;
         });
