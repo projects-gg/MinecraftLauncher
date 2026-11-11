@@ -494,7 +494,7 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
 
 /// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
 /// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk`, `voice`, `socNext`,
-/// `telemetry` and `packEdit`, which stay off until Studio turns them on.
+/// `telemetry`, `packEdit` and `aotCache`, which stay off until Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -571,6 +571,12 @@ pub struct Features {
     /// turned off before a launch (not features).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub pack_edit: bool,
+    /// "Hızlı oyun açılışı" (AOT-CACHE): Fabric starts on Java 25+ get Java's AOT cache
+    /// (`pl_mc::launch::aot`): the player's next start records, the launcher makes the cache while
+    /// no game runs, later starts open ~15% faster. Off by default; written only when on. Off,
+    /// nothing new is recorded or used; caches already made stay until the cleanup.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub aot_cache: bool,
 }
 
 impl Default for Features {
@@ -593,6 +599,7 @@ impl Default for Features {
             soc_next: false,
             telemetry: false,
             pack_edit: false,
+            aot_cache: false,
         }
     }
 }

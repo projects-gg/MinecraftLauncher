@@ -1242,6 +1242,7 @@ export const tr = {
         title: "Önbellek ve Eski Kayıtlar",
         caption: "{{count}} dosya",
         cache: "Mod Simgeleri ve Ekran Görüntüsü Önizlemeleri",
+        startCache: "Oyun Açılış Önbelleği",
         downloads: "Yarım Kalan İndirmeler",
         logs: "Eski Oyun Kayıtları",
         crashReports: "Eski Çökme Raporları",

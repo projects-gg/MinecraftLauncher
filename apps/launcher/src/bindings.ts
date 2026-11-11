@@ -6444,7 +6444,7 @@ export type LaunchSettings = {
 	route?: string | null,
 };
 
-export type LeftoverKindView = "cache" | "downloads" | "logs" | "crashReports";
+export type LeftoverKindView = "cache" | "startCache" | "downloads" | "logs" | "crashReports";
 
 export type LeftoverView = {
 	kind: LeftoverKindView,

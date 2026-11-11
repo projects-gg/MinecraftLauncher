@@ -110,7 +110,7 @@ export interface SharedFiles {
   totalBytes: number;
 }
 
-export type LeftoverKind = "cache" | "downloads" | "logs" | "crashReports";
+export type LeftoverKind = "cache" | "startCache" | "downloads" | "logs" | "crashReports";
 
 export interface Leftover {
   kind: LeftoverKind;

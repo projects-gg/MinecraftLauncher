@@ -1,5 +1,6 @@
 //! Projects Launcher application shell: window, plugins and the typed command bridge.
 
+mod aot;
 mod commands;
 mod error;
 mod fastpack;
@@ -187,6 +188,8 @@ pub fn run() {
             commands::java::start_java_updates(app.handle());
             // The chosen instance's files, downloaded gently while the launcher is idle (prepare).
             prepare::start(app.handle());
+            // Java AOT caches whose recordings wait from an earlier run get made (AOT-CACHE).
+            aot::start(app.handle());
             // VOICE-0's probe of the voice window (debug builds asked for it); voice chat itself
             // opens its window only for a call (`voice`).
             voice::install(app);
