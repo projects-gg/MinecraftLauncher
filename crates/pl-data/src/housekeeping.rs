@@ -405,8 +405,10 @@ fn candidates(
         let name = entry.file_name().to_string_lossy().into_owned();
         let instance = name.split('.').next().unwrap_or_default();
         let orphan = !instance.is_empty() && !root.join("instances").join(instance).is_dir();
+        // The give-up mark of a key that crashed the game stays with its instance.
         let idle = deep
             && !instance.is_empty()
+            && !name.ends_with(".tries")
             && idle_since.is_some_and(|since| {
                 let played = places
                     .last_played
@@ -878,24 +880,51 @@ impl Default for CleanupState {
 }
 
 impl CleanupState {
-    /// The record in the data folder `root`; the defaults when it is missing or unreadable.
+    /// The record in the data folder `root`: the defaults when there is none yet. A file that
+    /// cannot be read now (held by another program) is an error; a broken one starts over with
+    /// the automatic cleanup off (the player's choice is not guessed).
+    pub fn read(root: &Path) -> std::io::Result<Self> {
+        match std::fs::read(root.join(STATE_FILE)) {
+            Ok(bytes) => Ok(serde_json::from_slice(&bytes).unwrap_or_else(|error| {
+                tracing::warn!(%error, "the cleanup record is broken; automatic cleanup is off");
+                Self::off()
+            })),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// [`Self::read`], or (when the file cannot be read now) a record with the automatic cleanup
+    /// off for this time.
     pub fn load(root: &Path) -> Self {
-        std::fs::read(root.join(STATE_FILE))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default()
+        Self::read(root).unwrap_or_else(|_| Self::off())
+    }
+
+    fn off() -> Self {
+        Self {
+            auto: false,
+            ..Self::default()
+        }
     }
 
     /// Reads the record, changes it with `change` and stores it again, one caller at a time.
+    /// Nothing is written when the file cannot be read now.
     pub fn update<T>(root: &Path, change: impl FnOnce(&mut Self) -> T) -> pl_mc::Result<T> {
         let _guard = STATE_LOCK
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
-        let mut state = Self::load(root);
+        let path = root.join(STATE_FILE);
+        let mut state = Self::read(root).map_err(|error| pl_mc::Error::io(&path, error))?;
         let out = change(&mut state);
         let bytes = serde_json::to_vec_pretty(&state).unwrap_or_default();
-        pl_mc::paths::write_durable_blocking(&root.join(STATE_FILE), &bytes)?;
+        pl_mc::paths::write_durable_blocking(&path, &bytes)?;
         Ok(out)
+    }
+
+    /// Takes the unused marks a round worked out on its own copy (`from`); the use marks and the
+    /// switch stay as they are now (a launch or the player may have changed them meanwhile).
+    pub fn adopt_unused(&mut self, from: &CleanupState) {
+        self.unused.clone_from(&from.unused);
     }
 
     /// Whether an automatic round is due at `now_ms` (`every` since the last; a clock that went
@@ -1543,7 +1572,11 @@ mod tests {
             age(&icon, 1 + i);
         }
         fs::create_dir_all(&idle_game).unwrap();
-        for name in ["a.0123456789abcdef.aot", "idle.0123456789abcdef.aot"] {
+        for name in [
+            "a.0123456789abcdef.aot",
+            "idle.0123456789abcdef.aot",
+            "idle.0123456789abcdef.tries",
+        ] {
             write(&root.join("cache/aot").join(name), 50);
             age(&root.join("cache/aot").join(name), 30);
         }
@@ -1583,6 +1616,7 @@ mod tests {
         assert!(!root.join("cache/modrinth/icons/3.png").exists());
         assert!(root.join("cache/aot/a.0123456789abcdef.aot").exists());
         assert!(!root.join("cache/aot/idle.0123456789abcdef.aot").exists());
+        assert!(root.join("cache/aot/idle.0123456789abcdef.tries").exists());
         assert_eq!(report.junk.removed_files, 1 + 2 + 2 + 3 + 2 + 1);
         for rel in players {
             assert!(game.join(rel).exists(), "{rel} is the player's");
@@ -1689,11 +1723,25 @@ mod tests {
         let (due, _) = state.judge(&ids, 34 * day, 34 * day - 14 * day);
         assert_eq!(due.len(), 2);
 
-        // Broken file: the defaults (automatic cleanup on, nothing marked).
+        // A broken file starts over with the automatic cleanup off (the choice is not guessed);
+        // turning it on writes a good file again.
         std::fs::write(dir.path().join(STATE_FILE), b"{not json").unwrap();
-        assert_eq!(CleanupState::load(dir.path()), CleanupState::default());
-        CleanupState::update(dir.path(), |state| state.auto = false).unwrap();
-        assert!(!CleanupState::load(dir.path()).auto);
+        let broken = CleanupState::load(dir.path());
+        assert!(!broken.auto && broken.used.is_empty() && broken.unused.is_empty());
+        CleanupState::update(dir.path(), |state| state.auto = true).unwrap();
+        assert!(CleanupState::load(dir.path()).auto);
+
+        // A round's own copy hands its unused marks over; use marks written meanwhile stay.
+        let mut copy = CleanupState::load(dir.path());
+        copy.judge(&["assets".to_owned()], 30 * day, 0);
+        CleanupState::update(dir.path(), |state| {
+            state.mark_used("26.1.2", None, 31 * day);
+            state.adopt_unused(&copy);
+        })
+        .unwrap();
+        let merged = CleanupState::load(dir.path());
+        assert_eq!(merged.unused.get("assets"), Some(&(30 * day)));
+        assert_eq!(merged.used.get("version:26.1.2"), Some(&(31 * day)));
     }
 
     /// A data folder with game versions 1.21.1 (an instance uses it) and 1.20.1 (none does), each

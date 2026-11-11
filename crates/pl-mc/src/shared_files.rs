@@ -278,7 +278,9 @@ pub fn delete(
         }
     }
     for folder in [dirs.libraries(), dirs.asset_objects(), dirs.asset_virtual()] {
-        prune_empty_dirs(&folder);
+        if !linked_within(dirs, &folder) {
+            prune_empty_dirs(&folder);
+        }
     }
     progress(total, total);
     tracing::info!(
@@ -1137,6 +1139,15 @@ fn is_link(path: &Path) -> bool {
     std::fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink())
 }
 
+/// `folder` or a folder between it and the data folder is a link (kept elsewhere: not ours).
+fn linked_within(dirs: &DataDirs, folder: &Path) -> bool {
+    let root = dirs.root();
+    folder
+        .ancestors()
+        .take_while(|dir| *dir != root && dir.starts_with(root))
+        .any(is_link)
+}
+
 /// What a folder [`bury`] moved out of sight is called (`.<name>.gone`, `.<name>.gone2`, ...).
 fn is_buried(name: &str) -> bool {
     name.starts_with('.')
@@ -1211,6 +1222,7 @@ fn remove_dir_all_robust(dir: &Path) -> std::io::Result<()> {
 /// Removes folders under `root` that became empty (deepest first); `root` itself stays.
 fn prune_empty_dirs(root: &Path) {
     let dirs: Vec<PathBuf> = WalkDir::new(root)
+        .follow_root_links(false)
         .min_depth(1)
         .contents_first(true)
         .follow_links(false)

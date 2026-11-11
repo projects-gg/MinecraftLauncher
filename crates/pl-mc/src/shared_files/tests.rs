@@ -649,6 +649,9 @@ fn links_are_never_followed() {
     let real_libraries = fx._tmp.path().join("real-libraries");
     fs::rename(fx.dirs.libraries(), &real_libraries).unwrap();
     folder_link(&fx.dirs.libraries(), &real_libraries);
+    // Empty folders over there are not ours to prune either.
+    fs::create_dir_all(real_libraries.join("empty/inner")).unwrap();
+    fs::create_dir_all(real_assets.join("objects/ee")).unwrap();
     let found = scan(&fx.dirs, &refs, &later()).unwrap();
     assert!(!ids(&found).contains(&"assets"));
     // Only the natives of a version that is gone remain in the libraries item.
@@ -675,6 +678,8 @@ fn links_are_never_followed() {
             .join("com/example/orphan/1.0/orphan-1.0.jar")
             .is_file()
     );
+    assert!(real_libraries.join("empty/inner").is_dir());
+    assert!(real_assets.join("objects/ee").is_dir());
 }
 
 #[test]
