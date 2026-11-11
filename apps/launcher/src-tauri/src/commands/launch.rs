@@ -768,12 +768,22 @@ pub(crate) async fn ready_game_files(
     checkpoint(cancel)?;
     lap(clock, "switch");
 
-    // 1. Version metadata, falling back to offline mode when the network is gone.
+    // 1. Version metadata, falling back to offline mode when the network is gone. The player's
+    //    launch of a managed instance refreshes the pack's content at the same time (two round
+    //    trips at once, LAUNCH-SPEED); offline, the pack follows the cached content as before.
     let mut offline = false;
-    let fetched = step(cancel, async {
+    let manifest_step = step(cancel, async {
         Ok(pl_mc::version::manifest::load_manifest(ctx, false).await)
-    })
-    .await?;
+    });
+    let (fetched, refreshed) = if settings.is_some() && !beside && instance.managed_pack.is_some() {
+        let (fetched, refreshed) = tokio::join!(
+            manifest_step,
+            step(cancel, async { Ok(official::latest(state, false).await) }),
+        );
+        (fetched?, Some(refreshed?))
+    } else {
+        (manifest_step.await?, None)
+    };
     let manifest = match fetched {
         Ok(m) => Some(m),
         Err(e) if e.is_offline() => {
@@ -796,11 +806,33 @@ pub(crate) async fn ready_game_files(
     let pack = if beside {
         None
     } else {
-        let prepared = step(
-            cancel,
-            official::prepare_pack(state, instance, game_dir, offline, &launcher_version),
-        )
-        .await?;
+        let prepared = match refreshed {
+            Some(content) => {
+                let content = if offline {
+                    official::latest(state, true).await
+                } else {
+                    content
+                };
+                step(
+                    cancel,
+                    official::prepare_pack_from(
+                        state,
+                        instance,
+                        game_dir,
+                        content,
+                        &launcher_version,
+                    ),
+                )
+                .await?
+            }
+            None => {
+                step(
+                    cancel,
+                    official::prepare_pack(state, instance, game_dir, offline, &launcher_version),
+                )
+                .await?
+            }
+        };
         if prepared.content_changed {
             let _ = app.emit("content-changed", ());
         }
