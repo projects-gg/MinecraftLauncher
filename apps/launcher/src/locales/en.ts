@@ -13,6 +13,7 @@ import { enChat } from "./en-chat";
 import { enChatCalm } from "./en-chat-calm";
 import { enChatProd } from "./en-chat-prod";
 import { enChat2 } from "./en-chat2";
+import { enClean } from "./en-clean";
 import { enCloudAfk } from "./en-cloud-afk";
 import { enCloudAfkFeat } from "./en-cloud-afk-feat";
 import { enCloudAfkMove } from "./en-cloud-afk-move";
@@ -97,6 +98,7 @@ export const en: DeepPartial<Strings> = {
   afkAlerts: enAfkAlerts,
   graphics: enGraphics,
   disk: enDisk,
+  clean: enClean,
   overview: enOverview,
   libraryDrop: enLibraryDrop,
   updates: enUpdates,

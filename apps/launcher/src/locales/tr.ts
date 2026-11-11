@@ -15,6 +15,7 @@ import { trChat } from "./tr-chat";
 import { trChatCalm } from "./tr-chat-calm";
 import { trChatProd } from "./tr-chat-prod";
 import { trChat2 } from "./tr-chat2";
+import { trClean } from "./tr-clean";
 import { trCloudAfk } from "./tr-cloud-afk";
 import { trCloudAfkFeat } from "./tr-cloud-afk-feat";
 import { trCloudAfkMove } from "./tr-cloud-afk-move";
@@ -89,6 +90,7 @@ export const tr = {
   afkAlerts: trAfkAlerts,
   graphics: trGraphics,
   disk: trDisk,
+  clean: trClean,
   overview: trOverview,
   libraryDrop: trLibraryDrop,
   updates: trUpdates,
