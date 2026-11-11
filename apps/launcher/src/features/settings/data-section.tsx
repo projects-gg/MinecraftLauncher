@@ -18,6 +18,7 @@ import { UsageDataRow } from "@/features/telemetry/settings-row";
 import { api, type MovePlan, type MoveProgress } from "@/lib/api";
 import { formatBytes, formatCount, formatPercent } from "@/lib/format";
 import { useUi } from "@/stores/ui";
+import { AutoCleanupRow } from "./cleanup/auto-row";
 import { CleanupCard } from "./cleanup/cleanup-card";
 import { TrashRow } from "./cleanup/trash-row";
 import { ErrorLine, type Failure, failure } from "./failure";
@@ -158,6 +159,7 @@ export function DataSection() {
       <CleanupCard root={data?.root} />
 
       <motion.div layout={glides} transition={{ layout: glide }} className="mt-2">
+        <AutoCleanupRow />
         <TrashRow />
 
         <Item

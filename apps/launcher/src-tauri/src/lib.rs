@@ -633,6 +633,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::cleanup::cleanup_empty_trash,
             commands::cleanup::cleanup_delete_trashed_set,
             commands::cleanup::cleanup_summary,
+            commands::cleanup::cleanup_auto,
+            commands::cleanup::cleanup_set_auto,
             // instance page: logs, worlds, screenshots; library groups
             commands::library::game_logs,
             commands::library::game_log_read,

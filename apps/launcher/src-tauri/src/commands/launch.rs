@@ -1031,6 +1031,8 @@ pub(crate) async fn ready_game_files(
     })
     .await?;
     lap(clock, "files");
+    // The automatic cleanup keeps what a game was readied with for a while (CleanupState).
+    crate::commands::cleanup::note_use(state, &version_id, &installed.java.path);
 
     // Background: the instance lock again for its own files; an instance whose version changed
     // (or that went) meanwhile is left alone (the change brings its own preparation).

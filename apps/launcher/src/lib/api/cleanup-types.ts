@@ -202,4 +202,8 @@ export interface CleanupApi {
   restoreTrashed(instanceId: string, trashId: string): Promise<string>;
   /** For the occasional reminder. */
   summary(olderThanDays: number): Promise<CleanupSummary>;
+  /** "Otomatik Temizlik" (on by default). */
+  auto(): Promise<boolean>;
+  /** Turns it on or off; resolves with what was kept. */
+  setAuto(on: boolean): Promise<boolean>;
 }
