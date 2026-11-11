@@ -136,6 +136,22 @@ pub async fn runtime_index(ctx: &McContext, offline: bool) -> Result<RuntimeInde
     }
 }
 
+/// Whether an install of a runtime takes Mojang's index from the cache (LAUNCH-SPEED): an
+/// installed runtime that runs is used as it is unless a full check was asked (newer builds are
+/// staged by the background updater, whose daily check keeps the cache current), so a launch
+/// does not wait for Mojang for it. A missing or broken runtime, or a full check, asks Mojang.
+fn index_from_cache(installed: bool, verify: VerifyMode) -> bool {
+    installed && verify != VerifyMode::Full
+}
+
+/// The cached runtime index, when there is a readable one.
+async fn cached_runtime_index(ctx: &McContext) -> Option<RuntimeIndex> {
+    let bytes = tokio::fs::read(ctx.dirs.meta().join(INDEX_CACHE_FILE))
+        .await
+        .ok()?;
+    parse_index(&bytes).ok()
+}
+
 /// First platform key (native, then emulated fallbacks) that publishes `component`.
 pub fn select_runtime<'a>(
     index: &'a RuntimeIndex,
@@ -404,7 +420,16 @@ pub async fn install_runtime(
     options: &EnsureJavaOptions,
 ) -> Result<JavaInstallation> {
     safe_name(component)?;
-    let index = pl_net::until_cancelled(&options.cancel, runtime_index(ctx, false)).await?;
+    let installed = installed_runtime(ctx, component).await.is_some();
+    let cached = if index_from_cache(installed, options.verify) {
+        cached_runtime_index(ctx).await
+    } else {
+        None
+    };
+    let index = match cached {
+        Some(index) => index,
+        None => pl_net::until_cancelled(&options.cancel, runtime_index(ctx, false)).await?,
+    };
     let Some((platform_key, entry)) = select_runtime(&index, component, &ctx.platform) else {
         return Err(Error::Unsupported(format!(
             "Mojang publishes no {component} runtime for {}",
@@ -664,6 +689,55 @@ mod tests {
         let inst = installation(root, Os::Linux, "jre-legacy", "linux", "8u202");
         assert_eq!(inst.info.major, 8);
         assert_eq!(inst.info.arch, Arch::X86_64);
+    }
+
+    #[test]
+    fn only_an_installed_runtime_without_a_full_check_reads_the_cached_index() {
+        assert!(index_from_cache(true, VerifyMode::Size));
+        assert!(index_from_cache(true, VerifyMode::Exists));
+        assert!(!index_from_cache(true, VerifyMode::Full));
+        assert!(!index_from_cache(false, VerifyMode::Size));
+    }
+
+    /// A launch with the runtime installed takes the index from the cache: Mojang is not asked
+    /// (the cache would be rewritten with Mojang's index) and the installed build is used.
+    #[tokio::test]
+    async fn an_installed_runtime_installs_from_the_cached_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = McContext::new(
+            pl_net::Http::new(pl_net::HttpConfig::new("pl-mc-test")).unwrap(),
+            crate::paths::DataDirs::new(tmp.path()),
+        )
+        .with_platform(Platform::new(Os::Linux, Arch::X86_64, "6.1"));
+        let root = ctx.dirs.runtime_dir("java-runtime-delta", "linux").unwrap();
+        std::fs::create_dir_all(root.join("bin")).unwrap();
+        std::fs::write(root.join("bin").join("java"), b"").unwrap();
+        let marker = RuntimeMarker {
+            component: "java-runtime-delta".into(),
+            platform: "linux".into(),
+            version: "21.0.7".into(),
+            manifest_sha1: "dd".into(),
+        };
+        std::fs::write(root.join(MARKER_FILE), serde_json::to_vec(&marker).unwrap()).unwrap();
+        let cached = r#"{"linux": {"java-runtime-delta": [{"manifest": {"sha1": "dd", "size": 4, "url": "https://example.invalid/m.json"},
+            "version": {"name": "21.0.7", "released": "2025-01-01T00:00:00+00:00"}}]}}"#;
+        let cache = ctx.dirs.meta().join(INDEX_CACHE_FILE);
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        std::fs::write(&cache, cached).unwrap();
+
+        let installed = install_runtime(
+            &ctx,
+            "java-runtime-delta",
+            &EnsureJavaOptions {
+                verify: VerifyMode::Size,
+                ..EnsureJavaOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(installed.info.version, "21.0.7");
+        assert_eq!(installed.path, root.join("bin").join("java"));
+        assert_eq!(std::fs::read_to_string(&cache).unwrap(), cached);
     }
 
     #[tokio::test]

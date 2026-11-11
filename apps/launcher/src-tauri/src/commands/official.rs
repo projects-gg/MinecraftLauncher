@@ -182,7 +182,7 @@ pub(crate) async fn cached_or_fresh(state: &AppState) -> Option<ContentSnapshot>
 
 /// Content right before a launch: the network when reachable, otherwise the cache. The flag
 /// is true when the network brought a newer index than the cached one.
-async fn latest(state: &AppState, offline: bool) -> Option<(ContentSnapshot, bool)> {
+pub(crate) async fn latest(state: &AppState, offline: bool) -> Option<(ContentSnapshot, bool)> {
     let cached = state.content.load_cached().await.ok();
     if !offline {
         let known = cached.as_ref().map(|s| s.index.sequence);
@@ -205,6 +205,7 @@ pub(crate) struct VersionDropped {
 }
 
 /// What [`prepare_pack`] found.
+#[derive(Default)]
 pub(crate) struct PreparedPack {
     /// Manifest for [`sync_pack_files`]; `None` when the instance launches as it is.
     pub manifest: Option<PackManifest>,
@@ -575,15 +576,27 @@ pub(crate) async fn prepare_pack(
     offline: bool,
     launcher_version: &str,
 ) -> CmdResult<PreparedPack> {
-    let mut prepared = PreparedPack {
-        manifest: None,
-        content_changed: false,
-        dropped: None,
-    };
+    if instance.managed_pack.is_none() {
+        return Ok(PreparedPack::default());
+    }
+    let content = latest(state, offline).await;
+    prepare_pack_from(state, instance, game_dir, content, launcher_version).await
+}
+
+/// [`prepare_pack`] with the content [`latest`] gave (a launch refreshes it while it asks Mojang,
+/// LAUNCH-SPEED).
+pub(crate) async fn prepare_pack_from(
+    state: &AppState,
+    instance: &mut Instance,
+    game_dir: &Path,
+    content: Option<(ContentSnapshot, bool)>,
+    launcher_version: &str,
+) -> CmdResult<PreparedPack> {
+    let mut prepared = PreparedPack::default();
     if instance.managed_pack.is_none() {
         return Ok(prepared);
     }
-    let Some((snapshot, changed)) = latest(state, offline).await else {
+    let Some((snapshot, changed)) = content else {
         return Ok(prepared);
     };
     prepared.content_changed = changed;

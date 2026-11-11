@@ -31,6 +31,21 @@ pub(super) async fn install(
     id: &str,
     options: &InstallOptions,
 ) -> Result<String> {
+    ensure_profile(ctx, kind, mc, loader, id, options).await?;
+    let manifest = manifest_for(ctx, options).await?;
+    finish(ctx, id, manifest.as_ref(), options).await
+}
+
+/// The loader's own step alone: its profile in place (fetched when missing, or again for a full
+/// check). The game's files, its libraries included, are left to the core install.
+pub(super) async fn ensure_profile(
+    ctx: &McContext,
+    kind: LoaderKind,
+    mc: &str,
+    loader: &str,
+    id: &str,
+    options: &InstallOptions,
+) -> Result<()> {
     let progress = Progress::new(options);
     let installed = existing_profile(ctx, id, mc).await.is_some();
     // Profiles never change for a loader/Minecraft pair; only a full repair fetches it again.
@@ -68,8 +83,7 @@ pub(super) async fn install(
             Err(error) => return Err(error.into()),
         }
     }
-    let manifest = manifest_for(ctx, options).await?;
-    finish(ctx, id, manifest.as_ref(), options).await
+    Ok(())
 }
 
 #[cfg(test)]

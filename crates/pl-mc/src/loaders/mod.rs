@@ -198,6 +198,48 @@ pub async fn install_loader(
     result
 }
 
+/// Whether [`install_loader_profile`] leaves the game's files to the caller: Fabric and Quilt,
+/// whose only own step is their profile. Forge and NeoForge run installer steps on the game's
+/// files, so they install those themselves.
+pub fn profile_only(kind: LoaderKind) -> bool {
+    matches!(kind, LoaderKind::Fabric | LoaderKind::Quilt)
+}
+
+/// [`install_loader`] for a caller that installs the returned version's game files itself right
+/// after (a launch, LAUNCH-SPEED): for [`profile_only`] loaders only the profile is put in place,
+/// so the game's files are checked once per launch instead of twice (and Mojang's version list is
+/// not fetched a second time). Other loaders install as [`install_loader`] does.
+pub async fn install_loader_profile(
+    ctx: &McContext,
+    mc_version: &str,
+    kind: LoaderKind,
+    loader_version: &str,
+    options: InstallOptions,
+) -> Result<String> {
+    if !profile_only(kind) {
+        return install_loader(ctx, mc_version, kind, loader_version, options).await;
+    }
+    let mc = mc_version.trim();
+    let id = loader_profile_id(kind, mc, loader_version)?;
+    let loader = normalize_loader_version(kind, mc, loader_version)?;
+    let started = Instant::now();
+    match fabric::ensure_profile(ctx, kind, mc, &loader, &id, &options).await {
+        Ok(()) => {
+            tracing::info!(
+                %id,
+                offline = options.offline,
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                "loader profile ready"
+            );
+            Ok(id)
+        }
+        Err(error) => {
+            tracing::warn!(%id, %error, "loader install failed");
+            Err(error)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -452,6 +494,69 @@ mod tests {
         std::fs::remove_file(&forge_jar).unwrap();
         assert!(matches!(
             install_loader(&ctx, "1.12.2", LoaderKind::Forge, "14.23.5.2859", offline()).await,
+            Err(Error::Offline)
+        ));
+    }
+
+    /// A launch's loader step (`install_loader_profile`) puts only Fabric's and Quilt's profile in
+    /// place and leaves the game's files to the launch's own install, which checks them once; the
+    /// other loaders install everything as `install_loader` does.
+    #[tokio::test]
+    async fn profile_only_loaders_leave_the_game_files_to_the_launch() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = McContext::new(
+            Http::new(HttpConfig::new("pl-mc-test")).unwrap(),
+            DataDirs::new(tmp.path()),
+        )
+        .with_platform(Platform::new(Os::Linux, Arch::X86_64, "6.1"));
+        let dirs = ctx.dirs.clone();
+        let offline = || InstallOptions {
+            offline: true,
+            ..InstallOptions::default()
+        };
+        assert!(profile_only(LoaderKind::Fabric) && profile_only(LoaderKind::Quilt));
+        assert!(!profile_only(LoaderKind::Forge) && !profile_only(LoaderKind::NeoForge));
+        assert!(!profile_only(LoaderKind::Vanilla));
+
+        // No profile yet: nothing to launch offline.
+        assert!(matches!(
+            install_loader_profile(&ctx, "26.1.2", LoaderKind::Fabric, "0.19.5", offline()).await,
+            Err(Error::Offline)
+        ));
+
+        // The profile alone, none of the game's files (no vanilla JSON, no loader library).
+        let fabric_id = loader_profile_id(LoaderKind::Fabric, "26.1.2", "0.19.5").unwrap();
+        write(
+            &dirs.version_json(&fabric_id).unwrap(),
+            format!(
+                r#"{{"id": "{fabric_id}", "inheritsFrom": "26.1.2",
+                    "mainClass": "net.fabricmc.loader.impl.launch.knot.KnotClient",
+                    "libraries": [{{"name": "net.fabricmc:fabric-loader:0.19.5", "url": "https://maven.fabricmc.net/"}}]}}"#
+            )
+            .as_bytes(),
+        );
+        assert!(matches!(
+            install_loader(&ctx, "26.1.2", LoaderKind::Fabric, "0.19.5", offline()).await,
+            Err(Error::Offline)
+        ));
+        assert_eq!(
+            install_loader_profile(&ctx, "26.1.2", LoaderKind::Fabric, "0.19.5", offline())
+                .await
+                .unwrap(),
+            fabric_id
+        );
+        assert!(
+            !dirs
+                .library_file("net/fabricmc/fabric-loader/0.19.5/fabric-loader-0.19.5.jar")
+                .unwrap()
+                .exists(),
+            "the game's files are the launch's to install"
+        );
+
+        // Forge goes through the whole install.
+        assert!(matches!(
+            install_loader_profile(&ctx, "1.12.2", LoaderKind::Forge, "14.23.5.2859", offline())
+                .await,
             Err(Error::Offline)
         ));
     }

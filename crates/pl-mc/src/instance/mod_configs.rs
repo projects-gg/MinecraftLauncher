@@ -5,8 +5,10 @@
 //! server: Litematica opens its menu with M, Simple Voice Chat's microphone mute in the pack,
 //! MaLiLib opens its settings with A then C, the pack's zoom key, and Chest Tracker draws the title
 //! of a menu opened at a block above that block, which on the Projects server is the menu's
-//! picture (resource pack glyphs). `data/mod-configs.json` lists a
-//! settings file per mod holding only the values that matter. [`seed_mod_configs`] writes it
+//! picture (resource pack glyphs). Sodium Extra Information's library and XaeroLib call out
+//! while the game starts and the render thread waits for them (LAUNCH-SPEED): their switches are
+//! off. `data/mod-configs.json` lists a settings file per mod holding only the values that
+//! matter (JSON, or a mod's own text format). [`seed_mod_configs`] writes it
 //! while no file is at its path and never touches one that is: the player's later changes and
 //! the mod's own file always win. The mod keeps its own defaults for the rest and writes its full
 //! file itself.
@@ -37,8 +39,31 @@ pub struct ModConfig {
     pub mod_name: String,
     /// The file, relative to the game folder: `config/…`, `/`-separated.
     pub path: String,
-    /// What the file holds.
+    /// What the file holds, as JSON (an object).
+    #[serde(default)]
     pub json: serde_json::Value,
+    /// Instead of `json`: the file in the mod's own text format, written as it is (XaeroLib's
+    /// `key = value` lines).
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+impl ModConfig {
+    /// The file's bytes: `json` pretty-printed, or `text`; `None` for an entry that holds
+    /// neither or both.
+    fn contents(&self) -> Option<Vec<u8>> {
+        match (&self.text, self.json.is_object()) {
+            (None, true) => {
+                let mut bytes = serde_json::to_vec_pretty(&self.json).ok()?;
+                bytes.push(b'\n');
+                Some(bytes)
+            }
+            (Some(text), false) if self.json.is_null() && !text.trim().is_empty() => {
+                Some(text.as_bytes().to_vec())
+            }
+            _ => None,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -53,7 +78,7 @@ static TABLE: LazyLock<Vec<ModConfig>> =
             .files
             .into_iter()
             .filter(|file| {
-                let ok = settings_path(&file.path).is_some() && file.json.is_object();
+                let ok = settings_path(&file.path).is_some() && file.contents().is_some();
                 if !ok {
                     tracing::error!(path = %file.path, "mod settings table entry left out");
                 }
@@ -119,9 +144,9 @@ pub async fn seed_mod_configs(game_dir: &Path, projects: &[String]) -> Result<Ve
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(Error::io(&path, error)),
         }
-        let mut bytes =
-            serde_json::to_vec_pretty(&file.json).map_err(|e| Error::json(&file.path, e))?;
-        bytes.push(b'\n');
+        let Some(bytes) = file.contents() else {
+            continue;
+        };
         write_durable(&path, &bytes).await?;
         tracing::info!(mod_name = %file.mod_name, path = %file.path, "wrote a mod's first settings");
         written.push(file.path.clone());
@@ -141,6 +166,10 @@ mod tests {
     const MALILIB: &str = "GcWjdA9I";
     /// Chest Tracker (Unofficial port), the only Chest Tracker with files for 26.x.
     const CHEST_TRACKER: &str = "VC2NohMN";
+    /// Sodium Extra Information (Modrinth).
+    const SODIUM_EXTRA_INFO: &str = "696WgnvT";
+    /// Xaero's Better PvP: the official pack's own item (Projects hosts the file).
+    const BETTER_PVP: &str = "better-pvp";
 
     /// The official pack's default key bindings (as in `keys.rs`): name, key, when it acts.
     const PACK_KEYS: &str = include_str!("../../testdata/key-bindings/projects-26.1.2.tsv");
@@ -195,13 +224,22 @@ mod tests {
         let mut paths = BTreeSet::new();
         for file in mod_configs() {
             assert!(settings_path(&file.path).is_some(), "{}", file.path);
-            // Written as plain JSON, which is JSON5 too (YACL's files).
-            assert!(
-                file.path.ends_with(".json") || file.path.ends_with(".json5"),
-                "{}",
-                file.path
-            );
-            assert!(file.json.is_object(), "{}", file.path);
+            assert!(file.contents().is_some(), "{}", file.path);
+            let json_file = file.path.ends_with(".json") || file.path.ends_with(".json5");
+            if file.text.is_none() {
+                // Written as plain JSON, which is JSON5 too (YACL's files).
+                assert!(json_file, "{}", file.path);
+                assert!(file.json.is_object(), "{}", file.path);
+            } else {
+                // A mod's own text format, one value per line, ending with a line break.
+                let text = file.text.as_deref().unwrap();
+                assert!(!json_file && file.json.is_null(), "{}", file.path);
+                assert!(
+                    text.ends_with('\n') && !text.contains('\r'),
+                    "{}",
+                    file.path
+                );
+            }
             assert!(
                 paths.insert(file.path.to_ascii_lowercase()),
                 "{} twice",
@@ -324,6 +362,36 @@ mod tests {
     #[test]
     fn unknown_projects_have_no_files() {
         assert!(configs_for(["AANobbMI", ""]).is_empty());
+    }
+
+    /// The pack's mods that would hold the game's start up with a request (LAUNCH-SPEED): Sodium
+    /// Extra Information's library sends usage data, XaeroLib (inside Better PvP) asks about
+    /// Patreon perks and updates, each waited for on the render thread.
+    #[tokio::test]
+    async fn mods_that_call_out_at_the_start_get_it_off() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        let written =
+            seed_mod_configs(game, &[SODIUM_EXTRA_INFO.to_owned(), BETTER_PVP.to_owned()])
+                .await
+                .unwrap();
+        assert_eq!(
+            written,
+            [
+                "config/sodiumextrainformation/telemetry-config.json",
+                "config/xaero/lib/common.cfg"
+            ]
+        );
+        let telemetry: Value = serde_json::from_slice(
+            &std::fs::read(game.join("config/sodiumextrainformation/telemetry-config.json"))
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(telemetry, json!({ "enable_telemetry": false }));
+        assert_eq!(
+            std::fs::read_to_string(game.join("config/xaero/lib/common.cfg")).unwrap(),
+            "allow_internet_access = false\n"
+        );
     }
 
     #[tokio::test]
