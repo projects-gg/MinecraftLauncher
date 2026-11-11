@@ -26,6 +26,7 @@ import {
   builtInTemplates,
   cleanTemplateName,
   type PlanTemplate,
+  sameFill,
   TEMPLATE_NAME_MAX,
   templateFrom,
   templateTime,
@@ -261,9 +262,13 @@ export function TemplateChips({
   const save = () => {
     // A note that could not go (its reason shows under it) is no template either, as "Planla" waits.
     if (notes && planNoteProblem(note)) return;
-    const outcome = usePlanTemplates
-      .getState()
-      .add(templateFrom(at, day, notes ? note : "", Date.now(), t));
+    const template = templateFrom(at, day, notes ? note : "", Date.now(), t);
+    // A built-in chip already fills this: a copy of it would be a second chip doing the same.
+    if (builtInTemplates(t).some((one) => sameFill(one, template))) {
+      onRefuse(t("crewPlus.templates.exists"));
+      return;
+    }
+    const outcome = usePlanTemplates.getState().add(template);
     if (outcome === "added") announce(t("crewPlus.templates.saved"));
     else onRefuse(t(outcome === "full" ? "crewPlus.templates.full" : "crewPlus.templates.exists"));
   };

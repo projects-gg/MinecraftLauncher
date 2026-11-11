@@ -87,6 +87,7 @@ import {
   planNoteProblem,
 } from "./plan-note";
 import { TemplateChips } from "./plan-template-chips";
+import { usePlanTemplates } from "./plan-templates";
 import { SocialAvatar, SocialFace } from "./social-face";
 import { useSocialUi } from "./store";
 import { RoleBadge } from "./team-member";
@@ -891,6 +892,12 @@ function PlanForm({
   const [busy, setBusy] = useState(false);
   const [taken, setTaken] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Why "Şablonlara Ekle" kept nothing: the form's line only (the note is not at fault), gone
+  // once the form or the templates change.
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const own = usePlanTemplates((s) => s.own);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a change to the templates clears it
+  useEffect(() => setRefusal(null), [own]);
   // CREW-PLUS: a template's name is being written: "Planla" waits for it.
   const [renaming, setRenaming] = useState(false);
   const lineId = useId();
@@ -908,6 +915,7 @@ function PlanForm({
     setAt(next);
     setTaken(false);
     setError(null);
+    setRefusal(null);
   };
   const submit = async () => {
     if (problem || busy || renaming) return;
@@ -933,7 +941,8 @@ function PlanForm({
   };
 
   if (!day) return null;
-  const line = error ?? problemText(problem, t) ?? (taken ? t("crewWave2.plans.exists") : null);
+  const line =
+    error ?? problemText(problem, t) ?? refusal ?? (taken ? t("crewWave2.plans.exists") : null);
   return (
     <form
       className="rounded-[var(--radius-panel)] bg-obsidian-950/40 p-4 ring-1 ring-white/8"
@@ -954,7 +963,7 @@ function PlanForm({
           move(next);
           if (notes) setNote(nextNote);
         }}
-        onRefuse={setError}
+        onRefuse={setRefusal}
         onRenaming={setRenaming}
       />
       <Segmented<string>
@@ -1006,6 +1015,7 @@ function PlanForm({
             onChange={(next) => {
               setNote(next);
               setError(null);
+              setRefusal(null);
             }}
             problem={problem}
             error={error}
