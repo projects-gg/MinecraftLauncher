@@ -293,21 +293,12 @@ export const DEFAULT_PERMISSIONS: TeamPermissions = {
   admit: "moderators",
 };
 
-/** A crew can have this many moderators. */
-export const MAX_MODERATORS = 4;
-
 /**
- * Who the player becomes when they hand the leader role on: a moderator while fewer than 4 others
- * are (on a service with roles), else a member.
+ * Who the player becomes when they hand the leader role on: a moderator on a service with roles
+ * (a crew has as many moderators as its leader likes), else a member.
  */
-export function afterHandingOn(
-  team: Pick<SocialTeam, "members">,
-  to: string,
-  roles: boolean,
-): "moderator" | "member" {
-  if (!roles) return "member";
-  const others = team.members.filter((m) => m.moderator && m.id !== to && !m.me).length;
-  return others < MAX_MODERATORS ? "moderator" : "member";
+export function afterHandingOn(roles: boolean): "moderator" | "member" {
+  return roles ? "moderator" : "member";
 }
 
 // --- the crew's days ------------------------------------------------------------------------

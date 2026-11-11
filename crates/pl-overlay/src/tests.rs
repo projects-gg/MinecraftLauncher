@@ -1952,12 +1952,12 @@ async fn a_moderators_rows_and_an_older_mod_go_by_the_launchers_rules_only() {
 }
 
 #[tokio::test]
-async fn a_new_category_from_the_game_and_the_moderators_cap() {
+async fn a_new_category_from_the_game_and_no_moderators_cap() {
     use serde_json::json;
 
-    // t1 has four moderators: "Moderatör yap" goes no further.
+    // t1 has five moderators: the leader still names one more (no cap).
     let mut start = people3_view();
-    for (id, name) in [("u-a", "A"), ("u-b", "B"), ("u-c", "C")] {
+    for (id, name) in [("u-a", "A"), ("u-b", "B"), ("u-c", "C"), ("u-d", "D")] {
         let mut mate = start.crews[0].members[2].clone();
         mate.id = id.into();
         mate.name = name.into();
@@ -1967,12 +1967,19 @@ async fn a_new_category_from_the_game_and_the_moderators_cap() {
     let overlay = Overlay::new(OverlayConfig::default());
     let endpoint = overlay.start(social.clone(), "t").await.unwrap();
     let mut game = MockMod::connect_with(&endpoint, &["people", "people2", "people3"]).await;
-    assert_eq!(game.next_of("lists").await["roles"]["t1"]["modsFull"], true);
+    let roles = game.next_of("lists").await["roles"]["t1"].clone();
+    assert_eq!(
+        (roles["roles"].clone(), roles.get("modsFull")),
+        (json!(true), None)
+    );
     game.next_of("snapshot").await;
     game.send(json!({"t":"crew-mod","crew":"t1","friend":"u-cem","on":true}))
         .await;
-    assert_eq!(game.next_of("friend-result").await["reason"], "failed");
-    assert!(social.calls().crew_rows.is_empty());
+    assert_eq!(game.next_of("friend-result").await["ok"], true);
+    assert_eq!(
+        social.calls().crew_rows,
+        [("t1".to_owned(), "u-cem".to_owned(), "mod")]
+    );
 
     // "Yeni kategori…": the name with its spaces folded, the friend in it, saved whole.
     game.send(json!({"t":"move","friend":"f-ayse","name":"  Gece   Ekibi "}))

@@ -472,10 +472,6 @@ pub fn plan_answer_name(answer: pl_social::PlanAnswer) -> &'static str {
     }
 }
 
-/// The most moderators a crew may have besides its leader (the service's limit; the launcher's
-/// `MAX_MODERATORS`).
-pub const MAX_MODERATORS: usize = 4;
-
 /// Whether the player may remove `member` from `crew` (the launcher's `canRemove`): never the
 /// leader nor themself; the leader anyone else; with roles on, a moderator whose crew lets
 /// moderators remove members a plain member.
@@ -489,7 +485,7 @@ pub fn may_remove(crew: &TeamView, member: &TeamMemberView, roles: bool) -> bool
 
 /// The player's rights over crewmates, by crew (OVL-UX3, `lists.roles`), the launcher's rules
 /// (`person-menu.tsx`): the leader hands the lead on and removes anyone, and names or takes back
-/// moderators while the service offers roles ("Moderatör yap" dimmed at [`MAX_MODERATORS`]); a
+/// moderators while the service offers roles (as many as they like); a
 /// moderator whose crew lets moderators remove members removes plain ones ([`may_remove`]). Only
 /// crews with one of these rights, only the crewmates a row may be about, only while crews are on.
 fn crew_roles(view: &SocialView) -> BTreeMap<String, CrewRoles> {
@@ -516,11 +512,6 @@ fn crew_roles(view: &SocialView) -> BTreeMap<String, CrewRoles> {
         if !lead && mates.is_empty() {
             continue;
         }
-        let moderators = crew
-            .members
-            .iter()
-            .filter(|member| member.moderator)
-            .count();
         // The crew's conversation: its senders' menus in crew chat carry the rows.
         let conv = view
             .chat
@@ -533,7 +524,6 @@ fn crew_roles(view: &SocialView) -> BTreeMap<String, CrewRoles> {
             CrewRoles {
                 lead,
                 roles: lead && roles,
-                mods_full: lead && roles && moderators >= MAX_MODERATORS,
                 conv,
                 mates,
             },
