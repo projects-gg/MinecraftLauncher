@@ -268,9 +268,6 @@ export function CleanupCard({ root }: { root?: string }) {
                 />
               ))}
             </Rows>
-            <p className="pr-5 pb-3 pl-[50px] text-[12px] text-ash-400">
-              {t("dataSettings.cleanup.shared.redownload")}
-            </p>
           </Group>
         </GroupSlot>
 

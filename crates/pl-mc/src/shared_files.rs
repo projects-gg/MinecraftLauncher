@@ -18,6 +18,13 @@
 //! Sizes are what deleting frees. A file hard-linked into several version folders (a loader
 //! profile's copy of the game jar) frees nothing while one of the links stays: it is left out of
 //! the items and reported as a [`SharedGroup`] when every holder is itself unused.
+//!
+//! Links are never followed: a shared folder that is itself a symbolic link or a junction (a
+//! player keeping `assets/` on another disk, maybe shared with another launcher) is not judged at
+//! all, and neither is a version, runtime or natives folder that is a link. A folder is first moved
+//! out of sight (`.<name>.gone` beside it) and deleted after, so a deletion that stops half-way (a
+//! crash, a file in use) never leaves a version or a Java runtime that looks installed; the next
+//! [`delete`] finishes what such a folder still holds.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -70,6 +77,9 @@ pub struct ScanOptions {
     /// Files in use that may live inside the shared folders (an instance's custom Java
     /// executable inside `runtimes/`): whatever holds them stays.
     pub protected: Vec<PathBuf>,
+    /// Version ids kept as if an instance used them (started recently), with everything they
+    /// inherit from and need.
+    pub keep: Vec<String>,
 }
 
 impl Default for ScanOptions {
@@ -78,6 +88,7 @@ impl Default for ScanOptions {
             now: SystemTime::now(),
             min_age: DEFAULT_MIN_AGE,
             protected: Vec::new(),
+            keep: Vec::new(),
         }
     }
 }
@@ -197,6 +208,8 @@ struct VersionDir {
     /// The JSON file exists.
     json_present: bool,
     json: Option<VersionJson>,
+    /// The folder is a link (read for references, never deleted).
+    linked: bool,
 }
 
 /// What no instance uses, with the bytes each item frees. Blocking (walks the shared folders).
@@ -214,6 +227,7 @@ pub fn delete(
     cancel: &CancellationToken,
     progress: &dyn Fn(u64, u64),
 ) -> Result<SharedDeleteReport> {
+    clear_buried(dirs);
     let plan = plan(dirs, refs, options)?;
     let chosen: Vec<&SharedItem> = plan
         .scan
@@ -234,7 +248,10 @@ pub fn delete(
                 return Err(Error::Cancelled);
             }
             let removed = if removal.dir {
-                remove_dir_all_robust(&removal.path)
+                bury(&removal.path).and_then(|buried| match buried {
+                    Some(buried) => remove_dir_all_robust(&buried),
+                    None => Ok(()),
+                })
             } else {
                 remove_file_robust(&removal.path)
             };
@@ -261,7 +278,9 @@ pub fn delete(
         }
     }
     for folder in [dirs.libraries(), dirs.asset_objects(), dirs.asset_virtual()] {
-        prune_empty_dirs(&folder);
+        if !linked_within(dirs, &folder) {
+            prune_empty_dirs(&folder);
+        }
     }
     progress(total, total);
     tracing::info!(
@@ -279,7 +298,7 @@ pub fn delete(
 
 fn plan(dirs: &DataDirs, refs: &[GameRef], options: &ScanOptions) -> Result<Plan> {
     let versions = read_versions(dirs)?;
-    let used = used_versions(&versions, refs);
+    let used = used_versions(&versions, refs, &options.keep);
 
     // References of the used versions.
     let mut refs_known = true;
@@ -356,9 +375,14 @@ fn plan(dirs: &DataDirs, refs: &[GameRef], options: &ScanOptions) -> Result<Plan
         })
     };
 
-    // Version folders no instance refers to.
+    // Version folders no instance refers to (none through a link).
+    let versions_linked = is_link(&dirs.versions());
     for (id, version) in &versions {
-        if used.contains(id) || young(newest_change(&version.dir)) {
+        if versions_linked
+            || version.linked
+            || used.contains(id)
+            || young(newest_change(&version.dir))
+        {
             continue;
         }
         let (size, files) = tree_size(&version.dir);
@@ -401,12 +425,17 @@ fn plan(dirs: &DataDirs, refs: &[GameRef], options: &ScanOptions) -> Result<Plan
 
     // Natives: kept for used versions, removed with their version, orphans with the libraries.
     let mut orphan_natives: Vec<Removal> = Vec::new();
-    for entry in read_dir_entries(&dirs.natives()) {
+    let natives_entries = if is_link(&dirs.natives()) {
+        Vec::new()
+    } else {
+        read_dir_entries(&dirs.natives())
+    };
+    for entry in natives_entries {
         let path = entry.path();
-        if !path.is_dir() || young(newest_change(&path)) {
+        let key = entry.file_name().to_string_lossy().into_owned();
+        if key.starts_with('.') || is_link(&path) || !path.is_dir() || young(newest_change(&path)) {
             continue;
         }
-        let key = entry.file_name().to_string_lossy().into_owned();
         let Some(id) = natives_version(&key) else {
             continue; // not ours: keep
         };
@@ -434,12 +463,17 @@ fn plan(dirs: &DataDirs, refs: &[GameRef], options: &ScanOptions) -> Result<Plan
 
     if refs_known {
         // Java runtimes no used version asks for.
-        for entry in read_dir_entries(&dirs.runtimes()) {
+        let runtime_entries = if is_link(&dirs.runtimes()) {
+            Vec::new()
+        } else {
+            read_dir_entries(&dirs.runtimes())
+        };
+        for entry in runtime_entries {
             let path = entry.path();
-            if !path.is_dir() {
+            let component = entry.file_name().to_string_lossy().into_owned();
+            if component.starts_with('.') || is_link(&path) || !path.is_dir() {
                 continue;
             }
-            let component = entry.file_name().to_string_lossy().into_owned();
             let protected = options.protected.iter().any(|p| p.starts_with(&path));
             if components.contains(&component) || protected || young(newest_change(&path)) {
                 continue;
@@ -471,9 +505,10 @@ fn plan(dirs: &DataDirs, refs: &[GameRef], options: &ScanOptions) -> Result<Plan
         // Libraries no used version lists (plus natives of versions that are gone).
         let mut library_removals = orphan_natives;
         let root = dirs.libraries();
-        for entry in WalkDir::new(&root)
-            .follow_links(false)
+        let library_root = if is_link(&root) { None } else { Some(&root) };
+        for entry in library_root
             .into_iter()
+            .flat_map(|root| WalkDir::new(root).follow_links(false))
             .filter_map(std::result::Result::ok)
             .filter(|e| e.file_type().is_file())
         {
@@ -579,6 +614,9 @@ fn read_versions(dirs: &DataDirs) -> Result<BTreeMap<String, VersionDir>> {
         let Some(id) = entry.file_name().to_str().map(str::to_owned) else {
             continue; // a name we never write: not ours to judge
         };
+        if id.starts_with('.') {
+            continue; // a folder on its way out ([`bury`]) or not ours
+        }
         let file = dir.join(format!("{id}.json"));
         let (json_present, json) = match std::fs::read(&file) {
             Ok(bytes) => (
@@ -594,12 +632,14 @@ fn read_versions(dirs: &DataDirs) -> Result<BTreeMap<String, VersionDir>> {
             ),
             Err(_) => (false, None),
         };
+        let linked = is_link(&dir);
         versions.insert(
             id,
             VersionDir {
                 dir,
                 json_present,
                 json,
+                linked,
             },
         );
     }
@@ -632,9 +672,19 @@ fn chain_of(versions: &BTreeMap<String, VersionDir>, id: &str) -> Vec<String> {
 }
 
 /// Version ids instances use: their game versions, their loader profiles (all profiles built on
-/// a game version when the loader or its version is unknown), and everything those inherit from.
-fn used_versions(versions: &BTreeMap<String, VersionDir>, refs: &[GameRef]) -> HashSet<String> {
-    let mut used: HashSet<String> = HashSet::new();
+/// a game version when the loader or its version is unknown), the versions in `keep`, and
+/// everything those inherit from.
+fn used_versions(
+    versions: &BTreeMap<String, VersionDir>,
+    refs: &[GameRef],
+    keep: &[String],
+) -> HashSet<String> {
+    let mut used: HashSet<String> = keep
+        .iter()
+        .map(|id| id.trim())
+        .filter(|id| !id.is_empty())
+        .map(str::to_owned)
+        .collect();
     let profiles_of = |minecraft: &str| -> Vec<String> {
         versions
             .keys()
@@ -731,6 +781,16 @@ fn asset_removals(
     log_configs: &HashSet<String>,
     young: &dyn Fn(Option<SystemTime>) -> bool,
 ) -> Option<Vec<Removal>> {
+    let folders = [
+        dirs.assets(),
+        dirs.asset_objects(),
+        dirs.asset_indexes(),
+        dirs.log_configs(),
+        dirs.asset_virtual(),
+    ];
+    if folders.iter().any(|folder| is_link(folder)) {
+        return None; // kept elsewhere (maybe shared with another launcher): not ours to judge
+    }
     let mut used_objects: HashSet<String> = HashSet::new();
     for id in indexes {
         let Ok(path) = dirs.asset_index_file(id) else {
@@ -802,7 +862,8 @@ fn asset_removals(
     for entry in read_dir_entries(&dirs.asset_virtual()) {
         let path = entry.path();
         let id = entry.file_name().to_string_lossy().into_owned();
-        if !path.is_dir() || indexes.contains(&id) || young(newest_change(&path)) {
+        if is_link(&path) || !path.is_dir() || indexes.contains(&id) || young(newest_change(&path))
+        {
             continue;
         }
         let (size, files) = tree_size(&path);
@@ -1073,12 +1134,78 @@ fn remove_file_robust(path: &Path) -> std::io::Result<()> {
     }
 }
 
+/// A symbolic link or (on Windows) a junction: nothing is ever deleted through one.
+fn is_link(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_symlink())
+}
+
+/// `folder` or a folder between it and the data folder is a link (kept elsewhere: not ours).
+fn linked_within(dirs: &DataDirs, folder: &Path) -> bool {
+    let root = dirs.root();
+    folder
+        .ancestors()
+        .take_while(|dir| *dir != root && dir.starts_with(root))
+        .any(is_link)
+}
+
+/// What a folder [`bury`] moved out of sight is called (`.<name>.gone`, `.<name>.gone2`, ...).
+fn is_buried(name: &str) -> bool {
+    name.starts_with('.')
+        && name
+            .rsplit_once(".gone")
+            .is_some_and(|(_, n)| n.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Moves the folder at `path` out of the launcher's sight (renamed to `.<name>.gone` beside it)
+/// before it is deleted: a deletion that stops half-way leaves no folder that looks installed.
+/// `Ok(None)`: already gone. A folder with a file in use cannot move on Windows and stays whole.
+fn bury(path: &Path) -> std::io::Result<Option<PathBuf>> {
+    let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+        return Err(std::io::Error::other("no folder name"));
+    };
+    let name = name.to_string_lossy();
+    for n in 0..100u32 {
+        let suffix = if n == 0 { String::new() } else { n.to_string() };
+        let buried = parent.join(format!(".{name}.gone{suffix}"));
+        if std::fs::symlink_metadata(&buried).is_ok() {
+            continue;
+        }
+        return match std::fs::rename(path, &buried) {
+            Ok(()) => Ok(Some(buried)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(e),
+        };
+    }
+    Err(std::io::Error::other("too many buried folders"))
+}
+
+/// Deletes what earlier deletions moved out of sight but could not finish (a crash, a file that
+/// was in use then). Folders reached through a link are left alone.
+fn clear_buried(dirs: &DataDirs) {
+    for folder in [dirs.versions(), dirs.runtimes(), dirs.natives()] {
+        if is_link(&folder) {
+            continue;
+        }
+        for entry in read_dir_entries(&folder) {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if is_buried(&name)
+                && !is_link(&path)
+                && path.is_dir()
+                && let Err(error) = remove_dir_all_robust(&path)
+            {
+                tracing::debug!(path = %path.display(), %error, "a buried folder stays for now");
+            }
+        }
+    }
+}
+
 fn remove_dir_all_robust(dir: &Path) -> std::io::Result<()> {
     match std::fs::remove_dir_all(dir) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(first) => {
-            if cfg!(windows) {
+            if cfg!(windows) && !is_link(dir) {
                 for entry in WalkDir::new(dir)
                     .follow_links(false)
                     .into_iter()
@@ -1095,6 +1222,7 @@ fn remove_dir_all_robust(dir: &Path) -> std::io::Result<()> {
 /// Removes folders under `root` that became empty (deepest first); `root` itself stays.
 fn prune_empty_dirs(root: &Path) {
     let dirs: Vec<PathBuf> = WalkDir::new(root)
+        .follow_root_links(false)
         .min_depth(1)
         .contents_first(true)
         .follow_links(false)

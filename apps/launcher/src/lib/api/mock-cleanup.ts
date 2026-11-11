@@ -208,6 +208,8 @@ export function createMockCleanup(): CleanupApi {
     /** Worlds, screenshots and set-aside mod folders (listed with the rest). */
     files: empty ? [] : trashedFiles(),
     free: Math.round(118.2 * GB),
+    /** "Otomatik Temizlik". */
+    auto: true,
   };
   const trashBytes = () =>
     state.trash.reduce((sum, item) => sum + item.sizeBytes, 0) +
@@ -407,6 +409,15 @@ export function createMockCleanup(): CleanupApi {
       const sharedBytes = state.shared.items.reduce((sum, item) => sum + item.bytes, 0);
       const leftoverBytes = state.leftovers.reduce((sum, item) => sum + item.bytes, 0);
       return { reclaimableBytes: setBytes + sharedBytes + leftoverBytes, freeBytes: state.free };
+    },
+    async auto() {
+      await delay(80);
+      return state.auto;
+    },
+    async setAuto(on) {
+      await delay(120);
+      state.auto = on;
+      return state.auto;
     },
   };
 }

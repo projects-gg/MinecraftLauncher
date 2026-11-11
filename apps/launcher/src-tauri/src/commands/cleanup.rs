@@ -11,10 +11,11 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 
 use pl_content::VersionSets;
-use pl_data::housekeeping::{self, InUse, KeptSets, LeftoverKind, Places, Policy};
+use pl_data::housekeeping::{self, CleanupState, InUse, KeptSets, LeftoverKind, Places, Policy};
 use pl_mc::gamefiles::{LauncherTrash, TrashKind, TrashLimits};
 use pl_mc::instance::Instance;
 use pl_mc::java::JavaSetting;
@@ -30,13 +31,24 @@ use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
 use pl_lang::pick;
 
-/// The automatic tidy-up starts this long after the launcher (never slows the start).
+/// The first automatic round starts this long after the launcher (never slows the start).
 const FIRST_TIDY: Duration = Duration::from_secs(90);
-/// ...and then runs this often while the launcher stays open.
+/// ...and the launcher looks again this often while it stays open (a round runs only when one
+/// is due, [`Policy::round_every`]).
 const TIDY_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
-/// When something was busy, the tidy-up tries again after this.
-const TIDY_RETRY: Duration = Duration::from_secs(60 * 60);
+/// A round that found the launcher busy runs this long after it is free again (a game that just
+/// closed is often started again soon).
+const AFTER_BUSY: Duration = Duration::from_secs(3 * 60);
+/// A round's game file deletion stops after this; the rest goes next time.
+const ROUND_BUDGET: Duration = Duration::from_secs(2 * 60);
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+
+/// A round found the launcher busy and waits for it to be free ([`status_changed`]).
+static WAITING: AtomicBool = AtomicBool::new(false);
+/// A round is already scheduled after a busy spell.
+static SCHEDULED: AtomicBool = AtomicBool::new(false);
+/// The running round's stop: a game starting or getting ready, or an install, stops it.
+static RUNNING: std::sync::Mutex<Option<CancellationToken>> = std::sync::Mutex::new(None);
 
 fn iso_ms(ms: i64) -> Option<String> {
     jiff::Timestamp::from_millisecond(ms)
@@ -164,8 +176,33 @@ pub(crate) const STATUS_CHANGED: &str = "cleanup-status-changed";
 
 /// What [`blocked`] reads changed: a game started or ended, began or stopped getting ready, or an
 /// install, backup, Java download or data job began or ended (the free space moves with them).
+/// The automatic round listens too: a game starting stops its deletion between items, and a
+/// round that waited for a busy launcher runs [`AFTER_BUSY`] after it is free.
 pub(crate) fn status_changed(app: &AppHandle) {
     let _ = app.emit(STATUS_CHANGED, ());
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let block = blocked(app, &state);
+    if matches!(
+        block,
+        Some(CleanupBlock::GameRunning | CleanupBlock::Preparing | CleanupBlock::Busy)
+    ) {
+        let running = RUNNING.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(cancel) = running.as_ref() {
+            cancel.cancel();
+            WAITING.store(true, Ordering::Release);
+        }
+    }
+    if block.is_none() && WAITING.load(Ordering::Acquire) && !SCHEDULED.swap(true, Ordering::AcqRel)
+    {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(AFTER_BUSY).await;
+            SCHEDULED.store(false, Ordering::Release);
+            round(&app).await;
+        });
+    }
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -565,6 +602,110 @@ fn parked_ref(instance: &Instance, info: &pl_content::SetInfo) -> GameRef {
     )
 }
 
+/// What the automatic round keeps: [`game_refs`] read strictly (an instance file, a parked set or
+/// a switch journal that cannot be read now stops the round's game file part: what it needs is
+/// unknown), plus what the launcher trash may bring back within its 30 days (deleted instances
+/// with their parked sets and Java, version sets cleaned up).
+async fn round_refs(state: &AppState) -> CmdResult<(Vec<GameRef>, Vec<PathBuf>)> {
+    let unknown = |what: &str| {
+        CmdError::new(
+            "TEMIZLIK-OKUNAMADI",
+            "",
+            format!("{what} could not be read; the game files wait"),
+        )
+    };
+    let instances = state.instances.list().await.map_err(CmdError::from)?;
+    // An instance folder the list left out (its file unreadable) may need anything.
+    let root = state.instances.root().to_path_buf();
+    let folders = tokio::task::spawn_blocking(move || {
+        std::fs::read_dir(&root)
+            .map(|entries| {
+                entries
+                    .filter_map(Result::ok)
+                    .filter(|e| {
+                        e.path()
+                            .join(pl_mc::instance::store::INSTANCE_FILE)
+                            .exists()
+                    })
+                    .count()
+            })
+            .unwrap_or(0)
+    })
+    .await
+    .map_err(CmdError::internal)?;
+    if folders != instances.len() {
+        return Err(unknown("an instance"));
+    }
+    let mut refs = Vec::new();
+    let mut protected = Vec::new();
+    for instance in &instances {
+        let game_dir = state
+            .instances
+            .game_dir(&instance.id)
+            .map_err(CmdError::from)?;
+        instance_refs(instance, &game_dir, &mut refs, &mut protected)
+            .await
+            .map_err(|()| unknown("a version set"))?;
+    }
+    let trash = launcher_trash(state);
+    for entry in trash.list(None).await.map_err(CmdError::from)? {
+        let item = trash.item_path(&entry);
+        match entry.kind {
+            TrashKind::Instance => {
+                let file = item.join(pl_mc::instance::store::INSTANCE_FILE);
+                let instance: Instance = tokio::fs::read(&file)
+                    .await
+                    .ok()
+                    .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+                    .ok_or_else(|| unknown("a deleted instance"))?;
+                let game_dir = item.join(pl_mc::instance::store::GAME_DIR_NAME);
+                instance_refs(&instance, &game_dir, &mut refs, &mut protected)
+                    .await
+                    .map_err(|()| unknown("a deleted instance's set"))?;
+            }
+            TrashKind::VersionSet => {
+                let (info, _) = pl_content::sets::read_set_dir(&item)
+                    .await
+                    .map_err(|_| unknown("a trashed version set"))?;
+                // Its loader is not judged: every profile of its game version stays.
+                if let Some(info) = info {
+                    refs.push(GameRef::new(info.minecraft, None, None));
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok((refs, protected))
+}
+
+/// One instance's versions (active, parked, both sides of an unfinished switch) and custom Java;
+/// `Err` when its sets cannot be read.
+async fn instance_refs(
+    instance: &Instance,
+    game_dir: &Path,
+    refs: &mut Vec<GameRef>,
+    protected: &mut Vec<PathBuf>,
+) -> Result<(), ()> {
+    refs.push(GameRef::new(
+        instance.mc_version.clone(),
+        Some(instance.loader.kind),
+        instance.loader.version.clone(),
+    ));
+    if let JavaSetting::Custom { path } = &instance.java {
+        protected.push(path.clone());
+    }
+    let sets = VersionSets::new(game_dir);
+    if let Some(journal) = sets.pending().await.map_err(|_| ())? {
+        for minecraft in [journal.from, journal.to] {
+            refs.push(GameRef::new(minecraft, None, None));
+        }
+    }
+    for info in sets.parked().await.map_err(|_| ())? {
+        refs.push(parked_ref(instance, &info));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SharedFilesView {
@@ -717,13 +858,19 @@ pub struct LeftoverView {
 
 /// Where the cleanup looks, and what the running game holds right now.
 async fn places(app: &AppHandle, state: &AppState) -> (Places, InUse) {
-    let game_dirs: Vec<PathBuf> = state
-        .instances
-        .list()
-        .await
-        .unwrap_or_default()
+    let instances = state.instances.list().await.unwrap_or_default();
+    let game_dirs: Vec<PathBuf> = instances
         .iter()
         .filter_map(|instance| state.instances.game_dir(&instance.id).ok())
+        .collect();
+    let last_played: HashMap<String, i64> = instances
+        .iter()
+        .filter_map(|instance| {
+            Some((
+                instance.id.clone(),
+                instance.last_played_at?.as_millisecond(),
+            ))
+        })
         .collect();
     let mut in_use = InUse::default();
     for running in state.games.lock().iter() {
@@ -739,6 +886,8 @@ async fn places(app: &AppHandle, state: &AppState) -> (Places, InUse) {
         game_dirs,
         temp_dir: Some(std::env::temp_dir()),
         app_name: app.package_info().name.clone(),
+        app_version: app.package_info().version.to_string(),
+        last_played,
     };
     (places, in_use)
 }
@@ -1082,67 +1231,189 @@ pub async fn cleanup_summary(
     })
 }
 
-/// Starts the automatic tidy-up: shortly after start, then once a day while the launcher stays
-/// open. A round that finds the launcher busy (game, install, data job) tries again later. Usage
-/// data's daily batch rides on the same rounds (TELEMETRY: no timer of its own).
+/// Starts the automatic cleanup: a round shortly after start, then at most once a day
+/// ([`Policy::round_every`], counted across restarts in `cleanup-state.json`). A round never runs
+/// while a game runs or gets ready, an install or a data job runs: it waits for
+/// [`status_changed`] to say the launcher is free and runs [`AFTER_BUSY`] later. Usage data's
+/// daily batch rides on the same daily wake (TELEMETRY: no timer of its own); nothing else wakes
+/// up for the cleanup.
 pub fn start_housekeeping(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(FIRST_TIDY).await;
         loop {
             crate::telemetry::tick(&app);
-            let wait = if tidy(&app).await {
-                TIDY_EVERY
-            } else {
-                TIDY_RETRY
-            };
-            tokio::time::sleep(wait).await;
+            round(&app).await;
+            tokio::time::sleep(TIDY_EVERY).await;
         }
     });
 }
 
-/// One round of the automatic tidy-up; false when it had to wait for a busy launcher.
-async fn tidy(app: &AppHandle) -> bool {
+fn now_ms() -> i64 {
+    jiff::Timestamp::now().as_millisecond()
+}
+
+async fn cleanup_state(state: &AppState) -> CleanupState {
+    let root = state.root.clone();
+    tokio::task::spawn_blocking(move || CleanupState::load(&root))
+        .await
+        .unwrap_or_default()
+}
+
+/// One automatic round when one is due: the trash limits and junk always; with "Otomatik
+/// Temizlik" on also old logs and crash reports, the cache caps, idle start caches and the shared
+/// game files unused for [`Policy::unused_age`] ([`housekeeping::sweep_shared`]). A round a game
+/// interrupts waits for the launcher to be free again; one that ran out of its budget goes on
+/// the next day.
+async fn round(app: &AppHandle) {
     let state = app.state::<AppState>();
-    // The trash limits and junk rules never touch what a game uses, but the launcher stays
-    // quiet while it prepares one (downloads write `.part` files) or moves the data folder.
-    if matches!(
-        blocked(app, &state),
-        Some(CleanupBlock::Preparing | CleanupBlock::Busy | CleanupBlock::DataJob)
-    ) {
-        return false;
+    let policy = Policy::default();
+    let record = cleanup_state(&state).await;
+    if !record.round_due(now_ms(), policy.round_every) {
+        WAITING.store(false, Ordering::Release);
+        return;
     }
-    let Ok(_job) = begin_job(app, DataJob::Cleaning) else {
-        return false;
+    // The stop is in place before the last look, so a launch that starts from here on stops it
+    // (and marks the round as waiting again).
+    WAITING.store(false, Ordering::Release);
+    let cancel = CancellationToken::new();
+    *RUNNING.lock().unwrap_or_else(|p| p.into_inner()) = Some(cancel.clone());
+    let job = if blocked(app, &state).is_some() {
+        None
+    } else {
+        begin_job(app, DataJob::Cleaning).ok()
+    };
+    let Some(_job) = job else {
+        RUNNING.lock().unwrap_or_else(|p| p.into_inner()).take();
+        WAITING.store(true, Ordering::Release);
+        return;
+    };
+    let budget = {
+        let cancel = cancel.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(ROUND_BUDGET).await;
+            cancel.cancel();
+        })
     };
     let (places, in_use) = places(app, &state).await;
+    // Without everything the instances and the trash need nothing can be judged: the shared
+    // files wait for a later round.
+    let refs = if record.auto {
+        round_refs(&state)
+            .await
+            .map_err(|error| tracing::info!(?error, "the game files wait for a later round"))
+            .ok()
+    } else {
+        None
+    };
+    let dirs = state.mc.dirs.clone();
+    let deep = record.auto;
+    let work = cancel.clone();
     let outcome = tauri::async_runtime::spawn_blocking(move || {
+        let now = SystemTime::now();
         let cap = housekeeping::trash_cap(pl_data::usage::disk_size(&places.root));
-        housekeeping::tidy(
-            &places,
-            &Policy::default(),
-            &in_use,
-            SystemTime::now(),
-            Some(cap),
-        )
+        let deep = deep && !work.is_cancelled();
+        let tidied = housekeeping::tidy(&places, &policy, &in_use, now, Some(cap), deep);
+        // Judged and deleted on a copy of the record, which keeps no lock meanwhile; its unused
+        // marks are stored after (use marks a launch wrote meanwhile stay).
+        let swept = refs.and_then(|(refs, protected)| {
+            let mut copy = CleanupState::read(&places.root).ok()?;
+            if !copy.auto || work.is_cancelled() {
+                return None;
+            }
+            let swept = housekeeping::sweep_shared(
+                &dirs, &refs, &protected, &mut copy, &policy, now, &work,
+            );
+            if let Err(error) =
+                CleanupState::update(&places.root, |record| record.adopt_unused(&copy))
+            {
+                tracing::warn!(%error, "could not keep the cleanup record");
+            }
+            Some(swept)
+        });
+        (tidied, swept)
     })
     .await;
+    budget.abort();
+    RUNNING.lock().unwrap_or_else(|p| p.into_inner()).take();
+    let interrupted = WAITING.load(Ordering::Acquire);
     match outcome {
-        Ok(report) => {
-            if report.trash.removed > 0 || report.junk.removed_files > 0 {
+        Ok((tidied, swept)) => {
+            if tidied.trash.removed > 0 || tidied.junk.removed_files > 0 {
                 tracing::info!(
-                    trash_items = report.trash.removed,
-                    trash_bytes = report.trash.freed_bytes,
-                    junk_files = report.junk.removed_files,
-                    junk_bytes = report.junk.freed_bytes,
+                    trash_items = tidied.trash.removed,
+                    trash_bytes = tidied.trash.freed_bytes,
+                    junk_files = tidied.junk.removed_files,
+                    junk_bytes = tidied.junk.freed_bytes,
                     "tidied the data folder"
                 );
             }
+            if let Some(Err(error)) = swept
+                && !matches!(error, pl_mc::Error::Cancelled)
+            {
+                tracing::warn!(%error, "the game file cleanup did not run");
+            }
         }
-        Err(error) => tracing::warn!(%error, "the tidy-up did not run"),
+        Err(error) => tracing::warn!(%error, "the cleanup round did not run"),
+    }
+    if !interrupted {
+        let root = state.root.clone();
+        let stamp = now_ms();
+        let saved = tokio::task::spawn_blocking(move || {
+            CleanupState::update(&root, |record| record.last_round_ms = stamp)
+        })
+        .await;
+        if let Ok(Err(error)) = saved {
+            tracing::warn!(%error, "could not keep the cleanup record");
+        }
     }
     tidy_skin_history(app).await;
-    true
+}
+
+/// Marks the version a game was readied with and its Java as used ([`CleanupState`]): the
+/// automatic cleanup keeps them (and what they need) for [`Policy::unused_age`] even when no
+/// instance refers to them any more. A small write in the background, off the launch's path.
+pub(crate) fn note_use(state: &AppState, version_id: &str, java: &Path) {
+    let root = state.root.clone();
+    let dirs = state.mc.dirs.clone();
+    let version = version_id.to_owned();
+    let java = java.to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || {
+        let component = pl_mc::java::managed::managed_runtime_of(&dirs, &java).map(|(c, _)| c);
+        let marked = CleanupState::update(&root, |record| {
+            record.mark_used(&version, component.as_deref(), now_ms());
+        });
+        if let Err(error) = marked {
+            tracing::debug!(%error, "could not mark the game files as used");
+        }
+    });
+}
+
+/// Whether "Otomatik Temizlik" is on (the default).
+#[tauri::command]
+#[specta::specta]
+pub async fn cleanup_auto(state: State<'_, AppState>) -> CmdResult<bool> {
+    Ok(cleanup_state(&state).await.auto)
+}
+
+/// Turns "Otomatik Temizlik" on or off (off also stops a round that is deleting game files);
+/// returns what is kept.
+#[tauri::command]
+#[specta::specta]
+pub async fn cleanup_set_auto(state: State<'_, AppState>, on: bool) -> CmdResult<bool> {
+    if !on && let Some(cancel) = RUNNING.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
+        cancel.cancel();
+    }
+    let root = state.root.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        CleanupState::update(&root, |record| {
+            record.auto = on;
+            record.auto
+        })
+    })
+    .await
+    .map_err(CmdError::internal)?
+    .map_err(CmdError::from)
 }
 
 /// The skin history's share of the tidy-up: histories of accounts gone from this computer for

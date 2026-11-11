@@ -95,4 +95,6 @@ export const tauriCleanup: CleanupApi = {
     const s = await ok(commands.cleanupSummary(olderThanDays));
     return { reclaimableBytes: s.reclaimableBytes, freeBytes: defined(s.freeBytes) };
   },
+  auto: () => ok(commands.cleanupAuto()),
+  setAuto: (on) => ok(commands.cleanupSetAuto(on)),
 };

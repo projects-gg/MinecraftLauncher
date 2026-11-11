@@ -1423,6 +1423,13 @@ export const commands = {
 	cleanupDeleteTrashedSet: (trashId: string) => typedError<CleanupResultView, CmdError>(__TAURI_INVOKE("cleanup_delete_trashed_set", { trashId })),
 	/**  How much a cleanup could free, for the occasional reminder. */
 	cleanupSummary: (olderThanDays: number) => typedError<CleanupSummaryView, CmdError>(__TAURI_INVOKE("cleanup_summary", { olderThanDays })),
+	/**  Whether "Otomatik Temizlik" is on (the default). */
+	cleanupAuto: () => typedError<boolean, CmdError>(__TAURI_INVOKE("cleanup_auto")),
+	/**
+	 *  Turns "Otomatik Temizlik" on or off (off also stops a round that is deleting game files);
+	 *  returns what is kept.
+	 */
+	cleanupSetAuto: (on: boolean) => typedError<boolean, CmdError>(__TAURI_INVOKE("cleanup_set_auto", { on })),
 	/**
 	 *  The instance's logs, newest first: the sessions the launcher captured, then the game's own
 	 *  files (`latest.log`, `debug.log` and their archives). The game's folder is optional: when it
