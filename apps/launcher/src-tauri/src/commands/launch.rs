@@ -1445,6 +1445,15 @@ async fn prepare_and_spawn(
         options.wrapper.is_some(),
     )
     .await;
+    // Beside a running game of this folder (PLAY-AGAIN, maybe recording): no second recording.
+    if beside
+        && matches!(
+            aot.as_ref().map(|aot| &aot.plan),
+            Some(AotPlan::Train { .. })
+        )
+    {
+        aot = None;
+    }
     match aot.as_ref().map(|aot| &aot.plan) {
         Some(AotPlan::Use { cache }) => {
             options.launcher_jvm_args.extend(aot::use_jvm_args(cache));
