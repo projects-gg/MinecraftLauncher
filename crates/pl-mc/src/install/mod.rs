@@ -171,6 +171,9 @@ pub async fn install_version(
         .await?;
     let asset_index = assets::read_index(&index_path).await?;
     let logging_config = logging.map(|(path, _)| path).filter(|p| p.is_file());
+    // Each stage's milliseconds for the "version ready" line (LAUNCH-SPEED).
+    let mut stages = StageClock::new(started);
+    stages.lap("metadata");
 
     // Java decides the architecture used for natives and rules.
     run.check_cancel()?;
@@ -187,6 +190,7 @@ pub async fn install_version(
         },
     )
     .await?;
+    stages.lap("java");
     let platform = match java.arch() {
         Arch::Other => ctx.platform.clone(),
         arch => ctx.platform.with_arch(arch),
@@ -196,6 +200,7 @@ pub async fn install_version(
     let plan = plan_libraries(&ctx.dirs, resolved, &platform)?;
     run.fetch(InstallStage::Libraries, plan.downloads.clone(), concurrency)
         .await?;
+    stages.lap("libraries");
 
     // Asset objects and old layouts.
     let objects = assets::object_downloads(&ctx.dirs, &asset_index)?;
@@ -214,9 +219,11 @@ pub async fn install_version(
         ),
     )
     .await?;
+    stages.lap("assets");
 
     // Client jar.
     let client_jar = run.client_jar(resolved).await?;
+    stages.lap("client");
 
     // Natives.
     run.check_cancel()?;
@@ -251,12 +258,14 @@ pub async fn install_version(
         },
     )
     .await?;
+    stages.lap("natives");
 
     run.report(InstallStage::Done, DownloadProgress::default());
     tracing::info!(
         version = %resolved.id,
         java = %java.path.display(),
         elapsed_ms = started.elapsed().as_millis() as u64,
+        stages = %stages,
         offline = options.offline,
         "version ready"
     );
@@ -274,6 +283,41 @@ pub async fn install_version(
         assets: assets_info,
         logging_config,
     })
+}
+
+/// The milliseconds of each stage of an install, written as `metadata=3 java=41 …` (each stage
+/// from the end of the one before).
+struct StageClock {
+    last: std::time::Instant,
+    stages: Vec<(&'static str, u128)>,
+}
+
+impl StageClock {
+    fn new(started: std::time::Instant) -> Self {
+        Self {
+            last: started,
+            stages: Vec::new(),
+        }
+    }
+
+    fn lap(&mut self, stage: &'static str) {
+        let now = std::time::Instant::now();
+        self.stages
+            .push((stage, now.saturating_duration_since(self.last).as_millis()));
+        self.last = now;
+    }
+}
+
+impl std::fmt::Display for StageClock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, (stage, ms)) in self.stages.iter().enumerate() {
+            if i > 0 {
+                f.write_str(" ")?;
+            }
+            write!(f, "{stage}={ms}")?;
+        }
+        Ok(())
+    }
 }
 
 /// Where the log4j config goes and how to fetch it.
@@ -477,6 +521,25 @@ mod tests {
     fn write(path: &Path, bytes: &[u8]) {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, bytes).unwrap();
+    }
+
+    #[test]
+    fn stage_clock_lists_each_stage_once_in_order() {
+        let mut clock = StageClock::new(std::time::Instant::now());
+        assert_eq!(clock.to_string(), "");
+        clock.lap("metadata");
+        clock.lap("java");
+        let shown = clock.to_string();
+        let names: Vec<&str> = shown
+            .split(' ')
+            .map(|part| part.split_once('=').unwrap().0)
+            .collect();
+        assert_eq!(names, ["metadata", "java"]);
+        assert!(
+            shown
+                .split(' ')
+                .all(|part| part.split_once('=').unwrap().1.parse::<u128>().is_ok())
+        );
     }
 
     /// Offline installs never touch the network: everything missing is `Error::Offline`, and a
