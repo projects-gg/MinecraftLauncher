@@ -164,8 +164,6 @@ export interface PersonCrew {
   leader: boolean;
   /** They are one of its moderators. */
   moderator: boolean;
-  /** The crew has its 4 moderators: no one more can be named. */
-  moderatorsFull: boolean;
   /** The player may remove them (the leader anyone, a moderator plain members where allowed). */
   removable: boolean;
 }
@@ -339,9 +337,7 @@ export function personMenu(input: PersonInput): Plan<PersonAction> {
       ? only<PersonAction>(
           crew.leader &&
             crew.roles &&
-            (crew.moderator
-              ? { action: "unmakeModerator" }
-              : { action: "makeModerator", disabled: crew.moderatorsFull }),
+            (crew.moderator ? { action: "unmakeModerator" } : { action: "makeModerator" }),
           crew.leader && { action: "makeFounder" },
           crew.removable && { action: "removeMember" },
         )

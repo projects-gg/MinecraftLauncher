@@ -1376,9 +1376,6 @@ pub struct CrewRoles {
     /// "Moderatörlükten al".
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub roles: bool,
-    /// The crew has as many moderators as it may: "Moderatör yap" stays dimmed.
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub mods_full: bool,
     /// The crew's conversation (crew chat's `c:` id), whose senders' menus carry the rows; none
     /// while chat is off.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2593,7 +2590,6 @@ mod tests {
                     CrewRoles {
                         lead: true,
                         roles: true,
-                        mods_full: true,
                         conv: Some("c:t1".into()),
                         mates: BTreeMap::from([
                             (
@@ -2634,7 +2630,7 @@ mod tests {
         assert_eq!(
             roles,
             serde_json::json!({"t":"lists","groups":[],"crews":[],"roles":{
-                "t1":{"lead":true,"roles":true,"modsFull":true,"conv":"c:t1",
+                "t1":{"lead":true,"roles":true,"conv":"c:t1",
                     "mates":{"u-ali":{"kick":true},"u-cem":{"mod":true,"kick":true}}},
                 "t2":{"mates":{"u-ece":{"kick":true}}}}})
         );

@@ -74,7 +74,7 @@ import { canInvite, onTarget } from "./play-together";
 import { SocialFace } from "./social-face";
 import { type SocialPage, useSocialPrefs, useSocialUi } from "./store";
 import { CrewMark } from "./team-emblem";
-import { afterHandingOn, canRemove, MAX_MODERATORS } from "./teams";
+import { afterHandingOn, canRemove } from "./teams";
 
 /** Who the menu is about, as the place showing them knows them. */
 export interface PersonRef extends Pick<SocialProfile, "id" | "name"> {
@@ -191,7 +191,7 @@ export function questionText(
       return {
         title: t("teams.member.makeFounder"),
         sentence:
-          crew && afterHandingOn(crew, person.id, roles) === "moderator"
+          crew && afterHandingOn(roles) === "moderator"
             ? t("teams.member.makeFounderAskModerator", { name: person.name })
             : t("teams.member.makeFounderAsk", { name: person.name }),
         action: t("teams.member.makeFounder"),
@@ -400,7 +400,6 @@ export function personItems(
             roles,
             leader: crew.role === "founder",
             moderator: crewMember.moderator,
-            moderatorsFull: crew.members.filter((m) => m.moderator).length >= MAX_MODERATORS,
             removable: canRemove(crew, crewMember, roles),
           }
         : undefined,
