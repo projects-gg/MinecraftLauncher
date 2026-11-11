@@ -182,7 +182,7 @@ describe("the keyboard", () => {
     expect(screen.getAllByRole("grid").map((g) => g.getAttribute("aria-label"))).toEqual([
       "Ekipman",
       "Envanter",
-      "Araç çubuğu",
+      "Araç Çubuğu",
     ]);
     expect(label("inv:36")).toBe("Elmas Kılıç, dayanıklılık yüzde 92, büyülü, elde");
   });
@@ -260,18 +260,18 @@ describe("the keyboard", () => {
     expect(words(menu)).toEqual(["Altın Elma"]);
     expect(rows(menu)).toEqual([
       ["Al", "Enter"],
-      ["Yarısını al", null],
-      ["Envantere taşı", "Shift+Enter"],
-      ["Elde tut", null],
+      ["Yarısını Al", null],
+      ["Envantere Taşı", "Shift+Enter"],
+      ["Elde Tut", null],
       ["Kullan", null],
-      ["Bir tane at", "Q"],
-      ["Yığını at", "Ctrl+Q"],
+      ["Bir Tane At", "Q"],
+      ["Yığını At", "Ctrl+Q"],
     ]);
     // A solid surface over the game's window.
     expect(menu.classList.contains("pl-inv-menu")).toBe(true);
     // The floating tooltip makes way for the menu's own.
     expect(has(tooltip(), "data-shown")).toBe(false);
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Elde tut" }));
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Elde Tut" }));
     expect(sent.map((s) => s.op)).toEqual([{ action: "hold", slot: 2 }]);
     // The held frame moves at once (the account's hand is the player's own screen).
     const frame = document.querySelector<HTMLElement>(".pl-inv-held");
@@ -285,19 +285,19 @@ describe("the keyboard", () => {
     const menu = screen.getByRole("menu", { name: "Savaşçı Kiti" });
     // The server decides what they do (a kit may be bought): no guess at a verb.
     expect(rows(menu)).toEqual([
-      ["Sol tık", "Enter"],
-      ["Sağ tık", null],
-      ["Shift+sol tık", "Shift+Enter"],
+      ["Sol Tık", "Enter"],
+      ["Sağ Tık", null],
+      ["Shift+Sol Tık", "Shift+Enter"],
     ]);
     // The window's close button stays in place, unavailable, while the slot's menu is open.
     const close = screen.getByRole("button", {
-      name: "Menüyü oyunda kapat",
+      name: "Menüyü Oyunda Kapat",
       hidden: true,
     }) as HTMLButtonElement;
     expect(close.disabled).toBe(true);
     // Words alone: a cross beside a dialog's own read as closing the dialog.
     expect(close.querySelector("svg")).toBeNull();
-    fireEvent.click(within(menu).getByText("Sol tık"));
+    fireEvent.click(within(menu).getByText("Sol Tık"));
     expect(sent[0]?.op).toEqual(pickup("win", 13, SAMPLE_KITS.wseq));
   });
 });
@@ -326,10 +326,10 @@ describe("a finger", () => {
     // Under a finger the rows carry no keys; one item drops as "At".
     expect(rows(menu)).toEqual([
       ["Al", null],
-      ["Araç çubuğuna taşı", null],
+      ["Araç Çubuğuna Taşı", null],
       ["At", null],
     ]);
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Araç çubuğuna taşı" }));
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Araç Çubuğuna Taşı" }));
     expect(sent[0]?.op).toMatchObject({ slot: 22, mode: "quick_move" });
   });
 
@@ -345,7 +345,7 @@ describe("a finger", () => {
     expect(hand?.querySelector(".pl-inv-count")?.getAttribute("data-text")).toBe("9");
     expect(status()).toBe("Bırakmak için bir yuvaya dokun.");
     // The way back in words, beside the hint.
-    expect(screen.getByRole("button", { name: "Yerine koy" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Yerine Koy" })).toBeTruthy();
   });
 
   it("puts a carried stack back with a tap on the hand slot", async () => {
@@ -354,7 +354,7 @@ describe("a finger", () => {
     fireEvent.pointerUp(cell("inv:13"), finger);
     await sent[0]?.answer({ ok: true });
     act(() => frame(withCursor(SAMPLE_INVENTORY, 13)));
-    fireEvent.click(screen.getByRole("button", { name: "Yerine koy: Elmas" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yerine Koy: Elmas" }));
     // Back where it came from, as Esc and a press outside the window do.
     expect(sent.map((s) => s.op)).toEqual([pickup("inv", 13), pickup("inv", 13)]);
   });
@@ -436,7 +436,7 @@ describe("answers", () => {
   it("keeps everything still in a trade, the close button too", () => {
     const { onOp } = mount({ window: SAMPLE_CHEST, locked: true });
     expect(status()).toBe("Takas sürerken envanter kilitli.");
-    const close = screen.getByRole("button", { name: "Menüyü oyunda kapat" }) as HTMLButtonElement;
+    const close = screen.getByRole("button", { name: "Menüyü Oyunda Kapat" }) as HTMLButtonElement;
     expect(close.disabled).toBe(true);
     expect(flashed()).toBe(false);
     fireEvent.pointerDown(cell("win:0"), { ...mouse, button: 0 });
