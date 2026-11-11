@@ -11,7 +11,8 @@
 //! matter (JSON, or a mod's own text format). [`seed_mod_configs`] writes it
 //! while no file is at its path and never touches one that is: the player's later changes and
 //! the mod's own file always win. The mod keeps its own defaults for the rest and writes its full
-//! file itself.
+//! file itself. A value that existing instances need too (Better PvP's off hand armor status,
+//! XAERO-OFFHAND) is changed there once, after a backup ([`fix_mod_settings_once`]).
 //!
 //! The caller holds the instance's lock and the game is not running (a pack or a set is never
 //! synced while it runs), so nothing else writes these files meanwhile.
@@ -152,6 +153,77 @@ pub async fn seed_mod_configs(game_dir: &Path, projects: &[String]) -> Result<Ve
         written.push(file.path.clone());
     }
     Ok(written)
+}
+
+/// Better PvP's profile and the value [`fix_mod_settings_once`] turns off (XAERO-OFFHAND).
+const OFFHAND_PROFILE: &str = "config/xaero/betterpvp/profiles/default.cfg";
+const OFFHAND_KEY: &str = "armor_status_off_hand";
+/// Folder of the one-off fixes' marks and backups, in the instance's launcher folder beside its
+/// game folder (`<instance>/.launcher/mod-settings-fixes/`).
+const FIXES_DIR: &str = "mod-settings-fixes";
+const OFFHAND_MARK: &str = "xaero-offhand.done";
+const OFFHAND_BACKUP: &str = "xaero-offhand-default.cfg";
+
+/// `profile` (Better PvP's `key = value` lines) with `armor_status_off_hand = true` turned
+/// `false`, or `None` when no line has it on (or the file is not text).
+fn offhand_off(profile: &[u8]) -> Option<Vec<u8>> {
+    let text = std::str::from_utf8(profile).ok()?;
+    let mut changed = false;
+    let mut out = String::with_capacity(text.len());
+    for line in text.split_inclusive('\n') {
+        let body = line.trim_end_matches(['\r', '\n']);
+        let on = body
+            .split_once('=')
+            .is_some_and(|(key, value)| key.trim() == OFFHAND_KEY && value.trim() == "true");
+        if on {
+            out.push_str(OFFHAND_KEY);
+            out.push_str(" = false");
+            out.push_str(&line[body.len()..]);
+            changed = true;
+        } else {
+            out.push_str(line);
+        }
+    }
+    changed.then(|| out.into_bytes())
+}
+
+/// The one-off fix of a value existing instances got before [`mod_configs`] had it
+/// (XAERO-OFFHAND): Better PvP's armor status off hand item, on by default, draws the survival
+/// inventory's off hand slot empty while an item is in it. Once per instance, at the first launch
+/// that finds the profile: a `true` is turned `false` after a copy of the file is kept beside the
+/// mark (`<instance>/.launcher/mod-settings-fixes/`), every other line stays as it is, and the
+/// mark is left whatever the value was, so a player who turns it back on later keeps it. No
+/// profile yet (the mod never ran, or is not installed): nothing, and no mark. Returns whether
+/// the value was changed. The game must not be running.
+pub async fn fix_mod_settings_once(game_dir: &Path) -> Result<bool> {
+    let Some(instance) = game_dir.parent() else {
+        return Ok(false);
+    };
+    let fixes = instance.join(".launcher").join(FIXES_DIR);
+    let mark = fixes.join(OFFHAND_MARK);
+    if tokio::fs::symlink_metadata(&mark).await.is_ok() {
+        return Ok(false);
+    }
+    let Some(relative) = settings_path(OFFHAND_PROFILE) else {
+        return Ok(false);
+    };
+    let profile = game_dir.join(relative);
+    let bytes = match tokio::fs::read(&profile).await {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(Error::io(&profile, error)),
+    };
+    let fixed = offhand_off(&bytes);
+    if let Some(fixed) = &fixed {
+        write_durable(&fixes.join(OFFHAND_BACKUP), &bytes).await?;
+        write_durable(&profile, fixed).await?;
+        tracing::info!(
+            path = OFFHAND_PROFILE,
+            "turned Better PvP's off hand armor status off once"
+        );
+    }
+    write_durable(&mark, b"XAERO-OFFHAND\n").await?;
+    Ok(fixed.is_some())
 }
 
 #[cfg(test)]
@@ -379,7 +451,8 @@ mod tests {
             written,
             [
                 "config/sodiumextrainformation/telemetry-config.json",
-                "config/xaero/lib/common.cfg"
+                "config/xaero/lib/common.cfg",
+                OFFHAND_PROFILE
             ]
         );
         let telemetry: Value = serde_json::from_slice(
@@ -428,6 +501,90 @@ mod tests {
             .unwrap();
         assert!(written.is_empty());
         assert!(game.join("config").join("litematica.json").is_dir());
+    }
+
+    /// An instance folder with a game folder inside, as the launcher lays them out.
+    fn instance() -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path().join("minecraft");
+        std::fs::create_dir_all(&game).unwrap();
+        (dir, game)
+    }
+
+    #[tokio::test]
+    async fn a_new_better_pvp_gets_the_off_hand_item_off() {
+        let (_dir, game) = instance();
+        seed_mod_configs(&game, &[BETTER_PVP.to_owned()])
+            .await
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(game.join(OFFHAND_PROFILE)).unwrap(),
+            "armor_status_off_hand = false\n"
+        );
+        // The launch after it finds the value off: nothing to change, and it never looks again.
+        assert!(!fix_mod_settings_once(&game).await.unwrap());
+        assert!(
+            game.parent()
+                .unwrap()
+                .join(".launcher")
+                .join(FIXES_DIR)
+                .join(OFFHAND_MARK)
+                .exists()
+        );
+    }
+
+    #[tokio::test]
+    async fn an_old_profile_is_fixed_once_with_a_backup() {
+        let (_dir, game) = instance();
+        let profile = game.join(OFFHAND_PROFILE);
+        std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
+        let old = "armor_status = true\r\narmor_status_off_hand = true\r\nminimap_zoom = 2\r\n";
+        std::fs::write(&profile, old).unwrap();
+
+        assert!(fix_mod_settings_once(&game).await.unwrap());
+        assert_eq!(
+            std::fs::read_to_string(&profile).unwrap(),
+            "armor_status = true\r\narmor_status_off_hand = false\r\nminimap_zoom = 2\r\n"
+        );
+        let fixes = game.parent().unwrap().join(".launcher").join(FIXES_DIR);
+        assert_eq!(
+            std::fs::read_to_string(fixes.join(OFFHAND_BACKUP)).unwrap(),
+            old
+        );
+
+        // The player turns it back on: later launches leave it.
+        std::fs::write(&profile, old).unwrap();
+        assert!(!fix_mod_settings_once(&game).await.unwrap());
+        assert_eq!(std::fs::read_to_string(&profile).unwrap(), old);
+    }
+
+    #[tokio::test]
+    async fn no_profile_yet_leaves_no_mark() {
+        let (_dir, game) = instance();
+        assert!(!fix_mod_settings_once(&game).await.unwrap());
+        assert!(!game.parent().unwrap().join(".launcher").exists());
+
+        // The mod writes its profile with the value on; the next launch turns it off.
+        let profile = game.join(OFFHAND_PROFILE);
+        std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
+        std::fs::write(&profile, "armor_status_off_hand=true\n").unwrap();
+        assert!(fix_mod_settings_once(&game).await.unwrap());
+        assert_eq!(
+            std::fs::read_to_string(&profile).unwrap(),
+            "armor_status_off_hand = false\n"
+        );
+    }
+
+    #[test]
+    fn only_the_off_hand_line_on_is_changed() {
+        assert_eq!(offhand_off(b"armor_status_off_hand = false\n"), None);
+        assert_eq!(offhand_off(b"armor_status_off_hand_x = true\n"), None);
+        assert_eq!(offhand_off(b"a = 1\n"), None);
+        assert_eq!(offhand_off(&[0xff, 0xfe]), None);
+        assert_eq!(
+            offhand_off(b"a = 1\n  armor_status_off_hand =  true").as_deref(),
+            Some(&b"a = 1\narmor_status_off_hand = false"[..])
+        );
     }
 
     #[tokio::test]

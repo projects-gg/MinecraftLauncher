@@ -68,6 +68,13 @@
       "path": "config/xaero/lib/common.cfg",
       "text": "allow_internet_access = false\n",
       "why": "XaeroLib (inside Xaero's Better PvP) checks Patreon perks and updates online while the game starts, on the render thread, which waits for it (LAUNCH-SPEED). Its internet switch only feeds those checks and its online pictures, no gameplay feature. XaeroLib reads `key = value` lines and keeps its defaults for the others."
+    },
+    {
+      "projects": ["better-pvp"],
+      "mod": "Xaero's Better PvP",
+      "path": "config/xaero/betterpvp/profiles/default.cfg",
+      "text": "armor_status_off_hand = false\n",
+      "why": "With the armor status's off hand item on (the mod's default), Better PvP draws the survival inventory's off hand slot empty while an item is in it (seen in 26.1.0 and 26.6.2, XAERO-OFFHAND). Off, the slot shows its item. The player can turn it back on in the mod's settings. Installs from before this entry get the same value once (`fix_mod_settings_once`)."
     }
   ]
 }
