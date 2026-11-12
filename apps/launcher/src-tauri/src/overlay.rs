@@ -740,3 +740,51 @@ pub fn overlay_state(state: State<'_, AppState>) -> OverlayStateView {
         .versions(),
     }
 }
+
+/// SQOL-O: the game's room chat requests ("Oda" chip: send, "Sil", "Rapor Et") go to the same
+/// voice chat and report path as the room panel's commands (`voice_chat_send`, `voice_chat_delete`,
+/// `voice_chat_report`). Called once, where voice chat is made.
+pub fn wire_room_chat(overlay: &Overlay, voice: &pl_voice::Voice, social: &pl_social::SocialService) {
+    use pl_overlay::rchat::{RoomChatAct, RoomChatFuture, answer_of};
+    use pl_voice::rchat::RoomChatError;
+
+    let (voice, social) = (voice.clone(), social.clone());
+    overlay.on_room_chat(move |act| -> RoomChatFuture {
+        let (voice, social) = (voice.clone(), social.clone());
+        match act {
+            RoomChatAct::Send {
+                room,
+                text,
+                sticker,
+            } => Box::pin(async move { voice.chat_send(room, text, sticker).await }),
+            RoomChatAct::Delete { room, id } => {
+                Box::pin(async move { answer_of(voice.chat_delete(room, id).await) })
+            }
+            RoomChatAct::Report {
+                room,
+                id,
+                reason,
+                note,
+            } => Box::pin(async move {
+                // The message as the room sealed it and the ones before it (the report's evidence).
+                let Some((message, before)) = voice.chat_evidence(&room, &id) else {
+                    return answer_of(Some(RoomChatError::Gone));
+                };
+                let sent = social
+                    .report_room_chat(&room, message, before, reason, note)
+                    .await;
+                answer_of(sent.err().map(|error| {
+                    use pl_social::SocialError;
+                    match error {
+                        SocialError::RateLimited { .. } => RoomChatError::RateLimited,
+                        SocialError::Unauthorized | SocialError::Restricted { .. } => {
+                            RoomChatError::Off
+                        }
+                        SocialError::InvalidInput(_) => RoomChatError::Gone,
+                        _ => RoomChatError::Failed,
+                    }
+                }))
+            }),
+        }
+    });
+}

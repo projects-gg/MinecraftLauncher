@@ -31,6 +31,7 @@ pub mod links;
 pub mod mention;
 pub mod policy;
 pub mod protocol;
+pub mod rchat;
 mod route;
 mod server;
 mod session;

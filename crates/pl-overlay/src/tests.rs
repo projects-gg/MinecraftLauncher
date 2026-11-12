@@ -3386,3 +3386,193 @@ async fn new_cards_reach_a_mod_that_draws_them_and_the_switches_go_to_the_page()
     }
     overlay.stop(ByeReason::LauncherExit).await;
 }
+
+// --- the voice room's own chat (SQOL-O) ----------------------------------------------------------
+
+#[tokio::test]
+async fn the_rooms_own_chat_reaches_a_mod_that_shows_it_and_its_requests_reach_the_launcher() {
+    use pl_social::ReportReason;
+    use pl_voice::rchat::{RoomChatError, RoomChatMsg, RoomChatSend, VoiceChatEvent};
+    use serde_json::json;
+
+    use crate::rchat::{RoomChatAct, answer_of};
+
+    const ROOM: &str = "f0123456789abcdef";
+    const CONV: &str = "v:f0123456789abcdef";
+    fn msg(id: &str, from: &str, text: &str) -> RoomChatMsg {
+        RoomChatMsg {
+            id: id.into(),
+            from: from.into(),
+            at: now_ms(),
+            text: Some(text.into()),
+            sticker: None,
+        }
+    }
+    fn said(id: &str, from: &str, text: &str) -> VoiceChatEvent {
+        VoiceChatEvent::Msg {
+            room: ROOM.into(),
+            msg: msg(id, from, text),
+        }
+    }
+
+    let social = FakeSocial::new(view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let acts: Arc<Mutex<Vec<RoomChatAct>>> = Arc::new(Mutex::new(Vec::new()));
+    let (sink, hub) = (Arc::clone(&acts), overlay.clone());
+    overlay.on_room_chat(move |act| {
+        sink.lock().unwrap().push(act.clone());
+        let answer = match act {
+            RoomChatAct::Send { .. } => {
+                // The room's answer carries the message itself: the launcher tells it first.
+                hub.room_chat(&said("100", "me", "selam"));
+                RoomChatSend::Sent {
+                    id: "100".into(),
+                    at: 1,
+                }
+            }
+            RoomChatAct::Delete { .. } => answer_of(None),
+            RoomChatAct::Report { .. } => answer_of(Some(RoomChatError::RateLimited)),
+        };
+        Box::pin(std::future::ready(answer))
+    });
+    // A room of four with its chat; the launcher held a message before the game started.
+    let mut state = voice_room();
+    state.room.as_mut().unwrap().chat = true;
+    overlay.set_voice(&state, false);
+    overlay.room_chat(&VoiceChatEvent::Log {
+        room: ROOM.into(),
+        msgs: vec![msg("1", "u-cem", "selam herkese")],
+    });
+    let endpoint = overlay.start(social, "t").await.unwrap();
+
+    // A mod without `rchat` hears nothing of it.
+    let mut old = MockMod::connect_with(&endpoint, &["people", "voice"]).await;
+    old.next_of("voice").await;
+    old.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    loop {
+        let frame = old.next().await.expect("the bridge closed");
+        assert_ne!(frame["t"], "room-chat", "an older mod heard {frame}");
+        if frame["t"] == "history" {
+            break;
+        }
+    }
+    drop(old);
+
+    let mut game = MockMod::connect_with(&endpoint, &["people", "voice", "rchat"]).await;
+    assert_eq!(
+        game.next_of("room-chat").await,
+        json!({"t":"room-chat","conv":CONV})
+    );
+    // The chip opens: the room's whole log, its senders named as the lists know them.
+    game.send(json!({"t":"open-conv","conv":CONV})).await;
+    let history = game.next_of("history").await;
+    assert_eq!(history["conv"], CONV);
+    let first = &history["msgs"][0];
+    assert_eq!(
+        (first["from"].as_str(), first["by"].as_str(), first["text"].as_str()),
+        (Some("Cem"), Some("u-cem"), Some("selam herkese"))
+    );
+    // While the chip is on screen a message is only shown: nothing unread, no card.
+    overlay.room_chat(&said("2", "u-zz", "hey"));
+    let shown = game.next().await.unwrap();
+    assert_eq!(
+        (shown["t"].as_str(), shown["conv"].as_str(), shown["from"].as_str()),
+        (Some("msg"), Some(CONV), Some("Biri"))
+    );
+    // Another conversation on screen: they count, and one card comes for them after a moment.
+    game.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    game.next_of("history").await;
+    overlay.room_chat(&said("3", "u-cem", "naber"));
+    overlay.room_chat(&said("4", "u-cem", "orada mısın"));
+    assert_eq!(game.next_of("room-chat").await["unread"], 1);
+    assert_eq!(game.next_of("room-chat").await["unread"], 2);
+    let card = game.next_of("toast").await;
+    assert_eq!(
+        (
+            card["key"].as_str(),
+            card["conv"].as_str(),
+            card["title"].as_str(),
+            card["body"].as_str(),
+            card["by"].as_str()
+        ),
+        (
+            Some("room:f0123456789abcdef"),
+            Some(CONV),
+            Some("Cem"),
+            Some("orada mısın"),
+            Some("u-cem")
+        )
+    );
+    // The player's own message lands on its line, whichever comes first.
+    game.send(json!({"t":"send","cid":"c1","conv":CONV,"text":"selam"}))
+        .await;
+    let sent = game.next_of("sent").await;
+    assert_eq!(
+        (sent["cid"].as_str(), sent["id"].as_str()),
+        (Some("c1"), Some("100"))
+    );
+    let mine = game.next_of("msg").await;
+    assert_eq!(
+        (mine["id"].as_str(), mine["cid"].as_str(), mine["mine"].as_bool()),
+        (Some("100"), Some("c1"), Some(true))
+    );
+    // "Sil" on the player's own message; on someone else's it goes nowhere.
+    game.send(json!({"t":"room-delete","conv":CONV,"id":"100"}))
+        .await;
+    assert_eq!(
+        game.next_of("done").await,
+        json!({"t":"done","act":"room-delete","id":"100","ok":true})
+    );
+    game.send(json!({"t":"room-delete","conv":CONV,"id":"3"}))
+        .await;
+    assert_eq!(
+        game.next_of("done").await,
+        json!({"t":"done","act":"room-delete","id":"3","ok":false,"reason":"gone"})
+    );
+    // "Rapor Et" on someone else's: a message's reason, the note as the launcher keeps it.
+    game.send(json!({"t":"room-report","conv":CONV,"id":"3","reason":"spam","note":"  çok   spam "}))
+        .await;
+    assert_eq!(
+        game.next_of("done").await,
+        json!({"t":"done","act":"room-report","id":"3","ok":false,"reason":"rate"})
+    );
+    game.send(json!({"t":"room-report","conv":CONV,"id":"3","reason":"name"}))
+        .await;
+    assert_eq!(game.next_of("done").await["reason"], "failed");
+    assert_eq!(
+        *acts.lock().unwrap(),
+        [
+            RoomChatAct::Send {
+                room: ROOM.into(),
+                text: Some("selam".into()),
+                sticker: None,
+            },
+            RoomChatAct::Delete {
+                room: ROOM.into(),
+                id: "100".into(),
+            },
+            RoomChatAct::Report {
+                room: ROOM.into(),
+                id: "3".into(),
+                reason: ReportReason::Spam,
+                note: Some("çok spam".into()),
+            },
+        ]
+    );
+    // A friend room of two with a friend: their direct messages stand in, the chip goes.
+    let mut two = voice_room();
+    let room = two.room.as_mut().unwrap();
+    room.people.truncate(1);
+    room.chat = true;
+    overlay.set_voice(&two, false);
+    assert_eq!(game.next_of("room-chat").await, json!({"t":"room-chat"}));
+    // Someone else writes in the room meanwhile: its own chat shows for the rest of the stay.
+    overlay.room_chat(&said("5", "f-ayse", "buradayım"));
+    assert_eq!(
+        game.next_of("room-chat").await,
+        json!({"t":"room-chat","conv":CONV})
+    );
+    overlay.stop(ByeReason::LauncherExit).await;
+}

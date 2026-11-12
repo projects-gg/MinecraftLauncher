@@ -458,6 +458,37 @@ pub enum FromGame {
         #[serde(default)]
         on: bool,
     },
+    // --- SQOL-O: the voice room's chat and the player's own share (`ovl2-protocol.md` → "SQOL") ---
+    /// `rchat` (beside `voice`): "Sil" on the player's own message in the room's chat (`conv` the
+    /// room chat's conversation, `v:<room>`; `id` the message's, as its `msg` named it). Answered
+    /// with `done` (`room-delete`); the message comes back as a quiet mark.
+    RoomDelete {
+        #[serde(default)]
+        conv: String,
+        #[serde(default)]
+        id: String,
+    },
+    /// `rchat`: "Rapor Et" on someone else's message in the room's chat: a message's reason
+    /// (`harassment`, `inappropriate`, `spam`, `scam`, `other`) and maybe a note for moderators.
+    /// Answered with `done` (`room-report`).
+    RoomReport {
+        #[serde(default)]
+        conv: String,
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        reason: String,
+        #[serde(default)]
+        note: String,
+    },
+    /// `voice` + `share`: "Duraklat" (`on`) or "Sürdür" on the player's share `n` (only while
+    /// `voice-share` says `edit`). Answered with `voice-result` (`share-hold`).
+    VoiceShareHold {
+        #[serde(default)]
+        n: u8,
+        #[serde(default)]
+        on: bool,
+    },
     /// Anything newer than this launcher.
     #[serde(other)]
     Unknown,
@@ -583,6 +614,11 @@ pub const FEATURE_CARDS2: &str = "cards2";
 /// OVL-SHARE: the `hello` feature of a mod that shows screen sharing in voice rooms beside `voice`
 /// (`voice-share`, the `share-*` notices) and sends `voice-share-game` and `voice-share-stop`.
 pub const FEATURE_SHARE: &str = "share";
+/// SQOL-O: the `hello` feature of a mod that shows the voice room's own chat beside `voice` (the
+/// "Oda" chip: `room-chat`, the room chat's `msg`, `history` and cards, its `send`, `room-delete`
+/// and `room-report`). A mod without it hears nothing of the room's chat, and its frames about one
+/// are dropped.
+pub const FEATURE_RCHAT: &str = "rchat";
 
 /// The card kinds the player may turn off in game (`cards`), and the toast kinds each covers.
 pub const CARD_GROUPS: [(&str, &[ToastKind]); 7] = [
@@ -631,6 +667,7 @@ impl FromGame {
                 | Self::VoiceJoin { .. }
                 | Self::VoiceShareGame {}
                 | Self::VoiceShareStop { .. }
+                | Self::VoiceShareHold { .. }
                 | Self::VoiceThumb { .. }
         )
     }
@@ -947,6 +984,11 @@ pub enum ToGame {
     /// it changes (an empty one once there is nothing more to show). Only to a mod that said
     /// `voice` and `share`.
     VoiceShare(VoiceShareShown),
+    /// SQOL-O: the voice room's own chat as the panel shows it ("Oda" chip), whole, after the
+    /// greeting (when there is one) and whenever it changes; an empty one once it is gone. Its
+    /// messages travel as `msg` and `history` of its conversation. Only to a mod that said `voice`
+    /// and `rchat`.
+    RoomChat(RoomChatShown),
     /// SHARE-LIVE: the answer to `voice-thumb`, by the share it named: `kind` `image` with `png`
     /// (the picture, at most 320 px on its long side, base64), `locked` (the player may not join
     /// that room: a blurred lock, no picture) or `none` (no picture yet, or nothing to show).
@@ -1538,6 +1580,10 @@ pub struct MsgView {
     /// has the quiet gold ring).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub mention: bool,
+    /// SQOL-O, the room's chat (with `deleted`): its leader, a moderator or Projects took it away
+    /// ("Bu mesaj kaldırıldı"; its sender's own deletion says "Mesaj silindi").
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub removed: bool,
 }
 
 /// The message a reply answers (CHAT2): the service keeps only the link, the words come from this
@@ -2005,6 +2051,10 @@ pub struct VoiceShareShown {
     /// Others in the room who share now (their row's "Yayında").
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub live: Vec<VoiceLiveShown>,
+    /// SQOL-O: the player's live shares change here now (the service's `share.edit` in a room that
+    /// takes it): "Duraklat" and "Sürdür" may show. Absent: only "Paylaşımı durdur".
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub edit: bool,
 }
 
 impl VoiceShareShown {
@@ -2030,10 +2080,35 @@ pub struct VoiceMyShareShown {
     /// the first. `voice-thumb` answers the player's own from the launcher.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub th: Option<i64>,
+    /// SQOL-O: what its watchers see while it is not live: `hold` (a blank picture, "Duraklatıldı")
+    /// or `min` (the shared window is minimized); absent while live.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub st: Option<&'static str>,
+    /// SQOL-O: why it holds a blank picture: `paused` (the player's "Duraklat"; "Sürdür" brings it
+    /// back), `closed` (the shared window or screen went) or `game-closed`; absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hold: Option<&'static str>,
 }
 
 fn is_zero(value: &u16) -> bool {
     *value == 0
+}
+
+fn is_zero_u32(value: &u32) -> bool {
+    *value == 0
+}
+
+/// SQOL-O: the voice room's own chat as the game shows it (`room-chat`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct RoomChatShown {
+    /// Its conversation (`v:<room>`) while the panel shows it as the "Oda" chip; absent while there
+    /// is none (no room, a room without its chat, or a friend's direct messages stand in for it:
+    /// the contract's "Hangi sohbet").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conv: Option<String>,
+    /// Others' messages since the chip was last on screen (the chip's count, a card's count).
+    #[serde(skip_serializing_if = "is_zero_u32")]
+    pub unread: u32,
 }
 
 /// Someone else's share in the room (OVL-SHARE).
@@ -2051,6 +2126,10 @@ pub struct VoiceLiveShown {
     /// newer one than the card's asks `voice-thumb` again.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub th: Option<i64>,
+    /// SQOL-O: `hold` (its sharer paused it: a blank picture) or `min` (the shared window is
+    /// minimized); absent while live (and from a room before SQOL).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub st: Option<&'static str>,
 }
 
 fn is_good(quality: &pl_voice::view::VoiceQuality) -> bool {
