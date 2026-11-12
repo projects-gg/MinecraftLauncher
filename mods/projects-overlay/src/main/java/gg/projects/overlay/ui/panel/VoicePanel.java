@@ -61,7 +61,11 @@ final class VoicePanel {
     /** OVL-SHARE: "Oyunu paylaş", and "Paylaşımı durdur" on each of the player's shares. */
     final ActionButton shareGame;
     final ActionButton[] shareStops = new ActionButton[SHARE_ROWS];
+    /** SQOL-O: "Duraklat" / "Sürdür" on each of the player's shares (while the launcher takes live changes). */
+    final ActionButton[] shareHolds = new ActionButton[SHARE_ROWS];
     private final int[] shareN = new int[SHARE_ROWS];
+    /** SQOL-O: what each row's "Duraklat" / "Sürdür" asks for ({@code true}: pause). */
+    private final boolean[] holdOn = new boolean[SHARE_ROWS];
 
     private int seenRevision = -1;
     private int seenSpeaking = -1;
@@ -128,7 +132,16 @@ final class VoicePanel {
             // Quiet like the bar's "Ayrıl": a share stops at once and starts again with one press.
             shareStops[i] = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("share.stop"), null,
                 () -> overlay.voiceShareStop(shareN[index]));
+            // SQOL-O: as quiet: a pause hides the picture at once and "Sürdür" brings it back with one press.
+            shareHolds[i] = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("share.pause"), null,
+                () -> hold(index));
         }
+    }
+
+    /** SQOL-O: "Duraklat" or "Sürdür" on a row: once, until the next state (or a note) says how it went. */
+    private void hold(int index) {
+        shareHolds[index].active = false;
+        overlay.voiceShareHold(shareN[index], holdOn[index]);
     }
 
     /** "Oyunu paylaş": once; the next state (the share starting) or a note says how it went. */
@@ -143,8 +156,8 @@ final class VoicePanel {
 
     /** Every control, for the screen to add (the ring's answers first: they are what the player came for). */
     AbstractWidget[] widgets() {
-        return new AbstractWidget[] {ringJoin, ringDecline, strip, mic, deaf, leave, list, shareGame, shareStops[0],
-            shareStops[1], shareStops[2], pageMic, pageDeaf, pageLeave};
+        return new AbstractWidget[] {ringJoin, ringDecline, strip, mic, deaf, leave, list, shareGame, shareHolds[0],
+            shareStops[0], shareHolds[1], shareStops[1], shareHolds[2], shareStops[2], pageMic, pageDeaf, pageLeave};
     }
 
     /** Nothing of voice chat on the panel until the next layout places it (no card or page draws where it stood). */
@@ -447,9 +460,26 @@ final class VoicePanel {
     }
 
     /**
+     * SQOL-O: whether a share's row offers "Duraklat" / "Sürdür": the launcher takes live changes, the room took the
+     * share, and it is live or the player paused it (a closed window's share waits for the launcher's own choices).
+     */
+    private static boolean holdable(VoiceState v, VoiceState.MyShare share) {
+        return v.shareEdit() && share.live() && (share.hold().isEmpty() || share.paused());
+    }
+
+    /** A share row's height: its words, and (SQOL-O) a line of its own for "Duraklat" and "Paylaşımı durdur". */
+    private static int shareRowHeight(VoiceState v, VoiceState.MyShare share) {
+        return holdable(v, share) ? SHARE_ROW + ActionButton.HEIGHT + 4 : SHARE_ROW;
+    }
+
+    /**
      * OVL-SHARE: the player's shares and "Oyunu paylaş" above the page's bar, up from {@code bottom}: each share's row
      * (what it shows, "Başlıyor…" or who watches, "Paylaşımı durdur"), then "Oyunu paylaş" while it shows (dim with one
      * quiet line saying why). Returns where the list above them ends.
+     *
+     * <p>SQOL-O: a share the launcher takes live changes for shows "Duraklat" ("Sürdür" while paused) beside "Paylaşımı
+     * durdur" on a line of its own under its words (the narrow panel keeps both words whole); its words say how its
+     * watchers see it ("Duraklatıldı", "Pencere küçültüldü", "Paylaştığın pencere kapandı", "Oyun kapandı").
      */
     private int layoutShare(int x, int width, int bottom) {
         shareLines.clear();
@@ -468,30 +498,58 @@ final class VoicePanel {
             default -> Texts.str("share.note.off");
         };
         boolean dim = game.equals("off");
-        int height = rows * SHARE_ROW + (game.isEmpty() ? 0 : ActionButton.HEIGHT + 4 + (dim ? 12 : 0));
+        int height = game.isEmpty() ? 0 : ActionButton.HEIGHT + 4 + (dim ? 12 : 0);
+        for (int i = 0; i < rows; i++) {
+            height += shareRowHeight(v, mine.get(i));
+        }
         int y = bottom - height;
         int top = y;
+        boolean online = overlay.state().online();
         for (int i = 0; i < rows; i++) {
             VoiceState.MyShare share = mine.get(i);
             shareN[i] = share.n();
             ActionButton stop = shareStops[i];
             int sw = stop.preferredWidth();
             stop.visible = true;
-            stop.active = overlay.state().online();
-            PanelWidget.place(stop, x + width - sw, y + (SHARE_ROW - ActionButton.HEIGHT) / 2, sw,
-                ActionButton.HEIGHT);
-            int textW = Math.max(30, width - sw - 8 - 14);
+            stop.active = online;
+            boolean holdable = holdable(v, share);
+            int textW;
+            if (holdable) {
+                // Its buttons on a line of their own, at the row's right: "Duraklat" ("Sürdür"), "Paylaşımı durdur".
+                ActionButton hold = shareHolds[i];
+                boolean pause = !share.paused();
+                holdOn[i] = pause;
+                hold.setMessage(Texts.tr(pause ? "share.pause" : "share.resume"));
+                hold.visible = true;
+                // A press holds it until the panel is laid out again (the next state, or a note, says how it went).
+                hold.active = online;
+                int hw = hold.preferredWidth();
+                int by = y + SHARE_ROW;
+                PanelWidget.place(stop, x + width - sw, by, sw, ActionButton.HEIGHT);
+                PanelWidget.place(hold, x + width - sw - 4 - hw, by, hw, ActionButton.HEIGHT);
+                textW = Math.max(30, width - 14);
+            } else {
+                PanelWidget.place(stop, x + width - sw, y + (SHARE_ROW - ActionButton.HEIGHT) / 2, sw,
+                    ActionButton.HEIGHT);
+                textW = Math.max(30, width - sw - 8 - 14);
+            }
             String title = Texts.str(switch (share.kind()) {
                 case "game" -> "share.mine.game";
                 case "screen" -> "share.mine.screen";
                 default -> "share.mine.window";
             });
             String sub = !share.live() ? Texts.str("share.starting")
+                : share.paused() ? Texts.str("share.st.hold")
+                : share.hold().equals("closed") ? Texts.str("share.hold.closed")
+                : share.hold().equals("game-closed") ? Texts.str("share.hold.game_closed")
+                : share.st().equals("min") ? Texts.str("share.st.min")
                 : share.watchers() > 0 ? Texts.str("share.watchers", share.watchers())
                 : Texts.str("share.resting");
+            // The jade sign only while its watchers see it live.
+            boolean seen = share.live() && share.st().isEmpty();
             shareLines.add(new ShareLine(Texts.visual(Texts.fit(Fonts.ui(), title, textW)),
-                Texts.visual(Texts.fit(small, sub, textW)), share.live(), y));
-            y += SHARE_ROW;
+                Texts.visual(Texts.fit(small, sub, textW)), seen, y));
+            y += shareRowHeight(v, share);
         }
         if (!game.isEmpty()) {
             y += 2;
@@ -526,6 +584,9 @@ final class VoicePanel {
             Draw.text(g, Fonts.ui(), line.title, pageX + 14, Fonts.centeredY(Fonts.Face.UI, line.y + 7f), Theme.BONE_100);
             Draw.text(g, Fonts.small(), line.sub, pageX + 14, Fonts.centeredY(Fonts.Face.SMALL, line.y + 18f),
                 Theme.ASH_300);
+        }
+        for (ActionButton hold : shareHolds) {
+            render(g, hold, mouseX, mouseY);
         }
         for (ActionButton stop : shareStops) {
             render(g, stop, mouseX, mouseY);

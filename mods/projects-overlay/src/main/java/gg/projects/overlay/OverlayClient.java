@@ -1450,6 +1450,28 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         press("delete", Long.toString(sid), "", conversation, null, Protocol.delete(conversation, sid));
     }
 
+    // ---- SQOL-O: the voice room's own chat ---------------------------------------------------------------------
+
+    /** "Sil" on the player's own message in the voice room's chat (it comes back as a quiet mark). */
+    public void deleteRoomMessage(String conversation, String id) {
+        press("room-delete", id, "", conversation, null, Protocol.roomDelete(conversation, id));
+    }
+
+    /** "Rapor Et" on someone else's message in the voice room's chat; the chat's line says how it went. */
+    public void reportRoomMessage(String conversation, String id, String reason, String note) {
+        press("room-report", id, "", conversation, "reported", Protocol.roomReport(conversation, id, reason, note));
+    }
+
+    /** "Kopyala": a message's words to the clipboard, and a short note that they went. */
+    public void copyMessage(OverlayState.ChatLine line) {
+        if (line == null || line.deleted || line.sticker != null || line.text == null || line.text.isBlank()) {
+            return;
+        }
+        Minecraft.getInstance().keyboardHandler.setClipboard(line.text);
+        state.personNote("copied", "", false, System.currentTimeMillis());
+        refreshScreen();
+    }
+
     /** One of the launcher's notification switches, from the overlay's settings. */
     public void setNotify(String key, boolean on) {
         state.setPref(key, on);
@@ -1523,8 +1545,9 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             lastToastPage = t.conversation() != null ? OverlayScreen.Page.CHATS : OverlayScreen.Page.FRIENDS;
             lastToastPageAt = System.currentTimeMillis();
         }
+        // SQOL-O: a card of the voice room's chat counts what waits there (the launcher gathered them for four seconds).
         toasts.show(t, conv != null && conv.crew(), panel == null ? null : panel.openConversation(), panel != null,
-            settings.get(), key.keyName(), hintLine(), reducedMotion());
+            settings.get(), key.keyName(), hintLine(), reducedMotion(), state.roomUnread(t.conversation()));
     }
 
     // ---- Voice chat (VOICE-O) -------------------------------------------------------------------------------
@@ -1554,6 +1577,9 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             String name = voiceNames.getOrDefault(result.who(), "");
             if (result.ok() && result.act().equals("kick")) {
                 voiceNote(Texts.str("voice.person.kicked", VoiceState.shown(name, VoiceWords.WORDS)), false);
+            } else if (!result.ok() && result.act().equals("share-hold")) {
+                // SQOL-O: "Duraklat" / "Sürdür" did not go (the share is still starting, or its source closed).
+                voiceNote(Texts.str(holdAsked ? "share.note.pause_failed" : "share.note.resume_failed"), true);
             } else if (!result.ok()) {
                 String text = VoiceWords.refusal(result.reason(), name);
                 if (text != null) {
@@ -1649,6 +1675,15 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     public void voiceShareStop(int n) {
         voiceSend(Protocol.voiceShareStop(n));
     }
+
+    /** SQOL-O: "Duraklat" ({@code on}) or "Sürdür" on the player's share {@code n}; a refusal is said as a note. */
+    public void voiceShareHold(int n, boolean on) {
+        holdAsked = on;
+        voiceSend(Protocol.voiceShareHold(n, on));
+    }
+
+    /** SQOL-O: the last "Duraklat" ({@code true}) or "Sürdür" pressed, for the words of a refusal. */
+    private boolean holdAsked;
 
     /**
      * SHARE-LIVE: the live card on {@code u}'s "YAYINDA" opened: the launcher answers {@code voice-thumb}. Quiet when the

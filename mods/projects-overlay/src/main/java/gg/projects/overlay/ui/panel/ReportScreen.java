@@ -31,6 +31,9 @@ import net.minecraft.util.FormattedCharSequence;
  * nobody is told who reported, the player's reasons as a radio list (arrows move the pick, as the launcher's), a note
  * for moderators (200 characters), "Ayrıca engelle" and "Vazgeç" · "Gönder" ("Gönder" waits for a reason). Over the
  * panel, which stays where it was; Esc goes back to it. The launcher sends it; the panel says how it went.
+ *
+ * <p>SQOL-O: the same dialog for a message in the voice room's chat ({@link #forMessage}): a message's reasons (the
+ * launcher's), no "Ayrıca engelle".
  */
 public final class ReportScreen extends Screen {
     private static final int WIDTH = 236;
@@ -40,10 +43,19 @@ public final class ReportScreen extends Screen {
     private static final int FIELD_H = 18;
     private static final int CHECK_H = 12;
 
+    /** SQOL-O: where a message's report goes (its reason and the note). */
+    public interface MessageSender {
+        void send(String reason, String note);
+    }
+
     private final OverlayScreen panel;
     private final String friendId;
     private final String friendName;
     private final OverlayState.Badge badge;
+    /** The reasons offered, as the wire names them. */
+    private final List<String> reasonKeys;
+    /** SQOL-O: a message's report (none: a player's, with "Ayrıca engelle"). */
+    private final MessageSender messageSender;
     private ReasonList reasons;
     private ComposerField note;
     private CheckRow block;
@@ -62,11 +74,26 @@ public final class ReportScreen extends Screen {
     private String reason;
 
     public ReportScreen(OverlayScreen panel, String friendId, String friendName, OverlayState.Badge badge) {
+        this(panel, friendId, friendName, badge, Protocol.REPORT_REASONS, null);
+    }
+
+    private ReportScreen(OverlayScreen panel, String friendId, String friendName, OverlayState.Badge badge,
+        List<String> reasonKeys, MessageSender messageSender) {
         super(Texts.tr("report.title"));
         this.panel = panel;
         this.friendId = friendId;
         this.friendName = friendName == null || friendName.isEmpty() ? Texts.str("toast.someone") : friendName;
         this.badge = badge;
+        this.reasonKeys = reasonKeys;
+        this.messageSender = messageSender;
+    }
+
+    /**
+     * SQOL-O: "Rapor Et" on someone else's message in the voice room's chat ({@code sender} its sender's name): a
+     * message's reasons, a note, no "Ayrıca engelle"; "Gönder" hands them to {@code onSend}.
+     */
+    public static ReportScreen forMessage(OverlayScreen panel, String sender, MessageSender onSend) {
+        return new ReportScreen(panel, null, sender, null, Protocol.MESSAGE_REPORT_REASONS, onSend);
     }
 
     /** The panel this dialog stands over (it draws it behind). */
@@ -88,18 +115,20 @@ public final class ReportScreen extends Screen {
         nameLine = Texts.visual(fitted);
         privacy = Texts.wrap(small, Texts.str("report.private"), textW, 2);
         help = Texts.str("report.note.help");
-        int reasonsH = Protocol.REPORT_REASONS.size() * (REASON_H + REASON_GAP) - REASON_GAP;
-        cardH = PAD + 14 + 3 + privacy.size() * 9 + 8 + reasonsH + 6 + FIELD_H + 2 + 9 + 6 + CHECK_H + 9
+        int reasonsH = reasonKeys.size() * (REASON_H + REASON_GAP) - REASON_GAP;
+        // SQOL-O: a message's report has no "Ayrıca engelle" row.
+        boolean withBlock = messageSender == null;
+        cardH = PAD + 14 + 3 + privacy.size() * 9 + 8 + reasonsH + 6 + FIELD_H + 2 + 9 + (withBlock ? 6 + CHECK_H : 0) + 9
             + ActionButton.HEIGHT + PAD;
         cardX = cardX(width);
         cardY = Math.max(4, (height - cardH) / 2);
         int y = cardY + PAD + 14 + 3 + privacy.size() * 9 + 8;
         if (reasons == null) {
-            reasons = new ReasonList(this::picked);
+            reasons = new ReasonList(reasonKeys, this::picked);
             note = new ComposerField(Texts.tr("report.note"));
             note.setMaxLength(Protocol.MAX_REPORT_NOTE_CHARS);
             note.setPlaceholder(Texts.tr("report.note"));
-            block = new CheckRow(Texts.tr("report.block"));
+            block = withBlock ? new CheckRow(Texts.tr("report.block")) : null;
             cancel = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("people.cancel"), null, this::onClose);
             send = new ActionButton(ActionButton.Style.PRIMARY, Texts.tr("report.send"), null, this::sendReport);
         }
@@ -108,7 +137,9 @@ public final class ReportScreen extends Screen {
         noteY = y;
         PanelWidget.place(note, cardX + PAD + 7, y + (FIELD_H - 12) / 2, textW - 14, 12);
         y += FIELD_H + 2 + 9 + 6;
-        PanelWidget.place(block, cardX + PAD, y, Math.min(textW, block.preferredWidth()), CHECK_H);
+        if (block != null) {
+            PanelWidget.place(block, cardX + PAD, y, Math.min(textW, block.preferredWidth()), CHECK_H);
+        }
         int bw = Math.max(send.preferredWidth(), cancel.preferredWidth());
         int by = cardY + cardH - PAD - ActionButton.HEIGHT;
         PanelWidget.place(send, cardX + WIDTH - PAD - bw, by, bw, ActionButton.HEIGHT);
@@ -116,7 +147,9 @@ public final class ReportScreen extends Screen {
         send.active = reason != null;
         addWidget(reasons);
         addWidget(note);
-        addWidget(block);
+        if (block != null) {
+            addWidget(block);
+        }
         addWidget(cancel);
         addWidget(send);
         setInitialFocus(reasons);
@@ -131,14 +164,14 @@ public final class ReportScreen extends Screen {
 
     /** Picks a reason, writes a note and ticks "Ayrıca engelle" as the player would (the scenario driver). */
     public void fillForDriver(String reasonKey, String noteText, boolean alsoBlock) {
-        int i = Protocol.REPORT_REASONS.indexOf(reasonKey);
+        int i = reasonKeys.indexOf(reasonKey);
         if (i >= 0) {
             reasons.pick(i);
         }
         if (noteText != null) {
             note.setValue(noteText);
         }
-        if (alsoBlock != block.checked()) {
+        if (block != null && alsoBlock != block.checked()) {
             block.toggle();
         }
     }
@@ -161,9 +194,13 @@ public final class ReportScreen extends Screen {
         if (reason == null) {
             return;
         }
-        OverlayClient overlay = OverlayClient.get();
-        if (overlay != null) {
-            overlay.report(friendId, reason, note.getValue(), block.checked());
+        if (messageSender != null) {
+            messageSender.send(reason, note.getValue());
+        } else {
+            OverlayClient overlay = OverlayClient.get();
+            if (overlay != null) {
+                overlay.report(friendId, reason, note.getValue(), block != null && block.checked());
+            }
         }
         onClose();
     }
@@ -241,7 +278,9 @@ public final class ReportScreen extends Screen {
             Draw.text(g, small, count, cardX + WIDTH - PAD - small.width(count), Fonts.centeredY(Fonts.Face.SMALL,
                 hy + 4.5f), length >= Protocol.MAX_REPORT_NOTE_CHARS ? Theme.FLARE_300 : Theme.ASH_400);
         }
-        block.extractRenderState(g, mouseX, my, partialTick);
+        if (block != null) {
+            block.extractRenderState(g, mouseX, my, partialTick);
+        }
         cancel.extractRenderState(g, mouseX, my, partialTick);
         send.extractRenderState(g, mouseX, my, partialTick);
         g.pose().popMatrix();
@@ -262,6 +301,8 @@ public final class ReportScreen extends Screen {
         /** How far a row's fill reaches past the radio on each side. */
         private static final int BLEED = 4;
         private final java.util.function.Consumer<String> onPick;
+        /** The reasons as the wire names them (a player's, or SQOL-O: a message's). */
+        private final List<String> keys;
         private final List<FormattedCharSequence> labels = new ArrayList<>();
         private final List<String> words = new ArrayList<>();
         private int picked = -1;
@@ -269,14 +310,15 @@ public final class ReportScreen extends Screen {
         private int cursor;
         private final Tween[] lit;
 
-        ReasonList(java.util.function.Consumer<String> onPick) {
+        ReasonList(List<String> keys, java.util.function.Consumer<String> onPick) {
             super(0, 0, 100, 100, Texts.tr("report.reasons"));
+            this.keys = keys;
             this.onPick = onPick;
-            lit = new Tween[Protocol.REPORT_REASONS.size()];
+            lit = new Tween[keys.size()];
             for (int i = 0; i < lit.length; i++) {
                 lit[i] = new Tween(0f);
             }
-            for (String reason : Protocol.REPORT_REASONS) {
+            for (String reason : keys) {
                 String text = Texts.str("report.reason." + reason);
                 words.add(text);
                 labels.add(Texts.visual(text));
@@ -295,7 +337,7 @@ public final class ReportScreen extends Screen {
             picked = i;
             cursor = i;
             pressed();
-            onPick.accept(Protocol.REPORT_REASONS.get(i));
+            onPick.accept(keys.get(i));
         }
 
         @Override

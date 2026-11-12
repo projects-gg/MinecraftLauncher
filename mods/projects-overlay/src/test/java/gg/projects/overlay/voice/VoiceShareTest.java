@@ -34,7 +34,8 @@ class VoiceShareTest {
              "mine":[{"n":2,"kind":"window","live":true,"watchers":3},{"n":0,"kind":"game"}],
              "live":[{"person":"u-kaan","kind":"game"},{"kind":"screen"}]}"""));
         assertEquals("ready", state.shareGame());
-        assertEquals(List.of(new VoiceState.MyShare(2, "window", true, 3)), state.myShares(), "no share without n");
+        assertEquals(List.of(new VoiceState.MyShare(2, "window", true, 3, "", "")), state.myShares(),
+            "no share without n");
         assertTrue(state.live());
         assertEquals(3, state.watchers());
         assertTrue(state.sharing("u-kaan"));
@@ -55,6 +56,24 @@ class VoiceShareTest {
         state.clear();
         assertTrue(state.myShares().isEmpty());
         assertEquals("", state.shareGame());
+    }
+
+    @Test
+    void aPausedOrMinimizedShareSaysSoAndPausingIsTheLaunchers() {
+        // SQOL-O: the player's share paused, someone else's window minimized, live changes allowed.
+        assertTrue(apply("""
+            {"t":"voice-share","edit":true,
+             "mine":[{"n":1,"kind":"game","live":true,"st":"hold","hold":"paused"}],
+             "live":[{"person":"u-kaan","n":1,"kind":"window","st":"min"},{"person":"u-ece","kind":"game","st":"x"}]}"""));
+        VoiceState.MyShare mine = state.myShares().get(0);
+        assertTrue(state.shareEdit() && mine.paused());
+        assertEquals("hold", mine.st());
+        assertTrue(state.liveShare("u-kaan").minimized() && !state.liveShare("u-kaan").held());
+        assertEquals("", state.liveShare("u-ece").st(), "a state this build does not know is live");
+        // An older launcher says none of it: no "Duraklat", everything live.
+        apply("{\"t\":\"voice-share\",\"mine\":[{\"n\":1,\"kind\":\"game\",\"live\":true}]}");
+        assertFalse(state.shareEdit() || state.myShares().get(0).paused());
+        assertEquals("{\"t\":\"voice-share-hold\",\"n\":1,\"on\":true}", Protocol.voiceShareHold(1, true).toString());
     }
 
     @Test

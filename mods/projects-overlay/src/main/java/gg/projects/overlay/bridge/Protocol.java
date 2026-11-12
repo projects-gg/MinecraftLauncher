@@ -101,6 +101,7 @@ public final class Protocol {
             features.add(CARDS2);
             features.add(MATES);
             features.add(SHARE);
+            features.add(RCHAT);
         }
         features.add(LANG);
         features.add(EMOJI);
@@ -540,6 +541,58 @@ public final class Protocol {
     public static JsonObject voiceShareStop(int n) {
         JsonObject o = message("voice-share-stop");
         o.addProperty("n", n);
+        return o;
+    }
+
+    /**
+     * SQOL-O: "Duraklat" ({@code on}) or "Sürdür" on one of the player's shares, only while {@code voice-share} says
+     * {@code edit}; the launcher answers {@code voice-result} ({@code share-hold}).
+     */
+    public static JsonObject voiceShareHold(int n, boolean on) {
+        JsonObject o = message("voice-share-hold");
+        o.addProperty("n", n);
+        o.addProperty("on", on);
+        return o;
+    }
+
+    // ---- The voice room's own chat (SQOL-O, rows SQ of docs/tasks/ovl2-protocol.md) ----------------------------
+
+    /**
+     * SQOL-O: the hello feature of a mod that shows the voice room's own chat beside {@link #VOICE} (the "Oda" chip): it
+     * hears {@code room-chat} and the room chat's {@code msg}, {@code history} and cards, and sends {@code send} in its
+     * conversation, {@link #roomDelete} and {@link #roomReport}.
+     */
+    public static final String RCHAT = "rchat";
+    /** A voice room chat's conversation starts with this (and the room's id follows). */
+    public static final String ROOM_PREFIX = "v:";
+    /** Report reasons a message takes (the launcher's {@code REPORT_REASONS.message}). */
+    public static final List<String> MESSAGE_REPORT_REASONS = List.of("harassment", "inappropriate", "spam", "scam",
+        "other");
+
+    /** Whether {@code conversation} is a voice room's own chat ({@code v:<room>}). */
+    public static boolean roomConversation(String conversation) {
+        return conversation != null && conversation.length() > ROOM_PREFIX.length()
+            && conversation.startsWith(ROOM_PREFIX);
+    }
+
+    /** "Sil" on the player's own message in the room's chat ({@code id} as its {@code msg} named it). */
+    public static JsonObject roomDelete(String conversation, String id) {
+        JsonObject o = message("room-delete");
+        o.addProperty("conv", conversation);
+        o.addProperty("id", id);
+        return o;
+    }
+
+    /** "Rapor Et" on someone else's message in the room's chat: one of {@link #MESSAGE_REPORT_REASONS}, maybe a note. */
+    public static JsonObject roomReport(String conversation, String id, String reason, String note) {
+        JsonObject o = message("room-report");
+        o.addProperty("conv", conversation);
+        o.addProperty("id", id);
+        o.addProperty("reason", reason);
+        String clean = plain(note, MAX_REPORT_NOTE_CHARS);
+        if (!clean.isEmpty()) {
+            o.addProperty("note", clean);
+        }
         return o;
     }
 
