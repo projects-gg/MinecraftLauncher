@@ -418,10 +418,10 @@ export function VoiceSettingsSection() {
   const volumeMax = useVoiceUi((s) => s.state.volumeMax ?? 200);
   // OVL-NEXT: in a push-to-talk-only room the push-to-talk key matters in "Konuşunca" too.
   const pttRoom = useVoiceUi((s) => s.state.room?.ptt === true);
-  // SHARE: "Ekran paylaşımı" only while the service offers sharing and this computer can share.
-  const shareOffered = useVoiceUi((s) =>
-    Boolean(s.state.share?.service && s.state.share?.canShare),
-  );
+  // SHARE: "Ekran paylaşımı" only while the service offers sharing; its sharing choices only where
+  // this computer can share (SQOL-U1: the watching ones everywhere).
+  const shareOffered = useVoiceUi((s) => Boolean(s.state.share?.service));
+  const canShare = useVoiceUi((s) => Boolean(s.state.share?.canShare));
 
   // The engine runs for the devices and the level only while the page is open; a test the player
   // left running ends with it.
@@ -560,7 +560,11 @@ export function VoiceSettingsSection() {
               <Advanced settings={settings} change={change} />
               {/* SHARE: "Ekran paylaşımı", what a new share starts with (only while offered). */}
               {shareOffered ? (
-                <ShareSettingsRows value={settings.share} onChange={(share) => change({ share })} />
+                <ShareSettingsRows
+                  value={settings.share}
+                  onChange={(share) => change({ share })}
+                  canShare={canShare}
+                />
               ) : null}
             </motion.div>
           </motion.div>

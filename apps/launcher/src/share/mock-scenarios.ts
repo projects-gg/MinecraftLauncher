@@ -26,7 +26,10 @@
 // - `shareCrewLiveFull`: the same room full (4/4): the card is locked ("Oda dolu.");
 // - `shareFriendsLive`: the friends list, GeceKurdu_ live in "Taş Ocağı", ElmasKazma in a call of
 //   their own (locked).
+//
+// SQOL-U1 (the stream viewer): `shareView…` scenarios live in mock-view.ts.
 import type { VoiceCrewRooms, VoiceState } from "@/lib/api/voice-types";
+import { viewScenario } from "./mock-view";
 import type { ShareSources, ShareThumb, VoiceLiveShare, VoiceShareView } from "./types";
 
 const ME = "100";
@@ -234,7 +237,7 @@ export function shareViewFor(scenario: string): VoiceShareView | null {
     case "shareFriendsLive":
       return { ...VIEW, on: false };
     default:
-      return null;
+      return viewScenario(scenario);
   }
 }
 
