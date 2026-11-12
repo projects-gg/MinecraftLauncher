@@ -62,7 +62,7 @@ impl Default for LoginCommandsSettings {
         Self {
             enabled: false,
             only_first_login: false,
-            delay_seconds: 2.0,
+            delay_seconds: 5.0,
             commands: Vec::new(),
         }
     }
@@ -323,7 +323,7 @@ impl AccountSettings {
             login_commands: LoginCommandsSettings {
                 enabled: account.login_commands.enabled,
                 only_first_login: account.login_commands.only_first_login,
-                delay_seconds: clamp_f64(account.login_commands.delay_seconds, 0.0, 60.0, 2.0),
+                delay_seconds: clamp_f64(account.login_commands.delay_seconds, 0.0, 60.0, 5.0),
                 commands: login_commands.to_vec(),
             },
             scheduler: account.scheduler.clone(),
@@ -429,7 +429,7 @@ impl AccountSettings {
         let login = &mut account.login_commands;
         login.enabled = self.login_commands.enabled;
         login.only_first_login = self.login_commands.only_first_login;
-        login.delay_seconds = clamp_f64(self.login_commands.delay_seconds, 0.0, 60.0, 2.0);
+        login.delay_seconds = clamp_f64(self.login_commands.delay_seconds, 0.0, 60.0, 5.0);
 
         let source = &self.anti_afk;
         let (delay_min, delay_max) = ordered(
@@ -619,7 +619,7 @@ mod tests {
         assert_eq!(account.anti_afk.walk_range, 32);
         assert_eq!(account.auto_eat.threshold, 0);
         assert_eq!(account.server_port, 65535);
-        assert_eq!(account.login_commands.delay_seconds, 2.0);
+        assert_eq!(account.login_commands.delay_seconds, 5.0);
         assert_eq!(account.server_host, "mc.example.org");
         assert_eq!(account.minecraft_version, "auto");
         let task = &account.scheduler.tasks[0];

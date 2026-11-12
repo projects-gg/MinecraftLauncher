@@ -366,7 +366,7 @@ impl Default for LoginCommandsOptions {
         Self {
             enabled: false,
             only_first_login: false,
-            delay_seconds: 2.0,
+            delay_seconds: 5.0,
         }
     }
 }

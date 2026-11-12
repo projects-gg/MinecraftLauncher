@@ -305,7 +305,7 @@ const defaultPage = (): SettingsPage => ({
   minecraftVersion: "26.3",
   autoStart: false,
   allowResourcePacks: false,
-  loginCommands: { enabled: false, onlyFirstLogin: false, delaySeconds: 2, commands: [] },
+  loginCommands: { enabled: false, onlyFirstLogin: false, delaySeconds: 5, commands: [] },
   scheduler: { enabled: false, tasks: [] },
   antiAfk: {
     enabled: true,
@@ -345,7 +345,7 @@ const stored = new Map<string, SettingsPage>([
     {
       ...defaultPage(),
       autoStart: true,
-      loginCommands: { enabled: true, onlyFirstLogin: false, delaySeconds: 2, commands: [] },
+      loginCommands: { enabled: true, onlyFirstLogin: false, delaySeconds: 5, commands: [] },
       scheduler: {
         enabled: true,
         tasks: [
@@ -415,7 +415,7 @@ const stored = new Map<string, SettingsPage>([
       loginCommands: {
         enabled: startOnPassword(),
         onlyFirstLogin: false,
-        delaySeconds: 2,
+        delaySeconds: 5,
         commands: [],
       },
       autoRelog: {
