@@ -62,6 +62,7 @@ import { enReports } from "./en-reports";
 import { enSafety } from "./en-safety";
 import { enSetup } from "./en-setup";
 import { enShare } from "./en-share";
+import { enShareView } from "./en-share-view";
 import { enShortcuts } from "./en-shortcuts";
 import { enShotCopy } from "./en-shot-copy";
 import { enSmall7 } from "./en-small7";
@@ -370,6 +371,7 @@ export const en: DeepPartial<Strings> = {
   stars: enStars,
   voice: enVoice,
   share: enShare,
+  shareView: enShareView,
   socNext: enSocNext,
   socNote: enSocNote,
   telemetry: enTelemetry,
