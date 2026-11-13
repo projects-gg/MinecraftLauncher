@@ -26,8 +26,29 @@
 // - `shareCrewLiveFull`: the same room full (4/4): the card is locked ("Oda dolu.");
 // - `shareFriendsLive`: the friends list, GeceKurdu_ live in "Taş Ocağı", ElmasKazma in a call of
 //   their own (locked).
+//
+// SQOL (the player's own live share, sqol-r.md "API"; every scenario's service lets a live share
+// change unless it says otherwise):
+// - `shareEdit`: the player shares a window at "Yüksek" without sound, three watch;
+// - `sharePaused`: the player paused their game ("Duraklatıldı", "Sürdür");
+// - `shareMin`: the game's window is minimised ("Pencere küçültüldü.");
+// - `shareLost`: the shared window closed ("Paylaştığın pencere kapandı.", a minute to pick another);
+// - `shareLostGame`: the game closed ("Oyun kapandı.");
+// - `shareSoftware`: no hardware encoder on this computer ("Yüksek" off: "Bu bilgisayarda en çok
+//   Normal.");
+// - `shareCapped`: the service allows at most "Normal" now ("Bu kalite şu an kapalı.");
+// - `shareNoEdit`: an older service: a live share only stops;
+// - `shareSwitchFail`: "Ekranı Değiştir" fails ("Bu pencere paylaşılamadı.", the game goes on).
+// `edit=refuse` refuses every raise (a quality, a frame rate, the sound) to show the rollback.
 import type { VoiceCrewRooms, VoiceState } from "@/lib/api/voice-types";
-import type { ShareSources, ShareThumb, VoiceLiveShare, VoiceShareView } from "./types";
+import type {
+  ShareSources,
+  ShareStats,
+  ShareThumb,
+  VoiceLiveShare,
+  VoiceMyShare,
+  VoiceShareView,
+} from "./types";
 
 const ME = "100";
 const nowSec = () => Math.floor(Date.now() / 1000);
@@ -90,7 +111,31 @@ const VIEW: VoiceShareView = {
   stillAsking: false,
   volumes: {},
   names: NAMES,
+  edit: true,
+  hwMax: "high",
 };
+
+/** The player's game, live, as the SQOL scenarios start from. */
+const ownGame = (patch: Partial<VoiceMyShare> = {}): VoiceMyShare => ({
+  n: 1,
+  kind: "game",
+  label: "",
+  phase: "live",
+  audio: true,
+  preset: "normal",
+  fps: 30,
+  watchers: ["301", "909"],
+  since: nowSec() - 754,
+  th: nowSec() - 9,
+  st: "live",
+  hold: null,
+  holdUntil: null,
+  source: { kind: "game" },
+  motion: "auto",
+  cursor: true,
+  thumbs: true,
+  ...patch,
+});
 
 /** The share part of a `share…` scenario (null: no such scenario). */
 export function shareViewFor(scenario: string): VoiceShareView | null {
@@ -112,6 +157,7 @@ export function shareViewFor(scenario: string): VoiceShareView | null {
             fps: 30,
             watchers: ["301", "909"],
             since,
+            source: { kind: "game" },
           },
         ],
       };
@@ -129,6 +175,7 @@ export function shareViewFor(scenario: string): VoiceShareView | null {
             fps: 30,
             watchers: [],
             since: nowSec(),
+            source: { kind: "game" },
           },
         ],
       };
@@ -146,6 +193,7 @@ export function shareViewFor(scenario: string): VoiceShareView | null {
             fps: 30,
             watchers: [],
             since,
+            source: { kind: "window", id: "0x2a01" },
           },
         ],
       };
@@ -163,6 +211,7 @@ export function shareViewFor(scenario: string): VoiceShareView | null {
             fps: 60,
             watchers: ["301"],
             since,
+            source: { kind: "game" },
           },
           {
             n: 2,
@@ -174,9 +223,59 @@ export function shareViewFor(scenario: string): VoiceShareView | null {
             fps: 30,
             watchers: ["909", "303", "301"],
             since: since + 300,
+            source: { kind: "screen", id: "\\\\.\\DISPLAY2" },
           },
         ],
       };
+    case "shareEdit":
+      return {
+        ...VIEW,
+        mine: [
+          ownGame({
+            kind: "window",
+            label: "Kale planı - Paint",
+            source: { kind: "window", id: "0x2a01" },
+            preset: "high",
+            audio: false,
+            motion: "clarity",
+            watchers: ["301", "909", "303"],
+          }),
+        ],
+      };
+    case "sharePaused":
+      return { ...VIEW, mine: [ownGame({ st: "hold", hold: "paused", watchers: ["301"] })] };
+    case "shareMin":
+      return { ...VIEW, mine: [ownGame({ st: "min" })] };
+    case "shareLost":
+      return {
+        ...VIEW,
+        mine: [
+          ownGame({
+            kind: "window",
+            label: "Redstone notları - Not Defteri",
+            source: { kind: "window", id: "0x2a02" },
+            st: "hold",
+            hold: "closed",
+            holdUntil: nowSec() + 52,
+            watchers: ["301"],
+          }),
+        ],
+      };
+    case "shareLostGame":
+      return {
+        ...VIEW,
+        mine: [
+          ownGame({ st: "hold", hold: "gameClosed", holdUntil: nowSec() + 38, watchers: ["909"] }),
+        ],
+      };
+    case "shareSoftware":
+      return { ...VIEW, hwMax: "normal", mine: [ownGame()] };
+    case "shareSwitchFail":
+      return { ...VIEW, mine: [ownGame()] };
+    case "shareCapped":
+      return { ...VIEW, maxPreset: "normal", mine: [ownGame()] };
+    case "shareNoEdit":
+      return { ...VIEW, edit: false, mine: [ownGame()] };
     case "shareLiveRow":
       return { ...VIEW, live: [live("301", 1, "game", 2)] };
     case "shareLiveRows":
@@ -298,8 +397,8 @@ export function mockThumb(
   const picture: ShareThumb = { kind: "image", dataUrl: mockFrame(user) };
   if (state.room?.id === room) {
     const share = state.share?.live.find((l) => l.person === user);
-    const mine = user === state.room.me.id && (state.share?.mine.length ?? 0) > 0;
-    if (mine) return picture;
+    const mine = user === state.room.me.id ? state.share?.mine[0] : undefined;
+    if (mine) return { kind: "image", dataUrl: mockOwnFrame(mine) };
     return share && share.th != null ? picture : { kind: "none" };
   }
   for (const entry of state.crews) {
@@ -403,5 +502,32 @@ export const MOCK_SOURCES: ShareSources = {
   ],
   audio: true,
 };
+
+// --- SQOL: the player's own share ----------------------------------------------------------------
+
+/** What the player's own share shows in the preview: the picker's picture of its source. */
+export function mockOwnFrame(mine: Pick<VoiceMyShare, "kind" | "label" | "source">): string {
+  const sources = [
+    ...(MOCK_SOURCES.game ? [MOCK_SOURCES.game] : []),
+    ...MOCK_SOURCES.windows,
+    ...MOCK_SOURCES.screens,
+  ];
+  const id = mine.source && "id" in mine.source ? mine.source.id : null;
+  const found =
+    (id !== null ? sources.find((s) => "id" in s.source && s.source.id === id) : undefined) ??
+    sources.find(
+      (s) => s.source.kind === mine.kind && (mine.kind === "game" || s.label === mine.label),
+    );
+  return found?.thumb ?? scene("#6fa3d8", "#3f6b2e", "#f5d76e", 5);
+}
+
+const SIZES = { low: [854, 480], normal: [1280, 720], high: [1920, 1080] } as const;
+const KBPS = { low: 1200, normal: 2500, high: 6000 } as const;
+
+/** What the launcher would say a share sends (`share-stats`). */
+export function mockStats(mine: VoiceMyShare, hw: boolean): ShareStats {
+  const [w, h] = SIZES[mine.preset];
+  return { n: mine.n, w, h, fps: mine.fps, kbps: KBPS[mine.preset], hw };
+}
 
 export { ME as MOCK_ME };
