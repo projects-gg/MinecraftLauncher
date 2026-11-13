@@ -92,6 +92,8 @@ pub fn create(
     let _ = platform.voice.set(voice.clone());
     share::install(app, &voice);
     wire_overlay(&overlay, &voice);
+    // SQOL-O: the game's room chat ("Oda" chip) asks the same voice chat and report path.
+    crate::overlay::wire_room_chat(&overlay, &voice, &social);
     // SHARE-LIVE: the game's hover card gets the same still pictures as the launcher's.
     let (pictures, watching) = (social.clone(), voice.clone());
     overlay.on_thumb(move |room, user, n| -> pl_overlay::ThumbFuture {
@@ -231,6 +233,10 @@ fn wire_overlay(overlay: &pl_overlay::Overlay, voice: &Voice) {
                 voice.share_stop(n);
                 done()
             }
+            // SQOL-O: "Duraklat" / "Sürdür" in the game (the room's own rules decide).
+            VoiceAct::ShareHold { n, on } => Box::pin(std::future::ready(
+                pl_overlay::voice::hold_answer(voice.share_hold(n, on)),
+            )),
         }
     });
 }
@@ -919,7 +925,11 @@ impl Platform for AppPlatform {
 
     // SQOL -----------------------------------------------------------------------------------
     fn voice_chat(&self, event: pl_voice::rchat::VoiceChatEvent) {
-        // The room panel lives in the main window (the in-game overlay's chip comes later).
+        // SQOL-O: the in-game overlay's "Oda" chip hears it too.
+        if let Some(overlay) = self.overlay.get() {
+            overlay.room_chat(&event);
+        }
+        // The room panel lives in the main window.
         let _ = self.app.emit_to("main", CHAT_EVENT, event);
     }
 }

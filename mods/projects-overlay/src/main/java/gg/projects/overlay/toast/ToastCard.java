@@ -453,6 +453,11 @@ public final class ToastCard {
             };
         }
         String crewName = request.crew() == null || request.crew().isEmpty() ? null : request.crew();
+        if (b.kind == Kind.MESSAGE && crewName == null && request.conversation() != null
+            && request.conversation().startsWith(gg.projects.overlay.bridge.Protocol.ROOM_PREFIX)) {
+            // SQOL-O: a message of the voice room's chat says where it was written, under its sender.
+            crewName = Texts.str("room.title");
+        }
         if (b.kind == Kind.MESSAGE && crewName != null) {
             b.crew = Texts.visual(Texts.fit(small, crewName, TEXT_W));
         }

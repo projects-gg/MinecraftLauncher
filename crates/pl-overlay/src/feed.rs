@@ -2087,6 +2087,8 @@ pub fn msg_view(
         },
         ignored: !message.mine && scene.is_ignored(&message.from),
         mention,
+        // SQOL-O: only the voice room's chat says who took a message away.
+        removed: false,
     }
 }
 

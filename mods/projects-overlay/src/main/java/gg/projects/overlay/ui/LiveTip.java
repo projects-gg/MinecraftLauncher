@@ -45,6 +45,12 @@ public final class LiveTip {
         void ask(String room, String u, int n);
     }
 
+    /**
+     * SQOL-O: why a card shows no picture when its sharer paused the stream (its last picture stays hidden, as in the
+     * launcher): the dimmed face and "Yayın duraklatıldı.", no lock.
+     */
+    public static final String HOLD = "hold";
+
     private String person;
     private Face face;
     private String name = "";
@@ -169,6 +175,7 @@ public final class LiveTip {
             String sentence = Texts.str(switch (why) {
                 case "full" -> "share.preview.full";
                 case "private" -> "share.preview.private";
+                case HOLD -> "share.preview.hold";
                 default -> "share.preview.locked";
             });
             for (String line : wrap(Fonts.small(), sentence, width - 12)) {
@@ -242,13 +249,17 @@ public final class LiveTip {
             Draw.popAlpha();
             g.disableScissor();
             if (locked && !lockLines.isEmpty()) {
-                // The lock and its sentence, one block in the middle.
+                // The lock and its sentence, one block in the middle (SQOL-O: a paused stream's sentence alone).
                 int lines = lockLines.size();
-                float blockTop = iy + imageH / 2f - (12 + 4 + lines * 9) / 2f;
-                Draw.icon(g, Icon.LOCK, 12, ix + (imageW - 12) / 2f, blockTop, Theme.BONE_100);
+                boolean lock = !HOLD.equals(lockedHere);
+                int iconH = lock ? 12 + 4 : 0;
+                float blockTop = iy + imageH / 2f - (iconH + lines * 9) / 2f;
+                if (lock) {
+                    Draw.icon(g, Icon.LOCK, 12, ix + (imageW - 12) / 2f, blockTop, Theme.BONE_100);
+                }
                 for (int i = 0; i < lines; i++) {
                     Draw.text(g, Fonts.small(), lockLines.get(i), ix + (imageW - lockWidths.get(i)) / 2f,
-                        Fonts.centeredY(Fonts.Face.SMALL, blockTop + 12 + 4 + i * 9 + 4.5f), Theme.BONE_100);
+                        Fonts.centeredY(Fonts.Face.SMALL, blockTop + iconH + i * 9 + 4.5f), Theme.BONE_100);
                 }
             }
         }

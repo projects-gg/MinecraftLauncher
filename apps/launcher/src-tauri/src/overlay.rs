@@ -78,6 +78,16 @@ static BUNDLE: OnceLock<Option<Bundle>> = OnceLock::new();
 /// its `features.overlayJars` is on (else none): they cover the versions the shipped ones leave out.
 static CONTENT_JARS: Mutex<Vec<ContentJar>> = Mutex::new(Vec::new());
 
+/// SQOL-O: the hub, for the voice shortcuts' watch (its own thread, no app state there).
+static HUB: OnceLock<Overlay> = OnceLock::new();
+
+/// SQOL-O: a text field in a running game has the keyboard now, as its overlay says (the game's
+/// side of `voice_typing`): the voice shortcuts' watch leaves single keys without Ctrl, Alt or Shift
+/// alone meanwhile. A word that is not said again stops counting by itself (`pl_overlay`'s hold).
+pub fn game_typing() -> bool {
+    HUB.get().is_some_and(Overlay::game_typing)
+}
+
 fn bundle() -> Option<&'static Bundle> {
     BUNDLE.get().and_then(Option::as_ref)
 }
@@ -100,6 +110,7 @@ pub fn create(app: &AppHandle, root: &Path) -> Overlay {
         .unwrap_or_default();
     ENABLED.store(config.wants_mod(), Ordering::Relaxed);
     let overlay = Overlay::new(config);
+    let _ = HUB.set(overlay.clone());
     // The overlay's language (OVL-LANG): the one the player picked in its settings, kept here in
     // the data folder for every install and game, else the launcher's own (it follows changes).
     overlay.set_launcher_language(pl_lang::Lang::current());
@@ -773,4 +784,56 @@ pub fn overlay_state(state: State<'_, AppState>) -> OverlayStateView {
         }
         .versions(),
     }
+}
+
+/// SQOL-O: the game's room chat requests ("Oda" chip: send, "Sil", "Rapor Et") go to the same
+/// voice chat and report path as the room panel's commands (`voice_chat_send`, `voice_chat_delete`,
+/// `voice_chat_report`). Called once, where voice chat is made.
+pub fn wire_room_chat(
+    overlay: &Overlay,
+    voice: &pl_voice::Voice,
+    social: &pl_social::SocialService,
+) {
+    use pl_overlay::rchat::{RoomChatAct, RoomChatFuture, answer_of};
+    use pl_voice::rchat::RoomChatError;
+
+    let (voice, social) = (voice.clone(), social.clone());
+    overlay.on_room_chat(move |act| -> RoomChatFuture {
+        let (voice, social) = (voice.clone(), social.clone());
+        match act {
+            RoomChatAct::Send {
+                room,
+                text,
+                sticker,
+            } => Box::pin(async move { voice.chat_send(room, text, sticker).await }),
+            RoomChatAct::Delete { room, id } => {
+                Box::pin(async move { answer_of(voice.chat_delete(room, id).await) })
+            }
+            RoomChatAct::Report {
+                room,
+                id,
+                reason,
+                note,
+            } => Box::pin(async move {
+                // The message as the room sealed it and the ones before it (the report's evidence).
+                let Some((message, before)) = voice.chat_evidence(&room, &id) else {
+                    return answer_of(Some(RoomChatError::Gone));
+                };
+                let sent = social
+                    .report_room_chat(&room, message, before, reason, note)
+                    .await;
+                answer_of(sent.err().map(|error| {
+                    use pl_social::SocialError;
+                    match error {
+                        SocialError::RateLimited { .. } => RoomChatError::RateLimited,
+                        SocialError::Unauthorized | SocialError::Restricted { .. } => {
+                            RoomChatError::Off
+                        }
+                        SocialError::InvalidInput(_) => RoomChatError::Gone,
+                        _ => RoomChatError::Failed,
+                    }
+                }))
+            }),
+        }
+    });
 }

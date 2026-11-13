@@ -21,6 +21,8 @@ import gg.projects.overlay.host.HostGate;
 import gg.projects.overlay.keys.KeyHint;
 import gg.projects.overlay.keys.Laptop;
 import gg.projects.overlay.keys.PressLatch;
+import gg.projects.overlay.keys.TextFocus;
+import gg.projects.overlay.keys.TextFocusGuard;
 import gg.projects.overlay.lang.Language;
 import gg.projects.overlay.lang.LanguageChoice;
 import gg.projects.overlay.link.CodelessLink;
@@ -252,6 +254,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             }
             // The chat's emoji button and its picker (CHAT-EMOJI).
             ChatEmojiBar.attach(this, screen);
+            // SQOL-O: a chat (or any text box) that opens with the keyboard says so at once, before the first letters.
+            lookTextFocus();
         });
         game = new MinecraftGame(this);
         connector = new Connector(game, frame -> bridge.send(frame));
@@ -682,6 +686,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         if (keyLatch.held() && !key.heldNow()) {
             keyLatch.released();
         }
+        // SQOL-O: a text field's keyboard, as it moves (and said again while it lasts).
+        lookTextFocus();
         while (key.consumeClick()) {
             keyInGame();
         }
@@ -1316,6 +1322,12 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             }
             return;
         }
+        // SQOL-O: the launcher keeps its single-key voice shortcuts quiet while a text field here has the keyboard.
+        if ("keys-guard".equals(Protocol.type(frame))) {
+            textFocus.ask();
+            lookTextFocus();
+            return;
+        }
         // Voice chat (VOICE-O): its state, who speaks, a notice, how a press went.
         if (voice.apply(frame)) {
             onVoice();
@@ -1450,6 +1462,28 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         press("delete", Long.toString(sid), "", conversation, null, Protocol.delete(conversation, sid));
     }
 
+    // ---- SQOL-O: the voice room's own chat ---------------------------------------------------------------------
+
+    /** "Sil" on the player's own message in the voice room's chat (it comes back as a quiet mark). */
+    public void deleteRoomMessage(String conversation, String id) {
+        press("room-delete", id, "", conversation, null, Protocol.roomDelete(conversation, id));
+    }
+
+    /** "Rapor Et" on someone else's message in the voice room's chat; the chat's line says how it went. */
+    public void reportRoomMessage(String conversation, String id, String reason, String note) {
+        press("room-report", id, "", conversation, "reported", Protocol.roomReport(conversation, id, reason, note));
+    }
+
+    /** "Kopyala": a message's words to the clipboard, and a short note that they went. */
+    public void copyMessage(OverlayState.ChatLine line) {
+        if (line == null || line.deleted || line.sticker != null || line.text == null || line.text.isBlank()) {
+            return;
+        }
+        Minecraft.getInstance().keyboardHandler.setClipboard(line.text);
+        state.personNote("copied", "", false, System.currentTimeMillis());
+        refreshScreen();
+    }
+
     /** One of the launcher's notification switches, from the overlay's settings. */
     public void setNotify(String key, boolean on) {
         state.setPref(key, on);
@@ -1505,6 +1539,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             link.onClear();
             // Every face asks for its picture again once the launcher is back.
             Avatars.offline();
+            // SQOL-O: the launcher forgets a text field's keyboard with the connection; a new one asks again.
+            textFocus.reset();
         }
         refreshScreen();
     }
@@ -1523,8 +1559,9 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             lastToastPage = t.conversation() != null ? OverlayScreen.Page.CHATS : OverlayScreen.Page.FRIENDS;
             lastToastPageAt = System.currentTimeMillis();
         }
+        // SQOL-O: a card of the voice room's chat counts what waits there (the launcher gathered them for four seconds).
         toasts.show(t, conv != null && conv.crew(), panel == null ? null : panel.openConversation(), panel != null,
-            settings.get(), key.keyName(), hintLine(), reducedMotion());
+            settings.get(), key.keyName(), hintLine(), reducedMotion(), state.roomUnread(t.conversation()));
     }
 
     // ---- Voice chat (VOICE-O) -------------------------------------------------------------------------------
@@ -1554,6 +1591,9 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             String name = voiceNames.getOrDefault(result.who(), "");
             if (result.ok() && result.act().equals("kick")) {
                 voiceNote(Texts.str("voice.person.kicked", VoiceState.shown(name, VoiceWords.WORDS)), false);
+            } else if (!result.ok() && result.act().equals("share-hold")) {
+                // SQOL-O: "Duraklat" / "Sürdür" did not go (the share is still starting, or its source closed).
+                voiceNote(Texts.str(holdAsked ? "share.note.pause_failed" : "share.note.resume_failed"), true);
             } else if (!result.ok()) {
                 String text = VoiceWords.refusal(result.reason(), name);
                 if (text != null) {
@@ -1648,6 +1688,26 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
     /** OVL-SHARE: "Paylaşımı durdur" on the player's share {@code n}. */
     public void voiceShareStop(int n) {
         voiceSend(Protocol.voiceShareStop(n));
+    }
+
+    /** SQOL-O: "Duraklat" ({@code on}) or "Sürdür" on the player's share {@code n}; a refusal is said as a note. */
+    public void voiceShareHold(int n, boolean on) {
+        holdAsked = on;
+        voiceSend(Protocol.voiceShareHold(n, on));
+    }
+
+    /** SQOL-O: the last "Duraklat" ({@code true}) or "Sürdür" pressed, for the words of a refusal. */
+    private boolean holdAsked;
+
+    /** SQOL-O: what the launcher was told about a text field here having the keyboard. */
+    private final TextFocusGuard textFocus = new TextFocusGuard();
+
+    /** SQOL-O: tells the launcher when a text field here gains or loses the keyboard (once it asked). */
+    private void lookTextFocus() {
+        Boolean word = textFocus.look(TextFocus.now(Minecraft.getInstance()), monotonicMs());
+        if (word != null && bridge != null) {
+            bridge.send(Protocol.textFocus(word));
+        }
     }
 
     /**

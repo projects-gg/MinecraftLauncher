@@ -31,7 +31,8 @@ class OverlayStatePeople3Test {
         apply(ROLES);
         OverlayState.CrewRights led = state.crewRightsIn("c:t1");
         assertEquals("t1", led.crew());
-        assertTrue(led.lead() && led.roles() && led.modsFull());
+        // An older launcher's `modsFull` is read as nothing (CREW-MODS: no cap on moderators).
+        assertTrue(led.lead() && led.roles());
         assertEquals(Map.of("u-ali", new OverlayState.MateRights(true, true), "u-cem",
             new OverlayState.MateRights(false, true)), led.mates(), "never an empty id");
         // A crew without a chat has no sender to carry its rows; another chat has none.

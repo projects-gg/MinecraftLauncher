@@ -130,6 +130,17 @@ public final class ToastLayer implements HudElement {
      */
     public ToastCard show(OverlayState.ToastRequest request, boolean crewChat, String panelConversation,
         boolean panelOpen, OverlaySettings settings, String keyName, KeyHint.Line line, boolean reducedMotion) {
+        return show(request, crewChat, panelConversation, panelOpen, settings, keyName, line, reducedMotion, 0);
+    }
+
+    /**
+     * As {@link #show(OverlayState.ToastRequest, boolean, String, boolean, OverlaySettings, String, KeyHint.Line,
+     * boolean)}; {@code count} (SQOL-O, the voice room's chat): the messages the card stands for (the chip's unread), 0
+     * to count the card's own updates.
+     */
+    public ToastCard show(OverlayState.ToastRequest request, boolean crewChat, String panelConversation,
+        boolean panelOpen, OverlaySettings settings, String keyName, KeyHint.Line line, boolean reducedMotion,
+        int count) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null || !settings.showsKind(request.kind())) {
             return null;
@@ -141,8 +152,10 @@ public final class ToastLayer implements HudElement {
         if (forOpenConversation) {
             return null;
         }
+        // SQOL-O: the voice room's chat is quiet (its people talk; the launcher's own room chat has no sound either).
+        boolean roomChat = gg.projects.overlay.bridge.Protocol.roomConversation(request.conversation());
         Sounds.Cue cue = kind == ToastCard.Kind.CALL || kind == ToastCard.Kind.INVITE || kind == ToastCard.Kind.WORLD
-            ? Sounds.Cue.CALL : kind == ToastCard.Kind.MESSAGE ? Sounds.Cue.MESSAGE
+            ? Sounds.Cue.CALL : kind == ToastCard.Kind.MESSAGE ? (roomChat ? null : Sounds.Cue.MESSAGE)
             // OVL-SOC2: what waits for the player's answer (a request, a crew invite or request, a plan, a missed call)
             // says it with the message sound; a friend coming online and "Ekibe katıldın" quietly.
             : kind == ToastCard.Kind.SOCIAL && !quietCard(request.kind()) ? Sounds.Cue.MESSAGE : null;
@@ -155,11 +168,15 @@ public final class ToastLayer implements HudElement {
         }
         Shapes.prepare();
         ToastStack.Entry<ToastCard> existing = find(request.key());
-        int count = existing == null ? 1 : existing.count() + 1;
-        ToastCard card = ToastCard.of(request, crewChat, count, settings.showMessageText(), keyName, line);
+        int shown = count > 0 ? count : existing == null ? 1 : existing.count() + 1;
+        ToastCard card = ToastCard.of(request, crewChat, shown, settings.showMessageText(), keyName, line);
         placeStack(mc, settings);
         stack.setReducedMotion(reducedMotion);
         stack.push(request.key(), card, card.height(), duration(kind, settings, mc), now);
+        if (count > 0) {
+            // The card stands for what waits in the room's chat, not for how often it came.
+            stack.setCount(request.key(), count);
+        }
         mc.getNarrator().saySystemQueued(card.narration());
         return card;
     }

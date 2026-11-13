@@ -22,6 +22,7 @@ use std::time::Duration;
 use pl_content::ChatEmojis;
 use pl_lang::Lang;
 use pl_social::SocialUpdate;
+use pl_voice::rchat::VoiceChatEvent;
 use pl_voice::share::ShareNotice;
 use pl_voice::view::{VoiceNotice, VoiceSpeaking, VoiceState};
 use serde::{Deserialize, Serialize};
@@ -30,12 +31,14 @@ use tokio::sync::{mpsc, oneshot};
 use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::policy::NotifyPrefs;
 use crate::protocol::{ByeReason, ToGame};
+use crate::rchat::{RoomChatAct, RoomChatFuture, RoomLog};
 use crate::server::{Bridge, Endpoint};
 use crate::session::{
     CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, EmojiFn, KindsFn, LangFn, Msg,
-    PeopleChange, PeopleFn, Session, SocialActions, ThumbFn, VoiceActFn, VoiceHooks,
+    PeopleChange, PeopleFn, RoomChatActFn, Session, SocialActions, ThumbFn, VoiceActFn, VoiceHooks,
 };
 use crate::tweaks::ClientTweaks;
+use crate::typing::GameTyping;
 use crate::voice::{VoiceAct, VoiceFuture};
 
 /// How long [`Overlay::stop`] waits for the goodbye to leave.
@@ -186,6 +189,10 @@ type VoiceSink = Arc<dyn Fn(VoiceAct) -> VoiceFuture + Send + Sync>;
 /// hover card.
 type ThumbSink = Arc<dyn Fn(String, String, u8) -> crate::voice::ThumbFuture + Send + Sync>;
 
+/// SQOL-O: the launcher's voice chat as the game's room chat requests reach it (send, delete,
+/// report); the future answers how it went.
+type RoomChatSink = Arc<dyn Fn(RoomChatAct) -> RoomChatFuture + Send + Sync>;
+
 struct Running {
     id: u64,
     /// The bridge's port: names the session for [`Overlay::stop_for`].
@@ -224,6 +231,9 @@ struct Inner {
     /// VOICE-O: who speaks now, when that changed after the newest state (kept for the games that
     /// start later: the state's own flags are as of its change).
     voice_speaking: Option<VoiceSpeaking>,
+    /// SQOL-O: the voice room chat's newest messages as the launcher told them (kept for the
+    /// games that start later; gone with the room).
+    room_log: RoomLog,
 }
 
 impl Inner {
@@ -273,6 +283,11 @@ struct Shared {
     voice: Mutex<Option<VoiceSink>>,
     /// SHARE-LIVE: the launcher's still pictures, for the game's hover card.
     thumb: Mutex<Option<ThumbSink>>,
+    /// SQOL-O: the launcher's voice chat, for the game's room chat requests.
+    room_chat: Mutex<Option<RoomChatSink>>,
+    /// SQOL-O: which games say a text field of theirs has the keyboard (the launcher's single-key
+    /// voice shortcuts rest meanwhile; read on every key the voice shortcuts watch).
+    typing: Mutex<GameTyping>,
     /// A game's mod shows voice chat now (VOICE-O).
     voice_shown: AtomicBool,
     /// OVL-SHARE: the player shares and hides notifications while sharing ("Paylaşırken
@@ -313,6 +328,7 @@ impl Overlay {
                     emojis: Arc::new(ChatEmojis::builtin()),
                     voice: None,
                     voice_speaking: None,
+                    room_log: RoomLog::default(),
                 }),
                 next: AtomicU64::new(1),
                 connected: AtomicBool::new(false),
@@ -324,6 +340,8 @@ impl Overlay {
                 emoji: Mutex::new(None),
                 voice: Mutex::new(None),
                 thumb: Mutex::new(None),
+                room_chat: Mutex::new(None),
+                typing: Mutex::new(GameTyping::default()),
                 voice_shown: AtomicBool::new(false),
                 share_quiet: Arc::new(AtomicBool::new(false)),
                 missed_shown: AtomicBool::new(false),
@@ -590,7 +608,7 @@ impl Overlay {
         let (control, control_rx) = mpsc::unbounded_channel();
         let (events_tx, events) = mpsc::unbounded_channel();
         let (msgs, msgs_rx) = mpsc::unbounded_channel();
-        let (config, worlds, lang, emojis, voice, speaking) = {
+        let (config, worlds, lang, emojis, voice, speaking, room_log) = {
             let mut inner = self.lock();
             // The first game's session is the one world sharing follows, until the launcher names
             // another (`set_host`); a game started beside others sees no world sharing.
@@ -613,6 +631,7 @@ impl Overlay {
                 Arc::clone(&inner.emojis),
                 inner.voice.clone(),
                 inner.voice_speaking.clone(),
+                inner.room_log.clone(),
             )
         };
         // The game starts in the overlay's language (G2), with the panel and the emoji picker as
@@ -640,6 +659,10 @@ impl Overlay {
         let shown: ConnectedFn = Arc::new(move |on| hub.voice_report(id, on));
         let hub = self.clone();
         let kinds: KindsFn = Arc::new(move |kinds| hub.kinds_report(id, kinds));
+        let hub = self.clone();
+        let room_act: RoomChatActFn = Arc::new(move |act| hub.room_act(act));
+        let hub = self.clone();
+        let typing: ConnectedFn = Arc::new(move |on| hub.typing_report(id, on));
         let session = Session::new(
             social,
             launcher,
@@ -660,6 +683,9 @@ impl Overlay {
                 shown,
                 quiet: Arc::clone(&self.shared.share_quiet),
                 thumb,
+                room_log,
+                room_act,
+                typing,
             },
             Arc::clone(&self.shared.pictures),
         )
@@ -1034,7 +1060,67 @@ impl Overlay {
         inner.voice = Some((Arc::clone(&state), ring_in_game));
         // The state's own speaking flags are the newest now.
         inner.voice_speaking = None;
+        // SQOL-O: the room chat's messages go with their room.
+        inner
+            .room_log
+            .keep_room(state.room.as_ref().map(|room| room.id.as_str()));
         inner.tell_others(None, || Msg::Voice(Arc::clone(&state), ring_in_game));
+    }
+
+    /// SQOL-O: the voice room chat's news (the app's `Platform::voice_chat`: a message, one taken
+    /// away, the whole log anew): kept for the games that start later, and every running game's
+    /// session hears it.
+    pub fn room_chat(&self, event: &VoiceChatEvent) {
+        let mut inner = self.lock();
+        inner.room_log.apply(event);
+        if !inner.sessions.is_empty() {
+            inner.tell_others(None, || Msg::RoomChat(event.clone()));
+        }
+    }
+
+    /// SQOL-O: the launcher's voice chat, for the game's room chat requests: `sink` sends, deletes
+    /// or reports and answers how it went (a deletion's and a report's as
+    /// [`crate::rchat::answer_of`] makes them).
+    pub fn on_room_chat(
+        &self,
+        sink: impl Fn(RoomChatAct) -> RoomChatFuture + Send + Sync + 'static,
+    ) {
+        *self
+            .shared
+            .room_chat
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
+    }
+
+    /// SQOL-O: a text field in a running game has the keyboard now (its overlay said so within
+    /// `crate::typing::HOLD`): the launcher's single-key voice shortcuts rest, as they do while one of
+    /// its own text fields has it. Cheap: read on every key the voice shortcuts watch.
+    pub fn game_typing(&self) -> bool {
+        self.shared
+            .typing
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .typing_at(std::time::Instant::now())
+    }
+
+    /// A session says whether a text field in its game has the keyboard.
+    fn typing_report(&self, session: u64, on: bool) {
+        self.shared
+            .typing
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .set(session, on, std::time::Instant::now());
+    }
+
+    /// Hands a room chat request to the launcher's voice chat; none while the app did not wire it.
+    fn room_act(&self, act: RoomChatAct) -> Option<RoomChatFuture> {
+        let sink = self
+            .shared
+            .room_chat
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        sink.map(|sink| sink(act))
     }
 
     /// Who speaks now (the app's `Platform::speaking`; changes only, at most ten a second): kept

@@ -156,20 +156,37 @@ public final class VoiceState {
 
     /**
      * One of the player's screen shares (OVL-SHARE): its number, what it shows ({@code game}, {@code window},
-     * {@code screen}), whether the room took it ("Yayında"; false while it starts) and how many watch.
+     * {@code screen}), whether the room took it ("Yayında"; false while it starts) and how many watch. SQOL-O: what its
+     * watchers see while it is not live ({@code st}: {@code hold}, {@code min}; empty while live) and why a blank picture
+     * goes ({@code hold}: {@code paused} by the player, {@code closed} source, {@code game-closed}; empty otherwise).
      */
-    public record MyShare(int n, String kind, boolean live, int watchers) {
+    public record MyShare(int n, String kind, boolean live, int watchers, String st, String hold) {
         public boolean game() {
             return "game".equals(kind);
+        }
+
+        /** SQOL-O: the player paused it ("Sürdür" brings it back). */
+        public boolean paused() {
+            return "paused".equals(hold);
         }
     }
 
     /**
      * SHARE-LIVE: someone else's share in the room as {@code voice-share} lists it: its number (what {@code voice-thumb}
      * names), what it shows ({@code game}, {@code window}, {@code screen}), how many watch and when the room last stored
-     * its picture (Unix seconds, {@code 0}: none yet), so an open card asks again when it moves.
+     * its picture (Unix seconds, {@code 0}: none yet), so an open card asks again when it moves. SQOL-O: {@code st}
+     * {@code hold} (its sharer paused it) or {@code min} (the shared window is minimized), empty while live.
      */
-    public record LiveShare(String person, int n, String kind, int watchers, long th) {
+    public record LiveShare(String person, int n, String kind, int watchers, long th, String st) {
+        /** SQOL-O: its sharer paused it: a blank picture, no sound. */
+        public boolean held() {
+            return "hold".equals(st);
+        }
+
+        /** SQOL-O: the shared window is minimized. */
+        public boolean minimized() {
+            return "min".equals(st);
+        }
     }
 
     /**
@@ -216,6 +233,8 @@ public final class VoiceState {
     private String shareGame = "";
     private String shareWhy = "";
     private List<MyShare> myShares = List.of();
+    /** SQOL-O: the player's live shares change here now ("Duraklat" and "Sürdür" may show). */
+    private boolean shareEdit;
     private Set<String> sharing = Set.of();
     // SHARE-LIVE: what each sharer shows, and the preview pictures the launcher answered.
     private Map<String, LiveShare> liveShares = Map.of();
@@ -271,6 +290,7 @@ public final class VoiceState {
         shareGame = "";
         shareWhy = "";
         myShares = List.of();
+        shareEdit = false;
         sharing = Set.of();
         liveShares = Map.of();
         thumbs.clear();
@@ -403,6 +423,11 @@ public final class VoiceState {
     /** The player's own shares, in the launcher's order. */
     public List<MyShare> myShares() {
         return myShares;
+    }
+
+    /** SQOL-O: the player's live shares change here now: "Duraklat" and "Sürdür" may show (a newer launcher's word). */
+    public boolean shareEdit() {
+        return shareEdit;
     }
 
     /** The player shares something the room took ("Yayında"). */
@@ -669,6 +694,7 @@ public final class VoiceState {
         String game = id(frame, "game");
         shareGame = game.equals("ready") || game.equals("off") ? game : "";
         shareWhy = shareGame.equals("off") ? id(frame, "why") : "";
+        shareEdit = Protocol.bool(frame, "edit", false);
         List<MyShare> mine = new ArrayList<>();
         JsonArray list = arr(frame, "mine");
         if (list != null) {
@@ -678,7 +704,8 @@ public final class VoiceState {
                     int n = (int) Protocol.num(o, "n", 0);
                     if (n > 0 && n < 256) {
                         mine.add(new MyShare(n, word(o, "kind", "window"), Protocol.bool(o, "live", false),
-                            (int) Math.max(0, Math.min(999, Protocol.num(o, "watchers", 0)))));
+                            (int) Math.max(0, Math.min(999, Protocol.num(o, "watchers", 0))), stOf(o),
+                            holdOf(o)));
                     }
                 }
             }
@@ -698,13 +725,25 @@ public final class VoiceState {
                         int n = (int) Protocol.num(o, "n", 1);
                         shown.putIfAbsent(person, new LiveShare(person, n > 0 && n < 256 ? n : 1,
                             word(o, "kind", "window"), (int) Math.max(0, Math.min(999, Protocol.num(o, "watchers", 0))),
-                            Math.max(0L, Protocol.num(o, "th", 0L))));
+                            Math.max(0L, Protocol.num(o, "th", 0L)), stOf(o)));
                     }
                 }
             }
         }
         sharing = Collections.unmodifiableSet(live);
         liveShares = Collections.unmodifiableMap(shown);
+    }
+
+    /** SQOL-O: what a share's watchers see while it is not live ({@code hold}, {@code min}), else empty. */
+    private static String stOf(JsonObject o) {
+        String st = id(o, "st");
+        return st.equals("hold") || st.equals("min") ? st : "";
+    }
+
+    /** SQOL-O: why the player's share holds a blank picture ({@code paused}, {@code closed}, {@code game-closed}). */
+    private static String holdOf(JsonObject o) {
+        String hold = id(o, "hold");
+        return hold.equals("paused") || hold.equals("closed") || hold.equals("game-closed") ? hold : "";
     }
 
     /** The PNG's base64 at most (320 px on its long side; the bridge's frames stay under 256 KB). */

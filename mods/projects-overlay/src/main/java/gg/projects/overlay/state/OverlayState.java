@@ -97,7 +97,15 @@ public final class OverlayState {
         public boolean crew() {
             return kind.equals("crew");
         }
+
+        /** SQOL-O: the voice room's own chat (the "Oda" chip; the panel words its title). */
+        public boolean room() {
+            return kind.equals(ROOM);
+        }
     }
+
+    /** SQOL-O: the kind of the voice room chat's conversation (never one the launcher's lists carry). */
+    public static final String ROOM = "room";
 
     public record CrewCall(String id, String crew, String from, long since, long until, int coming, int soon,
         int cant, String mine, String where, String host, boolean own) {
@@ -157,11 +165,10 @@ public final class OverlayState {
 
     /**
      * OVL-UX3 (U1): the player's rights in one crew, for the crew rows of its crewmates' menus in its chat: the
-     * player leads it ("Liderliği devret", "Ekipten çıkar" for anyone), names moderators there ({@code roles}), the
-     * crew has its 4 moderators ({@code modsFull}), and the crewmates the rows may be about.
+     * player leads it ("Liderliği devret", "Ekipten çıkar" for anyone), names moderators there ({@code roles}; as many
+     * as the leader likes, CREW-MODS), and the crewmates the rows may be about.
      */
-    public record CrewRights(String crew, String conv, boolean lead, boolean roles, boolean modsFull,
-        Map<String, MateRights> mates) {
+    public record CrewRights(String crew, String conv, boolean lead, boolean roles, Map<String, MateRights> mates) {
     }
 
     /** One crewmate in {@link CrewRights}: a moderator, and whether the player may remove them. */
@@ -248,6 +255,8 @@ public final class OverlayState {
         public boolean edited;
         /** Deleted for everyone: shown as a quiet mark in its place. */
         public boolean deleted;
+        /** SQOL-O, the voice room's chat: deleted by its leader, a moderator or Projects ("Bu mesaj kaldırıldı"). */
+        public boolean removed;
         public Delivery delivery;
         public String failure;
         /** With failure {@code link}: the rule that refused it, when the launcher said. */
@@ -498,6 +507,11 @@ public final class OverlayState {
     private final Map<String, String> pressNames = new HashMap<>();
     /** When the next crew call may go after a refusal said so (Unix ms), 0 without one. */
     private long callWaitUntil;
+    // ---- SQOL-O: the voice room's own chat ----
+    /** The room chat's conversation while it shows as the "Oda" chip ({@code v:<room>}), or null. */
+    private String roomConv;
+    /** Others' messages there since the chip was last on screen (the launcher counts them). */
+    private int roomUnread;
 
     public BridgeClient.Status status() {
         return status;
@@ -875,12 +889,19 @@ public final class OverlayState {
         return friend != null ? friend.presence() : matesPresence.getOrDefault(id, Presence.OFFLINE);
     }
 
-    /** Newest activity first; a direct conversation the panel just opened for a friend (OVL-UX) before them. */
+    /**
+     * Newest activity first; a direct conversation the panel just opened for a friend (OVL-UX) before them. SQOL-O: the
+     * voice room's own chat first of all while it shows as the "Oda" chip (the room the player is in now).
+     */
     public Collection<Conversation> conversations() {
-        if (drafts.isEmpty()) {
+        Conversation room = roomChat();
+        if (drafts.isEmpty() && room == null) {
             return conversations.values();
         }
-        List<Conversation> all = new ArrayList<>(drafts.size() + conversations.size());
+        List<Conversation> all = new ArrayList<>(drafts.size() + conversations.size() + 1);
+        if (room != null) {
+            all.add(room);
+        }
         for (Conversation draft : drafts.values()) {
             if (friends.containsKey(draftFriends.get(draft.id()))) {
                 all.add(draft);
@@ -894,6 +915,9 @@ public final class OverlayState {
         if (id == null) {
             return null;
         }
+        if (id.equals(roomConv)) {
+            return roomChat();
+        }
         Conversation c = conversations.get(id);
         if (c == null && (c = drafts.get(id)) != null && !friends.containsKey(draftFriends.get(id))) {
             // No longer a friend: nothing to write in.
@@ -902,8 +926,23 @@ public final class OverlayState {
         return c;
     }
 
+    /** SQOL-O: the voice room's own chat while it shows as the "Oda" chip, or null. */
+    public Conversation roomChat() {
+        return roomConv == null ? null : new Conversation(roomConv, ROOM, "", roomUnread, false, true, 0, 0);
+    }
+
+    /** SQOL-O: the room chat's conversation while it shows as the chip ({@code v:<room>}), or null. */
+    public String roomConversation() {
+        return roomConv;
+    }
+
+    /** SQOL-O: others' messages in the room's chat since the chip was last on screen (a card counts them). */
+    public int roomUnread(String conversation) {
+        return conversation != null && conversation.equals(roomConv) ? roomUnread : 0;
+    }
+
     public int unreadTotal() {
-        int n = 0;
+        int n = roomConv == null ? 0 : roomUnread;
         for (Conversation c : conversations.values()) {
             n += c.unread();
         }
@@ -961,6 +1000,13 @@ public final class OverlayState {
         if (next != BridgeClient.Status.ONLINE) {
             // OVL-SOC2: no answer comes for a press on its way now; its button may be pressed again.
             forgetPresses();
+            // SQOL-O: nothing of the room's chat stays without the launcher (it says it again when it comes back).
+            if (roomConv != null) {
+                lines.remove(roomConv);
+                touch(roomConv);
+                roomConv = null;
+                roomUnread = 0;
+            }
         }
         revision++;
     }
@@ -1598,6 +1644,8 @@ public final class OverlayState {
                     worlds.clear();
                     host = null;
                     note = null;
+                    roomConv = null;
+                    roomUnread = 0;
                 }
                 // Tags may have come or gone with the features: what is laid out is laid out again.
                 badgeRevision++;
@@ -1635,7 +1683,9 @@ public final class OverlayState {
                 conversations.putAll(next);
                 // A conversation the panel opened before its first message is the real one now (OVL-UX).
                 drafts.keySet().removeIf(conversations::containsKey);
-                lines.keySet().removeIf(id -> !conversations.containsKey(id) && !hasPending(lines.get(id)));
+                // The voice room's chat (SQOL-O) is no list's: its own frame says when it goes.
+                lines.keySet().removeIf(id -> !conversations.containsKey(id) && !id.equals(roomConv)
+                    && !hasPending(lines.get(id)));
                 calls.clear();
                 forEach(frame, "calls", this::putCall);
                 dnd = Protocol.bool(frame, "dnd", dnd);
@@ -1654,6 +1704,7 @@ public final class OverlayState {
             }
             case "host-state" -> putHost(frame);
             case "conv" -> putConversation(frame);
+            case "room-chat" -> putRoomChat(frame);
             case "dnd" -> {
                 dnd = Protocol.bool(frame, "on", false);
                 putPresence(frame);
@@ -1673,6 +1724,10 @@ public final class OverlayState {
             }
             case "history" -> {
                 String conv = Protocol.str(frame, "conv", "");
+                if (Protocol.roomConversation(conv) && !conv.equals(roomConv)) {
+                    // SQOL-O: a room chat that no longer shows as the chip keeps nothing.
+                    return null;
+                }
                 Deque<ChatLine> deque = lines(conv);
                 List<ChatLine> waiting = new ArrayList<>();
                 for (ChatLine l : deque) {
@@ -1940,9 +1995,9 @@ public final class OverlayState {
     }
 
     /**
-     * U1: the crews' rights ({@code roles}: crew id to {@code lead}, {@code roles}, {@code modsFull}, {@code conv} and
-     * {@code mates}, each crewmate's {@code mod} and {@code kick}); at most 10 crews of 200 crewmates, anything else
-     * skipped.
+     * U1: the crews' rights ({@code roles}: crew id to {@code lead}, {@code roles}, {@code conv} and {@code mates}, each
+     * crewmate's {@code mod} and {@code kick}; an older launcher's {@code modsFull} means nothing since CREW-MODS); at most
+     * 10 crews of 200 crewmates, anything else skipped.
      */
     private static Map<String, CrewRights> rightsOf(JsonElement roles) {
         if (roles == null || !roles.isJsonObject()) {
@@ -1968,8 +2023,7 @@ public final class OverlayState {
             }
             String conv = Protocol.str(o, "conv", "");
             out.put(crew, new CrewRights(crew, conv.isEmpty() || conv.length() > 128 ? null : conv,
-                Protocol.bool(o, "lead", false), Protocol.bool(o, "roles", false), Protocol.bool(o, "modsFull", false),
-                Map.copyOf(mates)));
+                Protocol.bool(o, "lead", false), Protocol.bool(o, "roles", false), Map.copyOf(mates)));
         }
         return Map.copyOf(out);
     }
@@ -2159,9 +2213,25 @@ public final class OverlayState {
         }
     }
 
+    /**
+     * SQOL-O: {@code room-chat}, whole: the voice room chat's conversation while it shows as the "Oda" chip, and how many
+     * of others' messages wait there. Its lines go with it (the room keeps nothing once it is gone).
+     */
+    private void putRoomChat(JsonObject frame) {
+        String conv = Protocol.str(frame, "conv", null);
+        String next = Protocol.roomConversation(conv) && conv.length() <= 80 ? conv : null;
+        if (roomConv != null && !roomConv.equals(next)) {
+            lines.remove(roomConv);
+            touch(roomConv);
+        }
+        roomConv = next;
+        roomUnread = next == null ? 0 : (int) Math.max(0, Math.min(9999, Protocol.num(frame, "unread", 0)));
+    }
+
     private static Conversation conversationOf(JsonObject o) {
         String id = Protocol.str(o, "id", "");
-        if (id.isEmpty()) {
+        if (id.isEmpty() || Protocol.roomConversation(id)) {
+            // A room chat's conversation is never a list's (SQOL-O): its own frame names it.
             return null;
         }
         return new Conversation(id, Protocol.str(o, "kind", "dm"), name(o, "title"),
@@ -2188,7 +2258,8 @@ public final class OverlayState {
 
     private void putMessage(JsonObject o, long now, boolean live) {
         String conv = Protocol.str(o, "conv", "");
-        if (conv.isEmpty()) {
+        if (conv.isEmpty() || (Protocol.roomConversation(conv) && !conv.equals(roomConv))) {
+            // A room chat that no longer shows as the chip (SQOL-O) keeps nothing.
             return;
         }
         String id = Protocol.str(o, "id", null);
@@ -2197,6 +2268,8 @@ public final class OverlayState {
         boolean edited = Protocol.bool(o, "edited", false);
         // Deleted for everyone (L16): the line stays as a quiet "Mesaj silindi" mark, like the launcher's.
         boolean deleted = Protocol.bool(o, "deleted", false);
+        // SQOL-O: in the room's chat, taken away by its leader, a moderator or Projects ("Bu mesaj kaldırıldı").
+        boolean removed = deleted && Protocol.bool(o, "removed", false);
         long at = Protocol.num(o, "at", now);
         Deque<ChatLine> deque = lines(conv);
         ChatLine known = findById(deque, clientId, id);
@@ -2205,6 +2278,7 @@ public final class OverlayState {
             known.id = id == null ? known.id : id;
             if (deleted) {
                 known.deleted = true;
+                known.removed = removed;
                 known.text = "";
                 known.edited = false;
             } else {
@@ -2227,6 +2301,7 @@ public final class OverlayState {
         ChatLine line = new ChatLine(id, clientId, from, deleted ? "" : text, mine, Delivery.SENT, at, now);
         line.edited = edited && !deleted;
         line.deleted = deleted;
+        line.removed = removed;
         putExtras(line, o);
         append(conv, line);
         if (live) {
