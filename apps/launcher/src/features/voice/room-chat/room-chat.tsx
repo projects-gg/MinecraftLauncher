@@ -47,7 +47,7 @@ import { deleteRoomMessage, dropRoomMessage, reportRoomMessage, retryRoomMessage
 import { RoomComposer } from "./composer";
 import { useFieldCue } from "./field-cue";
 import { useRoomPeople } from "./people";
-import { asChatMessage, type RoomTombstone, tombstoneOf } from "./rules";
+import { asChatMessage, mayDeleteMsg, type RoomTombstone, tombstoneOf } from "./rules";
 import { useRoomChat } from "./store";
 
 /** Scrolled this close to the newest message counts as "at the bottom" (chat's). */
@@ -189,14 +189,13 @@ export function RoomChat({ room, visible }: { room: VoiceRoomView; visible: bool
   // People the player blocks never show (the room leaves them out too).
   const blocked = useMemo(() => new Set(blockedList.map((p) => p.id)), [blockedList]);
   const shownMsgs = useMemo(() => all.filter((m) => !blocked.has(m.from)), [all, blocked]);
-  // Whom the player may act on in the room: their messages may be taken away too.
-  const actsOn = useMemo(
-    () => new Set(room.people.filter((p) => p.can.kick || p.can.mute).map((p) => p.id)),
-    [room.people],
-  );
+  // Whose messages the player may take away: their own, those the room lets them act on, and, for
+  // a leader or a moderator, those of people who have left.
+  const inRoom = room.people;
+  const role = room.me.role;
   const messages = useMemo(
-    () => shownMsgs.map((m) => asChatMessage(m, m.mine || actsOn.has(m.from))),
-    [shownMsgs, actsOn],
+    () => shownMsgs.map((m) => asChatMessage(m, mayDeleteMsg(m, { people: inRoom, me: { role } }))),
+    [shownMsgs, inRoom, role],
   );
   const byKey = useMemo(() => new Map(shownMsgs.map((m) => [m.key, m])), [shownMsgs]);
   const byKeyNow = useRef(byKey);

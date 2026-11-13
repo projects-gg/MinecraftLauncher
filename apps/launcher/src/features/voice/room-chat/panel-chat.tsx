@@ -153,8 +153,11 @@ export function PanelChatSection({
 }) {
   const { t } = useTranslation();
   const { shown } = usePanelChrome();
-  // On screen: the panel shows its room page (not "Davet Et" over it).
-  const visible = useVoiceUi((s) => s.page === "room") && shown;
+  // On screen: the panel shows its room page (not "Davet Et" over it), the friends panel not over
+  // it (a friend's conversation marks nothing read under it).
+  const onRoomPage = useVoiceUi((s) => s.page === "room");
+  const friendsOpen = useSocialUi((s) => s.open);
+  const visible = onRoomPage && shown && !friendsOpen;
   const labelId = useId();
   return (
     <section aria-labelledby={labelId} className="flex min-h-0 flex-1 flex-col">
