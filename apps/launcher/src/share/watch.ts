@@ -2,13 +2,13 @@
 // per watching page (the main window, or the "Yayın" window) with the room's watch session on the
 // SFU. The launcher brokers its SDP: the room's offer comes as `offer` (a new connection when the
 // session is new, the same one when it only grew or shrank), the answer goes back as `answer`.
-// Chromium decodes in hardware where the GPU can; the picture goes to a `<video>`, the share's
-// sound with it (its own volume, `stream.ts`).
+// Chromium decodes in hardware where the GPU can; the picture goes to a `<video>`, the sound to
+// WebAudio (share/stream-audio.ts: its own volume, ducking).
 //
 // Nothing runs without a share on the page: no connection, no timer. Its only timers are the
 // connection's own waits (ICE 5 s, a dropped connection 3 s) and, while a share shows, a quality
-// look every 2 s (`getStats` on this computer, nothing goes to a server), for a quiet "Bağlantı
-// zayıf" on its tile.
+// look every 2 s (`getStats` on this computer, nothing goes to a server), for a quiet "Düşük
+// Kalite" on its tile and, while it shows, "Yayın Bilgileri".
 import { shareKey, type WatchCmd, type WatchMid, type WatchReport } from "./types";
 
 /** ICE that has not connected by then asks for TURN (the voice page's rule). */
@@ -20,11 +20,25 @@ export const STATS_MS = 2000;
 
 export type ShareQuality = "good" | "weak";
 
+/** SQOL "Yayın Bilgileri": what arrives of a share now (its picture's size and frames a second). */
+export interface ShareInfo {
+  w: number;
+  h: number;
+  fps: number;
+}
+
 export interface WatchEngine {
   handle(cmd: WatchCmd): void;
   /** The picture and sound of a share on this page, when it came. */
   stream(person: string, n: number): MediaStream | null;
   quality(person: string, n: number): ShareQuality;
+  /**
+   * What arrives of a share, as the last quality look saw it (null: nothing seen yet). Kept only
+   * while someone asks for it (`watchInfo`).
+   */
+  info(person: string, n: number): ShareInfo | null;
+  /** "Yayın Bilgileri" shows: the quality looks keep `info` too. Returns its release. */
+  watchInfo(): () => void;
   /** Called on every change of the streams or their quality. */
   subscribe(listener: () => void): () => void;
   /** Only these shares (their `shareKey`) are watched now: the others' streams go. */
@@ -71,6 +85,9 @@ export function createWatchEngine(
   let mids = new Map<string, WatchMid>();
   const streams = new Map<string, MediaStream>();
   const qualities = new Map<string, ShareQuality>();
+  const infos = new Map<string, ShareInfo>();
+  /** How many ask for `info` now. */
+  let infoAsked = 0;
   const listeners = new Set<() => void>();
   let iceTimer: number | null = null;
   let dropTimer: number | null = null;
@@ -121,6 +138,7 @@ export function createWatchEngine(
     const had = streams.size > 0;
     streams.clear();
     qualities.clear();
+    infos.clear();
     lastStats.clear();
     syncStats();
     if (had) notify();
@@ -250,6 +268,17 @@ export function createWatchEngine(
         qualities.set(key, quality);
         changed = true;
       }
+      // "Yayın Bilgileri", only while it shows: a new object only when a figure changed.
+      if (infoAsked > 0) {
+        const w = num(entry.frameWidth);
+        const h = num(entry.frameHeight);
+        const fps = Math.round(num(entry.framesPerSecond));
+        const known = infos.get(key);
+        if (w > 0 && h > 0 && (!known || known.w !== w || known.h !== h || known.fps !== fps)) {
+          infos.set(key, { w, h, fps });
+          changed = true;
+        }
+      }
     });
     if (changed) notify();
   };
@@ -276,6 +305,17 @@ export function createWatchEngine(
     },
     stream: (person, n) => streams.get(shareKey(person, n)) ?? null,
     quality: (person, n) => qualities.get(shareKey(person, n)) ?? "good",
+    info: (person, n) => infos.get(shareKey(person, n)) ?? null,
+    watchInfo() {
+      infoAsked++;
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        infoAsked--;
+        if (infoAsked === 0) infos.clear();
+      };
+    },
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -287,6 +327,7 @@ export function createWatchEngine(
         if (!kept.has(key)) {
           streams.delete(key);
           qualities.delete(key);
+          infos.delete(key);
           lastStats.delete(key);
           changed = true;
         }

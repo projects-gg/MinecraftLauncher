@@ -40,7 +40,10 @@
 // - `shareNoEdit`: an older service: a live share only stops;
 // - `shareSwitchFail`: "Ekranı Değiştir" fails ("Bu pencere paylaşılamadı.", the game goes on).
 // `edit=refuse` refuses every raise (a quality, a frame rate, the sound) to show the rollback.
+//
+// SQOL-U1 (the stream viewer): `shareView…` scenarios live in mock-view.ts.
 import type { VoiceCrewRooms, VoiceState } from "@/lib/api/voice-types";
+import { viewScenario } from "./mock-view";
 import type {
   ShareSources,
   ShareStats,
@@ -333,7 +336,7 @@ export function shareViewFor(scenario: string): VoiceShareView | null {
     case "shareFriendsLive":
       return { ...VIEW, on: false };
     default:
-      return null;
+      return viewScenario(scenario);
   }
 }
 
