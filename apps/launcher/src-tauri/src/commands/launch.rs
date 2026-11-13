@@ -1662,6 +1662,8 @@ async fn prepare_and_spawn(
         state.worlds.game_started(&instance.id, host_token);
     }
     crate::commands::cleanup::status_changed(app);
+    // SQOL: a screen share whose game closed takes this one (when its window comes).
+    crate::voice::share::game_started(app);
     // A cancel that came while the game was being started (after the last checkpoint, before it
     // counted as running) still stops it: the page already went back to OYNA.
     if cancel.is_cancelled() {
