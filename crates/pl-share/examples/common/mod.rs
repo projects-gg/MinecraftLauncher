@@ -126,6 +126,15 @@ pub fn test_window(w: i32, h: i32) -> isize {
     rx.recv().unwrap()
 }
 
+/// SQOL: closes a test window (as its user would: the capture of it ends).
+pub fn close_window(hwnd: isize) {
+    use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+    // SAFETY: our own window; a window that is gone already just fails.
+    unsafe {
+        let _ = PostMessageW(Some(HWND(hwnd as *mut _)), WM_CLOSE, WPARAM(0), LPARAM(0));
+    }
+}
+
 /// CPU time (user + kernel) of this process, in seconds.
 pub fn cpu_seconds() -> f64 {
     use windows::Win32::Foundation::FILETIME;
