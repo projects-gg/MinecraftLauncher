@@ -260,8 +260,9 @@ function focusables(root: HTMLElement): HTMLElement[] {
 /**
  * "Hâlâ izliyor musun?" over the stage: the focus stays in it (Tab goes round its two buttons) and
  * goes back where it was after it. Esc counts as "Evet" (any touch is an answer, the launcher's rule).
+ * It covers and centres on the stage the docked room panel leaves visible (`dock`: its width).
  */
-function StillAsk({ watches }: { watches: VoiceWatch[] }) {
+function StillAsk({ watches, dock }: { watches: VoiceWatch[]; dock: number }) {
   const { t } = useTranslation();
   const { reduce } = useMotionPrefs();
   const panel = useRef<HTMLDivElement>(null);
@@ -299,6 +300,7 @@ function StillAsk({ watches }: { watches: VoiceWatch[] }) {
       aria-modal="true"
       aria-labelledby="share-still-ask"
       className="absolute inset-0 z-10 flex items-center justify-center bg-obsidian-950/55"
+      style={dock ? { right: dock } : undefined}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1, transition: { duration: 0.2 } }}
       exit={{ opacity: 0, transition: { duration: 0.14 } }}
@@ -494,7 +496,9 @@ export function StageBody({
           <RoomChatPeek />
         </div>
       )}
-      <AnimatePresence>{share.stillAsking ? <StillAsk watches={watches} /> : null}</AnimatePresence>
+      <AnimatePresence>
+        {share.stillAsking ? <StillAsk watches={watches} dock={dock} /> : null}
+      </AnimatePresence>
     </div>
   );
 }

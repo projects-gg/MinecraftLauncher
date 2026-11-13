@@ -46,7 +46,7 @@ import { unwatchShare } from "./actions";
 import { isPopout, useShareInfo, useShareName, useShareQuality, useShareUi } from "./store";
 import { popOut, toggleFullscreen } from "./stream-actions";
 import { moveStreamVolume, streamSoundOf, toggleStreamMute, useStreamEnv } from "./stream-env";
-import { useShareChangeCalm, useWatchLayer } from "./stream-layer";
+import { useShareChangeCalm, useShareSettled, useWatchLayer } from "./stream-layer";
 import { useSoundItems, useStreamItems, useStreamSound } from "./stream-menu";
 import { sayStream } from "./stream-say";
 import { useOwnPreviewFrame, useOwnShareInfo, useOwnShareItems } from "./stream-seams";
@@ -458,8 +458,11 @@ export function StreamTile({
   }, [applyZoom]);
 
   // The layer ("Yayın Kalitesi"): a weak connection holds the small one a while under "Otomatik".
+  // A share paused or minimized stops its frames by design: neither that nor the moment it comes
+  // back reads as a weak connection (no "Düşük Kalite", no hold).
   const [hold, setHold] = useState(NO_WEAK_HOLD);
-  const weak = quality === "weak";
+  const settled = useShareSettled(live);
+  const weak = quality === "weak" && settled;
   useEffect(() => {
     setHold((before) => weakStep(before, weak, Date.now()));
   }, [weak]);

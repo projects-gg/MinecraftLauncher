@@ -16,12 +16,13 @@ import type {
   VoiceLiveShare,
   VoiceWatch,
 } from "@/share/types";
-import type { WatchEngine } from "@/share/watch";
+import { CHANGE_CALM_MS, type WatchEngine } from "@/share/watch";
 import { setPageEngine } from "./store";
 import {
   forgetAskedLayers,
   LAYER_SETTLE_MS,
   useShareChangeCalm,
+  useShareSettled,
   useWatchLayer,
 } from "./stream-layer";
 import { layerFor, WEAK_BACK_MS } from "./stream-view";
@@ -176,5 +177,24 @@ describe("a picture that changes on purpose", () => {
     expect(calm).toHaveBeenCalledTimes(3);
     hook.rerender({ live: live("window", "live") });
     expect(calm).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("a share paused or minimized", () => {
+  it("says nothing of the connection while stopped, nor for a moment after it came back", () => {
+    const hook = renderHook((p: { st?: ShareState }) => useShareSettled(p.st ? { st: p.st } : {}), {
+      initialProps: {} as { st?: ShareState },
+    });
+    expect(hook.result.current).toBe(true);
+    hook.rerender({ st: "hold" });
+    expect(hook.result.current).toBe(false);
+    hook.rerender({ st: "min" });
+    expect(hook.result.current).toBe(false);
+    hook.rerender({ st: "live" });
+    expect(hook.result.current).toBe(false);
+    act(() => vi.advanceTimersByTime(CHANGE_CALM_MS - 1));
+    expect(hook.result.current).toBe(false);
+    act(() => vi.advanceTimersByTime(1));
+    expect(hook.result.current).toBe(true);
   });
 });

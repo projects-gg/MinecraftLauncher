@@ -5,10 +5,11 @@
 // with the layer it wants, it asks once more after a short settle. A picture that changes on
 // purpose (another layer, a share paused or turned to another source) stops a moment: the quality
 // look is told, so that moment does not read as a weak connection.
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useVoiceUi } from "@/features/voice/store";
 import { shareApi } from "@/share/api";
 import { type ShareLayer, shareKey, type VoiceLiveShare, type VoiceWatch } from "@/share/types";
+import { CHANGE_CALM_MS } from "@/share/watch";
 import { calmShare } from "./store";
 
 /** How long the launcher has to report the layer a tile asked for before it is asked again. */
@@ -74,4 +75,22 @@ export function useShareChangeCalm(
     last.current = change;
     calmShare(person, n);
   }, [person, n, change]);
+}
+
+/**
+ * Whether a share's picture says anything of the connection now: not while its sharer paused or
+ * minimized it (its frames stop by design), nor in the few seconds after it came back.
+ */
+export function useShareSettled(live: Pick<VoiceLiveShare, "st"> | undefined): boolean {
+  const stopped = live?.st === "hold" || live?.st === "min";
+  const [settled, setSettled] = useState(!stopped);
+  useEffect(() => {
+    if (stopped) {
+      setSettled(false);
+      return;
+    }
+    const timer = setTimeout(() => setSettled(true), CHANGE_CALM_MS);
+    return () => clearTimeout(timer);
+  }, [stopped]);
+  return settled && !stopped;
 }
