@@ -49,7 +49,7 @@ import { popOut, toggleFullscreen } from "./stream-actions";
 import { moveStreamVolume, streamSoundOf, toggleStreamMute, useStreamEnv } from "./stream-env";
 import { useSoundItems, useStreamItems, useStreamSound } from "./stream-menu";
 import { sayStream } from "./stream-say";
-import { useOwnPreviewFrame, useOwnShareItems } from "./stream-seams";
+import { useOwnPreviewFrame, useOwnShareInfo, useOwnShareItems } from "./stream-seams";
 import {
   clampZoom,
   layerFor,
@@ -756,6 +756,8 @@ export function OwnTile({
   const name = me?.name ?? t("voice.room.you");
   const frame = useOwnPreviewFrame(n);
   const items = useOwnShareItems(n);
+  const infoOn = useShareUi((s) => s.info);
+  const sends = useOwnShareInfo(n);
   const chrome = useChrome(full, idle);
   const face: BackdropFace = {
     id: me?.id ?? "",
@@ -794,6 +796,12 @@ export function OwnTile({
       ) : (
         <StreamBackdrop face={face} />
       )}
+      {/* "Yayın Bilgileri": what this computer really sends. */}
+      {infoOn && sends ? (
+        <span className="absolute top-2 left-2 rounded-[7px] bg-obsidian-950/78 px-2 py-1 text-[12px] leading-[1.3] font-medium text-bone-100 tabular-nums ring-1 ring-white/10">
+          {sends}
+        </span>
+      ) : null}
       <Scrim shown={chrome.shown} />
       <div
         className="absolute inset-x-2 bottom-2 flex items-end justify-between gap-2"

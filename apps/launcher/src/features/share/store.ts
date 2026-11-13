@@ -33,16 +33,7 @@ interface ShareUi {
   /** Menus of the stage open now: its controls never hide meanwhile. */
   menus: number;
   menuOpen: (open: boolean) => void;
-  /** SQOL: the player's own share as a tile (its number), asked from its card's preview. */
-  own: number | null;
-  setOwn: (n: number | null) => void;
 }
-
-/** A preview's switch as a number. */
-const numberParam = (key: string): number | null => {
-  const value = Number(param(key));
-  return Number.isFinite(value) && value > 0 ? value : null;
-};
 
 export const useShareUi = create<ShareUi>()((set) => ({
   picker: param("picker") === "1",
@@ -59,8 +50,6 @@ export const useShareUi = create<ShareUi>()((set) => ({
   setInfo: (info) => set({ info }),
   menus: 0,
   menuOpen: (open) => set((s) => ({ menus: Math.max(0, s.menus + (open ? 1 : -1)) })),
-  own: numberParam("own"),
-  setOwn: (own) => set({ own }),
 }));
 
 /** Where the stage shows in this window (sqol.md §4: U3 docks the room panel beside "page"). */

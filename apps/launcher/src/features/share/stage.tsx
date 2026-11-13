@@ -48,8 +48,10 @@ import { type StageMode, useShare, useShareName, useShareStage, useShareUi } fro
 import { keepOnTop, leaveFullscreen } from "./stream-actions";
 import { useStreamEnv } from "./stream-env";
 import {
+  hideOwnTile,
   openRoomChat,
   RoomChatPeek,
+  useOwnTile,
   useRoomChatOffered,
   useRoomChatUnread,
   useStageDock,
@@ -366,7 +368,6 @@ export function StageBody({
   const share = useShare();
   const full = useShareUi((s) => s.full);
   const forward = useShareUi((s) => s.forward);
-  const setOwn = useShareUi((s) => s.setOwn);
   const { idle, wake } = useIdle(full);
   useEscLeavesFull(full);
 
@@ -405,7 +406,7 @@ export function StageBody({
             n={tile.n}
             full={full}
             idle={idle}
-            onClose={() => setOwn(null)}
+            onClose={hideOwnTile}
             className={className}
           />
         );
@@ -577,7 +578,7 @@ export function ShareStage() {
   const me = useVoiceUi((s) => s.state.room?.me.id ?? null);
   const small = useShareUi((s) => s.small);
   const full = useShareUi((s) => s.full);
-  const own = useShareUi((s) => s.own);
+  const own = useOwnTile();
   const dock = useStageDock();
   const main = share.surface === "main";
   const watches = main ? stageWatches(share, me) : [];
@@ -585,7 +586,7 @@ export function ShareStage() {
   // The player's own preview, while that share lives.
   const ownShown = own !== null && share.mine.some((m) => m.n === own) ? own : null;
   useEffect(() => {
-    if (own !== null && ownShown === null) useShareUi.getState().setOwn(null);
+    if (own !== null && ownShown === null) hideOwnTile();
   }, [own, ownShown]);
   const shown = watches.length > 0 || ended.length > 0 || ownShown !== null;
   const first = watches[0];
