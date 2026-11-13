@@ -39,9 +39,12 @@ describe("screen sharing in the preview", () => {
       "shareCapped",
       "shareNoEdit",
       "shareSwitchFail",
+      "shareLiveMuted",
     ]) {
       expect(voiceOf(scenario).current().share?.mine, scenario).toHaveLength(1);
     }
+    expect(voiceOf("shareLiveMuted").current().room?.me.mutedByModerator).toBe(true);
+    expect(voiceOf("shareLive").current().room?.me.mutedByModerator).toBe(false);
     expect(mineOf("sharePaused")).toMatchObject({ st: "hold", hold: "paused" });
     expect(mineOf("shareMin")).toMatchObject({ st: "min" });
     expect(mineOf("shareLost")).toMatchObject({ st: "hold", hold: "closed", kind: "window" });
@@ -67,6 +70,13 @@ describe("screen sharing in the preview", () => {
     // Someone the room does not let share.
     const quiet = createShareMock(voiceOf("shareNotAllowed"));
     expect(await quiet.start({ kind: "game" }, "")).toBe("notAllowed");
+    // Someone a moderator muted for everyone: no new share, nothing the room checks; the
+    // launcher's own goes on.
+    const muted = createShareMock(voiceOf("shareLiveMuted"), false);
+    expect(await muted.start({ kind: "screen", id: "1" }, "")).toBe("notAllowed");
+    expect(await muted.update(1, { preset: "low" })).toBe("notAllowed");
+    expect(await muted.update(1, { audio: false })).toBe("notAllowed");
+    expect(await muted.update(1, { cursor: false })).toBeNull();
   });
 
   it("switches, changes and pauses a live share in place as the launcher would", async () => {

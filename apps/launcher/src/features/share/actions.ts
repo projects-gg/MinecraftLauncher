@@ -42,7 +42,15 @@ import {
   useOwnUi,
 } from "./own-store";
 
-/** A refusal in the player's words. */
+/**
+ * A moderator muted the player for everyone: the room refuses their new shares and what it checks
+ * of a live one (its source, quality, frame rate and sound).
+ */
+export function mutedForAll(): boolean {
+  return useVoiceUi.getState().state.room?.me.mutedByModerator === true;
+}
+
+/** A refusal in the player's words (a moderator's mute before the room's rule). */
 export function refusalText(refusal: ShareRefusal, max = 2): string {
   const t = i18n.t.bind(i18n);
   switch (refusal) {
@@ -52,7 +60,7 @@ export function refusalText(refusal: ShareRefusal, max = 2): string {
     case "unsupported":
       return t("share.notice.unsupported");
     case "notAllowed":
-      return t("share.notice.notAllowed");
+      return mutedForAll() ? t("share.notice.modMuted") : t("share.notice.notAllowed");
     case "limited":
       return t("share.notice.limited");
     case "full":
@@ -314,8 +322,8 @@ export function changeRefusedText(
     return t("share.quality.capped");
   }
   if (refusal === "notAllowed") {
-    const { room, share } = useVoiceUi.getState().state;
-    if (room?.me.mutedByModerator) return t("share.own.modMuted");
+    if (mutedForAll()) return t("share.own.modMuted");
+    const { share } = useVoiceUi.getState().state;
     if (share?.on && !share.allowed) return t("share.notice.notAllowed");
   }
   return t("share.own.changeOff");

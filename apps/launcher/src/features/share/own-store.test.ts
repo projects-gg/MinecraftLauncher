@@ -9,7 +9,7 @@ import { createVoiceMock } from "@/lib/api/voice-mock";
 import type { VoiceState } from "@/lib/api/voice-types";
 import { shareApi } from "@/share/api";
 import type { ShareChange, ShareRefusal, VoiceMyShare } from "@/share/types";
-import { changeShare, holdShare, switchShare } from "./actions";
+import { changeShare, holdShare, startShare, switchShare } from "./actions";
 import { resetOwnNotices, showShareNotice } from "./own-notices";
 import {
   endSwitch,
@@ -53,6 +53,16 @@ function next(patch: Partial<VoiceMyShare>) {
   useVoiceUi.getState().setState({
     ...state,
     share: { ...share, mine: share.mine.map((m) => (m.n === 1 ? { ...m, ...patch } : m)) },
+  });
+}
+
+/** A moderator mutes the player for everyone. */
+function muteForAll() {
+  const state = useVoiceUi.getState().state;
+  if (!state.room) throw new Error("no room");
+  useVoiceUi.getState().setState({
+    ...state,
+    room: { ...state.room, me: { ...state.room.me, mutedByModerator: true } },
   });
 }
 
@@ -277,12 +287,7 @@ describe("a live share's changes", () => {
       "Bu odada yalnız lider ve moderatörler paylaşabilir.",
     );
     // A moderator muted the player for everyone: that is said first.
-    const ruled = useVoiceUi.getState().state;
-    if (!ruled.room) throw new Error("no room");
-    useVoiceUi.getState().setState({
-      ...ruled,
-      room: { ...ruled.room, me: { ...ruled.room.me, mutedByModerator: true } },
-    });
+    muteForAll();
     expect(await refused({ fps: 15 })).toBe(
       "Bir moderatör seni susturduğu için şu an değiştiremezsin.",
     );
@@ -294,6 +299,61 @@ describe("a live share's changes", () => {
     );
     expect(said).not.toHaveBeenCalled();
     expect(shown(1)).toMatchObject({ preset: "normal", audio: true, fps: 30 });
+  });
+
+  it("take back exactly the change a notice names, on its share", async () => {
+    useVoiceUi.getState().setState(scenario("shareTwoMine"));
+    vi.spyOn(shareApi, "update").mockResolvedValue(null);
+    // This share's quality twice, then the other share's sound (the latest change).
+    await changeShare(1, { preset: "low" });
+    await changeShare(1, { preset: "normal" });
+    await changeShare(2, { audio: true });
+    // The room refused the first of them: only that one goes back.
+    showShareNotice({
+      kind: "refused",
+      refusal: "budget",
+      n: 1,
+      change: { preset: "low", fps: null, audio: null },
+    });
+    expect(useOwnUi.getState().pending.map((p) => [p.n, p.patch])).toEqual([
+      [1, { preset: "normal" }],
+      [2, { audio: true }],
+    ]);
+    expect(shown(1).preset).toBe("normal");
+    expect(shown(2).audio).toBe(true);
+    expect(toast).toHaveBeenLastCalledWith("Bu kalite şu an kapalı.");
+    // A change nothing waits for any more: nothing goes back, its sentence is a change's still.
+    showShareNotice({ kind: "refused", refusal: "notAllowed", n: 2, change: { fps: 15 } });
+    expect(shown(2).audio).toBe(true);
+    expect(toast).toHaveBeenLastCalledWith("Bu ayar şu an değiştirilemiyor.");
+    expect(useOwnUi.getState().pending).toHaveLength(2);
+  });
+
+  it("take back at once the change a fast refusal names, never saying it as done", async () => {
+    const answer = answerLater();
+    const done = changeShare(1, { audio: false });
+    showShareNotice({ kind: "refused", refusal: "notAllowed", n: 1, change: { audio: false } });
+    expect(shown(1).audio).toBe(true);
+    answer.resolve(null);
+    expect(await done).toBe(false);
+    expect(said).not.toHaveBeenCalled();
+    expect(toast).toHaveBeenCalledExactlyOnceWith("Bu ayar şu an değiştirilemiyor.");
+    expect(useOwnUi.getState().pending).toEqual([]);
+  });
+
+  it("say a moderator's mute, not the room's rule, when a new share is refused", async () => {
+    const rule = "Bu odada yalnız lider ve moderatörler paylaşabilir.";
+    const mute = "Bir moderatör seni susturduğu için şu an paylaşamazsın.";
+    vi.spyOn(shareApi, "start").mockResolvedValue("notAllowed");
+    await startShare({ kind: "game" }, "", 2);
+    expect(toast).toHaveBeenLastCalledWith(rule);
+    muteForAll();
+    // The launcher's answer, and the room's notice when it says no later.
+    await startShare({ kind: "game" }, "", 2);
+    expect(toast).toHaveBeenLastCalledWith(mute);
+    toast.mockClear();
+    showShareNotice({ kind: "refused", refusal: "notAllowed" });
+    expect(toast).toHaveBeenCalledExactlyOnceWith(mute);
   });
 
   it("pause and resume, back as it was when refused", async () => {

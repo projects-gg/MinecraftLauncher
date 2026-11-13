@@ -199,6 +199,7 @@ export const trShare = {
     stopped: "Paylaşım durdu.",
     unsupported: "Bu bilgisayardan paylaşılamıyor.",
     notAllowed: "Bu odada yalnız lider ve moderatörler paylaşabilir.",
+    modMuted: "Bir moderatör seni susturduğu için şu an paylaşamazsın.",
     full: "Aynı anda en çok {{max}} paylaşım yapabilirsin.",
     roomFull: "Şu an daha fazla paylaşım açılamıyor.",
     watchFull: "Bu yayını izleyenlerin sayısı dolu.",
