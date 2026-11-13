@@ -147,6 +147,26 @@ pub fn close_window(hwnd: isize) {
     }
 }
 
+/// SQOL-R3: whether the window still exists.
+#[allow(dead_code)]
+pub fn window_alive(hwnd: isize) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+    // SAFETY: a read-only query.
+    unsafe { IsWindow(Some(HWND(hwnd as *mut _))).as_bool() }
+}
+
+/// SQOL-R3: this process's open handles (a leak per new encoder shows as growth).
+#[allow(dead_code)]
+pub fn handles() -> u32 {
+    use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessHandleCount};
+    let mut count = 0u32;
+    // SAFETY: the pseudo-handle of this process; `count` outlives the call.
+    unsafe {
+        let _ = GetProcessHandleCount(GetCurrentProcess(), &mut count);
+    }
+    count
+}
+
 /// CPU time (user + kernel) of this process, in seconds.
 pub fn cpu_seconds() -> f64 {
     use windows::Win32::Foundation::FILETIME;

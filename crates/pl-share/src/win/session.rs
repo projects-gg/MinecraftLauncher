@@ -13,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use tracing::{info, warn};
 use windows::Graphics::Capture::GraphicsCaptureItem;
@@ -32,7 +32,7 @@ use crate::api::{
 };
 use crate::controller::{Ctl, EventTx};
 use crate::preset::{AUDIO_KBPS, FrameGate, Layer, LayerSpec, layers};
-use crate::switch::{Wait, restart_needed};
+use crate::switch::{Wait, restart_needed, source_check_due};
 use crate::transport::{
     self, H264Profile, MediaCtl, Negotiated, Prepared, ToTransport, TransportHandle,
 };
@@ -327,6 +327,10 @@ struct Shared {
     /// SQOL: grows with every new source (a switch, a closed one): an old window's minimize
     /// events are no longer the share's.
     source_epoch: AtomicU64,
+    /// SQOL-R3: when the current capture's last frame came (ms since `born`): a window whose
+    /// frames stopped is looked at.
+    last_frame: AtomicU64,
+    born: Instant,
     events: EventTx,
     internal: Sender<Ctl>,
     encoders: Mutex<[Option<Sender<EncIn>>; 2]>,
@@ -344,6 +348,16 @@ struct StatsInfo {
 }
 
 impl Shared {
+    /// SQOL-R3: a frame of the current capture came (or a capture began) at `at`.
+    fn frame_seen(&self, at: Instant) {
+        let ms = at.saturating_duration_since(self.born).as_millis() as u64;
+        self.last_frame.store(ms, Ordering::Relaxed);
+    }
+
+    fn last_frame_at(&self) -> Instant {
+        self.born + Duration::from_millis(self.last_frame.load(Ordering::Relaxed))
+    }
+
     fn emit(&self, event: ShareEvent) {
         if !self.stopped.load(Ordering::SeqCst) {
             let _ = self.events.send(event);
@@ -453,6 +467,8 @@ pub struct Session {
     fresh_on_resume: bool,
     /// SQOL-R3: the source's window was minimized when its watch began.
     start_minimized: bool,
+    /// SQOL-R3: when the shared window was last looked at (its frames had stopped).
+    checked: Option<Instant>,
     rebuilds: u32,
 }
 
@@ -544,6 +560,8 @@ impl Session {
             device_lost: AtomicBool::new(false),
             minimized: AtomicBool::new(false),
             source_epoch: AtomicU64::new(0),
+            last_frame: AtomicU64::new(0),
+            born: Instant::now(),
             events,
             internal,
             encoders: Mutex::new([None, None]),
@@ -581,6 +599,7 @@ impl Session {
                 preview: false,
                 fresh_on_resume: false,
                 start_minimized: false,
+                checked: None,
                 rebuilds: 0,
             },
             sdp,
@@ -805,6 +824,8 @@ impl Session {
         item: &GraphicsCaptureItem,
         thumbs: Option<Arc<Thumbs>>,
     ) -> Result<Capture, Fail> {
+        // SQOL-R3: a new capture counts as a frame (its first one may take a moment).
+        self.shared.frame_seen(Instant::now());
         let shared = self.shared.clone();
         let gpu = self.gpu.clone();
         let on_frame = Box::new(
@@ -823,6 +844,7 @@ impl Session {
                 {
                     return;
                 }
+                shared.frame_seen(now);
                 let held = shared.held.load(Ordering::Relaxed);
                 // SHARE-LIVE: every frame counts for the still picture, resting or not (SQOL: and
                 // the sharer's preview); a held share's frames show nothing to anyone.
@@ -1440,6 +1462,7 @@ impl Session {
         if self.gone || self.shared.capture.load(Ordering::SeqCst) != number {
             return;
         }
+        info!("share {}: its source closed", self.shared.n);
         if let Stage::Live(live) = &mut self.stage {
             live.capture = None;
             live.item = None;
@@ -1461,11 +1484,37 @@ impl Session {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        self.waiting.map(|wait| wait.deadline())
+        [self.waiting.map(|wait| wait.deadline()), self.source_check_at()]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
-    /// SQOL: looks for the game's window when it is time.
+    /// SQOL-R3: when to look whether the shared window (a window's, a game's) still lives: its
+    /// frames stopped (a monitor's end is the capture's own `Closed`; a gone source has nothing).
+    fn source_check_at(&self) -> Option<Instant> {
+        if self.gone || self.hwnd.is_none() || !matches!(self.stage, Stage::Live(_)) {
+            return None;
+        }
+        Some(source_check_due(
+            self.shared.last_frame_at(),
+            self.checked,
+        ))
+    }
+
+    /// SQOL: looks for the game's window when it is time (SQOL-R3: and whether the shared window
+    /// still lives, when its frames stopped).
     fn tick(&mut self, now: Instant) {
+        if self.source_check_at().is_some_and(|at| now >= at) {
+            self.checked = Some(now);
+            if let (Some(hwnd), Some(pid)) = (self.hwnd, self.target_pid)
+                && !sources::window_alive(hwnd, pid)
+            {
+                info!("share {}: the shared window is gone", self.shared.n);
+                let number = self.shared.capture.load(Ordering::SeqCst);
+                self.source_closed(number, now);
+            }
+        }
         let Some(mut wait) = self.waiting else {
             return;
         };
