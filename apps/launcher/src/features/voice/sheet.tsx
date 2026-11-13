@@ -98,7 +98,14 @@ import {
 import { ConnectionMark } from "./connection";
 import { roomMenuItems } from "./crew-room-menu";
 import { useCrewRoomsUi, withPendingOrder } from "./crew-rooms-store";
-import { useDockWidth, useToastsBeside, useWindowTaller } from "./dock";
+import {
+  type Arrival,
+  arrivalOf,
+  FRESH,
+  useDockWidth,
+  useToastsBeside,
+  useWindowTaller,
+} from "./dock";
 import { SpeakingFace } from "./faces";
 import { FittedNames } from "./fitted-names";
 import { HeadphonesSlash } from "./icons";
@@ -1302,15 +1309,6 @@ function PanelPages({ room }: { room: VoiceRoomView }) {
 
 // --- the panel's two shells ---------------------------------------------------------------------
 
-/** How the panel arrives: sliding in (opened), or in place (its shell changed while it showed),
- * with the focus where it was in it: the chat's field, the panel, or not in it at all. */
-interface Arrival {
-  moved: boolean;
-  focus: "field" | "panel" | null;
-}
-
-const FRESH: Arrival = { moved: false, focus: null };
-
 /** The panel as a sheet over the page (no stage on the page): a modal dialog, as before. */
 function SheetShell({
   room,
@@ -1446,7 +1444,7 @@ function DockShell({
   return (
     <>
       {/* The sheet's scrim leaves as the panel docks (its shell changed in place). */}
-      {arrival.moved && open ? (
+      {arrival.moved && !arrival.back && open ? (
         <motion.div
           aria-hidden
           className="pointer-events-none fixed inset-0 z-[22] bg-obsidian-950/55"
@@ -1489,6 +1487,7 @@ export function RoomSheet() {
   const docked = stage === "page";
   // A stage over the whole window covers everything: the panel waits behind it, still open.
   const open = panel && room !== null && stage !== "full";
+  const behind = panel && room !== null && stage === "full";
   // The sheet keeps the last room while it slides away.
   const last = useRef<VoiceRoomView | null>(null);
   if (room) last.current = room;
@@ -1504,20 +1503,16 @@ export function RoomSheet() {
 
   // The stage came or went while the panel showed: its shell changes in place. Where the focus was
   // in it is read now, before the old shell goes.
-  const placed = useRef({ docked, open });
+  const placed = useRef({ docked, open, behind });
   const arrival = useRef<Arrival>(FRESH);
-  if (open && placed.current.open && placed.current.docked !== docked) {
-    const active = typeof document === "undefined" ? null : document.activeElement;
-    const inside = active?.closest("[data-room-panel]") ? active : null;
-    arrival.current = {
-      moved: true,
-      focus: inside ? (inside instanceof HTMLTextAreaElement ? "field" : "panel") : null,
-    };
-  } else if (open && !placed.current.open) {
-    arrival.current = FRESH;
-  }
+  arrival.current =
+    arrivalOf(placed.current, { docked, open }, () => {
+      const active = typeof document === "undefined" ? null : document.activeElement;
+      const inside = active?.closest("[data-room-panel]") ? active : null;
+      return inside ? (inside instanceof HTMLTextAreaElement ? "field" : "panel") : null;
+    }) ?? arrival.current;
   useEffect(() => {
-    placed.current = { docked, open };
+    placed.current = { docked, open, behind };
   });
 
   return docked ? (

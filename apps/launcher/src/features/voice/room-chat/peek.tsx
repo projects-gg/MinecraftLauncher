@@ -7,13 +7,12 @@
 // same from the room chat's host, gathered, so the previews themselves are out of their reading
 // and out of the Tab order. "Mesaj Önizlemelerini Göster" (Ayarlar → Sesli Sohbet) turns them off.
 //
-// SQOL-U1's stage places `<RoomChatPeek />` in its top right corner. `PeekFallback` (voice chat's
-// host) places them itself while no stage of the page has one.
+// SQOL-U1's stage places `<RoomChatPeek />` in its top right corner (not while the panel is docked
+// beside it: the chat itself is in view then).
 import { cn } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { create } from "zustand";
 import { messageLine } from "@/features/social/chat/preview";
 import { enter, glide, leave, useSocialMotion } from "@/features/social/motion";
 import { SocialFace } from "@/features/social/social-face";
@@ -25,9 +24,7 @@ import { useRoomPeople } from "./people";
 import { heldPeeks, livePeeks, nextPeekEnd } from "./rules";
 import { usePeekSetting } from "./settings";
 import { useRoomChat } from "./store";
-
-/** How many stages place the previews now (the fallback stays away while one does). */
-const usePeekHosts = create<{ hosts: number }>()(() => ({ hosts: 0 }));
+import { openRoomPanel } from "./unread";
 
 /** The previews show now: over the stage, the panel not beside it, the setting on. */
 function usePeekShown(): boolean {
@@ -71,12 +68,16 @@ function PeekList() {
     return () => window.clearTimeout(timer);
   }, [peeks, resting, apply]);
 
-  // Esc takes them away (it still does what it does elsewhere: nothing is stopped here).
+  // Esc takes them away, and only them: the topmost thing goes first (a layer over them took its
+  // Esc already; a full-screen stage under them leaves on the next one, SQOL-U1's own Esc yielding
+  // to a key that is taken).
   useEffect(() => {
     if (!live) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented) return;
-      apply((d) => (d.peeks.length ? { ...d, peeks: [] } : d));
+      if (!useRoomChat.getState().peeks.length) return;
+      event.preventDefault();
+      apply((d) => ({ ...d, peeks: [] }));
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -142,7 +143,7 @@ function PeekList() {
               initial={{ opacity: 0, transform: reduce ? "translateY(0px)" : "translateY(6px)" }}
               animate={{ opacity: 1, transform: "translateY(0px)", transition: enter(0.22) }}
               exit={{ opacity: 0, transition: leave(0.16) }}
-              onClick={() => useVoiceUi.getState().openPanel({ focus: "chat" })}
+              onClick={() => openRoomPanel({ focus: "chat" })}
               className="pointer-events-auto flex w-full cursor-pointer items-start gap-2.5 rounded-[var(--radius-panel)] bg-obsidian-900/94 px-3 py-2 text-left shadow-[0_14px_36px_rgb(34_6_6/0.5)] ring-1 ring-white/8 transition-[background-color,transform,scale] duration-150 ease-out hover:bg-obsidian-800 active:scale-[0.98]"
             >
               <SocialFace
@@ -168,29 +169,5 @@ function PeekList() {
 
 /** The previews, for the stage's top right corner (SQOL §4: SQOL-U1 places it). */
 export function RoomChatPeek() {
-  useEffect(() => {
-    usePeekHosts.setState((s) => ({ hosts: s.hosts + 1 }));
-    return () => usePeekHosts.setState((s) => ({ hosts: s.hosts - 1 }));
-  }, []);
   return <PeekList />;
-}
-
-/**
- * The previews while no stage places them (voice chat's host): at the stage's top right, under the
- * title bar (over the whole window when the stage fills it).
- */
-export function PeekFallback() {
-  const hosts = usePeekHosts((s) => s.hosts);
-  const stage = useStageMode();
-  if (hosts > 0 || (stage !== "page" && stage !== "full")) return null;
-  return (
-    <div
-      className={cn(
-        "pointer-events-none fixed right-5",
-        stage === "full" ? "top-16 z-[61]" : "top-[calc(var(--spacing-titlebar)+64px)] z-[25]",
-      )}
-    >
-      <PeekList />
-    </div>
-  );
 }

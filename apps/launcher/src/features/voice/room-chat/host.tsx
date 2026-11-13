@@ -19,7 +19,7 @@ import { burstWords, createGather, type Heard, HIDDEN_GATHER_MS, SHOWN_GATHER_MS
 import { mockRefused } from "./mock";
 import { choiceNow, roomChatOn, usePanelChat } from "./panel-chat";
 import { personNow } from "./people";
-import { shortLine } from "./rules";
+import { chatInSight, shortLine } from "./rules";
 import { usePeekSetting } from "./settings";
 import {
   forRoom,
@@ -86,8 +86,13 @@ export function RoomChatSync() {
     };
   }, [apply, roomId, chatOn]);
 
-  // On screen: the panel open on the room, the stage not over everything, the room chat its chat.
-  const shown = panelOnRoom && stage !== "full" && choice.kind === "room";
+  // In sight: the panel open on the room, neither hidden by a full-screen stage nor covered by the
+  // friends panel, the window on screen (minimised, what comes counts unread), the room chat its
+  // chat.
+  const friendsOpen = useSocialUi((s) => s.open);
+  const shown =
+    chatInSight({ panelOnRoom, stageFull: stage === "full", friendsOpen, away }) &&
+    choice.kind === "room";
   const [gather] = useState(() =>
     createGather<Heard>((heard) => {
       if (heard.length && !isWindowAway()) announce(burstWords(heard, now.current.shown, i18n.t));

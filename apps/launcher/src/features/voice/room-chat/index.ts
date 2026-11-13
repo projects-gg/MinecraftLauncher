@@ -3,7 +3,7 @@
 // width is `useVoiceUi((s) => s.dock)` in voice chat's store).
 export { RoomChatSync } from "./host";
 export { PanelChatSection, usePanelChat } from "./panel-chat";
-export { PeekFallback, RoomChatPeek } from "./peek";
+export { RoomChatPeek } from "./peek";
 export { peekOf, usePeekSetting } from "./settings";
 export {
   openRoomPanel,
