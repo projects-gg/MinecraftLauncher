@@ -271,7 +271,15 @@ export type ShareClosedWhy =
 /** A moment worth a toast (`share-notice`). */
 export type ShareNotice =
   | { kind: "closed"; why: ShareClosedWhy; src: ShareKind }
-  | { kind: "refused"; refusal: ShareRefusal }
+  | {
+      kind: "refused";
+      refusal: ShareRefusal;
+      // SQOL: a live change the room refused names the player's share and what that change
+      // asked of the room (its quality, frame rate and sound, as sent); a share or a watch that
+      // could not start names neither (nor does a launcher before them).
+      n?: number | null;
+      change?: ShareAsked | null;
+    }
   | { kind: "audioOff" }
   | { kind: "watchStopped" }
   | { kind: "watchFailed" }
@@ -294,6 +302,13 @@ export type ShareState = "live" | "hold" | "min";
  * (`closed`) or the game (`gameClosed`) it showed closed (a minute to pick another source).
  */
 export type ShareHoldWhy = "paused" | "closed" | "gameClosed";
+
+/** What a live change asks of the room (the rest is the launcher's own); a field may be null. */
+export interface ShareAsked {
+  preset?: SharePreset | null;
+  fps?: number | null;
+  audio?: boolean | null;
+}
 
 /** `share_update`: what a live share changes (only the fields given). */
 export interface ShareChange {

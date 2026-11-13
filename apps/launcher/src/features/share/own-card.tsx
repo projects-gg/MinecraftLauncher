@@ -6,7 +6,8 @@
 // "Duraklatıldı" (with "Sürdür"), "Pencere küçültüldü.", and a window or game that closed ("Başka
 // Ekran Seç", "Paylaşımı Durdur", a thin line running out with the minute it waits). Pressing the
 // picture asks the stage to show the share big (SQOL-U1 draws it); its tooltip says what really
-// goes out ("1280×720 · 30 fps · Donanım").
+// goes out ("1280×720 · 30 fps · Donanım"). While a moderator mutes the player for everyone,
+// "Ekranı Değiştir" stays dim with why on the pointer (the room would refuse another source).
 import {
   AppWindow,
   DotsThree,
@@ -255,6 +256,7 @@ export function OwnShareCard({ mine: given }: { mine: VoiceMyShare }) {
   const name = ownShareName(mine, t);
   const lost = isLost(status);
   const edit = share.edit === true;
+  const muted = useVoiceUi((s) => s.state.room?.me.mutedByModerator === true);
   const hasMenu = items.length > 1;
   const pressable = status !== "starting" && !lost;
 
@@ -287,28 +289,36 @@ export function OwnShareCard({ mine: given }: { mine: VoiceMyShare }) {
           ? "switch"
           : null;
   const guard = usePressGuard(role ?? "none");
+  // A moderator's mute: the room would refuse another source (why, on the pointer and in its name).
+  const blocked = muted && (role === "switch" || role === "pickOther");
+  const label =
+    role === "pickOther"
+      ? t("share.own.pickOther")
+      : role === "resume"
+        ? t("share.own.resume")
+        : t("share.own.switch");
   const primary =
     role === null ? null : (
-      <Button
-        size="sm"
-        variant={role === "pickOther" ? "bone" : "secondary"}
-        icon={
-          role === "resume" ? <Play size={15} weight="fill" /> : <Swap size={15} weight="bold" />
-        }
-        aria-disabled={!guard.armed || undefined}
-        {...guard.handlers}
-        onClick={(event) => {
-          if (!guard.take(event)) return;
-          if (role === "resume") void holdShare(mine.n, false);
-          else openSwitch(mine.n);
-        }}
-      >
-        {role === "pickOther"
-          ? t("share.own.pickOther")
-          : role === "resume"
-            ? t("share.own.resume")
-            : t("share.own.switch")}
-      </Button>
+      <Tooltip content={t("voice.mutedByMod")} disabled={!blocked}>
+        <Button
+          size="sm"
+          variant={role === "pickOther" ? "bone" : "secondary"}
+          icon={
+            role === "resume" ? <Play size={15} weight="fill" /> : <Swap size={15} weight="bold" />
+          }
+          aria-label={blocked ? `${label}. ${t("voice.mutedByMod")}` : undefined}
+          aria-disabled={blocked || !guard.armed || undefined}
+          {...guard.handlers}
+          onClick={(event) => {
+            if (blocked || !guard.take(event)) return;
+            if (role === "resume") void holdShare(mine.n, false);
+            else openSwitch(mine.n);
+          }}
+          className={cn(blocked && "opacity-45")}
+        >
+          {label}
+        </Button>
+      </Tooltip>
     );
 
   const picture = <Picture mine={mine} status={status} until={until} src={frame ?? still} />;

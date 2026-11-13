@@ -71,6 +71,7 @@ export function createShareMock(
   };
   const kindOf = (source: ShareSource) => source.kind;
   const mineOf = (n: number) => view(voice.current()).mine.find((m) => m.n === n);
+  const mutedForAll = () => voice.current().room?.me.mutedByModerator === true;
   const patchMine = (n: number, patch: (mine: VoiceMyShare) => VoiceMyShare) =>
     change((s) => ({ ...s, mine: s.mine.map((m) => (m.n === n ? patch(m) : m)) }));
   const emitNotice = (notice: ShareNotice) => {
@@ -95,7 +96,8 @@ export function createShareMock(
       const share = view(voice.current());
       if (!share.on) return "off";
       if (!share.canShare) return "unsupported";
-      if (!share.allowed) return "notAllowed";
+      // A moderator's mute for everyone: the room lets no new share start.
+      if (!share.allowed || mutedForAll()) return "notAllowed";
       if (!share.open) return "budget";
       if (share.mine.length >= share.mineMax) return "full";
       const n = [1, 2, 3].find((i) => !share.mine.some((m) => m.n === i)) ?? 1;
@@ -236,6 +238,10 @@ export function createShareMock(
       const mine = mineOf(n);
       if (!mine) return "gone";
       if (!share.edit) return "off";
+      // A moderator's mute for everyone: the room refuses what it checks (not the launcher's own).
+      const roomAsked =
+        asked.preset !== undefined || asked.fps !== undefined || asked.audio !== undefined;
+      if (roomAsked && mutedForAll()) return "notAllowed";
       if (asked.preset !== undefined && RANK[asked.preset] > RANK[share.maxPreset]) return "budget";
       if (options.refuseRaise && raises(mine, asked)) return "budget";
       // This computer's ceiling holds (the state says what it took); 60 frames only at "Yüksek".

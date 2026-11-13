@@ -35,6 +35,7 @@ const input = (
   hwMax: "high",
   canAudio: true,
   settings: DEFAULT_SHARE_SETTINGS,
+  muted: false,
   ...patch,
 });
 
@@ -135,6 +136,41 @@ describe("the own share's menu", () => {
     });
     const high = sub(ownShareItems(input({}, { preset: "high" }), t, actions()), "Gelişmiş");
     expect(row(high, "60 fps").disabled).toBe(false);
+  });
+
+  it("dims what the room checks while a moderator mutes the player, saying it once per menu", () => {
+    const act = actions();
+    const items = ownShareItems(input({ muted: true }), t, act);
+    // The source, the quality and the sound: the mute's sentence under the first of them.
+    expect(row(items, "Ekranı Değiştir…")).toMatchObject({
+      disabled: true,
+      hint: "Bir moderatör seni susturdu.",
+    });
+    for (const label of ["Kalite", "Sesi de Paylaş"]) {
+      expect(row(items, label).disabled).toBe(true);
+      expect(row(items, label).hint).toBeUndefined();
+    }
+    // The launcher's own stays: the pause, the picture, the cursor, the small picture, the stop.
+    expect(row(items, "Duraklat").disabled).toBeUndefined();
+    expect(row(items, "Gelişmiş").disabled).toBeUndefined();
+    expect(row(items, "Paylaşımı Durdur").disabled).toBeUndefined();
+    const advanced = sub(items, "Gelişmiş");
+    expect(row(advanced, "15 fps")).toMatchObject({
+      disabled: true,
+      hint: "Bir moderatör seni susturdu.",
+    });
+    for (const label of ["30 fps", "60 fps"]) {
+      expect(row(advanced, label).disabled).toBe(true);
+      expect(row(advanced, label).hint).toBeUndefined();
+    }
+    for (const label of ["Netlik", "İmleci Göster", "Önizleme Resmini Paylaş"]) {
+      expect(row(advanced, label).disabled).toBeUndefined();
+    }
+    row(advanced, "İmleci Göster").onSelect();
+    expect(act.change).toHaveBeenLastCalledWith(1, { cursor: false });
+    // This computer's own reason for the sound stays its own.
+    const quiet = ownShareItems(input({ muted: true, canAudio: false }), t, act);
+    expect(row(quiet, "Sesi de Paylaş").hint).toBe("Bu bilgisayarda ses paylaşılamıyor.");
   });
 
   it("asks for each change, and nothing for what is chosen already", () => {

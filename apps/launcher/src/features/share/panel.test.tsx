@@ -139,6 +139,32 @@ describe("screen sharing on the panel", () => {
     expect(screen.getByRole("button", { name: "Paylaşımı Durdur" })).toBeTruthy();
   });
 
+  it("dims Ekranı Değiştir while a moderator mutes the player, saying why once", () => {
+    const hold = vi.spyOn(shareApi, "hold").mockResolvedValue(null);
+    show(scenario("shareLiveMuted"), <ShareFooterRow />);
+    const swap = screen.getByRole("button", {
+      name: "Ekranı Değiştir. Bir moderatör seni susturdu.",
+    });
+    expect(swap.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(swap);
+    expect(useOwnUi.getState().switching).toBeNull();
+    expect(useShareUi.getState().picker).toBe(false);
+    // Its menu: what the room checks dim, the sentence once; the pause goes on.
+    fireEvent.keyDown(screen.getByRole("button", { name: "Paylaşımı Durdur" }), {
+      key: "F10",
+      shiftKey: true,
+    });
+    const menu = screen.getByRole("menu", { name: "Oyun" });
+    expect(
+      within(menu)
+        .getByRole("menuitem", { name: /^Ekranı Değiştir…/ })
+        .getAttribute("aria-disabled"),
+    ).toBe("true");
+    expect(within(menu).getAllByText("Bir moderatör seni susturdu.")).toHaveLength(1);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Duraklat" }));
+    expect(hold).toHaveBeenCalledWith(1, true);
+  });
+
   it("gives a friend room's leader the share rule for the header menu, not the footer", () => {
     const sharers = vi.spyOn(shareApi, "setSharers").mockResolvedValue(true);
     show(scenario("shareOffer"), <ShareFooterRow />);

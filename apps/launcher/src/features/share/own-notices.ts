@@ -16,7 +16,7 @@ import { useEffect } from "react";
 import { useVoiceUi } from "@/features/voice/store";
 import i18n from "@/lib/i18n";
 import { shareApi } from "@/share/api";
-import type { ShareNotice, ShareRefusal, VoiceMyShare } from "@/share/types";
+import type { ShareAsked, ShareNotice, ShareRefusal, VoiceMyShare } from "@/share/types";
 import {
   askOwnQuestion,
   changeRefusedText,
@@ -38,10 +38,12 @@ import { sayShare } from "./own-say";
 import {
   clearLost,
   dropRefused,
+  dropRefusedChange,
   isLost,
   type LostWhy,
   lostUntil,
   markLost,
+  type OwnPatch,
   type OwnStatus,
   ownStatus,
   useOwnUi,
@@ -63,6 +65,15 @@ const CHANGE_REFUSALS: ReadonlySet<ShareRefusal> = new Set([
   "notAllowed",
   "failed",
 ]);
+
+/** What a refused live change asked of the room: its given fields only. */
+function askedOf(change: ShareAsked): OwnPatch {
+  const asked: OwnPatch = {};
+  if (change.preset != null) asked.preset = change.preset;
+  if (change.fps != null) asked.fps = change.fps;
+  if (change.audio != null) asked.audio = change.audio;
+  return asked;
+}
 
 /** The room panel is open: the player's cards say their shares' states themselves. */
 const panelOpen = () => useVoiceUi.getState().panel;
@@ -144,9 +155,17 @@ export function showShareNotice(notice: ShareNotice) {
   for (const [n, at] of endedLost) if (now - at > RECENT_MS) endedLost.delete(n);
   switch (notice.kind) {
     case "refused": {
-      // The room refused a live change the launcher took (`share_update` asks it first): only
-      // that change's quality, frame rate or sound goes back, in its words; else a refusal of a
-      // share or a watch, as before.
+      // The room refused a live change (`share_update` asks it first; its notice can come before
+      // the launcher's answer): that change's quality, frame rate or sound goes back, said by its
+      // cause. The notice names the share and the change; one that does not takes back the latest
+      // change the room decides on. Else a share or a watch could not start, as before.
+      if (notice.change) {
+        const asked = askedOf(notice.change);
+        if (notice.n == null) dropRefused();
+        else dropRefusedChange(notice.n, asked);
+        toast(changeRefusedText(notice.refusal, asked));
+        return;
+      }
       const change = CHANGE_REFUSALS.has(notice.refusal) ? dropRefused() : null;
       toast(change ? changeRefusedText(notice.refusal, change) : refusalText(notice.refusal));
       return;
