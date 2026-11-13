@@ -283,6 +283,11 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<pl_voice::view::VoiceLevels>()
         // "share-notice": screen sharing's toasts (SHARE).
         .typ::<pl_voice::share::ShareNotice>()
+        // SQOL: "share-stats", "share-preview", "share-audio" (the "Yayın" window), "voice-chat".
+        .typ::<pl_voice::share::ShareStatsView>()
+        .typ::<pl_voice::share::SharePreviewView>()
+        .typ::<pl_voice::share::PopoutAudio>()
+        .typ::<pl_voice::rchat::VoiceChatEvent>()
         .commands(tauri_specta::collect_commands![
             commands::app::app_info,
             commands::app::app_set_language,
@@ -397,6 +402,12 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::voice::voice_restore,
             commands::voice::voice_levels,
             commands::voice::voice_ignored,
+            // SQOL: typing in the launcher; the voice room's own chat
+            commands::voice::voice_typing,
+            commands::voice::voice_chat_send,
+            commands::voice::voice_chat_delete,
+            commands::voice::voice_chat_report,
+            commands::voice::voice_chat_log,
             // the hidden voice window's page only (`pl_voice::guard`)
             commands::voice::voice_page_attach,
             commands::voice::voice_page_report,
@@ -418,6 +429,13 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::share::share_unshare,
             commands::share::share_set_sharers,
             commands::share::share_thumb,
+            // SQOL: a live share changes; the "Yayın" window's sound and watching choices
+            commands::share::share_switch,
+            commands::share::share_update,
+            commands::share::share_hold,
+            commands::share::share_preview,
+            commands::share::share_popout_audio,
+            commands::share::share_view_prefs,
             commands::server::server_status,
             commands::troubleshoot::troubleshoot_run,
             commands::troubleshoot::troubleshoot_crash,

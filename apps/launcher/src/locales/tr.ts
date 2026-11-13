@@ -65,6 +65,7 @@ import { trRoomChat } from "./tr-room-chat";
 import { trSafety } from "./tr-safety";
 import { trSetup } from "./tr-setup";
 import { trShare } from "./tr-share";
+import { trShareView } from "./tr-share-view";
 import { trShortcuts } from "./tr-shortcuts";
 import { trShotCopy } from "./tr-shot-copy";
 import { trSmall7 } from "./tr-small7";
@@ -165,6 +166,7 @@ export const tr = {
   voice: trVoice,
   share: trShare,
   roomChat: trRoomChat,
+  shareView: trShareView,
   socNext: trSocNext,
   socNote: trSocNote,
   telemetry: trTelemetry,

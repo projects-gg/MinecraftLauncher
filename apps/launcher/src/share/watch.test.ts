@@ -37,8 +37,9 @@ class FakePeer {
   async setLocalDescription(answer: { sdp: string }) {
     this.localDescription = answer;
   }
+  stats = new Map<string, Record<string, unknown>>();
   async getStats() {
-    return new Map();
+    return this.stats;
   }
   close() {
     this.closed = true;
@@ -56,6 +57,7 @@ class FakePeer {
 function rig() {
   const peers: FakePeer[] = [];
   const timers = new Map<number, { at: number; work: () => void }>();
+  const intervals = new Map<number, () => void>();
   let now = 0;
   let next = 1;
   const host: WatchHost = {
@@ -70,8 +72,12 @@ function rig() {
       return id;
     },
     clearTimeout: (id) => void timers.delete(id),
-    setInterval: () => next++,
-    clearInterval: () => {},
+    setInterval: (work) => {
+      const id = next++;
+      intervals.set(id, work);
+      return id;
+    },
+    clearInterval: (id) => void intervals.delete(id),
     createStream: () => new FakeStream() as unknown as MediaStream,
   };
   const reports: WatchReport[] = [];
@@ -86,7 +92,11 @@ function rig() {
     }
   };
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
-  return { engine, peers, reports, advance, settle };
+  /** The quality look's interval fires once. */
+  const look = () => {
+    for (const work of intervals.values()) work();
+  };
+  return { engine, peers, reports, advance, settle, look };
 }
 
 const offer = (ufrag: string) => `v=0\r\na=ice-ufrag:${ufrag}\r\n`;
@@ -172,6 +182,44 @@ describe("the watch engine", () => {
     advance(DROP_WAIT_MS);
     expect(reports.at(-1)).toEqual({ t: "lost" });
     expect(peers[0]?.closed).toBe(true);
+  });
+
+  it("keeps what arrives of a share (Yayın Bilgileri) only while someone asks for it", async () => {
+    const { engine, peers, settle, look } = rig();
+    engine.handle({ t: "offer", sdp: offer("abc"), mids, fresh: false });
+    await settle();
+    peers[0]?.track("0", "video");
+    engine.setShowing(true);
+    const peer = peers[0];
+    if (!peer) throw new Error("no peer");
+    const video = {
+      type: "inbound-rtp",
+      kind: "video",
+      mid: "0",
+      frameWidth: 1920,
+      frameHeight: 1080,
+      framesPerSecond: 59.6,
+      packetsLost: 0,
+      packetsReceived: 100,
+      freezeCount: 0,
+    };
+    peer.stats = new Map([["v", video]]);
+    look();
+    await settle();
+    expect(engine.info("301", 1)).toBeNull();
+    const release = engine.watchInfo();
+    let changes = 0;
+    engine.subscribe(() => changes++);
+    look();
+    await settle();
+    expect(engine.info("301", 1)).toEqual({ w: 1920, h: 1080, fps: 60 });
+    expect(changes).toBe(1);
+    // The same figures: nothing new for the page to draw.
+    look();
+    await settle();
+    expect(changes).toBe(1);
+    release();
+    expect(engine.info("301", 1)).toBeNull();
   });
 
   it("closes everything on reset, and a closed connection's late events change nothing", async () => {

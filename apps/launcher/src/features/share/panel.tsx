@@ -1,88 +1,28 @@
 // Screen sharing on the room panel (SHARE; share.md §3): above the panel's three buttons,
-// "Ekranını paylaş" while the player shares nothing; while they share, each share's line says
-// "Yayında" calmly (no red, no light), what it shows, who watches (their faces; their names on the
-// pointer) and "Durdur". Beside each person who shares, "İzle" (their "YAYINDA" is live-card.tsx's).
-import { CaretDown, Check, Monitor, Screencast } from "@phosphor-icons/react";
-import { Button, cn, Menu, type MenuItem, Tooltip, toast, useMotionPrefs } from "@pl/ui";
+// "Ekranını paylaş" while the player shares nothing; while they share, each share's card (SQOL:
+// own-card.tsx: its live picture, what it shows, its quality, who watches, "Ekranı Değiştir", "⋯"
+// and "Durdur"), calm (no red, no light). A friend room's leader picks "Kim paylaşabilir" in the
+// panel's header menu (`useShareRuleItems`; the footer keeps only the player's own sharing).
+// Beside each person who shares, "İzle" (their "YAYINDA" is live-card.tsx's).
+import { Monitor } from "@phosphor-icons/react";
+import { Button, cn, type MenuItem, toast, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { SpeakingFace } from "@/features/voice/faces";
-import { useFaces } from "@/features/voice/store";
 import { shareApi } from "@/share/api";
-import type { ShareBy, VoiceLiveShare, VoiceMyShare } from "@/share/types";
-import { stopShare, watchShare } from "./actions";
-import { useShare, useShareUi } from "./store";
+import type { ShareBy, VoiceLiveShare } from "@/share/types";
+import { watchShare } from "./actions";
+import { OwnShareCard } from "./own-card";
+import { openNewShare } from "./own-store";
+import { useShare } from "./store";
 
-function Watchers({ ids }: { ids: string[] }) {
-  const { t } = useTranslation();
-  const faces = useFaces(ids);
-  if (!ids.length) {
-    return <span className="text-[12.5px] text-ash-400">{t("share.live.resting")}</span>;
-  }
-  const names = faces.map((f) => f.name).join(", ");
-  return (
-    <Tooltip content={t("share.live.watchedBy", { names })}>
-      <span className="flex items-center gap-2">
-        <span className="sr-only">{t("share.live.watchedBy", { names })}</span>
-        <span className="flex -space-x-1.5">
-          {faces.slice(0, 3).map((face) => (
-            <SpeakingFace
-              key={face.id}
-              face={face}
-              size={20}
-              round
-              speaking={false}
-              className="ring-2 ring-obsidian-900"
-            />
-          ))}
-        </span>
-        <span className="text-[12.5px] whitespace-nowrap text-ash-300">
-          {t("share.live.watchers", { count: ids.length })}
-        </span>
-      </span>
-    </Tooltip>
-  );
-}
-
-/** One of the player's shares. */
-function LiveLine({ mine }: { mine: VoiceMyShare }) {
-  const { t } = useTranslation();
-  const live = mine.phase !== "starting";
-  const what =
-    mine.kind === "game" ? t("share.kind.game") : mine.label || t(`share.kind.${mine.kind}`);
-  return (
-    <div className="flex min-h-[44px] items-center gap-2.5 rounded-[var(--radius-panel)] bg-white/[0.045] py-1.5 pr-1.5 pl-3">
-      <Screencast
-        size={17}
-        weight="bold"
-        aria-hidden
-        className={cn("shrink-0", live ? "text-jade-400" : "text-ash-400")}
-      />
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="text-[13px] leading-[1.3] font-semibold text-bone-50">
-          {live ? t("share.live.on") : t("share.live.starting")}
-        </span>
-        <span className="truncate text-[12px] leading-[1.35] text-ash-400">{what}</span>
-      </span>
-      {live ? <Watchers ids={mine.watchers} /> : null}
-      <Button
-        size="sm"
-        variant="secondary"
-        aria-label={t("share.live.stopLabel")}
-        onClick={() => void stopShare(mine.n)}
-      >
-        {t("share.live.stop")}
-      </Button>
-    </div>
-  );
-}
-
-/** Above the panel's buttons: the player's shares, and "Ekranını paylaş". */
+/**
+ * Above the panel's buttons: the player's shares, and "Ekranını paylaş" (no props: the room
+ * panel's footer renders it as it is).
+ */
 export function ShareFooterRow() {
   const { t } = useTranslation();
   const { reduce } = useMotionPrefs();
   const share = useShare();
-  const openPicker = useShareUi((s) => s.openPicker);
   if (!share.on || (!share.canShare && !share.mine.length)) return null;
   const more = share.canShare && share.mine.length < share.mineMax;
   // Why "Ekranını paylaş" waits, in one sentence (none: it does not).
@@ -91,17 +31,22 @@ export function ShareFooterRow() {
     : !share.open
       ? t("share.notice.off")
       : null;
+  if (!share.mine.length && !more) return null;
   return (
     <div className="mb-2 flex flex-col gap-1.5">
       <AnimatePresence initial={false}>
         {share.mine.map((mine) => (
           <motion.div
             key={mine.n}
-            initial={{ opacity: 0, y: reduce ? 0 : 4 }}
-            animate={{ opacity: 1, y: 0, transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] } }}
+            initial={{ opacity: 0, transform: `translateY(${reduce ? 0 : 4}px)` }}
+            animate={{
+              opacity: 1,
+              transform: "translateY(0px)",
+              transition: { duration: 0.22, ease: [0.16, 1, 0.3, 1] },
+            }}
             exit={{ opacity: 0, transition: { duration: 0.14 } }}
           >
-            <LiveLine mine={mine} />
+            <OwnShareCard mine={mine} />
           </motion.div>
         ))}
       </AnimatePresence>
@@ -113,7 +58,7 @@ export function ShareFooterRow() {
             icon={<Monitor size={17} weight="bold" />}
             aria-disabled={why !== null || undefined}
             className={cn("w-full", why !== null && "opacity-45")}
-            onClick={why === null ? openPicker : undefined}
+            onClick={why === null ? openNewShare : undefined}
           >
             {t("share.action")}
           </Button>
@@ -121,15 +66,21 @@ export function ShareFooterRow() {
           {why ? <p className="px-1 text-center text-[12px] text-ash-400">{why}</p> : null}
         </>
       ) : null}
-      {share.canSetShareBy ? <WhoCanShare /> : null}
     </div>
   );
 }
 
-/** "Kim paylaşabilir" for a friend room's leader: one quiet line, its choice in a menu. */
-function WhoCanShare() {
+/** The same row under the name the SQOL notes give it (the room panel's footer, SQOL-U3). */
+export const SharePanel = ShareFooterRow;
+
+/**
+ * "Kim Paylaşabilir" › "Herkes" / "Lider ve Moderatörler" for the room panel's header menu
+ * (SQOL-U3 places it): a friend room's leader only; nothing elsewhere. The room checks the role.
+ */
+export function useShareRuleItems(): MenuItem[] {
   const { t } = useTranslation();
   const share = useShare();
+  if (!share.on || !share.canSetShareBy) return [];
   const set = (who: ShareBy) => {
     if (who === share.shareBy) return;
     void shareApi
@@ -139,31 +90,19 @@ function WhoCanShare() {
       })
       .catch(() => toast(t("share.notice.failed")));
   };
-  const items: MenuItem[] = (["all", "mods"] as const).map((who) => ({
-    label: t(`share.who.${who}`),
-    icon:
-      who === share.shareBy ? <Check size={15} weight="bold" /> : <span className="size-[15px]" />,
-    onSelect: () => set(who),
-  }));
-  return (
-    <div className="flex items-center justify-center gap-1.5 text-[12.5px] text-ash-400">
-      <span>{t("share.who.label")}</span>
-      <Menu
-        items={items}
-        align="center"
-        trigger={
-          <button
-            type="button"
-            aria-label={`${t("share.who.label")}: ${t(`share.who.${share.shareBy}`)}`}
-            className="flex h-7 cursor-pointer items-center gap-1 rounded-[6px] px-1.5 font-medium text-bone-100 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
-          >
-            {t(`share.who.${share.shareBy}`)}
-            <CaretDown size={12} weight="bold" aria-hidden />
-          </button>
-        }
-      />
-    </div>
-  );
+  return [
+    {
+      label: t("share.who.label"),
+      icon: <Monitor size={16} />,
+      onSelect: () => {},
+      items: (["all", "mods"] as const).map((who) => ({
+        label: t(`share.who.${who}`),
+        radio: true,
+        checked: share.shareBy === who,
+        onSelect: () => set(who),
+      })),
+    },
+  ];
 }
 
 /** A person's first share the player does not watch yet. */

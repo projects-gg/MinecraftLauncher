@@ -23,10 +23,17 @@ export interface MenuItem {
   /**
    * A choice rather than an action (sort order, a filter): a bone check marks it when `true` (the
    * screen's one gold is its main action, design.md §2). Read out as a checkbox item, or a radio
-   * item with `radio` (one choice of a group).
+   * item with `radio` (one choice of a group). Space checks it and keeps the menu open (APG);
+   * Enter and a click check it and close the menu.
    */
   checked?: boolean;
   radio?: boolean;
+  /**
+   * A group's name over the rows after it, up to the next line (`null`) or the next name: never a
+   * row (no focus, no select; `onSelect` is not used). Its rows are read as a group with this name
+   * ("Kare Hızı" over 15 / 30 / 60 fps).
+   */
+  heading?: boolean;
   /** A submenu (opens to the side on hover, → or Enter); `onSelect` is not used then. */
   items?: Array<MenuItem | null>;
   /** The keys that do the same outside the menu ("Alt ↑"), shown at the row's end. */
@@ -36,6 +43,12 @@ export interface MenuItem {
    * track under them. The menu stays open while it changes; `onSelect` is not used then.
    */
   slider?: MenuSlider;
+  /**
+   * One quiet sentence under the label: why a dimmed row is off ("Bu bilgisayarda en çok
+   * Normal."). With `disabled` the row stays in the arrows' reach (APG: a disabled item is
+   * focusable), reads its reason with its name, and a press on it does nothing.
+   */
+  hint?: string;
 }
 
 /** A row's value (`MenuItem.slider`). */
@@ -119,6 +132,10 @@ const rowClass =
 const titleClass =
   "max-w-[240px] truncate px-2.5 pt-1.5 pb-1 font-display text-[13px] leading-[16px] font-semibold text-bone-50 select-none";
 
+/** A group's name over its rows (`MenuItem.heading`): quiet, never a row. */
+const headingClass =
+  "px-2.5 pt-1.5 pb-0.5 text-[12px] leading-[16px] font-semibold text-ash-400 select-none";
+
 interface MenuParts {
   Item: typeof DropdownMenu.Item | typeof RadixContextMenu.Item;
   Separator: typeof DropdownMenu.Separator | typeof RadixContextMenu.Separator;
@@ -126,6 +143,8 @@ interface MenuParts {
   SubTrigger: typeof DropdownMenu.SubTrigger | typeof RadixContextMenu.SubTrigger;
   SubContent: typeof DropdownMenu.SubContent | typeof RadixContextMenu.SubContent;
   Portal: typeof DropdownMenu.Portal | typeof RadixContextMenu.Portal;
+  Group: typeof DropdownMenu.Group | typeof RadixContextMenu.Group;
+  Label: typeof DropdownMenu.Label | typeof RadixContextMenu.Label;
 }
 
 const DROPDOWN: MenuParts = {
@@ -135,6 +154,8 @@ const DROPDOWN: MenuParts = {
   SubTrigger: DropdownMenu.SubTrigger,
   SubContent: DropdownMenu.SubContent,
   Portal: DropdownMenu.Portal,
+  Group: DropdownMenu.Group,
+  Label: DropdownMenu.Label,
 };
 
 const CONTEXT: MenuParts = {
@@ -144,11 +165,15 @@ const CONTEXT: MenuParts = {
   SubTrigger: RadixContextMenu.SubTrigger,
   SubContent: RadixContextMenu.SubContent,
   Portal: RadixContextMenu.Portal,
+  Group: RadixContextMenu.Group,
+  Label: RadixContextMenu.Label,
 };
 
-function Icon({ item }: { item: MenuItem }) {
+function Icon({ item, className }: { item: MenuItem; className?: string }) {
   return item.icon ? (
-    <span className={cn("flex", item.danger ? "text-flare-400" : "text-ash-300")}>{item.icon}</span>
+    <span className={cn("flex", item.danger ? "text-flare-400" : "text-ash-300", className)}>
+      {item.icon}
+    </span>
   ) : null;
 }
 
@@ -286,86 +311,138 @@ function SliderRow({
   );
 }
 
-/** The rows of a menu; both menus share them (one look for "more" buttons and right clicks). */
+/**
+ * The rows of a menu; both menus share them (one look for "more" buttons and right clicks). A
+ * group's name (`heading`) and the rows after it, up to the next line or name, make one group.
+ */
 function menuRows(items: Array<MenuItem | null>, parts: MenuParts): ReactNode[] {
-  const { Item, Separator, Sub, SubTrigger, SubContent, Portal } = parts;
-  return items.map((item, i) => {
-    if (item === null) {
-      // biome-ignore lint/suspicious/noArrayIndexKey: separators have no identity
-      return <Separator key={`sep-${i}`} className="my-1.5 h-px bg-white/8" />;
+  const { Group, Label } = parts;
+  const out: ReactNode[] = [];
+  for (let i = 0; i < items.length; i += 1) {
+    const item = items[i] ?? null;
+    if (!item?.heading) {
+      out.push(menuRow(item, i, parts));
+      continue;
     }
-    if (item.slider) {
-      return <SliderRow key={item.label} item={{ ...item, slider: item.slider }} Item={Item} />;
-    }
-    if (item.items) {
-      return (
-        <Sub key={item.label}>
-          <SubTrigger
-            disabled={item.disabled}
-            className={cn(
-              rowClass,
-              "text-bone-100 data-[highlighted]:bg-white/8 data-[state=open]:bg-white/8",
-            )}
-          >
-            <Icon item={item} />
-            <span className="min-w-0 flex-1">{item.label}</span>
-            <CaretRight size={13} weight="bold" aria-hidden className="shrink-0 text-ash-400" />
-          </SubTrigger>
-          <Portal>
-            <SubContent
-              sideOffset={6}
-              alignOffset={-4}
-              collisionPadding={8}
-              className={cn(contentClass, "max-h-[360px] overflow-y-auto")}
-            >
-              {menuRows(item.items, parts)}
-            </SubContent>
-          </Portal>
-        </Sub>
-      );
-    }
-    return (
-      <Item
-        key={item.label}
-        disabled={item.disabled}
-        onSelect={item.onSelect}
-        // A closing menu leaves the focus alone: when the item opened a sheet or a dialog, the
-        // layer coming up under the pointer made Radix focus the fading menu again, and the
-        // layer's focus trap took the focus back as keyboard focus (rings on every tab after a
-        // plain click; POLISH6).
-        onPointerLeave={(event) => {
-          const menu = event.currentTarget.closest("[role=menu]");
-          if (menu?.getAttribute("data-state") === "closed") event.preventDefault();
-        }}
-        role={
-          item.checked === undefined
-            ? "menuitem"
-            : item.radio
-              ? "menuitemradio"
-              : "menuitemcheckbox"
-        }
-        aria-checked={item.checked}
-        className={cn(
-          rowClass,
-          item.danger
-            ? "text-flare-400 data-[highlighted]:bg-flare-400/12"
-            : "text-bone-100 data-[highlighted]:bg-white/8",
-        )}
-      >
-        <Icon item={item} />
-        <span className="min-w-0 flex-1">{item.label}</span>
-        {item.shortcut ? <Kbd>{item.shortcut}</Kbd> : null}
-        {item.checked === undefined ? null : (
-          <Check
-            size={15}
-            weight="bold"
-            aria-hidden
-            className={cn("shrink-0 text-bone-100", !item.checked && "invisible")}
-          />
-        )}
-      </Item>
+    let end = i + 1;
+    while (end < items.length && items[end] && !items[end]?.heading) end += 1;
+    const rows = items.slice(i + 1, end);
+    out.push(
+      <Group key={`group-${item.label}`} aria-label={item.label}>
+        <Label aria-hidden className={headingClass}>
+          {item.label}
+        </Label>
+        {rows.map((row, j) => menuRow(row, i + 1 + j, parts))}
+      </Group>,
     );
-  });
+    i = end - 1;
+  }
+  return out;
+}
+
+/** One row: a line, a slider, a submenu, or an action or choice. */
+function menuRow(item: MenuItem | null, i: number, parts: MenuParts): ReactNode {
+  const { Item, Separator, Sub, SubTrigger, SubContent, Portal } = parts;
+  if (item === null) {
+    // biome-ignore lint/suspicious/noArrayIndexKey: separators have no identity
+    return <Separator key={`sep-${i}`} className="my-1.5 h-px bg-white/8" />;
+  }
+  if (item.slider) {
+    return <SliderRow key={item.label} item={{ ...item, slider: item.slider }} Item={Item} />;
+  }
+  if (item.items) {
+    return (
+      <Sub key={item.label}>
+        <SubTrigger
+          disabled={item.disabled}
+          className={cn(
+            rowClass,
+            "text-bone-100 data-[highlighted]:bg-white/8 data-[state=open]:bg-white/8",
+          )}
+        >
+          <Icon item={item} />
+          <span className="min-w-0 flex-1">{item.label}</span>
+          <CaretRight size={13} weight="bold" aria-hidden className="shrink-0 text-ash-400" />
+        </SubTrigger>
+        <Portal>
+          <SubContent
+            sideOffset={6}
+            alignOffset={-4}
+            collisionPadding={8}
+            // Two named groups of choices fit before it scrolls (a share's "Gelişmiş").
+            className={cn(contentClass, "max-h-[420px] overflow-y-auto")}
+          >
+            {menuRows(item.items, parts)}
+          </SubContent>
+        </Portal>
+      </Sub>
+    );
+  }
+  // A dimmed row that says why (`hint`) stays reachable and does nothing when pressed.
+  const hinted = item.hint !== undefined;
+  const reasoned = item.disabled === true && hinted;
+  // APG: Space checks a checkbox or radio row and leaves the menu open; Enter checks and closes.
+  const checks = item.checked !== undefined && !reasoned;
+  return (
+    <Item
+      key={item.label}
+      disabled={item.disabled && !reasoned}
+      aria-disabled={reasoned || undefined}
+      onSelect={reasoned ? (event) => event.preventDefault() : item.onSelect}
+      onKeyDown={
+        checks
+          ? (event) => {
+              if (event.key !== " ") return;
+              event.preventDefault();
+              item.onSelect();
+            }
+          : undefined
+      }
+      // A closing menu leaves the focus alone: when the item opened a sheet or a dialog, the
+      // layer coming up under the pointer made Radix focus the fading menu again, and the
+      // layer's focus trap took the focus back as keyboard focus (rings on every tab after a
+      // plain click; POLISH6).
+      onPointerLeave={(event) => {
+        const menu = event.currentTarget.closest("[role=menu]");
+        if (menu?.getAttribute("data-state") === "closed") event.preventDefault();
+      }}
+      role={
+        item.checked === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox"
+      }
+      aria-checked={item.checked}
+      className={cn(
+        rowClass,
+        hinted && "items-start",
+        item.danger
+          ? "text-flare-400 data-[highlighted]:bg-flare-400/12"
+          : "text-bone-100 data-[highlighted]:bg-white/8",
+        reasoned && "cursor-default data-[highlighted]:bg-white/[0.04]",
+      )}
+    >
+      <Icon item={item} className={cn(hinted && "mt-[2px]", reasoned && "opacity-45")} />
+      {hinted ? (
+        <span className="min-w-0 flex-1">
+          <span className={cn("block", reasoned && "opacity-45")}>{item.label}</span>
+          <span className="mt-0.5 block text-[12px] leading-[1.35] text-ash-400">{item.hint}</span>
+        </span>
+      ) : (
+        <span className="min-w-0 flex-1">{item.label}</span>
+      )}
+      {item.shortcut ? <Kbd>{item.shortcut}</Kbd> : null}
+      {item.checked === undefined ? null : (
+        <Check
+          size={15}
+          weight="bold"
+          aria-hidden
+          className={cn(
+            "shrink-0 text-bone-100",
+            hinted && "mt-[2px]",
+            !item.checked && "invisible",
+          )}
+        />
+      )}
+    </Item>
+  );
 }
 
 /** A row's height, a separator's and the panel's padding, as `rowClass` and `contentClass` draw them. */
@@ -378,6 +455,10 @@ const PANEL_PX = 10;
 const STRIP_PX = 50;
 /** The title line (`titleClass`). */
 const TITLE_PX = 25;
+/** A row's reason under its label (`MenuItem.hint`). */
+const HINT_PX = 18;
+/** A group's name (`MenuItem.heading`, `headingClass`). */
+const HEADING_PX = 24;
 /** How far a menu keeps from the window's edges when it opens beside its trigger. */
 const MENU_MARGIN = 8;
 
@@ -389,11 +470,15 @@ export function menuHeight(
 ): number {
   const rows = items.filter((item) => item !== null).length;
   const sliders = items.filter((item) => item?.slider).length;
+  const hints = items.filter((item) => item?.hint !== undefined && !item.slider).length;
+  const headings = items.filter((item) => item?.heading).length;
   const separators = items.length - rows;
   return (
     PANEL_PX +
-    rows * ROW_PX +
+    rows * ROW_PX -
+    headings * (ROW_PX - HEADING_PX) +
     sliders * (SLIDER_PX - ROW_PX) +
+    hints * HINT_PX +
     separators * SEPARATOR_PX +
     (strip?.length ? STRIP_PX : 0) +
     (title ? TITLE_PX : 0)
