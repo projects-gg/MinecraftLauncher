@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import "@/lib/i18n";
 import type { VoicePerson } from "@/lib/api/voice-types";
 import i18n from "@/lib/i18n";
-import { fitNames, namesLines, titleNames } from "./panel-rules";
+import { closeInMenu, fitNames, namesLines, titleNames } from "./panel-rules";
 
 const t = i18n.getFixedT("tr") as TFunction;
 
@@ -46,5 +46,18 @@ describe("an unnamed room's names on a short line", () => {
     expect(titleNames({ name: "Taş Ocağı", general: false, people }, nameOf)).toBeNull();
     expect(titleNames({ name: "Genel", general: true, people }, nameOf)).toBeNull();
     expect(titleNames({ name: null, general: false, people: [] }, nameOf)).toBeNull();
+  });
+});
+
+describe("the header's room menu", () => {
+  const people = [{ id: "a" }] as VoicePerson[];
+
+  it("offers closing the room to whoever may, with others in it and not in a call of two", () => {
+    expect(closeInMenu({ canClose: true, people }, false)).toBe(true);
+    expect(closeInMenu({ canClose: false, people }, false)).toBe(false);
+    // Alone, closing is leaving.
+    expect(closeInMenu({ canClose: true, people: [] }, false)).toBe(false);
+    // A call of two: leaving is hanging up.
+    expect(closeInMenu({ canClose: true, people }, true)).toBe(false);
   });
 });

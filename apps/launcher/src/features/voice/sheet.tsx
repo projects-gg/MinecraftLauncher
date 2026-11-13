@@ -21,6 +21,7 @@ import {
   ArrowsClockwise,
   CaretDown,
   CaretLeft,
+  DotsThree,
   GearSix,
   Headphones,
   Keyboard,
@@ -34,8 +35,10 @@ import {
   User,
   UserPlus,
   Warning,
+  XCircle,
 } from "@phosphor-icons/react";
 import {
+  Dialog as AskDialog,
   Button,
   ContextMenu,
   cn,
@@ -100,7 +103,7 @@ import { FittedNames } from "./fitted-names";
 import { HeadphonesSlash } from "./icons";
 import { VoiceMeter } from "./meter";
 import { PanelChromeProvider, PanelClose, PanelTitle, usePanelChrome } from "./panel-chrome";
-import { titleNames } from "./panel-rules";
+import { closeInMenu, titleNames } from "./panel-rules";
 import { meterThreshold, setOutputVolume, useVoicePrefs } from "./prefs";
 import { PanelChatSection, usePanelChat } from "./room-chat";
 import {
@@ -872,8 +875,6 @@ function RoomHeader({
 }) {
   const { t } = useTranslation();
   const goTo = useVoiceUi((s) => s.goTo);
-  const close = useVoiceUi((s) => s.closePanel);
-  const navigate = useNavigate();
   const crew = useSocialUi((s) => s.view.crews.find((c) => c.id === room.crew));
   // While the name is typed, the field takes the header's room ("Davet et" and the settings wait).
   const [editing, setEditing] = useState(false);
@@ -919,14 +920,7 @@ function RoomHeader({
                 {t("voice.room.invite")}
               </Button>
             </Tooltip>
-            <IconButton
-              label={t("voice.room.settings")}
-              icon={<GearSix size={18} />}
-              onClick={() => {
-                close();
-                void navigate({ to: "/settings", search: { section: "voice" } });
-              }}
-            />
+            <RoomMenu room={room} />
           </>
         )}
         <PanelClose />
@@ -936,26 +930,65 @@ function RoomHeader({
   );
 }
 
-// --- the bottom -------------------------------------------------------------------------------
-
-function CloseRoom() {
+/**
+ * The header's room menu (SQOL-U3): the voice settings and, last and in flare, "Odayı Kapat" with
+ * its one sentence ("Oda herkes için kapanır."). The footer keeps "Ayrıl" as its only red action.
+ */
+function RoomMenu({ room }: { room: VoiceRoomView }) {
   const { t } = useTranslation();
-  const { reduce } = useMotionPrefs();
+  const closePanel = useVoiceUi((s) => s.closePanel);
+  const navigate = useNavigate();
+  const stage = useVoiceUi((s) => isOneToOne(s.state));
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const items: Array<MenuItem | null> = [
+    {
+      label: t("voice.room.settings"),
+      icon: <GearSix size={16} />,
+      onSelect: () => {
+        closePanel();
+        void navigate({ to: "/settings", search: { section: "voice" } });
+      },
+    },
+    ...(closeInMenu(room, stage)
+      ? [
+          null,
+          {
+            label: t("voice.room.close"),
+            icon: <XCircle size={16} />,
+            danger: true,
+            onSelect: () => setAsking(true),
+          },
+        ]
+      : []),
+  ];
   return (
-    <div className="relative mt-2 h-8">
-      <AnimatePresence initial={false} mode="popLayout">
-        {asking ? (
-          <motion.div key="ask" className="flex h-8 items-center gap-2" {...rise(reduce, 4, 0.2)}>
-            <p className="min-w-0 flex-1 truncate text-[13px] text-bone-100">
-              {t("voice.room.closeAsk")}
-            </p>
-            <Button size="sm" variant="ghost" onClick={() => setAsking(false)}>
+    <>
+      <Menu
+        items={items}
+        label={t("roomChat.panel.menu")}
+        trigger={
+          <IconButton
+            label={t("roomChat.panel.menu")}
+            icon={<DotsThree size={20} weight="bold" />}
+          />
+        }
+      />
+      <AskDialog
+        open={asking}
+        onOpenChange={(open) => {
+          if (!busy) setAsking(open);
+        }}
+        title={t("voice.room.close")}
+        description={t("voice.room.closeAsk")}
+        closeLabel={t("common.close")}
+        width={400}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setAsking(false)}>
               {t("voice.room.cancel")}
             </Button>
             <Button
-              size="sm"
               variant="danger"
               disabled={busy}
               onClick={async () => {
@@ -967,21 +1000,14 @@ function CloseRoom() {
             >
               {t("voice.room.close")}
             </Button>
-          </motion.div>
-        ) : (
-          <motion.div key="idle" className="flex h-8 justify-center" {...rise(reduce, 4, 0.2)}>
-            <Button size="sm" variant="ghost" onClick={() => setAsking(true)}>
-              {/* The words carry the flare (a ghost button colours its own label). */}
-              <span className="text-flare-400 transition-colors group-hover:text-flare-300">
-                {t("voice.room.close")}
-              </span>
-            </Button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+          </>
+        }
+      />
+    </>
   );
 }
+
+// --- the bottom -------------------------------------------------------------------------------
 
 /**
  * "Herkesin sesi" (VOICE-CALL, SOC-GAP §3.11): everyone's voice at once, the person menu's slider
@@ -1080,7 +1106,8 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
           size="lg"
           variant="secondary"
           className="w-full px-2"
-          // Leaving ends nothing for the others: a plate with a red glyph; "Odayı kapat" alone is red.
+          // Leaving ends nothing for the others: a plate with a red glyph, the footer's only red
+          // action ("Odayı Kapat" is the header menu's last row).
           icon={<PhoneDisconnect size={17} weight="bold" className="text-flare-400" />}
           aria-label={ringing ? t("voice.call.cancelLabel") : undefined}
           onClick={() => void leaveRoom()}
@@ -1088,8 +1115,6 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
           {ringing ? t("voice.room.cancelRing") : t("voice.room.leave")}
         </Button>
       </div>
-      {/* Alone, closing is leaving: "Ayrıl" says it. */}
-      {room.canClose && room.people.length > 0 && !stage ? <CloseRoom /> : null}
     </footer>
   );
 }

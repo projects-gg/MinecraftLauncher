@@ -1,5 +1,5 @@
 // The room panel's header and marks, in plain rules (SQOL-U3): who an unnamed room's title names
-// when its line is short.
+// when its line is short, and what the header's room menu holds.
 import type { TFunction } from "i18next";
 import type { VoiceRoomView } from "@/lib/api/voice-types";
 import { namesLine } from "./rules";
@@ -45,4 +45,15 @@ export function titleNames(
 ): string[] | null {
   if (room.general || room.name || !room.people.length) return null;
   return room.people.map((p) => nameOf(p.id));
+}
+
+/**
+ * "Odayı Kapat" in the header's menu: alone, closing is leaving ("Ayrıl" says it), and a call of
+ * two has nothing to close for the other (leaving is hanging up).
+ */
+export function closeInMenu(
+  room: Pick<VoiceRoomView, "canClose" | "people">,
+  stage: boolean,
+): boolean {
+  return room.canClose && room.people.length > 0 && !stage;
 }

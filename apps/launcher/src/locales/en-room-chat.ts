@@ -5,6 +5,7 @@ import type { trRoomChat } from "./tr-room-chat";
 export const enRoomChat: typeof trRoomChat = {
   panel: {
     label: "Voice Room",
+    menu: "Room Options",
   },
   people: {
     title: "In the Room",

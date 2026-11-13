@@ -5,6 +5,8 @@ export const trRoomChat = {
   panel: {
     /** The docked panel's landmark name. */
     label: "Ses Odası",
+    /** The header's menu: the voice settings, the room's own actions. */
+    menu: "Oda Seçenekleri",
   },
   people: {
     title: "Odadakiler",
