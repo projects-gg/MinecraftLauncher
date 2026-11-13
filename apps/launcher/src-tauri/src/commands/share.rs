@@ -7,7 +7,8 @@
 //! the commands it needs (`pl_voice::guard`).
 
 use pl_voice::share::{
-    ShareLayer, ShareRefusal, ShareSource, ShareSources, ShareSurface, WatchCmd, WatchReport,
+    PopoutAudio, ShareChange, ShareLayer, ShareRefusal, ShareSource, ShareSources, ShareSurface,
+    ShareViewPrefs, WatchCmd, WatchReport,
 };
 use pl_voice::view::VoiceAnswer;
 use tauri::ipc::Channel;
@@ -162,7 +163,7 @@ pub fn share_fullscreen(app: AppHandle, window: WebviewWindow, on: bool) -> CmdR
     Ok(())
 }
 
-/// A sharer's stream sound for the player (percent 0–100, muted).
+/// A sharer's stream sound for the player (percent 0 to `volumeMax`, SQOL: up to 200; muted).
 #[tauri::command]
 #[specta::specta]
 pub fn share_stream_volume(
@@ -194,6 +195,66 @@ pub async fn share_unshare(
     n: u8,
 ) -> CmdResult<VoiceAnswer> {
     Ok(state.voice.share_unshare(person, n).await)
+}
+
+/// SQOL "Ekranı Değiştir": share `source` in share `n` instead (the watchers stay): null when it
+/// went to the publisher; the result comes in the state and as `share-notice` (`switched`,
+/// `switchFailed`).
+#[tauri::command]
+#[specta::specta]
+pub fn share_switch(
+    state: State<'_, AppState>,
+    n: u8,
+    source: ShareSource,
+    label: String,
+) -> CmdResult<Option<ShareRefusal>> {
+    Ok(state.voice.share_switch(n, source, label).err())
+}
+
+/// SQOL: a live change of share `n` ("Kalite", "Kare Hızı", "Görüntü", "İmleci Göster", "Sesi de
+/// Paylaş", "Önizleme Resmini Paylaş"): null when asked; the values the room applied come in the
+/// state.
+#[tauri::command]
+#[specta::specta]
+pub fn share_update(
+    state: State<'_, AppState>,
+    n: u8,
+    change: ShareChange,
+) -> CmdResult<Option<ShareRefusal>> {
+    Ok(state.voice.share_update(n, change).err())
+}
+
+/// SQOL "Duraklat" (`on`) / "Sürdür": watchers see a blank picture meanwhile.
+#[tauri::command]
+#[specta::specta]
+pub fn share_hold(state: State<'_, AppState>, n: u8, on: bool) -> CmdResult<Option<ShareRefusal>> {
+    Ok(state.voice.share_hold(n, on).err())
+}
+
+/// SQOL: the player's own small live preview of share `n` while its card is on screen
+/// (`share-preview`, at most twice a second, only for new frames).
+#[tauri::command]
+#[specta::specta]
+pub fn share_preview(state: State<'_, AppState>, n: u8, on: bool) -> CmdResult<()> {
+    state.voice.share_preview(n, on);
+    Ok(())
+}
+
+/// SQOL: what the "Yayın" window plays streams with (it cannot read voice chat's settings);
+/// changes come as `share-audio`.
+#[tauri::command]
+#[specta::specta]
+pub fn share_popout_audio(state: State<'_, AppState>) -> CmdResult<PopoutAudio> {
+    Ok(crate::voice::share::popout_audio(&state.voice))
+}
+
+/// SQOL: the watching choices ("Yayın Kalitesi", "Biri Konuşunca Yayın Sesini Kıs" and its
+/// amount), from either window.
+#[tauri::command]
+#[specta::specta]
+pub fn share_view_prefs(state: State<'_, AppState>, change: ShareViewPrefs) -> CmdResult<()> {
+    state.voice.share_view_prefs(change);
+    Ok(())
 }
 
 /// SHARE-LIVE: the hover card's still picture of share `n` of `user` in `room` (the player's own

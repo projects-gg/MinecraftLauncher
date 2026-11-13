@@ -29,6 +29,19 @@ pub const THUMB_MAX_BYTES: usize = 12_000;
 /// SHARE-LIVE: the same sharing sound plays at most once this often (two shares that start or end
 /// together sound once).
 pub const SOUND_GAP_MS: u64 = 1_000;
+/// SQOL (the lead's contract `docs/tasks/sqol.md` §2.1): asked for with [`CAP`]: live changes of
+/// the player's own shares (`share_set` with `rid`: source, quality, frame rate, sound, `st`) and
+/// the share state's `st` (`hold`, `min`).
+pub const SHARE2_CAP: &str = "share2";
+/// SQOL (§2.2): the room's own text chat.
+pub const RCHAT_CAP: &str = "rchat1";
+/// SQOL: a share whose source closed waits this long for another one ("Başka Ekran Seç"), then
+/// ends ("Paylaşım durdu.").
+pub const HOLD_STOP_MS: u64 = 60_000;
+/// SQOL: "Kısma Miktarı" (percent the stream sound goes down while someone speaks).
+pub const DUCK_LEVEL_MIN: u8 = 20;
+pub const DUCK_LEVEL_MAX: u8 = 90;
+pub const DUCK_LEVEL_DEFAULT: u8 = 60;
 /// Shares a player may run at once unless the room says fewer (Studio 1–3).
 pub const MINE_MAX: u8 = 2;
 /// Shares a player may watch at once.
@@ -118,6 +131,28 @@ pub enum ShareMotion {
     Motion,
 }
 
+/// SQOL "Yayın Kalitesi" while watching: `auto` (the small layer for a small tile or a weak
+/// connection), `high` (always the full layer), `saver` (always the small layer).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ShareViewQuality {
+    #[default]
+    Auto,
+    High,
+    Saver,
+}
+
+/// Anything else reads as `auto` (a newer launcher's choice in a backup).
+impl<'de> Deserialize<'de> for ShareViewQuality {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match String::deserialize(deserializer)?.as_str() {
+            "high" => Self::High,
+            "saver" => Self::Saver,
+            _ => Self::Auto,
+        })
+    }
+}
+
 /// Where a share's sound comes from (Gelişmiş): the shared app's processes, or the whole computer
 /// without voice chat. A screen always shares the whole computer's.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, specta::Type)]
@@ -189,6 +224,16 @@ pub struct VoiceShareSettings {
     pub self_preview: bool,
     /// The "Yayın" window stays on top ("Her zaman üstte").
     pub always_on_top: bool,
+    /// SQOL "Biri Konuşunca Yayın Sesini Kıs" (watching; off by default).
+    pub duck: bool,
+    /// SQOL "Kısma Miktarı": percent, 20–90.
+    pub duck_level: u8,
+    /// SQOL "Ben Konuşunca da Kıs".
+    pub duck_self: bool,
+    /// SQOL "Yayın Kalitesi" while watching.
+    pub view_quality: ShareViewQuality,
+    /// SQOL "Önizleme Resmini Paylaş": the room gets the share's still picture (`share_thumb`).
+    pub thumbs: bool,
 }
 
 impl Default for VoiceShareSettings {
@@ -204,19 +249,30 @@ impl Default for VoiceShareSettings {
             audio_source: ShareAudioSource::App,
             self_preview: false,
             always_on_top: false,
+            duck: false,
+            duck_level: DUCK_LEVEL_DEFAULT,
+            duck_self: false,
+            view_quality: ShareViewQuality::Auto,
+            thumbs: true,
         }
     }
 }
 
 impl VoiceShareSettings {
-    /// Values held to their ranges: 15, 30 or 60 frames a second.
+    /// Values held to their ranges: 15, 30 or 60 frames a second; "Kısma Miktarı" 20–90.
     pub fn normalized(mut self) -> Self {
-        self.fps = self.fps.map(|fps| match fps {
-            0..=22 => 15,
-            23..=45 => 30,
-            _ => 60,
-        });
+        self.fps = self.fps.map(normal_fps);
+        self.duck_level = self.duck_level.clamp(DUCK_LEVEL_MIN, DUCK_LEVEL_MAX);
         self
+    }
+}
+
+/// A frame rate as one of 15, 30 and 60.
+pub fn normal_fps(fps: u8) -> u8 {
+    match fps {
+        0..=22 => 15,
+        23..=45 => 30,
+        _ => 60,
     }
 }
 
@@ -367,13 +423,30 @@ pub enum ShareCmd {
     KeyFrame {
         n: u8,
     },
-    /// The room allowed less than asked (`ack.preset`): the share goes on with these.
+    /// The room allowed less than asked (`ack.preset`), or the player changed the share live
+    /// (SQOL, with the room's applied values): the share goes on with these.
     Update {
         n: u8,
         opts: ShareOpts,
     },
     Stop {
         n: u8,
+    },
+    /// SQOL "Ekranı Değiştir": share `source` instead, watchers staying ([`ShareEvent::Switched`]
+    /// or [`ShareEvent::SwitchFailed`]).
+    Switch {
+        n: u8,
+        source: ShareSource,
+    },
+    /// SQOL "Duraklat" (`on`) / "Sürdür": a blank picture and no sound meanwhile.
+    Hold {
+        n: u8,
+        on: bool,
+    },
+    /// SQOL: the player's own small live preview while `on`.
+    Preview {
+        n: u8,
+        on: bool,
     },
 }
 
@@ -400,9 +473,26 @@ pub enum ShareEvent {
         n: u8,
         why: ShareLostWhy,
     },
-    /// The shared window closed, or the game ended.
+    /// The shared window closed, or the game ended (SQOL: the publisher holds a blank picture
+    /// meanwhile; the machine decides).
     SourceGone {
         n: u8,
+    },
+    /// SQOL: the share shows its new source (the player's switch, or the game's window found again
+    /// after it was recreated, unasked): the full layer's size now.
+    Switched {
+        n: u8,
+        width: u32,
+        height: u32,
+    },
+    /// SQOL: a switch did not happen (the old source goes on).
+    SwitchFailed {
+        n: u8,
+    },
+    /// SQOL: the shared window was minimized (`on`) or came back.
+    Minimized {
+        n: u8,
+        on: bool,
     },
     /// The app's sound cannot be had: the share goes on without it.
     AudioUnavailable {
@@ -512,6 +602,45 @@ pub enum ShareMinePhase {
     Resting,
 }
 
+/// SQOL: what watchers see of a share (wire `st`): its picture, a blank one ("Yayın
+/// duraklatıldı."), or the minimized window's last frame ("Paylaşılan pencere küçültüldü.").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ShareSt {
+    #[default]
+    Live,
+    Hold,
+    Min,
+}
+
+/// Anything else (a newer state) reads as live.
+impl<'de> Deserialize<'de> for ShareSt {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(
+            match Option::<serde_json::Value>::deserialize(deserializer)?
+                .as_ref()
+                .and_then(serde_json::Value::as_str)
+            {
+                Some("hold") => Self::Hold,
+                Some("min") => Self::Min,
+                _ => Self::Live,
+            },
+        )
+    }
+}
+
+/// SQOL: why one of the player's shares holds a blank picture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ShareHoldWhy {
+    /// "Duraklat".
+    Paused,
+    /// The shared window closed or the screen went: "Paylaştığın pencere kapandı."
+    Closed,
+    /// The shared game closed: "Oyun kapandı."
+    GameClosed,
+}
+
 /// One of the player's shares.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -531,6 +660,20 @@ pub struct VoiceMyShare {
     /// SHARE-LIVE: when the room took this share's last still picture (Unix seconds, the room's
     /// clock); none before the first. `share_thumb` answers the player's own from this computer.
     pub th: Option<i64>,
+    /// SQOL: what is shared now (this computer only): the picker marks it "Paylaşılıyor".
+    pub source: ShareSource,
+    /// SQOL: what watchers see.
+    pub st: ShareSt,
+    /// SQOL: why the picture is blank (`st` "hold").
+    pub hold: Option<ShareHoldWhy>,
+    /// SQOL: a closed source's share ends then unless another source is picked (Unix seconds).
+    pub hold_until: Option<i64>,
+    /// SQOL: "Görüntü" as chosen (`auto` follows the source).
+    pub motion: ShareMotion,
+    /// SQOL: "İmleci Göster".
+    pub cursor: bool,
+    /// SQOL: "Önizleme Resmini Paylaş" for this share.
+    pub thumbs: bool,
 }
 
 /// Someone else's share in the room.
@@ -550,6 +693,8 @@ pub struct VoiceLiveShare {
     /// SHARE-LIVE: when its last still picture came (Unix seconds); none before the first (or in a
     /// room from before SHARE-LIVE). The hover card's `share_thumb` keeps its answer by it.
     pub th: Option<i64>,
+    /// SQOL: what watchers see of it now (a room from before SQOL: always live).
+    pub st: ShareSt,
 }
 
 /// Where one watched share is.
@@ -577,7 +722,7 @@ pub struct VoiceWatch {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct VoiceStreamVolume {
-    /// Percent, 0–100.
+    /// Percent, 0 to `VoiceState.volumeMax` (SQOL: up to 200).
     pub volume: u16,
     pub muted: bool,
 }
@@ -624,6 +769,12 @@ pub struct VoiceShareView {
     pub volumes: BTreeMap<String, VoiceStreamVolume>,
     /// Names for the "Yayın" window, which has no friend list (the launcher fills them).
     pub names: BTreeMap<String, String>,
+    /// SQOL: the player's shares change live here ("Ekranı Değiştir", quality, sound, "Duraklat";
+    /// the service's `share.edit` and a `share2` room). False: only "Durdur".
+    pub edit: bool,
+    /// SQOL: this computer's best quality (no hardware encoder: "normal", "Bu bilgisayarda en çok
+    /// Normal."), apart from the room's (`max_preset` holds both).
+    pub hw_max: SharePreset,
 }
 
 impl VoiceShareView {
@@ -662,6 +813,8 @@ pub enum ShareRefusal {
     Gone,
     /// The room did not answer: "Bağlanamadı.".
     Failed,
+    /// SQOL: that source is in another of the player's shares already.
+    InUse,
 }
 
 impl ShareRefusal {
@@ -731,6 +884,18 @@ pub enum ShareNotice {
     WatchStopped,
     /// Watching could not connect.
     WatchFailed,
+    /// SQOL: "Artık {label} paylaşılıyor." (`label` empty for the game: the page names it).
+    Switched {
+        n: u8,
+        src: ShareKind,
+        label: String,
+    },
+    /// SQOL: "Bu pencere paylaşılamadı." (the old source goes on).
+    SwitchFailed { n: u8 },
+    /// SQOL: the shared window closed ("Paylaştığın pencere kapandı.") or the game did ("Oyun
+    /// kapandı."): "Başka Ekran Seç" / "Paylaşımı Durdur"; the share ends after [`HOLD_STOP_MS`]
+    /// (`closed`, `sourceGone`).
+    SourceClosed { n: u8, src: ShareKind },
 }
 
 // --- the room socket's share frames --------------------------------------------------------------
@@ -759,6 +924,9 @@ pub struct ShareWire {
     /// number reads as none.
     #[serde(default, deserialize_with = "unix_option")]
     pub th: Option<i64>,
+    /// SQOL (`share2`): what watchers see (absent: live).
+    #[serde(default)]
+    pub st: ShareSt,
 }
 
 fn unix_option<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<i64>, D::Error> {
@@ -780,6 +948,8 @@ pub struct ServiceShare {
     pub open: bool,
     /// A new watch may start now (the month's budget).
     pub watch: bool,
+    /// SQOL: live changes of a share (`hello.voice.share.edit`, Studio's "Canlı Yayın Ayarları").
+    pub edit: bool,
 }
 
 impl Default for ServiceShare {
@@ -789,8 +959,105 @@ impl Default for ServiceShare {
             max_preset: SharePreset::Normal,
             open: true,
             watch: true,
+            edit: false,
         }
     }
+}
+
+// --- SQOL: the page's live changes and the watching window's sound ------------------------------
+
+/// "Kalite", "Kare Hızı", "Görüntü", "İmleci Göster", "Sesi de Paylaş" and "Önizleme Resmini
+/// Paylaş" on a live share (`share_update`): only what changes is given.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ShareChange {
+    pub preset: Option<SharePreset>,
+    pub fps: Option<u8>,
+    pub motion: Option<ShareMotion>,
+    pub cursor: Option<bool>,
+    pub audio: Option<bool>,
+    pub thumbs: Option<bool>,
+}
+
+impl ShareChange {
+    /// What the room must agree to first (`share_set` with `rid`).
+    pub fn asks_room(&self) -> bool {
+        self.preset.is_some() || self.fps.is_some() || self.audio.is_some()
+    }
+}
+
+/// The watching choices both windows change (`share_view_prefs`): "Yayın Kalitesi" and the
+/// stream's ducking; only what changes is given.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ShareViewPrefs {
+    pub view_quality: Option<ShareViewQuality>,
+    pub duck: Option<bool>,
+    pub duck_level: Option<u8>,
+    pub duck_self: Option<bool>,
+}
+
+impl ShareViewPrefs {
+    /// `settings` with these changes (held to their ranges).
+    pub fn apply(&self, settings: &mut VoiceShareSettings) {
+        if let Some(quality) = self.view_quality {
+            settings.view_quality = quality;
+        }
+        if let Some(duck) = self.duck {
+            settings.duck = duck;
+        }
+        if let Some(level) = self.duck_level {
+            settings.duck_level = level.clamp(DUCK_LEVEL_MIN, DUCK_LEVEL_MAX);
+        }
+        if let Some(duck_self) = self.duck_self {
+            settings.duck_self = duck_self;
+        }
+    }
+}
+
+/// SQOL `share-stats`: one of the player's live shares now (every 5 s while it sends): "1280×720 ·
+/// 30 fps · donanım".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareStatsView {
+    pub n: u8,
+    /// The full layer's size.
+    pub w: u32,
+    pub h: u32,
+    /// Frames sent a second.
+    pub fps: u8,
+    /// Everything sent (both layers and the sound), kbit/s.
+    pub kbps: u32,
+    /// The hardware encoder ("donanım"); false: the software one ("yazılım").
+    pub hw: bool,
+}
+
+/// SQOL `share-preview`: the player's own small live picture of a share (while asked for).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SharePreviewView {
+    pub n: u8,
+    /// `data:image/jpeg;base64,…`.
+    pub data_url: String,
+}
+
+/// What the "Yayın" window plays streams with (`share_popout_audio`, `share-audio`): it cannot
+/// read voice chat's settings itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PopoutAudio {
+    /// Ses çıkışı (none: the system's default).
+    pub device: Option<String>,
+    /// "Herkesin Sesi", percent 0–200.
+    pub volume: u16,
+    /// Deafened: streams are silent too.
+    pub deaf: bool,
+    /// The stream volume slider's top (percent).
+    pub volume_max: u16,
+    pub duck: bool,
+    pub duck_level: u8,
+    pub duck_self: bool,
+    pub view_quality: ShareViewQuality,
 }
 
 /// "Kim paylaşabilir" (`hello.room.shareBy`, the `room` message): everyone, or the room's leader
@@ -1015,5 +1282,57 @@ mod tests {
             .is_plausible()
         );
         assert_eq!(clip_label("a\u{7}b"), "ab");
+    }
+
+    /// SQOL: what watchers see, the page's live changes and watching choices, read leniently.
+    #[test]
+    fn sqol_values_read_leniently() {
+        #[derive(Deserialize)]
+        struct Wire {
+            #[serde(default)]
+            st: ShareSt,
+        }
+        let st = |json: serde_json::Value| serde_json::from_value::<Wire>(json).unwrap().st;
+        assert_eq!(st(json!({"st": "hold"})), ShareSt::Hold);
+        assert_eq!(st(json!({"st": "min"})), ShareSt::Min);
+        assert_eq!(st(json!({})), ShareSt::Live);
+        assert_eq!(st(json!({"st": "later"})), ShareSt::Live);
+        assert_eq!(st(json!({"st": null})), ShareSt::Live);
+        let change: ShareChange =
+            serde_json::from_value(json!({"preset": "high", "cursor": false})).unwrap();
+        assert_eq!(change.preset, Some(SharePreset::High));
+        assert!(change.asks_room());
+        assert!(!ShareChange::default().asks_room());
+        assert!(
+            !serde_json::from_value::<ShareChange>(json!({"thumbs": false, "motion": "clarity"}))
+                .unwrap()
+                .asks_room()
+        );
+        let mut settings = VoiceShareSettings::default();
+        assert_eq!(
+            (settings.duck, settings.duck_level, settings.thumbs),
+            (false, DUCK_LEVEL_DEFAULT, true)
+        );
+        serde_json::from_value::<ShareViewPrefs>(
+            json!({"viewQuality": "saver", "duck": true, "duckLevel": 99}),
+        )
+        .unwrap()
+        .apply(&mut settings);
+        assert_eq!(settings.view_quality, ShareViewQuality::Saver);
+        assert!(settings.duck);
+        assert_eq!(settings.duck_level, DUCK_LEVEL_MAX);
+        // A backup from a newer launcher, or a hand-edited file.
+        let read: VoiceShareSettings =
+            serde_json::from_value(json!({"viewQuality": "8k", "duckLevel": 3})).unwrap();
+        assert_eq!(read.view_quality, ShareViewQuality::Auto);
+        assert_eq!(read.normalized().duck_level, DUCK_LEVEL_MIN);
+        assert_eq!(
+            serde_json::to_value(ShareNotice::SourceClosed {
+                n: 1,
+                src: ShareKind::Game
+            })
+            .unwrap(),
+            json!({"kind":"sourceClosed","n":1,"src":"game"})
+        );
     }
 }

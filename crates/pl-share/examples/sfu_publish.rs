@@ -5,6 +5,12 @@
 //!
 //! `cargo run -p pl-share --example sfu_publish -- --secs 90 --info <file> [--pause-at 20]
 //!  [--resume-at 70] [--no-keepalive] [--preset low|normal|high] [--fps 30]`
+//!
+//! SQOL (live changes, between two test windows of our own, the second 4:3): `[--switch-at 15]`
+//! (to the second window: new encoders, its size differs) `[--switch-back-at 25]` (a keyframe only)
+//! `[--hold-at 30] [--unhold-at 36]` (a blank picture, then a fresh frame) `[--update-at 40]`
+//! (`--update-preset` / `--update-fps`, default low / 15) `[--close-at 45]` (the shown window closes:
+//! a blank picture and `sourceGone`, the share goes on) `[--preview]` (the sharer's own preview).
 
 #[cfg(windows)]
 #[path = "common/mod.rs"]
@@ -42,11 +48,32 @@ async fn main() {
     let resume_at: Option<u64> = arg("--resume-at").and_then(|s| s.parse().ok());
     let info_path = arg("--info");
     let fps: u8 = arg("--fps").and_then(|s| s.parse().ok()).unwrap_or(30);
-    let preset = match arg("--preset").as_deref() {
+    let preset_of = |name: Option<String>, default: Preset| match name.as_deref() {
         Some("low") => Preset::Low,
+        Some("normal") => Preset::Normal,
         Some("high") => Preset::High,
-        _ => Preset::Normal,
+        _ => default,
     };
+    let preset = preset_of(arg("--preset"), Preset::Normal);
+    // SQOL: the live changes, each once at its second.
+    let at = |name: &str| arg(name).and_then(|s| s.parse::<u64>().ok());
+    let mut plan: Vec<(u64, &str)> = [
+        "--switch-at",
+        "--switch-back-at",
+        "--hold-at",
+        "--unhold-at",
+        "--update-at",
+        "--close-at",
+    ]
+    .into_iter()
+    .filter_map(|name| at(name).map(|second| (second, name)))
+    .collect();
+    plan.sort();
+    let update_preset = preset_of(arg("--update-preset"), Preset::Low);
+    let update_fps: u8 = arg("--update-fps")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(15);
+    let preview = args.iter().any(|a| a == "--preview");
     if args.iter().any(|a| a == "--no-keepalive") {
         // SAFETY: set before any other thread starts.
         unsafe { std::env::set_var("PL_SHARE_TEST_NO_KEEPALIVE", "1") };
@@ -90,7 +117,13 @@ async fn main() {
     };
 
     let hwnd = common::test_window(1280, 720);
+    // SQOL: the second window to switch to (4:3: another picture size).
+    let second = (!plan.is_empty()).then(|| common::test_window(1024, 768));
     std::thread::sleep(Duration::from_millis(300));
+    let window = |hwnd: isize| SourceId::Window {
+        hwnd: hwnd as u32,
+        pid: std::process::id(),
+    };
     let (controller, mut events) = ShareController::start(ShareEnv::default()).expect("controller");
     let opts = ShareOpts {
         preset,
@@ -102,10 +135,7 @@ async fn main() {
     };
     controller.send(ShareCmd::Prepare {
         n: 1,
-        source: SourceId::Window {
-            hwnd: hwnd as u32,
-            pid: std::process::id(),
-        },
+        source: window(hwnd),
         opts,
     });
 
@@ -114,6 +144,7 @@ async fn main() {
     let mut mids: Vec<(String, String)> = Vec::new();
     let mut paused = false;
     let mut stats_lines = 0;
+    let mut previews = 0u32;
     let deadline = t0 + Duration::from_secs(secs);
     while Instant::now() < deadline {
         let tick = tokio::time::sleep(Duration::from_millis(500));
@@ -160,11 +191,48 @@ async fn main() {
                     ShareEvent::Thumb { n, jpg } => {
                         println!("[{:>5.1}s] thumb {n}: {} bytes", t0.elapsed().as_secs_f64(), jpg.len());
                     }
+                    ShareEvent::PreviewFrame { n, jpg } => {
+                        previews += 1;
+                        if previews % 10 == 1 {
+                            println!("[{:>5.1}s] preview {n}: {} bytes ({previews} so far)", t0.elapsed().as_secs_f64(), jpg.len());
+                        }
+                    }
+                    ShareEvent::Started { n } => {
+                        println!("[{:>5.1}s] started {n}", t0.elapsed().as_secs_f64());
+                        if preview {
+                            controller.send(ShareCmd::Preview { n, on: true });
+                        }
+                    }
                     other => println!("[{:>5.1}s] {other:?}", t0.elapsed().as_secs_f64()),
                 }
             }
             _ = tick => {
                 let at = t0.elapsed().as_secs();
+                // SQOL: the live changes due now.
+                while let Some(&(due, name)) = plan.first() && at >= due {
+                    plan.remove(0);
+                    println!("[{at}s] {name}");
+                    let cmd = match name {
+                        "--switch-at" => second.map(|other| ShareCmd::Switch { n: 1, source: window(other) }),
+                        "--switch-back-at" => Some(ShareCmd::Switch { n: 1, source: window(hwnd) }),
+                        "--hold-at" => Some(ShareCmd::Hold { n: 1, on: true }),
+                        "--unhold-at" => Some(ShareCmd::Hold { n: 1, on: false }),
+                        "--update-at" => Some(ShareCmd::Update {
+                            n: 1,
+                            opts: ShareOpts { preset: update_preset, fps: update_fps, ..opts },
+                        }),
+                        "--close-at" => {
+                            // The first window closes (shown again after `--switch-back-at`):
+                            // the share holds a blank picture.
+                            common::close_window(hwnd);
+                            None
+                        }
+                        _ => None,
+                    };
+                    if let Some(cmd) = cmd {
+                        controller.send(cmd);
+                    }
+                }
                 if !paused && pause_at.is_some_and(|p| at >= p) && resume_at.is_none_or(|r| at < r) {
                     paused = true;
                     println!("[{at}s] pause");

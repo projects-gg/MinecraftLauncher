@@ -209,10 +209,25 @@ pub enum ToRoom {
         sdp: Sdp,
         rid: u32,
     },
-    /// Nobody watches: encoding rests (or goes on).
+    /// Nobody watches: encoding rests (or goes on), never answered (`paused`). SQOL (`share2`): with
+    /// `rid`, a live change the room answers with the values it applied (`ack`) or an `error`; `st`
+    /// alone (what watchers see), never answered.
     ShareSet {
         n: u8,
-        paused: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        rid: Option<u32>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        paused: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        src: Option<crate::share::ShareKind>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        audio: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        preset: Option<crate::share::SharePreset>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fps: Option<u8>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        st: Option<crate::share::ShareSt>,
     },
     ShareClose {
         n: u8,
@@ -243,6 +258,50 @@ pub enum ToRoom {
         n: u8,
         jpg: String,
     },
+    // SQOL (`rchat1`, the lead's contract sqol.md §2.2) -----------------------------------------
+    /// A room chat message: a text or a sticker (`ack` with its id and time, or `error`).
+    Rchat {
+        rid: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        st: Option<String>,
+    },
+    /// Deletes a room chat message (the player's own; a leader's or moderator's anyone's).
+    RchatDel {
+        rid: u32,
+        id: String,
+    },
+}
+
+impl ToRoom {
+    /// `share_set` that says only whether encoding rests (SHARE).
+    pub fn share_paused(n: u8, paused: bool) -> Self {
+        Self::ShareSet {
+            n,
+            rid: None,
+            paused: Some(paused),
+            src: None,
+            audio: None,
+            preset: None,
+            fps: None,
+            st: None,
+        }
+    }
+
+    /// SQOL: `share_set` that says only what watchers see.
+    pub fn share_st(n: u8, st: crate::share::ShareSt) -> Self {
+        Self::ShareSet {
+            n,
+            rid: None,
+            paused: None,
+            src: None,
+            audio: None,
+            preset: None,
+            fps: None,
+            st: Some(st),
+        }
+    }
 }
 
 impl fmt::Debug for ToRoom {
@@ -273,6 +332,8 @@ impl ToRoom {
             Self::Unwatch { .. } => "unwatch",
             Self::Wanswer { .. } => "wanswer",
             Self::ShareThumb { .. } => "share_thumb",
+            Self::Rchat { .. } => "rchat",
+            Self::RchatDel { .. } => "rchat_del",
         }
     }
 
@@ -284,7 +345,10 @@ impl ToRoom {
             | Self::Cancel { rid, .. }
             | Self::Mod { rid, .. }
             | Self::ShareOpen { rid, .. }
-            | Self::Watch { rid, .. } => Some(*rid),
+            | Self::Watch { rid, .. }
+            | Self::Rchat { rid, .. }
+            | Self::RchatDel { rid, .. } => Some(*rid),
+            Self::ShareSet { rid, .. } => *rid,
             _ => None,
         }
     }
@@ -346,6 +410,14 @@ pub struct RoomWire {
     /// OVL-NEXT: push-to-talk only (`ptt: true`; absent or anything else: no).
     #[serde(default, deserialize_with = "only_true")]
     pub ptt: bool,
+    /// SQOL: the room has its own text chat (`chat: true`, only to `rchat1` sockets while Studio's
+    /// "Oda Sohbeti" and the chat switch are on).
+    #[serde(default, deserialize_with = "only_true")]
+    pub chat: bool,
+    /// SQOL: a friend room that had three or more people at some time (`grew: true`, the room keeps
+    /// it; never for a crew room).
+    #[serde(default, deserialize_with = "only_true")]
+    pub grew: bool,
 }
 
 /// OVL-NEXT: `true` reads as yes; absent, `null` or anything else as no.
@@ -502,6 +574,10 @@ pub enum FromRoom {
         /// OVL-NEXT: push-to-talk only (a service from before it never says so).
         #[serde(default, deserialize_with = "only_true")]
         ptt: bool,
+        /// SQOL: the room's text chat is on (an `rchat1` room says `chat: true` in every `room`
+        /// message while it is; absent: off).
+        #[serde(default, deserialize_with = "only_true")]
+        chat: bool,
     },
     /// The player's role changed.
     Me {
@@ -548,6 +624,19 @@ pub enum FromRoom {
         n: Option<u8>,
         #[serde(default)]
         preset: Option<crate::share::SharePreset>,
+        /// SQOL: `share_set`: the frame rate and sound the room applied.
+        #[serde(default)]
+        fps: Option<u8>,
+        #[serde(default)]
+        audio: Option<bool>,
+        /// SQOL: `rchat`: the message's id and the room's time of it (Unix ms), and the message
+        /// itself as the room keeps it (the sender gets no `rchat` of their own).
+        #[serde(default)]
+        id: Option<String>,
+        #[serde(default)]
+        at: Option<i64>,
+        #[serde(default)]
+        m: Option<serde_json::Value>,
     },
     Error {
         #[serde(default)]
@@ -559,6 +648,12 @@ pub enum FromRoom {
         until: Option<i64>,
         #[serde(default)]
         item: Option<String>,
+        /// SQOL: `chat_rejected`'s reason (`phone`, `link`, `word`, `length`, `lines`) and the
+        /// rule that matched.
+        #[serde(default)]
+        reason: Option<String>,
+        #[serde(default)]
+        rule: Option<String>,
     },
     // SHARE --------------------------------------------------------------------------------------
     /// Who watches one of the player's shares.
@@ -581,6 +676,23 @@ pub enum FromRoom {
         n: u8,
         #[serde(default)]
         why: crate::share::ShareClosedWhy,
+    },
+    // SQOL (`rchat1`) ----------------------------------------------------------------------------
+    /// A new room chat message (the player's own too), kept as sent (its seal goes back with a
+    /// report).
+    Rchat {
+        m: serde_json::Value,
+    },
+    /// The room's last messages (on `join` and after a reconnect): the whole log.
+    RchatLog {
+        #[serde(default)]
+        ms: Vec<serde_json::Value>,
+    },
+    /// A message was deleted (`by`: `self`, `mod`, `staff`).
+    RchatDeleted {
+        id: String,
+        #[serde(default)]
+        by: String,
     },
     #[serde(other)]
     Unknown,
@@ -908,6 +1020,7 @@ mod tests {
                 max: None,
                 share_by: None,
                 ptt: false,
+                chat: false,
             }
         );
         // VOICE-ROOMS: a crew room's limit the crew changed.
@@ -920,11 +1033,14 @@ mod tests {
                 max: Some(4),
                 share_by: None,
                 ptt: false,
+                chat: false,
             }
         );
-        // OVL-NEXT: the crew made it push-to-talk only.
+        // OVL-NEXT: the crew made it push-to-talk only; SQOL: the room's chat is on.
         assert_eq!(
-            FromRoom::parse(r#"{"t":"room","name":"Gece","leader":"u1","mods":[],"ptt":true}"#),
+            FromRoom::parse(
+                r#"{"t":"room","name":"Gece","leader":"u1","mods":[],"ptt":true,"chat":true}"#
+            ),
             FromRoom::Room {
                 name: Some("Gece".into()),
                 leader: Some("u1".into()),
@@ -932,6 +1048,7 @@ mod tests {
                 max: None,
                 share_by: None,
                 ptt: true,
+                chat: true,
             }
         );
         assert_eq!(
@@ -1004,6 +1121,11 @@ mod tests {
                 sdp: None,
                 n: None,
                 preset: None,
+                fps: None,
+                audio: None,
+                id: None,
+                at: None,
+                m: None,
             }
         );
         assert_eq!(
@@ -1015,11 +1137,100 @@ mod tests {
                 code: "rate_limited".into(),
                 retry_after: Some(40),
                 until: None,
-                item: Some("voice_invites".into())
+                item: Some("voice_invites".into()),
+                reason: None,
+                rule: None,
             }
         );
         assert_eq!(FromRoom::parse(r#"{"t":"news"}"#), FromRoom::Unknown);
         assert_eq!(FromRoom::parse("pong"), FromRoom::Unknown);
+    }
+
+    #[test]
+    fn sqol_frames_read_and_write_as_the_contract_says() {
+        use crate::share::{SharePreset, ShareSt};
+        // share2: a live change with `rid`, its applied values back.
+        let change = ToRoom::ShareSet {
+            n: 1,
+            rid: Some(9),
+            paused: None,
+            src: None,
+            audio: Some(true),
+            preset: Some(SharePreset::High),
+            fps: Some(60),
+            st: None,
+        };
+        assert_eq!(
+            change.text(),
+            r#"{"t":"share_set","n":1,"rid":9,"audio":true,"preset":"high","fps":60}"#
+        );
+        assert_eq!(change.rid(), Some(9));
+        assert_eq!(
+            ToRoom::share_paused(1, true).text(),
+            r#"{"t":"share_set","n":1,"paused":true}"#
+        );
+        assert_eq!(ToRoom::share_paused(1, true).rid(), None);
+        assert_eq!(
+            ToRoom::share_st(2, ShareSt::Hold).text(),
+            r#"{"t":"share_set","n":2,"st":"hold"}"#
+        );
+        assert!(matches!(
+            FromRoom::parse(r#"{"t":"ack","rid":9,"n":1,"preset":"normal","fps":30,"audio":true}"#),
+            FromRoom::Ack {
+                rid: Some(9),
+                n: Some(1),
+                preset: Some(SharePreset::Normal),
+                fps: Some(30),
+                audio: Some(true),
+                ..
+            }
+        ));
+        // rchat1: a message, the log, a deletion, and the answers.
+        assert_eq!(
+            ToRoom::Rchat {
+                rid: 12,
+                text: Some("selam".into()),
+                st: None
+            }
+            .text(),
+            r#"{"t":"rchat","rid":12,"text":"selam"}"#
+        );
+        assert_eq!(
+            ToRoom::RchatDel {
+                rid: 14,
+                id: "m1".into()
+            }
+            .text(),
+            r#"{"t":"rchat_del","rid":14,"id":"m1"}"#
+        );
+        assert!(matches!(
+            FromRoom::parse(r#"{"t":"rchat","m":{"id":"m1","u":"u2","at":1,"text":"selam","seal":"x"}}"#),
+            FromRoom::Rchat { m } if m["text"] == "selam"
+        ));
+        assert!(matches!(
+            FromRoom::parse(r#"{"t":"rchat_log","ms":[{"id":"m1"},{"id":"m2"}]}"#),
+            FromRoom::RchatLog { ms } if ms.len() == 2
+        ));
+        assert_eq!(
+            FromRoom::parse(r#"{"t":"rchat_deleted","id":"m1","by":"mod"}"#),
+            FromRoom::RchatDeleted {
+                id: "m1".into(),
+                by: "mod".into()
+            }
+        );
+        assert!(matches!(
+            FromRoom::parse(r#"{"t":"ack","rid":12,"id":"m3","at":1731500000123,"m":{"id":"m3","u":"me","text":"selam"}}"#),
+            FromRoom::Ack { rid: Some(12), id: Some(id), at: Some(1_731_500_000_123), m: Some(m), .. } if id == "m3" && m["text"] == "selam"
+        ));
+        // A friend room that once held three, said by the room.
+        assert!(matches!(
+            FromRoom::parse(r#"{"t":"hello","room":{"id":"f0","kind":"f","chat":true,"grew":true}}"#),
+            FromRoom::Hello { room, .. } if room.chat && room.grew
+        ));
+        assert!(matches!(
+            FromRoom::parse(r#"{"t":"error","rid":12,"code":"chat_rejected","reason":"link","rule":"r1"}"#),
+            FromRoom::Error { rid: Some(12), reason: Some(reason), rule: Some(rule), .. } if reason == "link" && rule == "r1"
+        ));
     }
 
     #[test]

@@ -46,6 +46,7 @@ fn ready() -> Machine {
             max_preset: SharePreset::High,
             open: true,
             watch: true,
+            edit: false,
         }),
         0,
     );
@@ -76,6 +77,7 @@ fn shared(n: u8) -> ShareWire {
         at: UNIX,
         paused: false,
         th: None,
+        st: crate::share::ShareSt::Live,
     }
 }
 
@@ -93,6 +95,8 @@ fn hello(people: Vec<PersonWire>, share: Option<ShareBy>, sdp: bool) -> FromRoom
             max: 10,
             share_by: share,
             ptt: false,
+            chat: false,
+            grew: false,
         },
         me: MeWire {
             role: if share == Some(ShareBy::Mods) {
@@ -245,6 +249,11 @@ fn sharing(machine: &mut Machine, generation: u64, now: u64) {
             sdp: Some(Sdp::new("v=0 sfu")),
             n: Some(1),
             preset: None,
+            fps: None,
+            audio: None,
+            id: None,
+            at: None,
+            m: None,
         },
         now,
         UNIX,
@@ -296,11 +305,11 @@ fn the_room_socket_asks_for_share1() {
     // SHARE-LIVE: `live1` with it (still pictures, their times in the share state).
     assert!(matches!(
         sent(&effects)[..],
-        [ToRoom::Join { caps, .. }] if caps == &vec!["share1".to_owned(), "live1".to_owned()]
+        [ToRoom::Join { caps, .. }] if caps == &vec!["share1".to_owned(), "live1".to_owned(), "share2".to_owned(), "rchat1".to_owned()]
     ));
     assert_eq!(
         sent(&effects)[0].text(),
-        r#"{"t":"join","sdp":"v=0","caps":["share1","live1"]}"#
+        r#"{"t":"join","sdp":"v=0","caps":["share1","live1","share2","rchat1"]}"#
     );
 }
 
@@ -343,6 +352,11 @@ fn a_share_goes_live_rests_alone_and_ends_after_fifteen_minutes() {
             sdp: Some(Sdp::new("v=0 sfu")),
             n: Some(1),
             preset: None,
+            fps: None,
+            audio: None,
+            id: None,
+            at: None,
+            m: None,
         },
         2_200,
         UNIX,
@@ -383,7 +397,7 @@ fn a_share_goes_live_rests_alone_and_ends_after_fifteen_minutes() {
         to_publisher(&effects),
         [&ShareCmd::Pause { n: 1, paused: true }]
     );
-    assert_eq!(sent(&effects), [&ToRoom::ShareSet { n: 1, paused: true }]);
+    assert_eq!(sent(&effects), [&ToRoom::share_paused(1, true)]);
     assert_eq!(
         machine.view(80_000, UNIX).share.mine[0].phase,
         ShareMinePhase::Resting
@@ -492,6 +506,8 @@ fn shares_are_held_to_the_rooms_limits() {
             retry_after: None,
             until: None,
             item: None,
+            reason: None,
+            rule: None,
         },
         2_200,
         UNIX,
@@ -586,7 +602,7 @@ fn sharing_off_or_a_lost_share_on_return_ends_it() {
         })
         .unwrap();
     let effects = machine.socket_open(generation, 4_100);
-    assert!(matches!(sent(&effects)[..], [ToRoom::Sync { caps }] if caps.len() == 2));
+    assert!(matches!(sent(&effects)[..], [ToRoom::Sync { caps }] if caps.len() == 4));
     let effects = machine.socket_message(
         generation,
         hello(
@@ -755,6 +771,8 @@ fn at_most_two_watched_and_the_rooms_refusal() {
             retry_after: None,
             until: None,
             item: None,
+            reason: None,
+            rule: None,
         },
         2_100,
         UNIX,
@@ -963,10 +981,10 @@ fn stream_volumes_are_kept_per_person() {
     let volumes = machine.view(2_000, UNIX).share.volumes;
     assert_eq!(volumes["a"].volume, 40);
     assert!(machine.set_stream_volume("a", 40, false).is_empty());
-    // Held to 100 %.
+    // SQOL: held to the slider's top (200 % while the voice page plays through WebAudio).
     machine.set_stream_volume("a", 250, true);
     let volumes = machine.view(2_000, UNIX).share.volumes;
-    assert_eq!((volumes["a"].volume, volumes["a"].muted), (100, true));
+    assert_eq!((volumes["a"].volume, volumes["a"].muted), (200, true));
 }
 
 /// `hello` again on a socket that came back, the room's watch session carrying `watch`.
@@ -1106,6 +1124,11 @@ fn the_rooms_allowed_quality_and_the_months_budget() {
             sdp: Some(Sdp::new("v=0 sfu")),
             n: Some(1),
             preset: Some(SharePreset::Normal),
+            fps: None,
+            audio: None,
+            id: None,
+            at: None,
+            m: None,
         },
         2_200,
         UNIX,
@@ -1124,6 +1147,7 @@ fn the_rooms_allowed_quality_and_the_months_budget() {
         Some(ServiceShare {
             open: false,
             watch: false,
+            edit: false,
             ..ServiceShare::default()
         }),
         3_000,
@@ -1160,6 +1184,7 @@ fn who_may_share_is_the_rooms_and_its_leaders_to_change() {
             max: None,
             share_by: Some(ShareBy::Mods),
             ptt: false,
+            chat: false,
         },
         2_100,
         UNIX,
@@ -1245,10 +1270,7 @@ fn a_share_waiting_for_its_answer_ends_when_the_socket_comes_back() {
         UNIX,
     );
     assert!(sent(&effects).contains(&&ToRoom::ShareClose { n: 3 }));
-    assert!(sent(&effects).contains(&&ToRoom::ShareSet {
-        n: 1,
-        paused: false
-    }));
+    assert!(sent(&effects).contains(&&ToRoom::share_paused(1, false)));
     assert!(to_publisher(&effects).contains(&&ShareCmd::KeyFrame { n: 1 }));
     assert_eq!(
         machine.view(71_200, UNIX).share.mine[0].phase,
@@ -1391,6 +1413,11 @@ fn ack(rid: u32, n: u8) -> FromRoom {
         sdp: Some(Sdp::new("v=0 sfu")),
         n: Some(n),
         preset: None,
+        fps: None,
+        audio: None,
+        id: None,
+        at: None,
+        m: None,
     }
 }
 
@@ -1417,6 +1444,7 @@ fn share_live(
 fn with_th(n: u8, th: i64) -> ShareWire {
     ShareWire {
         th: Some(th),
+        st: crate::share::ShareSt::Live,
         ..shared(n)
     }
 }
@@ -1498,6 +1526,7 @@ fn sharing_sounds_once_together_and_never_on_a_catch_up() {
             max_preset: SharePreset::High,
             open: true,
             watch: true,
+            edit: false,
         }),
         5_100,
     );
