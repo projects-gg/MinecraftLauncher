@@ -62,7 +62,10 @@ export interface MenuSlider {
   notch?: number;
   /** The value as shown and read out ("%140"). */
   format: (value: number) => string;
-  /** Each change; `final` once a drag or a key press ends. */
+  /**
+   * Each change; `final` once a drag lets go, or once key steps rest (half a second without one,
+   * leaving the row or the menu closing): keep the value then, not at each step.
+   */
   onChange: (value: number, final: boolean) => void;
 }
 
@@ -200,10 +203,15 @@ function keyStep(key: string, step: number, min: number, max: number, value: num
   }
 }
 
+/** How long a key step waits for the next one before its value is final (kept, once). */
+const KEY_SETTLE_MS = 500;
+
 /**
  * A row that sets a value: its label and value, and a track the pointer drags (it lands on the
  * notch when close) or ← → change. Selecting it keeps the menu open. The value follows the pointer
- * at once (no transition: it is the pointer's, not a motion), the fill drawn with `scaleX`.
+ * at once (no transition: it is the pointer's, not a motion), the fill drawn with `scaleX`. A drag
+ * is final when it lets go; key steps once they rest (half a second, leaving the row, the menu
+ * closing), not at each press (each final value is a settings write).
  */
 function SliderRow({
   item,
@@ -217,6 +225,28 @@ function SliderRow({
   const [value, setValue] = useState(slider.value);
   const dragging = useRef(false);
   const track = useRef<HTMLSpanElement>(null);
+  // The owner's latest callback, and the value key steps left waiting to be final.
+  const changed = useRef(onChange);
+  changed.current = onChange;
+  const keyed = useRef<{ value: number; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const settle = () => {
+    const steps = keyed.current;
+    if (!steps) return;
+    keyed.current = null;
+    clearTimeout(steps.timer);
+    changed.current(steps.value, true);
+  };
+  // The menu closing ends the steps too (it takes the row away).
+  useEffect(
+    () => () => {
+      const steps = keyed.current;
+      if (!steps) return;
+      keyed.current = null;
+      clearTimeout(steps.timer);
+      changed.current(steps.value, true);
+    },
+    [],
+  );
   // A value the owner changes (another device, a reset) shows unless a drag holds it.
   useEffect(() => {
     if (!dragging.current) setValue(slider.value);
@@ -251,8 +281,13 @@ function SliderRow({
         // Its own: the menu's Home/End jumps and a submenu's ← close stay away from it.
         event.preventDefault();
         event.stopPropagation();
-        set(next, true);
+        // Each step shows and plays at once; it is final once the steps rest.
+        const v = clamp(next);
+        set(v, false);
+        if (keyed.current) clearTimeout(keyed.current.timer);
+        keyed.current = { value: v, timer: setTimeout(settle, KEY_SETTLE_MS) };
       }}
+      onBlur={settle}
       className={cn(
         rowClass,
         "cursor-default flex-col items-stretch gap-1 py-2 text-bone-100 data-[highlighted]:bg-white/[0.06]",
@@ -270,6 +305,9 @@ function SliderRow({
         className="relative mx-[7px] h-4 cursor-pointer touch-none"
         onPointerDown={(event) => {
           if (event.button !== 0) return;
+          // A drag takes over from key steps: its letting go is final.
+          if (keyed.current) clearTimeout(keyed.current.timer);
+          keyed.current = null;
           dragging.current = true;
           event.currentTarget.setPointerCapture(event.pointerId);
           fromPointer(event.clientX, false);

@@ -16,7 +16,7 @@ import { useEffect } from "react";
 import { useVoiceUi } from "@/features/voice/store";
 import i18n from "@/lib/i18n";
 import { shareApi } from "@/share/api";
-import type { ShareAsked, ShareNotice, ShareRefusal, VoiceMyShare } from "@/share/types";
+import type { ShareAsked, ShareNotice, VoiceMyShare } from "@/share/types";
 import {
   askOwnQuestion,
   changeRefusedText,
@@ -37,7 +37,6 @@ import { forgetOwnPreview, forgetOwnStats } from "./own-live";
 import { sayShare } from "./own-say";
 import {
   clearLost,
-  dropRefused,
   dropRefusedChange,
   isLost,
   type LostWhy,
@@ -58,21 +57,58 @@ const switchedLately = new Set<number>();
 
 const RECENT_MS = 5_000;
 
-/** The room's refusals a live change can get (`share_set`: the gate, the month, the room's rule). */
-const CHANGE_REFUSALS: ReadonlySet<ShareRefusal> = new Set([
-  "budget",
-  "off",
-  "notAllowed",
-  "failed",
-]);
-
-/** What a refused live change asked of the room: its given fields only. */
-function askedOf(change: ShareAsked): OwnPatch {
+/** What a refused live change asked of the room: its given fields only (null: nothing asked). */
+function askedOf(change: ShareAsked | null | undefined): OwnPatch | null {
+  if (!change) return null;
   const asked: OwnPatch = {};
   if (change.preset != null) asked.preset = change.preset;
   if (change.fps != null) asked.fps = change.fps;
   if (change.audio != null) asked.audio = change.audio;
-  return asked;
+  return Object.keys(asked).length > 0 ? asked : null;
+}
+
+/**
+ * How long a share ended by a limit waits for the state to say the room's rule left the player
+ * out (a crew room's new definition ends the shares first, then reaches the state).
+ */
+const RULE_WAIT_MS = 1_500;
+
+/** A share ended by a limit waits to be said (one sentence for shares ending together). */
+let limitWait: { timer: ReturnType<typeof setTimeout>; stop: () => void } | null = null;
+let limitSaidAt = 0;
+
+/** "Kim Paylaşabilir" leaves the player out now (only the leader and moderators share). */
+function ruleLeavesOut(state = useVoiceUi.getState().state): boolean {
+  const share = state.share;
+  return share?.on === true && share.shareBy === "mods" && !share.allowed;
+}
+
+/**
+ * A share ended by a limit (`limit`, which also stands for sharing going off): the room's rule
+ * leaving the player out says that ("Bu odada artık yalnız lider ve moderatörler paylaşabilir."),
+ * else "Ekran paylaşımı şu an kullanılamıyor.".
+ */
+function sayLimitClosed() {
+  if (limitWait !== null || Date.now() - limitSaidAt < RECENT_MS) return;
+  const say = (ruled: boolean) => {
+    limitWait?.stop();
+    if (limitWait) clearTimeout(limitWait.timer);
+    limitWait = null;
+    limitSaidAt = Date.now();
+    toast(ruled ? i18n.t("share.notice.modsOnly") : i18n.t("share.notice.off"));
+  };
+  const { share } = useVoiceUi.getState().state;
+  if (ruleLeavesOut() || share?.on !== true) {
+    say(ruleLeavesOut());
+    return;
+  }
+  limitWait = {
+    timer: setTimeout(() => say(false), RULE_WAIT_MS),
+    stop: useVoiceUi.subscribe((now) => {
+      if (ruleLeavesOut(now.state)) say(true);
+      else if (now.state.share?.on !== true) say(false);
+    }),
+  };
 }
 
 /** The room panel is open: the player's cards say their shares' states themselves. */
@@ -155,19 +191,17 @@ export function showShareNotice(notice: ShareNotice) {
   for (const [n, at] of endedLost) if (now - at > RECENT_MS) endedLost.delete(n);
   switch (notice.kind) {
     case "refused": {
-      // The room refused a live change (`share_update` asks it first; its notice can come before
-      // the launcher's answer): that change's quality, frame rate or sound goes back, said by its
-      // cause. The notice names the share and the change; one that does not takes back the latest
-      // change the room decides on. Else a share or a watch could not start, as before.
-      if (notice.change) {
-        const asked = askedOf(notice.change);
-        if (notice.n == null) dropRefused();
-        else dropRefusedChange(notice.n, asked);
+      // A live change the room refused (or never answered) names its share and what it asked:
+      // exactly that goes back, said by its cause (its notice can come before the launcher's
+      // answer). Without it (nothing asked: an empty one too) a share or a watch could not
+      // start: its refusal is said, no change goes back.
+      const asked = askedOf(notice.change);
+      if (asked) {
+        if (notice.n != null) dropRefusedChange(notice.n, asked);
         toast(changeRefusedText(notice.refusal, asked));
         return;
       }
-      const change = CHANGE_REFUSALS.has(notice.refusal) ? dropRefused() : null;
-      toast(change ? changeRefusedText(notice.refusal, change) : refusalText(notice.refusal));
+      toast(refusalText(notice.refusal));
       return;
     }
     case "sourceClosed":
@@ -195,6 +229,10 @@ export function showShareNotice(notice: ShareNotice) {
           stoppedInPlace(waiting);
           return;
         }
+      }
+      if (notice.why === "limit") {
+        sayLimitClosed();
+        return;
       }
       const text = noticeText(notice);
       if (text) toast(text);
@@ -233,4 +271,10 @@ export function resetOwnNotices() {
   endedLost.clear();
   lastStatus.clear();
   switchedLately.clear();
+  if (limitWait) {
+    clearTimeout(limitWait.timer);
+    limitWait.stop();
+  }
+  limitWait = null;
+  limitSaidAt = 0;
 }

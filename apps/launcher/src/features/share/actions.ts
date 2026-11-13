@@ -311,7 +311,8 @@ export function changeSaid(change: ShareChange): string | null {
 /**
  * A refused change, in one sentence, from its cause: the month's limit on a quality; a
  * moderator's mute ("Bir moderatör seni susturduğu için şu an değiştiremezsin."); the room's
- * "Kim Paylaşabilir" when it leaves the player out; else that it cannot change now.
+ * "Kim Paylaşabilir" when it leaves the player out; a room that never answered ("Bu ayar
+ * değiştirilemedi."); else that it cannot change now.
  */
 export function changeRefusedText(
   refusal: ShareRefusal,
@@ -326,6 +327,8 @@ export function changeRefusedText(
     const { share } = useVoiceUi.getState().state;
     if (share?.on && !share.allowed) return t("share.notice.notAllowed");
   }
+  // The room never answered (the launcher gave up waiting).
+  if (refusal === "failed") return t("share.own.changeFailed");
   return t("share.own.changeOff");
 }
 

@@ -18,6 +18,7 @@ import {
   markLost,
   openSwitch,
   ownStatus,
+  ROOM_WAIT_MS,
   resetOwnUi,
   SETTLED_MS,
   useOwnUi,
@@ -199,10 +200,33 @@ describe("a live share's changes", () => {
       vi.spyOn(shareApi, "update").mockResolvedValue(null);
       await changeShare(1, { preset: "high" });
       expect(shown(1).preset).toBe("high");
-      vi.advanceTimersByTime(SETTLED_MS);
+      // The launcher waits 10 s for the room's answer: the change shows as long.
+      vi.advanceTimersByTime(10_000);
+      expect(shown(1).preset).toBe("high");
+      vi.advanceTimersByTime(ROOM_WAIT_MS - 10_000);
       expect(shown(1).preset).toBe("normal");
       next({ watchers: ["301"] });
       expect(said).not.toHaveBeenCalled();
+      // What the launcher alone decides waits less.
+      await changeShare(1, { cursor: false });
+      vi.advanceTimersByTime(SETTLED_MS);
+      expect(useOwnUi.getState().pending).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("take back what the room never answered, saying so", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.spyOn(shareApi, "update").mockResolvedValue(null);
+      await changeShare(1, { audio: false });
+      vi.advanceTimersByTime(10_000);
+      // The launcher gave up waiting: a failed refusal with what it asked.
+      showShareNotice({ kind: "refused", refusal: "failed", n: 1, change: { audio: false } });
+      expect(shown(1).audio).toBe(true);
+      expect(toast).toHaveBeenCalledExactlyOnceWith("Bu ayar değiştirilemedi.");
+      expect(useOwnUi.getState().pending).toEqual([]);
     } finally {
       vi.useRealTimers();
     }
@@ -215,18 +239,28 @@ describe("a live share's changes", () => {
     await changeShare(2, { audio: true });
     await changeShare(1, { cursor: false });
     await changeShare(1, { preset: "low" });
-    showShareNotice({ kind: "refused", refusal: "budget" });
+    showShareNotice({ kind: "refused", refusal: "budget", n: 1, change: { preset: "low" } });
     expect(shown(1)).toMatchObject({ preset: "high", cursor: false });
     expect(shown(2).audio).toBe(true);
     expect(toast).toHaveBeenLastCalledWith("Bu kalite şu an kapalı.");
-    // The next refusal: the other share's sound, the room's too.
-    showShareNotice({ kind: "refused", refusal: "budget" });
+    showShareNotice({ kind: "refused", refusal: "budget", n: 2, change: { audio: true } });
     expect(shown(2).audio).toBe(false);
     expect(toast).toHaveBeenLastCalledWith("Bu ayar şu an değiştirilemiyor.");
-    // Nothing waits for the room any more: a refusal of a share, as before.
+    expect(shown(1).cursor).toBe(false);
+  });
+
+  it("take back nothing for a share or a watch that could not start, saying its refusal", async () => {
+    vi.spyOn(shareApi, "update").mockResolvedValue(null);
+    await changeShare(1, { preset: "high" });
+    // No change named (an empty one is none either): the change waiting for the room stays.
     showShareNotice({ kind: "refused", refusal: "budget" });
     expect(toast).toHaveBeenLastCalledWith("Ekran paylaşımı şu an kullanılamıyor.");
-    expect(shown(1).cursor).toBe(false);
+    showShareNotice({ kind: "refused", refusal: "notAllowed", n: 1, change: {} });
+    expect(toast).toHaveBeenLastCalledWith("Bu odada yalnız lider ve moderatörler paylaşabilir.");
+    showShareNotice({ kind: "refused", refusal: "watchFull" });
+    expect(toast).toHaveBeenLastCalledWith("Bu yayını izleyenlerin sayısı dolu.");
+    expect(shown(1).preset).toBe("high");
+    expect(useOwnUi.getState().pending).toHaveLength(1);
   });
 
   it("take back at once a change the room refused before the launcher answered, never as done", async () => {
@@ -234,7 +268,7 @@ describe("a live share's changes", () => {
     const done = changeShare(1, { preset: "high" });
     expect(shown(1).preset).toBe("high");
     // The room refused fast: its notice comes before the launcher's answer.
-    showShareNotice({ kind: "refused", refusal: "notAllowed" });
+    showShareNotice({ kind: "refused", refusal: "notAllowed", n: 1, change: { preset: "high" } });
     expect(shown(1).preset).toBe("normal");
     expect(toast).toHaveBeenCalledExactlyOnceWith("Bu ayar şu an değiştirilemiyor.");
     answer.resolve(null);
@@ -244,11 +278,11 @@ describe("a live share's changes", () => {
     expect(useOwnUi.getState().pending).toEqual([]);
     // The launcher's answer says no as well, or fails: the notice's sentence stays the only one.
     const refusedToo = changeShare(1, { audio: false });
-    showShareNotice({ kind: "refused", refusal: "notAllowed" });
+    showShareNotice({ kind: "refused", refusal: "notAllowed", n: 1, change: { audio: false } });
     answer.resolve("notAllowed");
     expect(await refusedToo).toBe(false);
     const failed = changeShare(1, { fps: 15 });
-    showShareNotice({ kind: "refused", refusal: "notAllowed" });
+    showShareNotice({ kind: "refused", refusal: "notAllowed", n: 1, change: { fps: 15 } });
     answer.reject(new Error("gone"));
     expect(await failed).toBe(false);
     expect(toast).toHaveBeenCalledTimes(3);
@@ -260,7 +294,7 @@ describe("a live share's changes", () => {
     vi.spyOn(shareApi, "update").mockResolvedValue(null);
     expect(await changeShare(1, { audio: false })).toBe(true);
     expect(shown(1).audio).toBe(false);
-    showShareNotice({ kind: "refused", refusal: "notAllowed" });
+    showShareNotice({ kind: "refused", refusal: "notAllowed", n: 1, change: { audio: false } });
     expect(shown(1).audio).toBe(true);
     expect(toast).toHaveBeenCalledExactlyOnceWith("Bu ayar şu an değiştirilemiyor.");
     // The state moves later on something else: still nothing said of the refused change.
@@ -273,7 +307,7 @@ describe("a live share's changes", () => {
     vi.spyOn(shareApi, "update").mockResolvedValue(null);
     const refused = async (change: ShareChange) => {
       await changeShare(1, change);
-      showShareNotice({ kind: "refused", refusal: "notAllowed" });
+      showShareNotice({ kind: "refused", refusal: "notAllowed", n: 1, change });
       return toast.mock.lastCall?.[0];
     };
     expect(await refused({ audio: false })).toBe("Bu ayar şu an değiştirilemiyor.");
