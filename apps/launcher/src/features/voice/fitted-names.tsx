@@ -72,7 +72,7 @@ export function FittedNames({
     };
     measure();
     // The title's own font may still be on its way.
-    void document.fonts?.ready.then(measure);
+    void document.fonts?.ready?.then(measure);
     window.addEventListener("resize", measure);
     const watched = box?.current;
     const observer =
