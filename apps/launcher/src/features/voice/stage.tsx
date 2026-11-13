@@ -9,7 +9,8 @@
 // stay square), their names clear of the ring that follows the voice.
 //
 // SQOL-U3: with a chat under it the stage is compact (faces at 48 px, a band at the panel's top),
-// and the friend's face says "konuşuyor" to screen readers while they speak.
+// and the friend's face says "konuşuyor" to screen readers while they speak. In a wide panel's
+// people column the two faces stand one over the other.
 import { cn, Menu, useMotionPrefs } from "@pl/ui";
 import { motion } from "motion/react";
 import { type ReactNode, type RefObject, useRef, useState } from "react";
@@ -184,6 +185,7 @@ export function CallStage({
   room,
   marksOf,
   compact = false,
+  stacked = false,
 }: {
   room: VoiceRoomView;
   /** What someone turned off, as the panel's rows draw it. */
@@ -192,6 +194,8 @@ export function CallStage({
   ) => ReactNode;
   /** SQOL-U3: a chat under the stage: a band at the panel's top instead of its middle. */
   compact?: boolean;
+  /** SQOL-U3: a wide panel's people column: the faces one over the other, in its middle. */
+  stacked?: boolean;
 }) {
   const { t } = useTranslation();
   const me = useSocialUi((s) => s.view.me);
@@ -224,7 +228,11 @@ export function CallStage({
     >
       <motion.div
         {...moves}
-        className={cn("flex items-start justify-center", compact ? "gap-4" : "gap-6")}
+        className={cn(
+          "flex justify-center",
+          stacked ? "flex-col items-center gap-7" : "items-start",
+          !stacked && (compact ? "gap-4" : "gap-6"),
+        )}
       >
         {friend ? (
           <FriendSeat person={friend} marks={marksOf(friend)} stage={stageRef} compact={compact} />

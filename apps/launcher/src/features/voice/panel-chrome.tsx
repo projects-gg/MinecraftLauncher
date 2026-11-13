@@ -7,6 +7,7 @@ import { IconButton } from "@pl/ui";
 import { Dialog } from "radix-ui";
 import { createContext, type ReactNode, useContext } from "react";
 import { useTranslation } from "react-i18next";
+import type { PanelLayout } from "./panel-size";
 
 export interface PanelChrome {
   /** Docked beside the stage (no scrim, the page stays live). */
@@ -14,12 +15,15 @@ export interface PanelChrome {
   /** The panel is on screen (not sliding away, not hidden behind a full-screen stage). */
   shown: boolean;
   close: () => void;
+  /** How its width lays it out (panel-size.ts): one column, or the people beside the chat. */
+  layout: PanelLayout;
 }
 
 const PanelChromeContext = createContext<PanelChrome>({
   docked: false,
   shown: false,
   close: () => {},
+  layout: "stacked",
 });
 
 export const PanelChromeProvider = PanelChromeContext.Provider;
