@@ -1,10 +1,12 @@
 // SQOL §1.3: which chat the room panel shows, how the room's refusals read, the rows as chat
 // messages, tombstones, and the previews' timing.
 import { describe, expect, it } from "vitest";
+import i18n from "@/lib/i18n";
 import {
   asChatMessage,
   type ChatChoiceInput,
   chatChoice,
+  deleteFailureOf,
   failureOf,
   heldPeeks,
   livePeeks,
@@ -90,19 +92,56 @@ describe("chatChoice", () => {
 });
 
 describe("failureOf", () => {
-  it("reads the room's refusals as chat's own failures", () => {
+  it("words the filters' refusals as chat does", () => {
     expect(failureOf({ code: "rejected", reason: "phone" })).toEqual({ failure: "phone" });
     expect(failureOf({ code: "rejected", reason: "link", rule: "shortener" })).toEqual({
       failure: "link",
       rule: "shortener",
     });
-    expect(failureOf({ code: "rejected", reason: "word" })).toEqual({ failure: "words" });
-    expect(failureOf({ code: "rejected", reason: "lines" })).toEqual({ failure: "invalid" });
+    expect(failureOf({ code: "rejected", reason: "link" })).toEqual({ failure: "link" });
+    // The word filter: chat's own "Bu mesaj gönderilemez." with "Düzenle".
+    expect(failureOf({ code: "rejected", reason: "words" })).toEqual({ failure: "words" });
+    // Too long (the launcher's own check) or no reason: "Bu mesaj gönderilemez." too.
+    expect(failureOf({ code: "rejected", reason: "length" })).toEqual({ failure: "invalid" });
+    expect(failureOf({ code: "rejected" })).toEqual({ failure: "invalid" });
+  });
+
+  it("gives every other refusal its own sentence, the generic one only when nothing answered", () => {
+    // Studio switched the stickers off: chat's "Bu özellik şu an kapalı.".
+    expect(failureOf({ code: "stickersOff" })).toEqual({ failure: "featureOff" });
+    expect(failureOf({ code: "notAllowed" })).toEqual({ failure: "notAllowed" });
     expect(failureOf({ code: "rateLimited" })).toEqual({ failure: "tooFast" });
     expect(failureOf({ code: "muted" })).toEqual({ failure: "muted" });
     expect(failureOf({ code: "limited" })).toEqual({ failure: "limitedLinks" });
     expect(failureOf({ code: "off" })).toEqual({ failure: "off" });
+    expect(failureOf({ code: "gone" })).toEqual({ failure: "connection" });
     expect(failureOf({ code: "failed" })).toEqual({ failure: "connection" });
+  });
+
+  it("has words for every failure it gives", () => {
+    const tr = i18n.getFixedT("tr");
+    const words = (failure: string) =>
+      i18n.exists(`chat.failure.${failure}`)
+        ? tr(`chat.failure.${failure}`)
+        : tr(`chat2.failure.${failure}`);
+    expect(words(failureOf({ code: "stickersOff" }).failure)).toBe("Bu özellik şu an kapalı.");
+    expect(words(failureOf({ code: "notAllowed" }).failure)).toBe(
+      "Buraya artık mesaj gönderemezsin.",
+    );
+    expect(words(failureOf({ code: "rejected", reason: "words" }).failure)).toBe(
+      "Bu mesaj gönderilemez.",
+    );
+  });
+});
+
+describe("deleteFailureOf", () => {
+  it("says why a deletion was refused, and keeps one the room no longer has", () => {
+    expect(deleteFailureOf("notAllowed")).toBe("notAllowed");
+    expect(deleteFailureOf("off")).toBe("off");
+    expect(deleteFailureOf("gone")).toBeNull();
+    expect(deleteFailureOf("failed")).toBe("connection");
+    expect(deleteFailureOf("rateLimited")).toBe("connection");
+    expect(i18n.getFixedT("tr")("roomChat.refused.notAllowed")).toBe("Bu mesajı silemezsin.");
   });
 });
 

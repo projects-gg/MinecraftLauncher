@@ -1,11 +1,19 @@
 // The app's side of room chat (SQOL §3, docs/tasks/sqol-r.md "Oda paneli ve sohbet": R's
 // `voice_chat_*`, `voice_typing` and the `voice-chat` event). Called by name, as the share module's
 // commands are, so the page does not wait for the generated bindings; answers are read field by
-// field (types.ts). A refusal is an answer: a deletion's or a report's turns into a rejection here
-// (its callers say "Gönderilemedi." / "Rapor gönderilemedi." in their own words).
+// field (types.ts). A refusal is an answer: a deletion's or a report's turns into a
+// `RoomChatRefused` here, which its callers word ("Bu mesajı silemezsin.", "Rapor gönderilemedi.").
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@/lib/api/listen";
-import { codeOf, eventOf, msgOf, type RoomChatApi, type RoomChatMsg, sendOf } from "./types";
+import {
+  codeOf,
+  eventOf,
+  msgOf,
+  type RoomChatApi,
+  type RoomChatMsg,
+  RoomChatRefused,
+  sendOf,
+} from "./types";
 
 const quiet = () => {
   // A launcher without the command (an older one) or one closing: nothing to do here.
@@ -14,7 +22,7 @@ const quiet = () => {
 /** A command that answers a refusal (`RoomChatError`) or null. */
 async function done(command: string, args: Record<string, unknown>): Promise<void> {
   const refused = await invoke<unknown>(command, args);
-  if (refused !== null && refused !== undefined) throw new Error(`room chat: ${codeOf(refused)}`);
+  if (refused !== null && refused !== undefined) throw new RoomChatRefused(codeOf(refused));
 }
 
 export const tauriRoomChat: RoomChatApi = {

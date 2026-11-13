@@ -11,7 +11,7 @@ import { api } from "@/lib/api";
 import i18n from "@/lib/i18n";
 import { useVoiceUi } from "../store";
 import { roomChatApi } from "./api";
-import type { ShownMsg } from "./rules";
+import { deleteFailureOf, type ShownMsg } from "./rules";
 import {
   discard,
   markDeleted,
@@ -21,7 +21,7 @@ import {
   undelete,
   useRoomChat,
 } from "./store";
-import type { RoomChatSend } from "./types";
+import { RoomChatRefused, type RoomChatSend } from "./types";
 
 let made = 0;
 const nonceOf = () => `${Date.now().toString(36)}${(made++).toString(36)}`;
@@ -72,7 +72,10 @@ export function dropRoomMessage(key: string, toField: boolean): void {
   if (toField && msg && !msg.sticker) useRoomChat.getState().setDraft(msg.text);
 }
 
-/** "Herkesten Sil": the tombstone at once; the message comes back if the room refuses. */
+/**
+ * "Herkesten Sil": the tombstone at once; the message comes back if the room refuses, with why
+ * (`deleteFailureOf`). One the room no longer has stays taken away.
+ */
 export async function deleteRoomMessage(id: string): Promise<boolean> {
   const room = useRoomChat.getState().room;
   if (!room) return false;
@@ -82,8 +85,19 @@ export async function deleteRoomMessage(id: string): Promise<boolean> {
     announce(i18n.t("chat.actions.deleted"));
     return true;
   } catch (error) {
+    const failure = error instanceof RoomChatRefused ? deleteFailureOf(error.code) : "connection";
+    if (failure === null) {
+      announce(i18n.t("chat.actions.deleted"));
+      return true;
+    }
     useRoomChat.getState().apply((d) => (d.room === room ? undelete(d, id) : d));
-    toast.error(friendlyError(error, i18n.t("chat.failure.connection")).message);
+    toast.error(
+      failure === "notAllowed"
+        ? i18n.t("roomChat.refused.notAllowed")
+        : failure === "off"
+          ? i18n.t("chat.failure.off")
+          : friendlyError(error, i18n.t("chat.failure.connection")).message,
+    );
     return false;
   }
 }

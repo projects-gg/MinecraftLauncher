@@ -23,6 +23,9 @@ export const enRoomChat: typeof trRoomChat = {
   tombstone: {
     mod: "This message was removed",
   },
+  refused: {
+    notAllowed: "You can't delete this message.",
+  },
   speaking: "speaking",
   connection: {
     good: "Connection: Good",

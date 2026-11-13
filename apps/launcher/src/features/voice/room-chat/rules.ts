@@ -4,7 +4,7 @@
 import { directConversation } from "@/features/social/chat/conversations";
 import type { ChatMessage, SendFailure } from "@/lib/api/social-types";
 import type { VoiceRoomView } from "@/lib/api/voice-types";
-import type { RoomChatDeletedBy, RoomChatRefusal } from "./types";
+import type { RoomChatCode, RoomChatDeletedBy, RoomChatRefusal } from "./types";
 
 /** The chat under the room's people: a friend's direct messages, the room's own chat, or none. */
 export type PanelChat =
@@ -48,7 +48,13 @@ export function chatChoice(input: ChatChoiceInput): PanelChat {
   return room.chat ? { kind: "room" } : { kind: "none" };
 }
 
-/** A room's refusal as chat's own failure words (`chat.failure.*`, `chat2.*`). */
+/**
+ * A room's refusal of a message (SQOL-R's `RoomChatError` and `RoomChatReason`) as chat's own
+ * failure words (`chat.failure.*`, `chat2.failure.*`): the filters' phone, link (its rule's own
+ * words) and words as chat says them; Studio's stickers switch as chat's "Bu özellik şu an
+ * kapalı."; a mute, a limit, haste and a closed chat as chat's; only a room that is gone or did
+ * not answer says "Gönderilemedi.".
+ */
 export function failureOf(refusal: RoomChatRefusal): { failure: SendFailure; rule?: string } {
   switch (refusal.code) {
     case "rejected":
@@ -57,23 +63,45 @@ export function failureOf(refusal: RoomChatRefusal): { failure: SendFailure; rul
           return { failure: "phone" };
         case "link":
           return refusal.rule ? { failure: "link", rule: refusal.rule } : { failure: "link" };
-        case "word":
+        case "words":
           return { failure: "words" };
         default:
-          // Too long or too many lines: the composer stops those before they go.
+          // Too long (the launcher's own `length`; the composer stops it first) or no reason.
           return { failure: "invalid" };
       }
+    case "stickersOff":
+      return { failure: "featureOff" };
     case "rateLimited":
       return { failure: "tooFast" };
     case "muted":
       return { failure: "muted" };
     case "limited":
       return { failure: "limitedLinks" };
+    case "notAllowed":
+      return { failure: "notAllowed" };
     case "off":
       return { failure: "off" };
-    default:
-      // The room or the message is gone, or the launcher could not ask: "Gönderilemedi."
+    case "gone":
+    case "failed":
       return { failure: "connection" };
+  }
+}
+
+/**
+ * A deletion the room refused, as the words its toast says: `notAllowed` (someone else's message
+ * without the right: "Bu mesajı silemezsin."), `off` (chat's "Sohbet şu an kapalı."), else chat's
+ * "Gönderilemedi."; null when the message is not there any more (`gone`): it stays taken away.
+ */
+export function deleteFailureOf(code: RoomChatCode): "notAllowed" | "off" | "connection" | null {
+  switch (code) {
+    case "gone":
+      return null;
+    case "notAllowed":
+      return "notAllowed";
+    case "off":
+      return "off";
+    default:
+      return "connection";
   }
 }
 

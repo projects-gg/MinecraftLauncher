@@ -1,6 +1,9 @@
 // Room chat (SQOL §1.3, §2.2, §3): what the launcher hands the page, as this module reads it. The
-// launcher's events and answers are read field by field (`msgOf`, `eventOf`, `sendOf`), so a
-// launcher that names a field as the room's wire does (`u`, `st`, `ms`) reads the same.
+// launcher's events and answers are SQOL-R's (`RoomChatMsg`, `VoiceChatEvent`, `RoomChatSend`,
+// `RoomChatError`, `RoomChatReason` in the generated bindings), read field by field (`msgOf`,
+// `eventOf`, `sendOf`) so a malformed one is dropped instead of breaking the chat. The refusals'
+// names are the bindings' own: a name R changes fails the typecheck here.
+import type { RoomChatError, RoomChatReason } from "@/bindings";
 
 /** One message of the room's chat. */
 export interface RoomChatMsg {
@@ -24,35 +27,42 @@ export type RoomChatEvent =
   | { room: string; kind: "log"; msgs: RoomChatMsg[] };
 
 /**
- * Why the room did not take a message (SQOL-R's `RoomChatError`; the room's §2.2 codes read the
- * same: `chat_off`, `chat_rejected`, `rate_limited`, `chat_muted`). `gone`: the message or the room
- * is not there any more.
+ * Why the room did not take a message, a deletion or a report (SQOL-R's `RoomChatError`): `off`
+ * (no chat now), `stickersOff` (Studio switched the stickers off), `rejected` (the filters: see
+ * `reason`), `rateLimited`, `muted` (Projects' moderators), `limited` (a new account's link),
+ * `notAllowed` (deleting someone else's message without the right), `gone` (not in that room any
+ * more, or no such message), `failed` (the room did not answer).
  */
-export type RoomChatCode =
-  | "off"
-  | "rejected"
-  | "rateLimited"
-  | "muted"
-  | "limited"
-  | "gone"
-  | "failed";
+export type RoomChatCode = RoomChatError;
 
 export interface RoomChatRefusal {
   code: RoomChatCode;
-  /** With `rejected`: which text rule refused it. */
-  reason?: "phone" | "link" | "word" | "length" | "lines";
+  /** With `rejected`: what the filters found (`phone`, `link`, `words`), or the launcher's `length`. */
+  reason?: RoomChatReason;
   /** With a refused link: the link rule (chat-links.json), for its own words. */
   rule?: string;
 }
 
 export type RoomChatSend = { sent: { id: string; at: number } } | { refused: RoomChatRefusal };
 
+/** A deletion or a report the room refused: its callers word `code`. */
+export class RoomChatRefused extends Error {
+  readonly code: RoomChatCode;
+
+  constructor(code: RoomChatCode) {
+    super(`room chat: ${code}`);
+    this.code = code;
+  }
+}
+
 /** What the page asks of room chat. Listeners return their stop function. */
 export interface RoomChatApi {
   /** The room's last messages as this computer holds them (the people the player blocks out). */
   log(room: string): Promise<RoomChatMsg[]>;
   send(room: string, body: { text?: string; sticker?: string }): Promise<RoomChatSend>;
+  /** Rejects with `RoomChatRefused` when the room refuses. */
   remove(room: string, id: string): Promise<void>;
+  /** Rejects with `RoomChatRefused` when the room refuses. */
   report(room: string, id: string, reason: string, note?: string): Promise<void>;
   /** A text field has the focus: the single-key voice shortcuts rest meanwhile (R `voice_typing`). */
   typing(on: boolean): Promise<void>;
@@ -69,9 +79,9 @@ const text = (value: unknown): string | undefined =>
 export function msgOf(raw: unknown): RoomChatMsg | null {
   if (!isRaw(raw)) return null;
   const id = text(raw.id);
-  const from = text(raw.from ?? raw.u ?? raw.user);
+  const from = text(raw.from);
   const at = typeof raw.at === "number" ? raw.at : Number(raw.at);
-  const sticker = text(raw.sticker ?? raw.st) || undefined;
+  const sticker = text(raw.sticker) || undefined;
   const words = text(raw.text) ?? "";
   if (!id || !from || !Number.isFinite(at) || (!words && !sticker)) return null;
   return sticker ? { id, from, at, text: "", sticker } : { id, from, at, text: words };
@@ -86,7 +96,7 @@ export function eventOf(raw: unknown): RoomChatEvent | null {
   if (!room) return null;
   switch (raw.kind) {
     case "msg": {
-      const msg = msgOf(raw.msg ?? raw.m ?? raw.message);
+      const msg = msgOf(raw.msg);
       return msg ? { room, kind: "msg", msg } : null;
     }
     case "del": {
@@ -95,9 +105,8 @@ export function eventOf(raw: unknown): RoomChatEvent | null {
       return id ? { room, kind: "del", id, by } : null;
     }
     case "log": {
-      const list = raw.msgs ?? raw.ms ?? raw.messages;
-      const msgs = Array.isArray(list)
-        ? list.map(msgOf).filter((m): m is RoomChatMsg => m !== null)
+      const msgs = Array.isArray(raw.msgs)
+        ? raw.msgs.map(msgOf).filter((m): m is RoomChatMsg => m !== null)
         : [];
       return { room, kind: "log", msgs };
     }
@@ -106,47 +115,57 @@ export function eventOf(raw: unknown): RoomChatEvent | null {
   }
 }
 
-/** A refusal's code as SQOL-R names it, from its name or the room's (§2.2). */
-const CODES: Record<string, RoomChatCode> = {
-  off: "off",
-  chat_off: "off",
-  chat_feature_off: "off",
-  rejected: "rejected",
-  chat_rejected: "rejected",
-  rateLimited: "rateLimited",
-  rate_limited: "rateLimited",
-  muted: "muted",
-  chat_muted: "muted",
-  limited: "limited",
-  gone: "gone",
-  not_found: "gone",
-  failed: "failed",
+/** Every refusal SQOL-R names (a name it adds or renames fails the typecheck here). */
+const CODES: Record<RoomChatCode, true> = {
+  off: true,
+  stickersOff: true,
+  rejected: true,
+  rateLimited: true,
+  muted: true,
+  limited: true,
+  notAllowed: true,
+  gone: true,
+  failed: true,
 };
-const REASONS = ["phone", "link", "word", "length", "lines"] as const;
+const REASONS: Record<RoomChatReason, true> = {
+  phone: true,
+  link: true,
+  words: true,
+  length: true,
+};
 
 /** A refusal's code, or `failed` for one this page does not know. */
 export function codeOf(value: unknown): RoomChatCode {
-  return (typeof value === "string" && Object.hasOwn(CODES, value) && CODES[value]) || "failed";
+  return typeof value === "string" && Object.hasOwn(CODES, value)
+    ? (value as RoomChatCode)
+    : "failed";
+}
+
+/** A rejection's reason, or none for one this page does not know. */
+export function reasonOf(value: unknown): RoomChatReason | undefined {
+  return typeof value === "string" && Object.hasOwn(REASONS, value)
+    ? (value as RoomChatReason)
+    : undefined;
 }
 
 /**
- * What `voice_chat_send` answered: the room took it (its id and time), or why not. SQOL-R answers
- * `{kind: "sent", id, at}` or `{kind: "refused", error, reason, rule, …}`; a flat `{code, …}` or a
- * nested `{refused: {code, …}}` reads the same.
+ * What `voice_chat_send` answered (SQOL-R's `RoomChatSend`): `{kind: "sent", id, at}`, or
+ * `{kind: "refused", error, reason, rule, retryAfter, until}`; anything else did not go.
  */
 export function sendOf(raw: unknown, nowMs = Date.now()): RoomChatSend {
   if (!isRaw(raw)) return { refused: { code: "failed" } };
-  const refusal = raw.kind === "sent" ? null : (raw.refused ?? raw.error ?? raw.code);
-  if (raw.kind === "refused" || (refusal !== undefined && refusal !== null)) {
-    const detail = isRaw(refusal) ? refusal : raw;
-    const code = codeOf(isRaw(refusal) ? refusal.code : refusal);
-    const reason = REASONS.find((r) => r === detail.reason);
-    const rule = text(detail.rule);
+  if (raw.kind === "refused") {
+    const reason = reasonOf(raw.reason);
+    const rule = text(raw.rule);
     return {
-      refused: { code, ...(reason ? { reason } : {}), ...(rule ? { rule } : {}) },
+      refused: {
+        code: codeOf(raw.error),
+        ...(reason ? { reason } : {}),
+        ...(rule ? { rule } : {}),
+      },
     };
   }
-  const id = text(raw.id);
+  const id = raw.kind === "sent" ? text(raw.id) : undefined;
   if (!id) return { refused: { code: "failed" } };
   const at = typeof raw.at === "number" && Number.isFinite(raw.at) ? raw.at : nowMs;
   return { sent: { id, at } };

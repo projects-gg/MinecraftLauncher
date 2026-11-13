@@ -25,6 +25,10 @@ export const trRoomChat = {
     /** The room's leader or a moderator took it away. */
     mod: "Bu mesaj kaldırıldı",
   },
+  refused: {
+    /** Deleting someone else's message without the right to (SQOL-R `notAllowed`). */
+    notAllowed: "Bu mesajı silemezsin.",
+  },
   /** In a person's name for screen readers, while they speak. */
   speaking: "konuşuyor",
   /** A connection's bars, in words (their tooltip, screen readers); bars show only when not good. */
