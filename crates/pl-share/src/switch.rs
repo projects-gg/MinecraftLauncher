@@ -25,6 +25,22 @@ pub const GAME_WINDOW_WAIT: Duration = Duration::from_secs(55);
 pub const REACQUIRE_EVERY: Duration = Duration::from_millis(250);
 /// How often a starting game's windows are looked at.
 pub const WINDOW_WAIT_EVERY: Duration = Duration::from_millis(500);
+/// SQOL-R3: a shared window whose frames stopped this long is looked at (does it still live?): a
+/// closed window sends none, and neither the capture's `Closed` nor the window's own end event is
+/// sure to come (another program's window, its program ending).
+pub const SOURCE_CHECK_AFTER: Duration = Duration::from_secs(1);
+/// SQOL-R3: and again this often while its frames stay away (a still window sends none either).
+pub const SOURCE_CHECK_EVERY: Duration = Duration::from_secs(1);
+
+/// SQOL-R3: when to look whether the shared window still lives: [`SOURCE_CHECK_AFTER`] past its
+/// last frame, then every [`SOURCE_CHECK_EVERY`] while no frame comes.
+pub fn source_check_due(last_frame: Instant, last_check: Option<Instant>) -> Instant {
+    let after_frames = last_frame + SOURCE_CHECK_AFTER;
+    match last_check {
+        Some(at) if at >= last_frame => (at + SOURCE_CHECK_EVERY).max(after_frames),
+        _ => after_frames,
+    }
+}
 
 /// New encoders are needed for `new` layers (a size or a frame rate changed); otherwise the
 /// running ones go on and a keyframe marks the change.
@@ -187,5 +203,24 @@ mod tests {
             t0 + Duration::from_secs(30) + WINDOW_WAIT_EVERY
         );
         assert!(!wait.missed(t0 + GAME_WINDOW_WAIT));
+    }
+
+    /// SQOL-R3: frames flowing keep the look away; once they stop, a look a second.
+    #[test]
+    fn a_window_whose_frames_stopped_is_looked_at_once_a_second() {
+        let t0 = Instant::now();
+        assert_eq!(source_check_due(t0, None), t0 + SOURCE_CHECK_AFTER);
+        // A frame later: later still.
+        let t1 = t0 + Duration::from_millis(400);
+        assert_eq!(source_check_due(t1, None), t1 + SOURCE_CHECK_AFTER);
+        // Looked at, no frame since: the next look a second on.
+        let looked = t1 + SOURCE_CHECK_AFTER;
+        assert_eq!(
+            source_check_due(t1, Some(looked)),
+            looked + SOURCE_CHECK_EVERY
+        );
+        // A frame after the look: a second after that frame.
+        let t2 = looked + Duration::from_millis(300);
+        assert_eq!(source_check_due(t2, Some(looked)), t2 + SOURCE_CHECK_AFTER);
     }
 }

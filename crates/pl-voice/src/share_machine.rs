@@ -40,6 +40,9 @@ use crate::wire::{FromRoom, ModAct, ToRoom};
 
 /// SQOL: a live change the room has not answered by then is given up (nothing changes).
 const EDIT_WAIT_MS: u64 = 10_000;
+/// MOB-WATCH: TURN the watching page has serves a new connection only while it has this long
+/// left (the room's credentials last `ttl`; a connection set up on them must still come up).
+const TURN_SPARE_MS: u64 = 60_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MinePhase {
@@ -81,7 +84,20 @@ struct Mine {
     switching: Option<Switching>,
     /// SQOL: a live change waits for the room: its `rid` and when it went.
     editing: Option<(u32, u64)>,
+    /// SQOL-R3: what that newest change asked for (a quick change back is measured against it,
+    /// not against what the room applied before).
+    asked: Asked,
+    /// SQOL-R3: the player's own "Duraklat", kept while a closed source's wait shows instead: a
+    /// new source comes paused when it was.
+    player_hold: bool,
+    /// SQOL-R3: the publisher found no sound to share for this source: the room's answers do not
+    /// turn it back on (the player's own "Sesi de Paylaş" or another source does).
+    audio_failed: bool,
 }
+
+/// SQOL-R3: the values a live change asks the room for (none: unchanged); a refusal tells the
+/// page these (`refused`'s `change`).
+type Asked = crate::share::ShareAsked;
 
 /// SQOL: a source the publisher is switching to.
 #[derive(Debug, Clone)]
@@ -201,6 +217,9 @@ pub(super) struct Shares {
     pending_offer: Option<WatchCmd>,
     /// The watch connection works.
     connected: bool,
+    /// MOB-WATCH: until when the TURN the watching page was given serves a new connection (none:
+    /// no end known, or none given).
+    turn_until: Option<u64>,
     losses: u32,
     /// The last touch watching knows of (a watch, an answer, the window coming back).
     touched: u64,
@@ -233,6 +252,7 @@ impl Default for Shares {
             held: false,
             pending_offer: None,
             connected: false,
+            turn_until: None,
             losses: 0,
             touched: 0,
             asking_since: None,
@@ -255,7 +275,7 @@ impl Pending {
     fn is_share(&self) -> bool {
         matches!(
             self,
-            Self::ShareOpen(_) | Self::Watch(..) | Self::WatchTurn | Self::ShareSet(_)
+            Self::ShareOpen(_) | Self::Watch(..) | Self::WatchTurn | Self::ShareSet(..)
         )
     }
 }
@@ -486,6 +506,9 @@ impl Machine {
             told: ShareSt::Live,
             switching: None,
             editing: None,
+            asked: Asked::default(),
+            player_hold: false,
+            audio_failed: false,
         });
         let mut out = vec![Effect::Share(ShareCmd::Prepare { n, source, opts })];
         self.sync_privacy(&mut out);
@@ -526,7 +549,7 @@ impl Machine {
             });
         }
         self.pending.retain(|_, pending| {
-            *pending != Pending::ShareOpen(n) && *pending != Pending::ShareSet(n)
+            !matches!(pending, Pending::ShareOpen(m) | Pending::ShareSet(m, _) if *m == n)
         });
         // The player's own preview of it goes with it.
         let me = self.me.clone();
@@ -623,12 +646,14 @@ impl Machine {
                 }
             }
             ShareEvent::AudioUnavailable { n } => {
-                if let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == n)
-                    && mine.opts.audio
-                {
-                    mine.opts.audio = false;
-                    out.push(Effect::ShareNotice(ShareNotice::AudioOff));
-                    out.push(Effect::Changed);
+                if let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == n) {
+                    // SQOL-R3: the room's answers keep it off from now on.
+                    mine.audio_failed = true;
+                    if mine.opts.audio {
+                        mine.opts.audio = false;
+                        out.push(Effect::ShareNotice(ShareNotice::AudioOff));
+                        out.push(Effect::Changed);
+                    }
                 }
             }
             // SHARE-LIVE: a live share's still picture goes to the room (a `live1` room keeps it
@@ -778,18 +803,25 @@ impl Machine {
                         None => self.close_mine(n, Some(ShareClosedWhy::Error), true, now, out),
                     },
                     // SQOL: the room's applied values of a live change.
-                    Some(Pending::ShareSet(n)) => self.edited(n, rid, preset, fps, audio, out),
+                    Some(Pending::ShareSet(n, _)) => self.edited(n, rid, preset, fps, audio, out),
                     Some(Pending::WatchTurn) => match ice {
-                        Some(ice) if !ice.urls.is_empty() => self.deliver(
-                            WatchCmd::Ice {
-                                ice: crate::engine::EngineIce {
-                                    urls: ice.urls,
-                                    username: ice.username,
-                                    credential: ice.credential,
+                        Some(ice) if !ice.urls.is_empty() => {
+                            // MOB-WATCH: it serves the session's new connections until shortly
+                            // before it runs out.
+                            self.share.turn_until = (ice.ttl > 0).then(|| {
+                                now + ice.ttl.saturating_mul(1_000).saturating_sub(TURN_SPARE_MS)
+                            });
+                            self.deliver(
+                                WatchCmd::Ice {
+                                    ice: crate::engine::EngineIce {
+                                        urls: ice.urls,
+                                        username: ice.username,
+                                        credential: ice.credential,
+                                    },
                                 },
-                            },
-                            out,
-                        ),
+                                out,
+                            );
+                        }
                         _ => self.watch_lost(now, out),
                     },
                     // A watch's offer follows its `ack` (if the room sends one at all).
@@ -806,24 +838,30 @@ impl Machine {
                 match self.pending.remove(&rid) {
                     Some(Pending::ShareOpen(n)) => {
                         self.close_mine(n, None, false, now, out);
-                        out.push(Effect::ShareNotice(ShareNotice::Refused { refusal }));
+                        out.push(Effect::ShareNotice(ShareNotice::refused(refusal)));
                     }
                     // SQOL: a live change the room refused: nothing changes. The budget and the
-                    // room's rule are told; a room that does not take changes yet stays quiet.
-                    Some(Pending::ShareSet(n)) => {
+                    // room's rule are told (SQOL-R3: with the share and what it asked, so the page
+                    // rolls back exactly that); a room that does not take changes yet stays quiet.
+                    Some(Pending::ShareSet(n, asked)) => {
                         if let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == n)
                             && mine.editing.is_some_and(|(asked, _)| asked == rid)
                         {
                             mine.editing = None;
+                            mine.asked = Asked::default();
                         }
                         if matches!(refusal, ShareRefusal::Budget | ShareRefusal::NotAllowed) {
-                            out.push(Effect::ShareNotice(ShareNotice::Refused { refusal }));
+                            out.push(Effect::ShareNotice(ShareNotice::Refused {
+                                refusal,
+                                n: Some(n),
+                                change: Some(asked),
+                            }));
                         }
                         out.push(Effect::Changed);
                     }
                     Some(Pending::Watch(u, n)) => {
                         self.drop_watch(&u, n, false, out);
-                        out.push(Effect::ShareNotice(ShareNotice::Refused { refusal }));
+                        out.push(Effect::ShareNotice(ShareNotice::refused(refusal)));
                     }
                     Some(Pending::WatchTurn) => self.watch_lost(now, out),
                     _ => {}
@@ -869,7 +907,7 @@ impl Machine {
                     self.resume_sharing(&mine_listed, now, out);
                     // SHARE-LIVE: catching up with the room says nothing (no sounds).
                     self.prune_watches(false, now, out);
-                    self.resume_watching(watch.unwrap_or_default(), out);
+                    self.resume_watching(watch.unwrap_or_default(), now, out);
                 }
                 self.mine_pictures(&mine_listed);
                 out.push(Effect::Changed);
@@ -1013,7 +1051,8 @@ impl Machine {
         {
             for (n, src) in kinds {
                 let rid = self.rid();
-                self.pending.insert(rid, Pending::ShareSet(n));
+                self.pending
+                    .insert(rid, Pending::ShareSet(n, Asked::default()));
                 out.push(Effect::Send {
                     generation,
                     frame: ToRoom::ShareSet {
@@ -1032,19 +1071,40 @@ impl Machine {
     }
 
     /// Back on a new socket: the room's watch session still carries `kept` (its `hello.me.watch`).
-    /// Those go on as they are; the rest are asked for again; with nothing kept the session is new
-    /// (the page's connection too). What the room carries that the player no longer watches (an
-    /// `unwatch` lost meanwhile, or all of it while held) is let go there.
-    fn resume_watching(&mut self, kept: Vec<WatchWire>, out: &mut Vec<Effect>) {
+    /// Those whose offer came go on as they are; the rest are asked for again; with none of them
+    /// carried the session is new (the page's connection too). What the room carries that the
+    /// player no longer watches (an `unwatch` lost meanwhile, or all of it while held), or not as
+    /// the player left it (a `watch` whose offer went to the old socket, MOB-WATCH), is let go
+    /// there. A connection that waited for TURN has no answer to come (only the socket that asked
+    /// gets it): the session is new.
+    fn resume_watching(&mut self, kept: Vec<WatchWire>, now: u64, out: &mut Vec<Effect>) {
         let held = self.share.held;
+        let turn_lost = self
+            .pending
+            .values()
+            .any(|pending| *pending == Pending::WatchTurn);
+        let carried: Vec<bool> = self
+            .share
+            .watching
+            .iter()
+            .map(|watch| {
+                !held
+                    && !turn_lost
+                    && watch.sent
+                    && watch.rid.is_none()
+                    && kept.iter().any(|k| k.u == watch.u && k.n == watch.n)
+            })
+            .collect();
         if let Some(generation) = self.open_generation() {
-            for stray in kept.iter().filter(|k| {
-                held || !self
+            for stray in &kept {
+                let at = self
                     .share
                     .watching
                     .iter()
-                    .any(|watch| watch.u == k.u && watch.n == k.n)
-            }) {
+                    .position(|watch| watch.u == stray.u && watch.n == stray.n);
+                if at.is_some_and(|at| carried[at]) {
+                    continue;
+                }
                 out.push(Effect::Send {
                     generation,
                     frame: ToRoom::Unwatch {
@@ -1052,23 +1112,22 @@ impl Machine {
                         n: stray.n,
                     },
                 });
+                if let Some(at) = at {
+                    self.share.watching[at].sent = false;
+                }
             }
         }
         if self.share.watching.is_empty() || held {
             return;
         }
-        let carried = |watch: &Watching| kept.iter().any(|k| k.u == watch.u && k.n == watch.n);
-        if !self.share.watching.iter().any(carried) {
-            self.restart_watching(out);
+        if !carried.contains(&true) {
+            self.restart_watching(now, out);
             return;
         }
         self.pending
             .retain(|_, pending| !matches!(pending, Pending::Watch(..) | Pending::WatchTurn));
-        for at in 0..self.share.watching.len() {
-            if carried(&self.share.watching[at]) {
-                self.share.watching[at].rid = None;
-                self.share.watching[at].asked_at = None;
-            } else {
+        for (at, carried) in carried.into_iter().enumerate() {
+            if !carried {
                 self.share.watching[at].sent = false;
                 self.send_watch(at, out);
             }
@@ -1121,7 +1180,7 @@ impl Machine {
         {
             out.push(Effect::Watch {
                 surface: self.share.surface,
-                cmd: WatchCmd::Reset,
+                cmd: WatchCmd::Reset { keep_turn: false },
             });
         }
         if self.share.popout {
@@ -1261,6 +1320,9 @@ impl Machine {
                 },
             });
         }
+        // SQOL-R3: the page reads the layer back from the state (its tiles chose by it: a stale one
+        // kept the stream on the small layer after "Veri Tasarrufu" was left, the real-SFU run).
+        out.push(Effect::Changed);
         out
     }
 
@@ -1291,7 +1353,7 @@ impl Machine {
         self.pending
             .retain(|_, pending| *pending != Pending::Watch(watch.u.clone(), n));
         if self.share.watching.is_empty() {
-            self.reset_page(out);
+            self.reset_page(false, out);
             self.share.asking_since = None;
             self.share.hidden_since = None;
             self.share.held = false;
@@ -1306,7 +1368,7 @@ impl Machine {
         }
         self.unwatch_room(out);
         self.share.watching.clear();
-        self.reset_page(out);
+        self.reset_page(false, out);
         self.share.asking_since = None;
         self.share.hidden_since = None;
         self.share.held = false;
@@ -1378,22 +1440,26 @@ impl Machine {
         }
     }
 
-    /// The session anew: the room lets the old go, the page closes its connection, the list is
-    /// asked for again.
-    fn restart_watching(&mut self, out: &mut Vec<Effect>) {
+    /// The session anew: the room lets the old go, the page closes its connection (keeping TURN
+    /// it was given while that still serves, MOB-WATCH), the list is asked for again.
+    fn restart_watching(&mut self, now: u64, out: &mut Vec<Effect>) {
         self.unwatch_room(out);
-        self.reset_page(out);
+        let keep_turn = self.share.turn_until.is_none_or(|until| now < until);
+        self.reset_page(keep_turn, out);
         self.rewatch(out);
     }
 
-    /// The watching page closes its connection.
-    fn reset_page(&mut self, out: &mut Vec<Effect>) {
+    /// The watching page closes its connection (`keep_turn`: TURN it has stays for the next one).
+    fn reset_page(&mut self, keep_turn: bool, out: &mut Vec<Effect>) {
         self.share.pending_offer = None;
         self.share.connected = false;
+        if !keep_turn {
+            self.share.turn_until = None;
+        }
         if self.share.attached[slot(self.share.surface)] {
             out.push(Effect::Watch {
                 surface: self.share.surface,
-                cmd: WatchCmd::Reset,
+                cmd: WatchCmd::Reset { keep_turn },
             });
         }
     }
@@ -1424,7 +1490,7 @@ impl Machine {
             return out;
         }
         if !self.share.watching.is_empty() && !self.share.held {
-            self.restart_watching(&mut out);
+            self.restart_watching(now, &mut out);
             out.push(Effect::Changed);
         }
         out
@@ -1445,6 +1511,8 @@ impl Machine {
             self.unwatch_room(&mut out);
             self.share.connected = false;
             self.share.pending_offer = None;
+            // SQOL-R3: what watching shows changed (it waits for the page again).
+            out.push(Effect::Changed);
         }
         out
     }
@@ -1476,7 +1544,7 @@ impl Machine {
 
     fn move_watching(&mut self, to: ShareSurface, now: u64, out: &mut Vec<Effect>) {
         self.unwatch_room(out);
-        self.reset_page(out);
+        self.reset_page(false, out);
         self.share.surface = to;
         self.share.hidden_since = None;
         self.share.touched = now;
@@ -1541,10 +1609,11 @@ impl Machine {
                 }
             }
             WatchReport::NeedTurn => {
-                if let Ok((_, effects)) =
-                    self.request(Pending::WatchTurn, |rid| ToRoom::Turn { rid })
-                {
-                    out.extend(effects);
+                match self.request(Pending::WatchTurn, |rid| ToRoom::Turn { rid }) {
+                    Ok((_, effects)) => out.extend(effects),
+                    // No socket to ask on: as lost (the page waits for nothing else; the
+                    // socket's return asks anew).
+                    Err(_) => self.watch_lost(now, &mut out),
                 }
             }
             WatchReport::Connected => {
@@ -1560,7 +1629,7 @@ impl Machine {
     }
 
     /// The watch connection is gone: asked for anew, a few times in a row at most.
-    fn watch_lost(&mut self, _now: u64, out: &mut Vec<Effect>) {
+    fn watch_lost(&mut self, now: u64, out: &mut Vec<Effect>) {
         if self.share.watching.is_empty() {
             return;
         }
@@ -1569,7 +1638,7 @@ impl Machine {
         if self.share.losses >= WATCH_LOSSES_MAX {
             self.stop_watching(Some(ShareNotice::WatchFailed), out);
         } else {
-            self.restart_watching(out);
+            self.restart_watching(now, out);
             out.push(Effect::Changed);
         }
     }
@@ -1679,6 +1748,15 @@ impl Machine {
         if mine.source == source && mine.hold.is_none() {
             return Ok(Vec::new());
         }
+        // SQOL-R3: the same source asked again while its switch is on its way (a double click in
+        // the picker): one switch.
+        if mine
+            .switching
+            .as_ref()
+            .is_some_and(|switching| switching.source == source)
+        {
+            return Ok(Vec::new());
+        }
         let label = match source.kind() {
             ShareKind::Game => String::new(),
             _ => crate::share::clip_label(label),
@@ -1714,14 +1792,21 @@ impl Machine {
         mine.kind = switching.source.kind();
         mine.source = switching.source;
         mine.label = switching.label.clone();
-        // A closed source's wait is over; a pause the player chose stays.
+        // Another source may have sound to share.
+        mine.audio_failed = false;
+        // A closed source's wait is over; a pause the player chose stays (SQOL-R3: also one
+        // chosen before the source closed: the publisher still holds, nothing is sent).
         if matches!(
             mine.hold,
             Some(ShareHoldWhy::Closed | ShareHoldWhy::GameClosed)
         ) {
-            mine.hold = None;
             mine.hold_until = None;
-            out.push(Effect::Share(ShareCmd::Hold { n, on: false }));
+            if mine.player_hold {
+                mine.hold = Some(ShareHoldWhy::Paused);
+            } else {
+                mine.hold = None;
+                out.push(Effect::Share(ShareCmd::Hold { n, on: false }));
+            }
         }
         // "Görüntü" and the sound follow the new source (a game moves; a screen's sound is the
         // whole computer's).
@@ -1744,7 +1829,8 @@ impl Machine {
             && let Some(generation) = generation
         {
             let rid = self.rid();
-            self.pending.insert(rid, Pending::ShareSet(n));
+            self.pending
+                .insert(rid, Pending::ShareSet(n, Asked::default()));
             out.push(Effect::Send {
                 generation,
                 frame: ToRoom::ShareSet {
@@ -1821,8 +1907,14 @@ impl Machine {
         let at = self.editable(n)?;
         let mine = &mut self.share.mine[at];
         match (on, mine.hold) {
-            (true, None) => mine.hold = Some(ShareHoldWhy::Paused),
-            (false, Some(ShareHoldWhy::Paused)) => mine.hold = None,
+            (true, None) => {
+                mine.hold = Some(ShareHoldWhy::Paused);
+                mine.player_hold = true;
+            }
+            (false, Some(ShareHoldWhy::Paused)) => {
+                mine.hold = None;
+                mine.player_hold = false;
+            }
             (false, Some(_)) => return Err(ShareRefusal::Gone),
             (true, Some(_)) | (false, None) => return Ok(Vec::new()),
         }
@@ -1889,25 +1981,47 @@ impl Machine {
             out.push(Effect::Share(ShareCmd::Update { n, opts }));
         }
         if change.asks_room() {
+            // SQOL-R3: measured against what the share will have once the change still waiting
+            // for the room lands: a quick change back (sound on, then off at once) is a change too.
+            let waiting = if mine.editing.is_some() {
+                mine.asked
+            } else {
+                Asked::default()
+            };
+            let (now_preset, now_fps, now_audio) = (
+                waiting.preset.unwrap_or(mine.opts.preset),
+                waiting.fps.unwrap_or(mine.opts.fps),
+                waiting.audio.unwrap_or(mine.opts.audio),
+            );
             let preset = change.preset.map(|preset| preset.min(max));
-            let target = preset.unwrap_or(mine.opts.preset);
+            let target = preset.unwrap_or(now_preset);
             let top = if target == SharePreset::High { 60 } else { 30 };
             // 60 frames only with "Yüksek": a lower quality takes the rate down with it.
             let fps = change
                 .fps
                 .map(|fps| normal_fps(fps).min(top))
-                .or_else(|| (mine.opts.fps > top).then_some(top));
-            let asked = (
-                preset.filter(|preset| *preset != mine.opts.preset),
-                fps.filter(|fps| *fps != mine.opts.fps),
-                change.audio.filter(|audio| *audio != mine.opts.audio),
-            );
-            if asked != (None, None, None)
+                .or_else(|| (now_fps > top).then_some(top));
+            let asked = Asked {
+                preset: preset.filter(|preset| *preset != now_preset),
+                fps: fps.filter(|fps| *fps != now_fps),
+                audio: change.audio.filter(|audio| *audio != now_audio),
+            };
+            // The player's own "Sesi de Paylaş" tries the sound again.
+            if change.audio == Some(true) {
+                mine.audio_failed = false;
+            }
+            if asked != Asked::default()
                 && let Some(generation) = generation
             {
                 let rid = self.rid();
-                self.pending.insert(rid, Pending::ShareSet(n));
-                self.share.mine[at].editing = Some((rid, now));
+                self.pending.insert(rid, Pending::ShareSet(n, asked));
+                let mine = &mut self.share.mine[at];
+                mine.editing = Some((rid, now));
+                mine.asked = Asked {
+                    preset: asked.preset.or(waiting.preset),
+                    fps: asked.fps.or(waiting.fps),
+                    audio: asked.audio.or(waiting.audio),
+                };
                 out.push(Effect::Send {
                     generation,
                     frame: ToRoom::ShareSet {
@@ -1915,9 +2029,9 @@ impl Machine {
                         rid: Some(rid),
                         paused: None,
                         src: None,
-                        audio: asked.2,
-                        preset: asked.0,
-                        fps: asked.1,
+                        audio: asked.audio,
+                        preset: asked.preset,
+                        fps: asked.fps,
                         st: None,
                     },
                 });
@@ -1945,6 +2059,7 @@ impl Machine {
         };
         if mine.editing.is_some_and(|(asked, _)| asked == rid) {
             mine.editing = None;
+            mine.asked = Asked::default();
         }
         let mut opts = mine.opts;
         if let Some(preset) = preset {
@@ -1956,8 +2071,9 @@ impl Machine {
         if opts.preset != SharePreset::High {
             opts.fps = opts.fps.min(30);
         }
+        // SQOL-R3: sound the publisher found none of stays off whatever the room recorded.
         if let Some(audio) = audio {
-            opts.audio = audio && can_audio;
+            opts.audio = audio && can_audio && !mine.audio_failed;
         }
         if opts != mine.opts {
             mine.opts = opts;
@@ -2062,6 +2178,7 @@ impl Machine {
                 && now >= asked + EDIT_WAIT_MS
             {
                 mine.editing = None;
+                mine.asked = Asked::default();
                 pending.remove(&rid);
                 out.push(Effect::Changed);
             }
@@ -2077,7 +2194,7 @@ impl Machine {
                 self.share.held = true;
                 self.share.asking_since = None;
                 self.unwatch_room(out);
-                self.reset_page(out);
+                self.reset_page(false, out);
                 out.push(Effect::Changed);
             }
         }

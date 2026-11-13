@@ -263,8 +263,9 @@ enum Pending {
     Watch(String, u8),
     WatchTurn,
     Unshare,
-    // SQOL: a live change of share `n` (`share_set` with `rid`), a room chat message, a deletion.
-    ShareSet(u8),
+    // SQOL: a live change of share `n` (`share_set` with `rid`; SQOL-R3: with what it asked), a
+    // room chat message, a deletion.
+    ShareSet(u8, crate::share::ShareAsked),
     Rchat,
     RchatDel,
 }
@@ -1309,6 +1310,21 @@ impl Machine {
         // A TURN answer can only come on the socket that asked (the page's own wait reports the
         // connection lost, and the socket's return asks for a new one).
         self.pending.retain(|_, pending| *pending != Pending::Turn);
+        // SQOL-R3: so can a room chat answer: its caller hears now (it waits for nothing else; a
+        // slow room's answer is waited for as long as the socket lives).
+        let chat: Vec<u32> = self
+            .pending
+            .iter()
+            .filter(|(_, pending)| matches!(pending, Pending::Rchat | Pending::RchatDel))
+            .map(|(rid, _)| *rid)
+            .collect();
+        for rid in chat {
+            self.pending.remove(&rid);
+            out.push(Effect::ChatAnswer {
+                rid,
+                answer: crate::rchat::RoomChatSend::refused(crate::rchat::RoomChatError::Failed),
+            });
+        }
         out.push(Effect::Changed);
     }
 

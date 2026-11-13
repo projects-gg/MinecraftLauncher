@@ -331,12 +331,16 @@ export function createWatchEngine(
           iceServers = [
             { urls: cmd.ice.urls, username: cmd.ice.username, credential: cmd.ice.credential },
           ];
-          // The next connection goes through TURN: this one ends, the launcher asks anew.
-          queue = queue.then(lost);
+          // The next connection goes through TURN: this one ends, the launcher asks anew. One that
+          // came up meanwhile stays (TURN waits for the next one).
+          queue = queue.then(() => {
+            if (pc?.connectionState !== "connected") lost();
+          });
           return;
         case "reset":
-          // Nothing watched: TURN credentials expire, the next session asks again if it must.
-          iceServers = [];
+          // A session asked anew keeps TURN (that is what it was asked for, MOB-WATCH). Nothing
+          // watched, or TURN ran out: it goes, the next session asks again if it must.
+          if (!cmd.keepTurn) iceServers = [];
           queue = queue.then(close);
           return;
       }

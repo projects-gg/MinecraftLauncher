@@ -1,14 +1,22 @@
 //! The room chat's side of [`Voice`] (SQOL `rchat1`): the page's chat commands, each one step of
 //! the machine (a child of [`crate::manager`]).
 
+use std::time::Duration;
+
 use tokio::sync::oneshot;
 
-use super::{ANSWER_WAIT, Voice, lock};
+use super::{Voice, lock};
 use crate::machine::{Effect, Machine};
 use crate::rchat::{RoomChatError, RoomChatMsg, RoomChatSend};
 
+/// SQOL-R3: how long a room chat request waits for its answer at most. The room answers every
+/// request while its socket lives, and the machine answers at once when the socket goes; a slow
+/// answer (past the usual 10 s) still settles the sender's own message instead of a failure the
+/// player would send again (a duplicate in the room). Only a room that never answers is given up.
+const CHAT_ANSWER_WAIT: Duration = Duration::from_secs(60);
+
 impl Voice {
-    /// Sends `make`'s request and waits for the room's answer (at most [`ANSWER_WAIT`]).
+    /// Sends `make`'s request and waits for the room's answer (at most [`CHAT_ANSWER_WAIT`]).
     async fn chat_request(
         &self,
         make: impl FnOnce(&mut Machine) -> Result<(u32, Vec<Effect>), RoomChatSend>,
@@ -25,7 +33,7 @@ impl Voice {
             Ok(rid) => rid,
             Err(answer) => return answer,
         };
-        match tokio::time::timeout(ANSWER_WAIT, receiver).await {
+        match tokio::time::timeout(CHAT_ANSWER_WAIT, receiver).await {
             Ok(Ok(answer)) => answer,
             _ => {
                 lock(&self.inner.chat_waiters).remove(&rid);

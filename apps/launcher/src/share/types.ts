@@ -10,6 +10,13 @@ export type ShareKind = "game" | "window" | "screen";
 /** "Kalite": Düşük (480p30) / Normal (720p30) / Yüksek (1080p30; a game's "Akıcılık" 1080p60). */
 export type SharePreset = "low" | "normal" | "high";
 
+/** SQOL-R3: the room-checked values a live change asked for, as sent (absent: not asked). */
+export interface ShareAsked {
+  preset?: SharePreset | null;
+  fps?: number | null;
+  audio?: boolean | null;
+}
+
 /** A watcher's simulcast layer: full, or a quarter for a small tile. */
 export type ShareLayer = "f" | "q";
 
@@ -271,12 +278,11 @@ export type ShareClosedWhy =
 /** A moment worth a toast (`share-notice`). */
 export type ShareNotice =
   | { kind: "closed"; why: ShareClosedWhy; src: ShareKind }
+  // SQOL-R3: a live change of share `n` the room refused carries what it asked (`change`), so the
+  // page rolls back exactly that; a share or a watch that could not start carries neither.
   | {
       kind: "refused";
       refusal: ShareRefusal;
-      // SQOL: a live change the room refused names the player's share and what that change
-      // asked of the room (its quality, frame rate and sound, as sent); a share or a watch that
-      // could not start names neither (nor does a launcher before them).
       n?: number | null;
       change?: ShareAsked | null;
     }
@@ -302,13 +308,6 @@ export type ShareState = "live" | "hold" | "min";
  * (`closed`) or the game (`gameClosed`) it showed closed (a minute to pick another source).
  */
 export type ShareHoldWhy = "paused" | "closed" | "gameClosed";
-
-/** What a live change asks of the room (the rest is the launcher's own); a field may be null. */
-export interface ShareAsked {
-  preset?: SharePreset | null;
-  fps?: number | null;
-  audio?: boolean | null;
-}
 
 /** `share_update`: what a live share changes (only the fields given). */
 export interface ShareChange {
@@ -357,7 +356,12 @@ export type WatchCmd =
   /** `fresh`: a new watch session (a new connection); `mids`: the m-lines this offer adds. */
   | { t: "offer"; sdp: string; mids: WatchMid[]; fresh: boolean }
   | { t: "ice"; ice: WatchIce }
-  | { t: "reset" };
+  /**
+   * The connection closes. `keepTurn`: the session is asked for anew (after a loss, which is what
+   * TURN was asked for), TURN stays for its next connection; otherwise nothing is watched here now,
+   * or TURN ran out.
+   */
+  | { t: "reset"; keepTurn: boolean };
 
 /** The watching page → launcher. */
 export type WatchReport =
