@@ -35,12 +35,12 @@ import net.minecraft.util.FormattedCharSequence;
 
 /**
  * The people of the player's voice room on the room page (VOICE-O; the launcher's room panel, voice.md §5.1): the player
- * first ("Sen"), then everyone else as they came, then the player's invites that still ring ("Aranıyor…"). A row is a
- * face with its jade ring while they speak (in 100 ms, out 300 ms; opacity only), the name, "Lider" or "Moderatör" under
- * it, and on the right the signs of what is off: the microphone (flare when a moderator muted them), hearing, "Benim
- * için sustur", a weak connection (the server bars' colours). A press or a right click on someone opens their menu
- * (volume first); the arrows move, Enter, Space, Shift+F10 or the menu key open it. A note under the rows says how the
- * last action went, as the friend list's.
+ * first (no "Sen" on it: people know their own name; the narrator says it), then everyone else as they came, then the
+ * player's invites that still ring ("Aranıyor…"). A row is a face with its jade ring while they speak (in 100 ms, out
+ * 300 ms; opacity only), the name, "Lider" or "Moderatör" under it, and on the right the signs of what is off: the
+ * microphone (flare when a moderator muted them), hearing, "Benim için sustur", a weak connection (the server bars'
+ * colours). A press or a right click on someone opens their menu (volume first); the arrows move, Enter, Space,
+ * Shift+F10 or the menu key open it. A note under the rows says how the last action went, as the friend list's.
  */
 public final class VoiceList extends PanelWidget {
     /** Opens someone's menu. */
@@ -147,10 +147,8 @@ public final class VoiceList extends PanelWidget {
         mine.me = true;
         mine.live = voice != null && voice.live();
         String own = meName == null || meName.isEmpty() ? Texts.str("voice.room.you") : meName;
-        // "Sen", and the player's role beside it ("Sen · Lider").
-        String you = Texts.str("voice.room.you");
-        String role = roleOr(me.role(), null);
-        fill(mine, own, Avatars.ME, role == null ? you : you + " · " + role, strong, small, textW);
+        // Only the player's role under their name ("Lider"), as on the others' rows: no "Sen" (the narrator says it).
+        fill(mine, own, Avatars.ME, roleOr(me.role(), null), strong, small, textW);
         mine.marks.clear();
         mine.markInks.clear();
         voiceMarks(mine, me.mute(), me.deaf(), me.mutedByModerator());
@@ -290,9 +288,14 @@ public final class VoiceList extends PanelWidget {
         };
     }
 
-    /** What the narrator says after the name: "Yayında", speaking, then what is off. */
+    /** What the narrator says after the name: "Sen" on the player's own row, "Yayında", speaking, then what is off. */
     private static String state(Row row, boolean speaking) {
-        List<String> parts = new ArrayList<>(4);
+        List<String> parts = new ArrayList<>(5);
+        String you = Texts.str("voice.room.you");
+        if (row.me && !you.equals(row.label)) {
+            // The row shows no "Sen"; the narrator still says which row is the player's.
+            parts.add(you);
+        }
         if (row.live) {
             parts.add(Texts.str("share.live"));
             if (row.stream != null) {
@@ -311,9 +314,6 @@ public final class VoiceList extends PanelWidget {
         }
         if (row.bars > 0) {
             parts.add(Texts.str("voice.person.weak"));
-        }
-        if (parts.isEmpty() && row.sub != null) {
-            return row.me ? Texts.str("voice.room.you") : "";
         }
         return String.join(", ", parts);
     }
