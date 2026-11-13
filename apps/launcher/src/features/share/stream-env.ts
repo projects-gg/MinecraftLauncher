@@ -291,6 +291,8 @@ export function startStreamPlayback(surface: ShareSurface): () => void {
   let cancelIdle: (() => void) | null = null;
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
   let needed = false;
+  /** The system's outputs as last seen: a change lets a refused output be asked again. */
+  let outputs: string | null = null;
 
   const run = () => {
     queued = false;
@@ -299,6 +301,9 @@ export function startStreamPlayback(surface: ShareSurface): () => void {
     const me = ui.state.room?.me.id ?? null;
     const here = share !== null && share.surface === surface;
     const env = useStreamEnv.getState();
+    const seen = (env.outputs ?? []).join(" ");
+    if (outputs !== null && seen !== outputs) audio.devicesChanged();
+    outputs = seen;
 
     // The sound is ready before a stream comes; it lets go a minute after nothing needs it.
     const need =

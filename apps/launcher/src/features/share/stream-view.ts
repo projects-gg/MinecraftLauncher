@@ -149,6 +149,11 @@ export function zoomPercent(zoom: Zoom): number {
   return Math.round(zoom.s * 100);
 }
 
+/** The picture's transform for a zoom (none at %100). */
+export function zoomTransform(zoom: Zoom): string {
+  return zoom.s === 1 ? "" : `translate3d(${zoom.x}px, ${zoom.y}px, 0) scale(${zoom.s})`;
+}
+
 // --- the stream menu -----------------------------------------------------------------------------
 
 export type StreamRow =

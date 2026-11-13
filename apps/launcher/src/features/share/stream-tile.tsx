@@ -39,7 +39,6 @@ import { SocialFace } from "@/features/social/social-face";
 import { useSocialUi } from "@/features/social/store";
 import { useFace } from "@/features/voice/store";
 import { formatPercent } from "@/lib/format";
-import { shareApi } from "@/share/api";
 import { mockZoom } from "@/share/mock-view";
 import { param } from "@/share/param";
 import { shareKey, type VoiceLiveShare, type VoiceWatch } from "@/share/types";
@@ -47,6 +46,7 @@ import { unwatchShare } from "./actions";
 import { isPopout, useShareInfo, useShareName, useShareQuality, useShareUi } from "./store";
 import { popOut, toggleFullscreen } from "./stream-actions";
 import { moveStreamVolume, streamSoundOf, toggleStreamMute, useStreamEnv } from "./stream-env";
+import { useShareChangeCalm, useWatchLayer } from "./stream-layer";
 import { useSoundItems, useStreamItems, useStreamSound } from "./stream-menu";
 import { sayStream } from "./stream-say";
 import { useOwnPreviewFrame, useOwnShareInfo, useOwnShareItems } from "./stream-seams";
@@ -65,6 +65,7 @@ import {
   type Zoom,
   zoomAt,
   zoomPercent,
+  zoomTransform,
 } from "./stream-view";
 import { ShareVideo } from "./video";
 
@@ -394,12 +395,17 @@ export function StreamTile({
   const applyZoom = useCallback((next: Zoom) => {
     zoom.current = next;
     const element = picture.current;
-    if (element) {
-      element.style.transform =
-        next.s === 1 ? "" : `translate3d(${next.x}px, ${next.y}px, 0) scale(${next.s})`;
-    }
+    if (element) element.style.transform = zoomTransform(next);
     const shown = zoomPercent(next);
     setPercent((before) => (before === shown ? before : shown));
+  }, []);
+  /**
+   * The picture comes back (a watch held while the window was away returns): it takes the zoom the
+   * chip shows, so the two never disagree.
+   */
+  const pictureRef = useCallback((element: HTMLDivElement | null) => {
+    picture.current = element;
+    if (element) element.style.transform = zoomTransform(zoom.current);
   }, []);
 
   // Its size: the zoom stays inside it, and the layer follows it once a resize settles.
@@ -473,16 +479,8 @@ export function StreamTile({
     zoomed: percent > 100,
     hasSmall: true,
   });
-  const asked = useRef(watch.layer);
-  useEffect(() => {
-    if (watch.layer === layer) {
-      asked.current = layer;
-      return;
-    }
-    if (watch.phase === "held" || asked.current === layer || width === null) return;
-    asked.current = layer;
-    void shareApi.layer(person, n, layer).catch(() => {});
-  }, [layer, watch.layer, watch.phase, width, person, n]);
+  useWatchLayer(watch, layer, width !== null);
+  useShareChangeCalm(person, n, live);
 
   // A drag looks around a zoomed picture; a double click is full screen.
   const drag = useRef<{ id: number; x: number; y: number; moved: number } | null>(null);
@@ -612,7 +610,7 @@ export function StreamTile({
           }}
         >
           <div
-            ref={picture}
+            ref={pictureRef}
             className={cn(
               "absolute inset-0 origin-top-left",
               minimized && "blur-[16px] brightness-75",
@@ -755,7 +753,6 @@ export function OwnTile({
   const name = me?.name ?? t("voice.room.you");
   const frame = useOwnPreviewFrame(n);
   const items = useOwnShareItems(n);
-  const infoOn = useShareUi((s) => s.info);
   const sends = useOwnShareInfo(n);
   const chrome = useChrome(full, idle);
   const face: BackdropFace = {
@@ -795,12 +792,6 @@ export function OwnTile({
       ) : (
         <StreamBackdrop face={face} />
       )}
-      {/* "Yayın Bilgileri": what this computer really sends. */}
-      {infoOn && sends ? (
-        <span className="absolute top-2 left-2 rounded-[7px] bg-obsidian-950/78 px-2 py-1 text-[12px] leading-[1.3] font-medium text-bone-100 tabular-nums ring-1 ring-white/10">
-          {sends}
-        </span>
-      ) : null}
       <Scrim shown={chrome.shown} />
       <div
         className="absolute inset-x-2 bottom-2 flex items-end justify-between gap-2"
@@ -810,11 +801,17 @@ export function OwnTile({
           <NamePlate name={name} />
           <span
             className={cn(
-              "shrink-0 pl-0.5 text-[12px] leading-[1.3] text-ash-200",
+              "flex min-w-0 items-center gap-2 pl-0.5 text-[12px] leading-[1.3] text-ash-200",
               fade(chrome.shown),
             )}
           >
-            {t("shareView.own.preview")}
+            <span className="shrink-0">{t("shareView.own.preview")}</span>
+            {/* What this computer really sends (sqol.md §1.2), whenever the bar shows. */}
+            {sends ? (
+              <span className="min-w-0 truncate tabular-nums @max-[28rem]/tile:hidden">
+                {sends}
+              </span>
+            ) : null}
           </span>
         </span>
         <span className={cn("flex shrink-0 gap-1.5", fade(chrome.shown))}>
