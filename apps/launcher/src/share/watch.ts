@@ -18,9 +18,10 @@ export const DROP_WAIT_MS = 3000;
 /** How often a showing share's quality is looked at. */
 export const STATS_MS = 2000;
 /**
- * A picture that changed on purpose (another source or layer, a pause or a hold ending) stops a
- * moment: a freeze this soon after a new key frame, a new size or `calm` is no weak connection.
- * Lost packets still are (a lossy link asks for key frames itself).
+ * A picture that changed on purpose (another source, layer or frame rate, a pause or a hold
+ * ending) stops a moment: a freeze this soon after a new size, a key frame the link did not ask
+ * for or `calm` is no weak connection even when the link stumbles then. Lost packets beyond a few
+ * percent always are.
  */
 export const CHANGE_CALM_MS = 4000;
 
@@ -86,7 +87,7 @@ export function ufragOf(sdp: string): string | null {
   return /^a=ice-ufrag:(\S+)/m.exec(sdp)?.[1] ?? null;
 }
 
-/** A loss above this share of packets reads as weak (as a frozen picture does). */
+/** A loss above this share of packets reads as weak (as a picture frozen by a stumbling link does). */
 const LOSS_WEAK = 0.05;
 
 export function createWatchEngine(
@@ -113,10 +114,22 @@ export function createWatchEngine(
   let queue: Promise<void> = Promise.resolve();
   /** Each connection's own number: a late event of a closed one changes nothing. */
   let generation = 0;
-  /** Each share's counters at the last look (key frames and size: did its picture change?). */
+  /**
+   * Each share's counters at the last look: key frames and size (did its picture change?), the
+   * page's asks for lost packets and key frames (`asks`), and whether the link had trouble then.
+   */
   const lastStats = new Map<
     string,
-    { lost: number; received: number; freezes: number; keys: number; w: number; h: number }
+    {
+      lost: number;
+      received: number;
+      freezes: number;
+      keys: number;
+      asks: number;
+      w: number;
+      h: number;
+      trouble: boolean;
+    }
   >();
   /** Until when a share's freezes say nothing (its picture changed on purpose). */
   const calmUntil = new Map<string, number>();
@@ -279,30 +292,39 @@ export function createWatchEngine(
       const receivedNow = num(entry.packetsReceived);
       const freezesNow = num(entry.freezeCount);
       const keysNow = num(entry.keyFramesDecoded);
+      const asksNow = num(entry.nackCount) + num(entry.pliCount) + num(entry.firCount);
       const w = num(entry.frameWidth);
       const h = num(entry.frameHeight);
       const before = lastStats.get(key);
+      const lostDelta = before ? Math.max(0, lostNow - before.lost) : 0;
+      const receivedDelta = before ? Math.max(0, receivedNow - before.received) : 0;
+      // The link's own trouble: packets lost, or this page asked for them again or for a key frame.
+      const trouble = !!before && (lostDelta > 0 || asksNow > before.asks);
       lastStats.set(key, {
         lost: lostNow,
         received: receivedNow,
         freezes: freezesNow,
         keys: keysNow,
+        asks: asksNow,
         w,
         h,
+        trouble,
       });
-      // A new key frame or a new size: the picture changed on purpose (another source or layer,
-      // a pause ending, a new watcher), and its moment of stillness is no weak connection.
+      // A new size, or a key frame the link did not ask for: the picture changed on purpose
+      // (another source, layer or frame rate, a pause ending, a new watcher).
       const now = host.now();
       const resized = !!before && w > 0 && before.w > 0 && (w !== before.w || h !== before.h);
-      if (before && (keysNow > before.keys || resized)) calmUntil.set(key, now + CHANGE_CALM_MS);
+      const keyed = !!before && keysNow > before.keys && !trouble;
+      if (resized || keyed) calmUntil.set(key, now + CHANGE_CALM_MS);
       const calm = (calmUntil.get(key) ?? 0) > now;
-      const lostDelta = before ? Math.max(0, lostNow - before.lost) : 0;
-      const receivedDelta = before ? Math.max(0, receivedNow - before.received) : 0;
       const froze = before ? freezesNow > before.freezes : false;
       const loss = lostDelta + receivedDelta > 0 ? lostDelta / (lostDelta + receivedDelta) : 0;
-      // Few frames are no sign (a still window of text sends few); a picture that froze (unless it
-      // changed on purpose) or lost packets is.
-      const weak = (froze && !calm) || loss > LOSS_WEAK;
+      // A freeze is weak only with the link's trouble (in this look or the one before): without
+      // it the sharer simply sent fewer frames (a still window sends one a second, and Chromium
+      // counts the gaps after motion as freezes for seconds; a switch, another frame rate, a
+      // pause). Packets lost beyond a few percent are weak in any case.
+      const frozeWeak = froze && !calm && (trouble || before?.trouble === true);
+      const weak = frozeWeak || loss > LOSS_WEAK;
       const quality: ShareQuality = weak ? "weak" : "good";
       if (qualities.get(key) !== quality) {
         qualities.set(key, quality);

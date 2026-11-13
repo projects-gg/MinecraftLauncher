@@ -4,7 +4,7 @@
 // Sohbeti" beside it that opens the crew's chat in the friends panel); else nothing and the people
 // take the room. A third person turns it to the room's chat for good. The two cross-fade in place.
 import { ChatCircleDots } from "@phosphor-icons/react";
-import { ContentIcon } from "@pl/ui";
+import { ContentIcon, cn } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useId, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -147,9 +147,12 @@ function CrewChatLink({ crew }: { crew: string }) {
 export function PanelChatSection({
   room,
   chat,
+  centered = false,
 }: {
   room: VoiceRoomView;
   chat: Exclude<PanelChat, { kind: "none" }>;
+  /** SQOL-U3: a very wide panel: the chat in the middle of its column, its lines at most 720 px. */
+  centered?: boolean;
 }) {
   const { t } = useTranslation();
   const { shown } = usePanelChrome();
@@ -160,7 +163,10 @@ export function PanelChatSection({
   const visible = onRoomPage && shown && !friendsOpen;
   const labelId = useId();
   return (
-    <section aria-labelledby={labelId} className="flex min-h-0 flex-1 flex-col">
+    <section
+      aria-labelledby={labelId}
+      className={cn("flex min-h-0 flex-1 flex-col", centered && "mx-auto w-full max-w-[720px]")}
+    >
       <div className="flex h-9 shrink-0 items-center gap-2 pr-3 pl-5">
         <h3
           id={labelId}

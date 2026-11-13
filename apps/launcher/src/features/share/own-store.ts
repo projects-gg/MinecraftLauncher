@@ -33,7 +33,10 @@ interface Pending {
   patch: OwnPatch;
   /** What the state said of the patched fields when it was made (it moves: the answer came). */
   base: OwnPatch;
-  /** The launcher took it: it goes when the state moves on its fields (or soon, `SETTLED_MS`). */
+  /**
+   * The launcher took it: it goes when the state moves on its fields (or soon: `SETTLED_MS`,
+   * `ROOM_WAIT_MS` for what the room decides).
+   */
   settled: boolean;
 }
 
@@ -67,6 +70,12 @@ export const useOwnUi = create<OwnUi>()(() => ({
 
 /** How long a taken change waits for the launcher's state before the state alone shows. */
 export const SETTLED_MS = 4_000;
+
+/**
+ * The same for a change the room decides on: longer than the launcher waits for the room's answer
+ * (10 s; it then says `refused`, `failed`), so a slow room never takes a change back silently.
+ */
+export const ROOM_WAIT_MS = 12_000;
 
 /** How long a share whose source went away waits for another one (sqol.md §1.2). */
 export const LOST_WAIT_S = 60;
@@ -221,16 +230,6 @@ export function dropRefusedChange(n: number, asked: OwnPatch): OwnPatch | null {
   return entry ? takeBack(entry, fields) : null;
 }
 
-/**
- * The room refused a live change and its notice names none (a launcher before SQOL-R's exact
- * notice): the latest change the room decides on goes back, its room fields only (every other
- * change and share stays). Returns what went back, null when nothing waited for the room.
- */
-export function dropRefused(): OwnPatch | null {
-  const entry = [...useOwnUi.getState().pending].reverse().find((p) => asksRoom(p.patch));
-  return entry ? takeBack(entry, ROOM_FIELDS) : null;
-}
-
 /** The launcher refused (or failed): the share shows what it really has again. */
 export function dropPatch(which: number) {
   forget(which);
@@ -262,7 +261,7 @@ export function settlePatch(which: number, taken?: (now: VoiceMyShare) => void) 
   forgetTimer(which);
   settleTimers.set(
     which,
-    setTimeout(() => dropPatch(which), SETTLED_MS),
+    setTimeout(() => dropPatch(which), asksRoom(entry.patch) ? ROOM_WAIT_MS : SETTLED_MS),
   );
 }
 

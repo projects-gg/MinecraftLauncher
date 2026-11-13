@@ -10,6 +10,7 @@ import {
   SMALL_TILE_PX,
   streamRows,
   tileKey,
+  WEAK_AGAIN_MS,
   WEAK_BACK_MAX_MS,
   WEAK_BACK_MS,
   weakBackAt,
@@ -92,6 +93,22 @@ describe("a weak connection's hold", () => {
     hold = weakStep(hold, false, now);
     hold = weakStep(hold, true, now + 5 * 60_000);
     expect(hold.wait).toBe(WEAK_BACK_MS);
+  });
+
+  it("starts from the first wait when weak again only after a good spell (E2E: 24 s after)", () => {
+    let hold = weakStep(NO_WEAK_HOLD, true, 0);
+    hold = weakStep(hold, false, 1_000);
+    hold = weakStep(hold, false, 1_000 + WEAK_BACK_MS);
+    expect(hold.held).toBe(false);
+    const back = 1_000 + WEAK_BACK_MS;
+    hold = weakStep(hold, true, back + 24_000);
+    expect(hold.wait).toBe(WEAK_BACK_MS);
+    // Within the first seconds after the full layer came back it still doubles.
+    hold = weakStep(hold, false, back + 25_000);
+    hold = weakStep(hold, false, back + 25_000 + WEAK_BACK_MS);
+    hold = weakStep(hold, true, back + 25_000 + WEAK_BACK_MS + 5_000);
+    expect(hold.wait).toBe(WEAK_BACK_MS * 2);
+    expect(WEAK_AGAIN_MS).toBeLessThan(24_000);
   });
 
   it("says nothing new while the connection stays as it was", () => {

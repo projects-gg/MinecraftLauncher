@@ -154,4 +154,51 @@ describe("the own share's notices", () => {
     showShareNotice({ kind: "closed", why: "left", src: "game" });
     expect(toast).toHaveBeenCalledTimes(2);
   });
+
+  it("say the room's rule when it ended the share, sharing going off otherwise", () => {
+    const rule = "Bu odada artık yalnız lider ve moderatörler paylaşabilir.";
+    const off = "Ekran paylaşımı şu an kullanılamıyor.";
+    const share = (patch: { on?: boolean; allowed?: boolean; shareBy?: "all" | "mods" }) => {
+      const state = useVoiceUi.getState().state;
+      if (!state.share) throw new Error("no share");
+      useVoiceUi.getState().setState({ ...state, share: { ...state.share, ...patch } });
+    };
+    const before = useVoiceUi.getState().state;
+    vi.useFakeTimers();
+    try {
+      // A friend room: the leader's choice reaches the state first, its share's end next.
+      share({ shareBy: "mods", allowed: false });
+      showShareNotice({ kind: "closed", why: "limit", src: "game" });
+      expect(toast).toHaveBeenCalledExactlyOnceWith(rule);
+      // A second share ending with it says nothing more.
+      showShareNotice({ kind: "closed", why: "limit", src: "screen" });
+      expect(toast).toHaveBeenCalledOnce();
+      // A crew room: the share ends first, the room's new definition comes just after.
+      resetOwnNotices();
+      toast.mockClear();
+      useVoiceUi.getState().setState(before);
+      showShareNotice({ kind: "closed", why: "limit", src: "game" });
+      expect(toast).not.toHaveBeenCalled();
+      share({ shareBy: "mods", allowed: false });
+      expect(toast).toHaveBeenCalledExactlyOnceWith(rule);
+      // Sharing went off (Studio's switch): said at once.
+      resetOwnNotices();
+      toast.mockClear();
+      useVoiceUi.getState().setState(before);
+      share({ on: false });
+      showShareNotice({ kind: "closed", why: "limit", src: "game" });
+      expect(toast).toHaveBeenCalledExactlyOnceWith(off);
+      // Nothing says why within its moment: sharing is off for now.
+      resetOwnNotices();
+      toast.mockClear();
+      useVoiceUi.getState().setState(before);
+      showShareNotice({ kind: "closed", why: "limit", src: "game" });
+      vi.advanceTimersByTime(1_499);
+      expect(toast).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(toast).toHaveBeenCalledExactlyOnceWith(off);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

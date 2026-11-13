@@ -164,12 +164,12 @@ describe("a picture that changes on purpose", () => {
   });
 
   it("is no weak connection when its sharer pauses it, brings it back or shows another source", () => {
-    const live = (kind: ShareKind, st?: ShareState): Pick<VoiceLiveShare, "st" | "kind"> =>
-      st ? { kind, st } : { kind };
-    const hook = renderHook(
-      (p: { live: Pick<VoiceLiveShare, "st" | "kind"> }) => useShareChangeCalm("301", 1, p.live),
-      { initialProps: { live: live("game") } },
-    );
+    type Live = Pick<VoiceLiveShare, "st" | "kind" | "fps" | "preset">;
+    const live = (kind: ShareKind, st?: ShareState, fps = 30): Live =>
+      st ? { kind, st, fps, preset: "normal" } : { kind, fps, preset: "normal" };
+    const hook = renderHook((p: { live: Live }) => useShareChangeCalm("301", 1, p.live), {
+      initialProps: { live: live("game") },
+    });
     expect(calm).not.toHaveBeenCalled();
     hook.rerender({ live: live("game", "hold") });
     hook.rerender({ live: live("game") });
@@ -177,6 +177,11 @@ describe("a picture that changes on purpose", () => {
     expect(calm).toHaveBeenCalledTimes(3);
     hook.rerender({ live: live("window", "live") });
     expect(calm).toHaveBeenCalledTimes(3);
+    // E2E: a step to 15 fps, then another quality.
+    hook.rerender({ live: live("window", "live", 15) });
+    expect(calm).toHaveBeenCalledTimes(4);
+    hook.rerender({ live: { ...live("window", "live", 15), preset: "high" } });
+    expect(calm).toHaveBeenCalledTimes(5);
   });
 });
 

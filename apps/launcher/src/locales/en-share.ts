@@ -196,6 +196,7 @@ export const enShare = {
     stopped: "Your share stopped.",
     unsupported: "This computer can't share.",
     notAllowed: "Only the leader and moderators can share in this room.",
+    modsOnly: "Only the leader and moderators can share in this room now.",
     modMuted: "A moderator muted you, so you can't share right now.",
     full: "You can run at most {{max}} shares at once.",
     roomFull: "No more shares can start right now.",

@@ -290,35 +290,63 @@ describe("the watch engine", () => {
     return { engine, quality, advance };
   }
 
-  it("reads a freeze as weak, unless the picture just changed on purpose (key frame, size)", async () => {
-    const { quality, advance } = await showing();
-    expect(await quality({ freezeCount: 1 })).toBe("weak");
+  it("reads a freeze as weak only when the link stumbles too (lost packets, asks for them)", async () => {
+    const { quality } = await showing();
+    // The sharer sent fewer frames (a still window): no weak connection.
+    expect(await quality({ freezeCount: 1 })).toBe("good");
+    expect(await quality({ freezeCount: 2 })).toBe("good");
+    // Lost packets asked for again, a key frame asked for: weak.
+    expect(await quality({ freezeCount: 3, nackCount: 4 })).toBe("weak");
     expect(await quality()).toBe("good");
-    // The sharer switched to another window: a key frame, another size, the switch's freeze.
-    expect(await quality({ freezeCount: 2, keyFramesDecoded: 2, frameWidth: 920 })).toBe("good");
-    expect(await quality({ freezeCount: 3 })).toBe("good");
-    // A layer change: the same size, a key frame.
-    advance(CHANGE_CALM_MS);
-    expect(await quality({ freezeCount: 4, keyFramesDecoded: 3 })).toBe("good");
-    advance(CHANGE_CALM_MS);
-    expect(await quality({ freezeCount: 5 })).toBe("weak");
+    expect(await quality({ freezeCount: 4, pliCount: 1 })).toBe("weak");
+    expect(await quality()).toBe("good");
   });
 
-  it("reads no freeze as weak just after calm(), lost packets still", async () => {
-    const { engine, quality } = await showing();
+  it("takes neither a step to 15 fps nor a source switch for a weak connection (E2E)", async () => {
+    const { quality } = await showing();
+    // The step to 15 fps: new encoders (a key frame), and the gap before it.
+    expect(await quality({ freezeCount: 1, keyFramesDecoded: 2 })).toBe("good");
+    expect(await quality()).toBe("good");
+    // 24 s later the switch to window B: freezeCount 1 → 2 on the black frame that stands in…
+    expect(await quality({ freezeCount: 2 })).toBe("good");
+    // …then B's key frame at its own size, and a still window's sparse frames.
+    expect(await quality({ keyFramesDecoded: 3, frameWidth: 612, frameHeight: 360 })).toBe("good");
+    expect(await quality({ freezeCount: 3 })).toBe("good");
+    expect(await quality({ freezeCount: 4 })).toBe("good");
+  });
+
+  it("takes a key frame the link asked for as no change: its freezes still read as weak", async () => {
+    const { quality } = await showing();
+    expect(await quality({ freezeCount: 1, keyFramesDecoded: 2, pliCount: 1 })).toBe("weak");
+  });
+
+  it("stays weak while a bad link freezes look after look (the chip does not blink)", async () => {
+    const { quality } = await showing();
+    expect(await quality({ freezeCount: 1, nackCount: 2 })).toBe("weak");
+    expect(await quality({ freezeCount: 2, nackCount: 5 })).toBe("weak");
+    // The freeze a lost packet caused may come a look after it.
+    expect(await quality({ freezeCount: 3 })).toBe("weak");
+    expect(await quality()).toBe("good");
+  });
+
+  it("reads no freeze as weak just after a new size or calm(), lost packets still", async () => {
+    const { engine, quality, advance } = await showing();
+    expect(await quality({ frameWidth: 612, frameHeight: 360, nackCount: 1 })).toBe("good");
+    expect(await quality({ freezeCount: 1, nackCount: 2 })).toBe("good");
+    advance(CHANGE_CALM_MS);
     engine.calm("301", 1);
-    expect(await quality({ freezeCount: 1 })).toBe("good");
+    expect(await quality({ freezeCount: 2, nackCount: 3 })).toBe("good");
     expect(await quality({ packetsLost: 20, packetsReceived: 200 })).toBe("weak");
   });
 
   it("compares with nothing older once its looks start again (a hidden window, a held watch)", async () => {
     const { engine, quality } = await showing();
     engine.setShowing(false);
-    // It froze while nobody looked.
-    expect(await quality({ freezeCount: 3 })).toBe("good");
+    // It froze and asked for packets while nobody looked.
+    expect(await quality({ freezeCount: 3, nackCount: 5 })).toBe("good");
     engine.setShowing(true);
     expect(await quality()).toBe("good");
-    expect(await quality({ freezeCount: 4 })).toBe("weak");
+    expect(await quality({ freezeCount: 4, nackCount: 6 })).toBe("weak");
   });
 
   it("closes everything on reset, and a closed connection's late events change nothing", async () => {
