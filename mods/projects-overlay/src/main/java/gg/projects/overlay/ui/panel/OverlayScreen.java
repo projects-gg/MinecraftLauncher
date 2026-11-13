@@ -2780,13 +2780,24 @@ public final class OverlayScreen extends Screen {
 
     // ---- Input --------------------------------------------------------------------------------------
 
+    /**
+     * A letter pressed now types text: into the message field, the friend filter, the menu's "Yeni kategori…" name or the
+     * emoji search. The panel's own key types then ({@link #keyPressed}), and the launcher's single-key voice shortcuts
+     * rest (SQOL-O, {@code keys/TextFocus}).
+     */
+    public boolean typesText() {
+        return field.isFocused() && field.visible || menu.naming()
+            || friendFilter.visible && friendFilter.isFocused()
+            || emojiPicker.isFocused() && emojiPicker.isOpen();
+    }
+
     @Override
     public boolean keyPressed(KeyEvent event) {
         // A name typed into the menu's "Yeni kategori…" field types too (OVL-UX3), and the friend filter (OVL-SOC 2).
         boolean filtering = friendFilter.visible && friendFilter.isFocused();
         boolean typing = field.isFocused() && field.visible || menu.naming() || filtering;
         // The emoji search types too (OVL-SOC): the panel's key bound to a letter types there.
-        if (overlay.key().closes(event, typing || emojiPicker.isFocused() && emojiPicker.isOpen())) {
+        if (overlay.key().closes(event, typesText())) {
             // Closes, unless this is the held press that opened the panel repeating (F7-OPEN).
             overlay.keyInPanel(this);
             return true;

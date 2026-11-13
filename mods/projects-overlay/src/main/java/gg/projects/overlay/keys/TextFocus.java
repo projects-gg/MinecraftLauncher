@@ -1,6 +1,7 @@
 package gg.projects.overlay.keys;
 
 import gg.projects.overlay.compat.Compat;
+import gg.projects.overlay.ui.panel.OverlayScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.MultiLineEditBox;
@@ -12,8 +13,10 @@ import net.minecraft.client.gui.screens.inventory.BookEditScreen;
 
 /**
  * SQOL-O: whether a text field in the game has the keyboard now ({@link TextFocusGuard} tells the launcher): the game's
- * window is active and its screen's focused element is a text box (the chat, an anvil, a command block, the creative
- * search, the overlay's own fields), or the screen edits text itself (a sign, a book).
+ * window is active and its screen's focused element is a visible text box (the chat, an anvil, a command block), a
+ * visible text box of the screen has the keys without being its focus (the creative search), the screen edits text
+ * itself (a sign, a book), or the overlay's panel types (its own fields, the menu's name, the emoji search). The recipe
+ * book's search keeps its focus to itself and is not seen.
  */
 public final class TextFocus {
     /** Nested containers walked at most for the focused element. */
@@ -30,16 +33,31 @@ public final class TextFocus {
         if (screen == null) {
             return false;
         }
+        if (screen instanceof OverlayScreen panel) {
+            return panel.typesText();
+        }
         if (screen instanceof AbstractSignEditScreen || screen instanceof BookEditScreen) {
             return true;
         }
         GuiEventListener focused = screen.getFocused();
         for (int depth = 0; focused != null && depth < MAX_DEPTH; depth++) {
-            if (focused instanceof EditBox || focused instanceof MultiLineEditBox) {
+            if (textBox(focused)) {
                 return true;
             }
             focused = focused instanceof ContainerEventHandler container ? container.getFocused() : null;
         }
+        for (GuiEventListener child : screen.children()) {
+            if (child instanceof EditBox box && box.isVisible() && box.isFocused()) {
+                return true;
+            }
+        }
         return false;
+    }
+
+    private static boolean textBox(GuiEventListener element) {
+        if (element instanceof EditBox box) {
+            return box.isVisible();
+        }
+        return element instanceof MultiLineEditBox area && area.visible;
     }
 }
