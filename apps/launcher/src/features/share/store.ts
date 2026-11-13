@@ -144,6 +144,14 @@ export function useShareQuality(person: string, n: number): ShareQuality {
   return isTauri() ? quality : mockQuality(person);
 }
 
+/**
+ * A watched share changed on purpose (its layer was asked for, its sharer paused it or changed its
+ * source): its picture's moment of stillness reads as no weak connection.
+ */
+export function calmShare(person: string, n: number) {
+  engine?.calm(person, n);
+}
+
 /** "Yayın Bilgileri" of a watched share while it shows (the preview makes them up). */
 export function useShareInfo(
   person: string,

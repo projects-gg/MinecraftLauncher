@@ -1,10 +1,13 @@
 // @vitest-environment happy-dom
-// "Yayın bitti." (SQOL-U1): a watched share whose sharer stopped keeps its place for two seconds;
-// "İzlemeyi Bırak", watching moving to the other window and leaving the room show nothing.
+// The stage (SQOL-U1). "Yayın bitti.": a watched share whose sharer stopped keeps its place for two
+// seconds (in the corner when it was there); "İzlemeyi Bırak", watching moving to the other window
+// and leaving the room show nothing. Esc in full screen leaves it only when nothing above took it.
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { shareApi } from "@/share/api";
 import type { VoiceLiveShare, VoiceWatch } from "@/share/types";
-import { ENDED_MS, useEndedShares } from "./stage";
+import { ENDED_MS, stagePlace, useEndedShares, useEscLeavesFull } from "./stage";
+import { useShareUi } from "./store";
 
 const live = (person: string): VoiceLiveShare => ({
   person,
@@ -56,5 +59,78 @@ describe("the Yayın bitti card", () => {
     hook.rerender({ watches: [], live: [], on: true });
     hook.rerender({ watches: [watch("301")], live: [live("301")], on: true });
     expect(hook.result.current).toEqual([]);
+  });
+});
+
+describe("where the stage shows", () => {
+  const none = { watches: 0, ended: false, own: false, small: false, full: false };
+
+  it("is not there with nothing to show", () => {
+    expect(stagePlace(none)).toEqual({ mode: null, corner: null });
+  });
+
+  it("keeps a share that ended in the corner it was in, not over the page", () => {
+    expect(stagePlace({ ...none, watches: 1, small: true })).toEqual({
+      mode: "corner",
+      corner: "watch",
+    });
+    expect(stagePlace({ ...none, ended: true, small: true })).toEqual({
+      mode: "corner",
+      corner: "ended",
+    });
+  });
+
+  it("is on the page otherwise, and over everything in full screen", () => {
+    expect(stagePlace({ ...none, ended: true })).toEqual({ mode: "page", corner: null });
+    expect(stagePlace({ ...none, own: true, small: true })).toEqual({ mode: "page", corner: null });
+    expect(stagePlace({ ...none, watches: 2, small: true, full: true })).toEqual({
+      mode: "full",
+      corner: null,
+    });
+  });
+});
+
+describe("Esc in full screen", () => {
+  beforeEach(() => {
+    vi.spyOn(shareApi, "fullscreen").mockResolvedValue();
+    useShareUi.setState({ full: true });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    useShareUi.setState({ full: false });
+  });
+
+  const esc = (on: EventTarget) =>
+    on.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+
+  it("leaves it when nothing above took the key", () => {
+    const hook = renderHook(() => useEscLeavesFull(true));
+    esc(document.body);
+    act(() => vi.runAllTimers());
+    hook.unmount();
+    expect(useShareUi.getState().full).toBe(false);
+  });
+
+  it("stays when the room chat's previews took it, even heard after the stage", () => {
+    const hook = renderHook(() => useEscLeavesFull(true));
+    const take = (event: Event) => event.preventDefault();
+    window.addEventListener("keydown", take);
+    esc(document.body);
+    act(() => vi.runAllTimers());
+    window.removeEventListener("keydown", take);
+    hook.unmount();
+    expect(useShareUi.getState().full).toBe(true);
+  });
+
+  it("stays when the key belongs to a field", () => {
+    const hook = renderHook(() => useEscLeavesFull(true));
+    const field = document.body.appendChild(document.createElement("input"));
+    esc(field);
+    act(() => vi.runAllTimers());
+    field.remove();
+    hook.unmount();
+    expect(useShareUi.getState().full).toBe(true);
   });
 });

@@ -15,6 +15,11 @@ export function enterFullscreen(forward?: string) {
   void shareApi.fullscreen(true).catch(() => {});
 }
 
+/**
+ * Full screen gives way (Esc, the tiles' "Tam Ekrandan Çık", the room panel opening over the stage:
+ * SQOL-U3's `openRoomPanel`). Safe to call any time: nothing happens outside full screen; a share a
+ * tile's "Tam Ekran" brought forward goes back.
+ */
 export function leaveFullscreen() {
   const ui = useShareUi.getState();
   if (!ui.full) return;

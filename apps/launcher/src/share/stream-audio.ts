@@ -171,6 +171,8 @@ interface Entry {
   /** Above 100 % a stream's own limiter keeps its peaks from pressing the other one down. */
   boost: DynamicsCompressorNode | null;
   level: number;
+  /** The output its element plays on (without WebAudio; null: not set yet). */
+  sink: string | null;
 }
 
 export class StreamAudio {
@@ -180,6 +182,8 @@ export class StreamAudio {
   private duck = 1;
   private sinkWanted = "";
   private sinkNow = "";
+  /** An output that refused: not asked again until the choice or the system's outputs change. */
+  private sinkRefused: string | null = null;
   private sinkWork: Promise<void> = Promise.resolve();
   /** No WebAudio here: each stream plays through its element. */
   private plain = false;
@@ -222,6 +226,8 @@ export class StreamAudio {
   /** What plays now: these streams at these gains, through `duck`, on `sink`. */
   sync(wanted: readonly WantedStream[], duck: number, sink: string): void {
     if (this.disposed) return;
+    // Another choice of output: whatever refused before may be asked again.
+    if (sink !== this.sinkWanted) this.sinkRefused = null;
     this.sinkWanted = sink;
     const keep = new Set<string>();
     for (const want of wanted) {
@@ -269,7 +275,15 @@ export class StreamAudio {
     const element = this.host.createElement();
     const stream = this.host.createStream([track]);
     element.srcObject = stream;
-    const entry: Entry = { track, element, source: null, gain: null, boost: null, level };
+    const entry: Entry = {
+      track,
+      element,
+      source: null,
+      gain: null,
+      boost: null,
+      level,
+      sink: null,
+    };
     const ctx = this.ctx;
     if (ctx && this.duckNode) {
       element.muted = true;
@@ -344,17 +358,36 @@ export class StreamAudio {
     for (const entry of this.entries.values()) if (!entry.gain) this.playPlain(entry);
   }
 
-  /** The chosen output while it is there, else the default; one change at a time. */
+  /** The system's outputs changed (a device came back): an output that refused may be asked again. */
+  devicesChanged(): void {
+    if (this.sinkRefused === null) return;
+    this.sinkRefused = null;
+    this.applySink();
+  }
+
+  /** The output to play on now: the chosen one, unless it refused already (then the default). */
+  private sinkTarget(): string {
+    return this.sinkWanted !== "" && this.sinkWanted === this.sinkRefused ? "" : this.sinkWanted;
+  }
+
+  /**
+   * The chosen output while it is there, else the default; one change at a time, and only when
+   * something changed (an update comes up to ten times a second while people talk).
+   */
   private applySink(): void {
     this.sinkWork = this.sinkWork.then(async () => {
-      const wanted = this.sinkWanted;
+      const target = this.sinkTarget();
       const ctx = this.ctx;
-      if (ctx && wanted !== this.sinkNow) {
-        const now = await sinkTo(ctx, wanted);
+      if (ctx && target !== this.sinkNow) {
+        const now = await sinkTo(ctx, target);
+        if (now !== target) this.sinkRefused = target;
         if (this.ctx === ctx) this.sinkNow = now;
       }
       for (const entry of this.entries.values()) {
-        if (!entry.gain) await sinkTo(entry.element, wanted);
+        if (entry.gain || entry.sink === target) continue;
+        const now = await sinkTo(entry.element, target);
+        if (now !== target) this.sinkRefused = target;
+        entry.sink = now;
       }
     });
   }

@@ -17,6 +17,12 @@ export const ICE_WAIT_MS = 5000;
 export const DROP_WAIT_MS = 3000;
 /** How often a showing share's quality is looked at. */
 export const STATS_MS = 2000;
+/**
+ * A picture that changed on purpose (another source or layer, a pause or a hold ending) stops a
+ * moment: a freeze this soon after a new key frame, a new size or `calm` is no weak connection.
+ * Lost packets still are (a lossy link asks for key frames itself).
+ */
+export const CHANGE_CALM_MS = 4000;
 
 export type ShareQuality = "good" | "weak";
 
@@ -39,6 +45,11 @@ export interface WatchEngine {
   info(person: string, n: number): ShareInfo | null;
   /** "Yayın Bilgileri" shows: the quality looks keep `info` too. Returns its release. */
   watchInfo(): () => void;
+  /**
+   * The share changed on purpose (its layer was asked for, its sharer paused it or changed its
+   * source): a freeze in the next few seconds says nothing of the connection.
+   */
+  calm(person: string, n: number): void;
   /** Called on every change of the streams or their quality. */
   subscribe(listener: () => void): () => void;
   /** Only these shares (their `shareKey`) are watched now: the others' streams go. */
@@ -56,6 +67,8 @@ export interface WatchHost {
   setInterval(work: () => void, ms: number): number;
   clearInterval(id: number): void;
   createStream(): MediaStream;
+  /** Milliseconds on a steady clock. */
+  now(): number;
 }
 
 const browserHost: WatchHost = {
@@ -65,6 +78,7 @@ const browserHost: WatchHost = {
   setInterval: (work, ms) => window.setInterval(work, ms),
   clearInterval: (id) => window.clearInterval(id),
   createStream: () => new MediaStream(),
+  now: () => performance.now(),
 };
 
 /** The ICE ufrag an SDP carries (a new watch session has a new one). */
@@ -99,7 +113,13 @@ export function createWatchEngine(
   let queue: Promise<void> = Promise.resolve();
   /** Each connection's own number: a late event of a closed one changes nothing. */
   let generation = 0;
-  const lastStats = new Map<string, { lost: number; received: number; freezes: number }>();
+  /** Each share's counters at the last look (key frames and size: did its picture change?). */
+  const lastStats = new Map<
+    string,
+    { lost: number; received: number; freezes: number; keys: number; w: number; h: number }
+  >();
+  /** Until when a share's freezes say nothing (its picture changed on purpose). */
+  const calmUntil = new Map<string, number>();
 
   const notify = () => {
     for (const listener of listeners) listener();
@@ -115,6 +135,9 @@ export function createWatchEngine(
   const syncStats = () => {
     const wanted = showing && pc !== null && streams.size > 0;
     if (wanted && statsTimer === null) {
+      // Looks that start again compare with nothing older: what froze while nobody looked (a
+      // hidden window, a held watch) says nothing of the connection now.
+      lastStats.clear();
       statsTimer = host.setInterval(() => void look(), STATS_MS);
     } else if (!wanted && statsTimer !== null) {
       host.clearInterval(statsTimer);
@@ -140,6 +163,7 @@ export function createWatchEngine(
     qualities.clear();
     infos.clear();
     lastStats.clear();
+    calmUntil.clear();
     syncStats();
     if (had) notify();
   };
@@ -254,15 +278,31 @@ export function createWatchEngine(
       const lostNow = num(entry.packetsLost);
       const receivedNow = num(entry.packetsReceived);
       const freezesNow = num(entry.freezeCount);
+      const keysNow = num(entry.keyFramesDecoded);
+      const w = num(entry.frameWidth);
+      const h = num(entry.frameHeight);
       const before = lastStats.get(key);
-      lastStats.set(key, { lost: lostNow, received: receivedNow, freezes: freezesNow });
+      lastStats.set(key, {
+        lost: lostNow,
+        received: receivedNow,
+        freezes: freezesNow,
+        keys: keysNow,
+        w,
+        h,
+      });
+      // A new key frame or a new size: the picture changed on purpose (another source or layer,
+      // a pause ending, a new watcher), and its moment of stillness is no weak connection.
+      const now = host.now();
+      const resized = !!before && w > 0 && before.w > 0 && (w !== before.w || h !== before.h);
+      if (before && (keysNow > before.keys || resized)) calmUntil.set(key, now + CHANGE_CALM_MS);
+      const calm = (calmUntil.get(key) ?? 0) > now;
       const lostDelta = before ? Math.max(0, lostNow - before.lost) : 0;
       const receivedDelta = before ? Math.max(0, receivedNow - before.received) : 0;
       const froze = before ? freezesNow > before.freezes : false;
       const loss = lostDelta + receivedDelta > 0 ? lostDelta / (lostDelta + receivedDelta) : 0;
-      // Few frames are no sign (a still window of text sends few); a picture that froze or lost
-      // packets is.
-      const weak = froze || loss > LOSS_WEAK;
+      // Few frames are no sign (a still window of text sends few); a picture that froze (unless it
+      // changed on purpose) or lost packets is.
+      const weak = (froze && !calm) || loss > LOSS_WEAK;
       const quality: ShareQuality = weak ? "weak" : "good";
       if (qualities.get(key) !== quality) {
         qualities.set(key, quality);
@@ -270,8 +310,6 @@ export function createWatchEngine(
       }
       // "Yayın Bilgileri", only while it shows: a new object only when a figure changed.
       if (infoAsked > 0) {
-        const w = num(entry.frameWidth);
-        const h = num(entry.frameHeight);
         const fps = Math.round(num(entry.framesPerSecond));
         const known = infos.get(key);
         if (w > 0 && h > 0 && (!known || known.w !== w || known.h !== h || known.fps !== fps)) {
@@ -306,6 +344,9 @@ export function createWatchEngine(
     stream: (person, n) => streams.get(shareKey(person, n)) ?? null,
     quality: (person, n) => qualities.get(shareKey(person, n)) ?? "good",
     info: (person, n) => infos.get(shareKey(person, n)) ?? null,
+    calm(person, n) {
+      calmUntil.set(shareKey(person, n), host.now() + CHANGE_CALM_MS);
+    },
     watchInfo() {
       infoAsked++;
       let released = false;
@@ -329,6 +370,7 @@ export function createWatchEngine(
           qualities.delete(key);
           infos.delete(key);
           lastStats.delete(key);
+          calmUntil.delete(key);
           changed = true;
         }
       }
