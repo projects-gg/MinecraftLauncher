@@ -879,10 +879,12 @@ impl Session {
     }
 
     /// SQOL: the shared window's minimize events (a game or a window), told while it is the
-    /// share's source.
+    /// share's source; and its end, as its capture's own `Closed` would say it (that did not come
+    /// for a closed window, SQOL-R2).
     fn watch_minimize(&self) -> Option<MinimizeWatch> {
         let (hwnd, pid) = (self.hwnd?, self.target_pid?);
         let shared = self.shared.clone();
+        let closed = self.shared.clone();
         let epoch = shared.source_epoch.load(Ordering::SeqCst);
         MinimizeWatch::start(
             hwnd,
@@ -892,6 +894,15 @@ impl Session {
                     && shared.minimized.swap(on, Ordering::SeqCst) != on
                 {
                     shared.emit(ShareEvent::Minimized { n: shared.n, on });
+                }
+            }),
+            Box::new(move || {
+                if closed.source_epoch.load(Ordering::SeqCst) == epoch {
+                    let _ = closed.internal.send(Ctl::SourceClosed {
+                        n: closed.n,
+                        generation: closed.generation,
+                        capture: closed.capture.load(Ordering::SeqCst),
+                    });
                 }
             }),
         )
@@ -1347,7 +1358,8 @@ impl Session {
     /// SQOL: capture `number`'s source closed. The share holds a blank picture; the game's new
     /// window (a fullscreen switch recreates it) is looked for a moment, any other source is gone.
     fn source_closed(&mut self, number: u64, now: Instant) {
-        if self.shared.capture.load(Ordering::SeqCst) != number {
+        // Told once: the capture's `Closed` and the window's end may both come.
+        if self.gone || self.shared.capture.load(Ordering::SeqCst) != number {
             return;
         }
         if let Stage::Live(live) = &mut self.stage {
