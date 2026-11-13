@@ -88,8 +88,11 @@ function asSettings(s: BindingSettings): VoiceSettings {
   const d = DEFAULT_VOICE_SETTINGS;
   // SHARE: "Ekran paylaşımı" travels with the rest (a save without it would reset it).
   const share = (s as { share?: Partial<VoiceShareSettings> | null }).share;
+  // SQOL-U3: the room panel's "Mesaj Önizlemelerini Göster" (`peek`) travels with them too.
+  const peek = (s as { peek?: boolean | null }).peek;
   return {
     ...(share ? { share: { ...DEFAULT_SHARE_SETTINGS, ...share } } : {}),
+    ...(typeof peek === "boolean" ? { peek } : {}),
     enabled: s.enabled ?? d.enabled,
     inputDevice: s.inputDevice ?? null,
     outputDevice: s.outputDevice ?? null,

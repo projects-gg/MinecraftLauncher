@@ -7,7 +7,10 @@
 // on the friend opens their menu, as a row's does. SHARE-LIVE: a friend who shares has "YAYINDA" and
 // "İzle" under their name (the stage glides to its new middle). Faces at 72 px (a multiple of 8: the pixel heads
 // stay square), their names clear of the ring that follows the voice.
-import { Menu, useMotionPrefs } from "@pl/ui";
+//
+// SQOL-U3: with a chat under it the stage is compact (faces at 48 px, a band at the panel's top),
+// and the friend's face says "konuşuyor" to screen readers while they speak.
+import { cn, Menu, useMotionPrefs } from "@pl/ui";
 import { motion } from "motion/react";
 import { type ReactNode, type RefObject, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,9 +24,12 @@ import type { VoicePerson, VoiceRoomView, VoiceState } from "@/lib/api/voice-typ
 import { CallTime, callStart } from "./call-time";
 import { SpeakingFace } from "./faces";
 import { presenceOf, roleWord, type VoiceFace } from "./rules";
+import { useSpeakingWord } from "./speaking-word";
 import { useFace, useVoiceUi } from "./store";
 
 const FACE = 72;
+/** With a chat under the stage (SQOL-U3): still a multiple of 8. */
+const COMPACT_FACE = 48;
 
 /** The panel shows the call this way: a friend room with one friend in it, or one being called. */
 export function isOneToOne(state: Pick<VoiceState, "room" | "calling">): boolean {
@@ -38,6 +44,7 @@ function Seat({
   marks,
   dim = false,
   live,
+  compact = false,
   children,
 }: {
   face: VoiceFace;
@@ -47,16 +54,35 @@ function Seat({
   dim?: boolean;
   /** SHARE-LIVE: "YAYINDA" under the name (the seat is too narrow beside it). */
   live?: ReactNode;
+  /** SQOL-U3: a chat under the stage: smaller faces, closer lines. */
+  compact?: boolean;
   /** The face as a button (the friend's menu), or plain. */
   children?: (face: ReactNode) => ReactNode;
 }) {
-  const art = <SpeakingFace face={face} size={FACE} dim={dim} speaking={dim ? false : undefined} />;
+  const art = (
+    <SpeakingFace
+      face={face}
+      size={compact ? COMPACT_FACE : FACE}
+      dim={dim}
+      speaking={dim ? false : undefined}
+    />
+  );
   return (
-    <div className="flex w-[132px] min-w-0 flex-col items-center gap-3.5 text-center">
+    <div
+      className={cn(
+        "flex min-w-0 flex-col items-center text-center",
+        compact ? "w-[116px] gap-2.5" : "w-[132px] gap-3.5",
+      )}
+    >
       {children ? children(art) : art}
       <div className="flex min-w-0 max-w-full flex-col items-center">
         <span className="flex max-w-full items-center gap-1.5">
-          <span className="truncate text-[14px] leading-[1.3] font-semibold text-bone-50">
+          <span
+            className={cn(
+              "truncate leading-[1.3] font-semibold text-bone-50",
+              compact ? "text-[13px]" : "text-[14px]",
+            )}
+          >
             {face.name}
           </span>
           {marks}
@@ -76,16 +102,19 @@ function FriendSeat({
   person,
   marks,
   stage,
+  compact,
 }: {
   person: VoicePerson;
   marks: ReactNode;
   /** The stage: the live card sits beside the panel, level with it. */
   stage: RefObject<HTMLElement | null>;
+  compact: boolean;
 }) {
   const { t } = useTranslation();
   const face = useFace(person.id);
   const [open, setOpen] = useState(false);
   const live = useRoomTargets(person.id);
+  const speaking = useSpeakingWord(person.id);
   const ref = { id: face.id, name: face.name, avatar: face.avatar, avatarUrl: face.avatarUrl };
   const items = usePersonItems(ref, { from: "list" });
   return (
@@ -93,6 +122,7 @@ function FriendSeat({
       face={face}
       line={roleWord(person.role, t)}
       marks={marks}
+      compact={compact}
       live={
         // SHARE-LIVE: "YAYINDA" under the name, and "İzle" under it: both the friend's.
         <LiveAppear show={live.length > 0}>
@@ -112,7 +142,7 @@ function FriendSeat({
           trigger={
             <button
               type="button"
-              aria-label={face.name}
+              aria-label={speaking ? `${face.name}, ${t("roomChat.speaking")}` : face.name}
               onContextMenu={(event) => {
                 event.preventDefault();
                 setOpen(true);
@@ -135,23 +165,33 @@ function FriendSeat({
 }
 
 /** The friend being called: faded, "Aranıyor…" (or "Başka bir odada"). */
-function CallingSeat({ friend }: { friend: string }) {
+function CallingSeat({ friend, compact }: { friend: string; compact: boolean }) {
   const { t } = useTranslation();
   const face = useFace(friend);
   const friends = useSocialUi((s) => s.view.friends);
   const busy = useVoiceUi((s) => presenceOf(friend, s.state, friends) === "in");
-  return <Seat face={face} dim line={busy ? t("voice.call.elsewhere") : t("voice.room.ringing")} />;
+  return (
+    <Seat
+      face={face}
+      dim
+      compact={compact}
+      line={busy ? t("voice.call.elsewhere") : t("voice.room.ringing")}
+    />
+  );
 }
 
 export function CallStage({
   room,
   marksOf,
+  compact = false,
 }: {
   room: VoiceRoomView;
   /** What someone turned off, as the panel's rows draw it. */
   marksOf: (
     person: Pick<VoicePerson, "mute" | "deaf" | "mutedByModerator" | "quality">,
   ) => ReactNode;
+  /** SQOL-U3: a chat under the stage: a band at the panel's top instead of its middle. */
+  compact?: boolean;
 }) {
   const { t } = useTranslation();
   const me = useSocialUi((s) => s.view.me);
@@ -174,18 +214,26 @@ export function CallStage({
     <section
       ref={stageRef}
       aria-label={t("voice.title")}
-      // In the middle of the panel, a little above it (the eye's middle).
-      className="flex flex-1 flex-col items-center justify-center px-2 pt-4 pb-14"
+      // In the middle of the panel, a little above it (the eye's middle); over a chat, a band at
+      // its top.
+      className={cn(
+        "flex flex-col items-center px-2",
+        compact ? "pt-3 pb-2" : "flex-1 justify-center pt-4 pb-14",
+      )}
       data-voice-stage=""
     >
-      <motion.div {...moves} className="flex items-start justify-center gap-6">
+      <motion.div
+        {...moves}
+        className={cn("flex items-start justify-center", compact ? "gap-4" : "gap-6")}
+      >
         {friend ? (
-          <FriendSeat person={friend} marks={marksOf(friend)} stage={stageRef} />
+          <FriendSeat person={friend} marks={marksOf(friend)} stage={stageRef} compact={compact} />
         ) : calling ? (
-          <CallingSeat friend={calling.friend} />
+          <CallingSeat friend={calling.friend} compact={compact} />
         ) : null}
         <Seat
           face={meFace}
+          compact={compact}
           line={t("voice.room.you")}
           marks={marksOf(room.me)}
           live={
@@ -198,9 +246,15 @@ export function CallStage({
         />
       </motion.div>
       {/* The call's time; its room is kept while the call still rings, so nothing moves on an answer. */}
-      <motion.div {...moves} className="mt-5 flex h-8 items-center">
+      <motion.div
+        {...moves}
+        className={cn("flex items-center", compact ? "mt-1.5 h-6" : "mt-5 h-8")}
+      >
         {since !== null ? (
-          <CallTime since={since} className="text-[15px] font-semibold text-ash-300" />
+          <CallTime
+            since={since}
+            className={cn("font-semibold text-ash-300", compact ? "text-[13px]" : "text-[15px]")}
+          />
         ) : null}
       </motion.div>
     </section>

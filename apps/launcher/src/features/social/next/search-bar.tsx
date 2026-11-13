@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import { api } from "@/lib/api";
 import type { ChatMessage } from "@/lib/api/social-types";
+import { chatKeyHere } from "../chat/focus";
 import { inside, leaveOnEscape } from "../edit-escape";
 import {
   mergeHistory,
@@ -74,12 +75,8 @@ export function useSearchShortcut(
       if (event.defaultPrevented || event.altKey || event.shiftKey) return;
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "f") return;
       const box = root.current;
-      if (!box) return;
-      const panel = box.closest<HTMLElement>("[role='dialog']") ?? box;
-      const target = event.target;
-      if (!(target instanceof Node) || (target !== document.body && !panel.contains(target))) {
-        return;
-      }
+      // SQOL-U3: only from inside the panel that holds the conversation (chat/focus.ts).
+      if (!box || !chatKeyHere(box, event.target)) return;
       event.preventDefault();
       openChatSearch(conv);
     };

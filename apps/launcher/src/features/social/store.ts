@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import {
   HIDDEN_SNAPSHOT,
   type MarkDef,
+  type ReportReason,
   type ReportTarget,
   type SignInFailure,
   type SocialProfile,
@@ -41,6 +42,11 @@ export interface ReportRequest {
     name: string;
     person: Pick<SocialProfile, "name" | "avatar" | "avatarUrl">;
   };
+  /**
+   * SQOL-U3: a report that goes another way than the friends service's own (a voice room's chat:
+   * the room seals what was said). The dialog is the same; without it, it goes to the service.
+   */
+  send?: (reason: ReportReason, note: string | undefined, block: boolean) => Promise<void>;
 }
 
 /** Where a menu sends the player on the team page: editing, the invite list, or leaving. */
@@ -180,6 +186,13 @@ interface SocialUi {
   chatFocus: string | null;
   /** The conversation on screen takes the focus asked for it (true once). */
   takeChatFocus: (conv: string) => boolean;
+  /**
+   * SQOL-U3: conversations on screen outside this panel (the room panel shows a call's friend's
+   * messages), how many places show each: they are read there and their notices stay quiet.
+   */
+  shownElsewhere: Readonly<Record<string, number>>;
+  /** A conversation came on screen outside this panel (`on`), or went. */
+  showElsewhere: (conv: string, on: boolean) => void;
   /** "Rapor et" is open about this. */
   report: ReportRequest | null;
   openReport: (request: ReportRequest) => void;
@@ -200,12 +213,20 @@ export function friendListShown(ui: {
   return ui.open && ui.page === "list" && (!ui.view.chat || ui.listTab === "friends");
 }
 
-/** A conversation is on screen: the panel open on its chat page (a friend's or a crew's). */
+/** A conversation is on screen: the panel open on its chat page (a friend's or a crew's), or
+ * (SQOL-U3) another place shows it (the room panel). */
 export function conversationShown(
-  ui: { open: boolean; page: SocialPage; chatConv: string | null },
+  ui: {
+    open: boolean;
+    page: SocialPage;
+    chatConv: string | null;
+    shownElsewhere?: Readonly<Record<string, number>>;
+  },
   conv: string,
 ): boolean {
-  return ui.open && ui.page === "chat" && ui.chatConv === conv;
+  return (
+    (ui.open && ui.page === "chat" && ui.chatConv === conv) || (ui.shownElsewhere?.[conv] ?? 0) > 0
+  );
 }
 
 /** That crew's page is on screen: the panel open on it (with several crews, on its tab). */
@@ -391,6 +412,15 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
     set({ chatFocus: null });
     return true;
   },
+  shownElsewhere: {},
+  showElsewhere: (conv, on) =>
+    set((s) => {
+      const count = (s.shownElsewhere[conv] ?? 0) + (on ? 1 : -1);
+      const next: Record<string, number> = { ...s.shownElsewhere };
+      if (count > 0) next[conv] = count;
+      else delete next[conv];
+      return { shownElsewhere: next };
+    }),
   report: null,
   openReport: (report) => set({ report }),
   closeReport: () => set({ report: null }),
