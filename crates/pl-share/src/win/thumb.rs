@@ -72,6 +72,9 @@ enum Msg {
     /// not).
     PreviewReady,
     PreviewMissed,
+    /// SQOL-R3: what the share shows changed (a black stand-in, another source, a hold's end): the
+    /// last picture is no longer it, a new one is due soon.
+    Renew,
     Stop,
 }
 
@@ -139,6 +142,13 @@ impl Thumbs {
     /// SQOL: the sharer's own preview on or off.
     pub fn preview(&self, on: bool) {
         let _ = self.tx.send(Msg::Preview(on));
+    }
+
+    /// SQOL-R3: what the share shows changed (black while it holds, another source): the room's
+    /// picture follows within seconds instead of keeping the old one up to a minute (and a held
+    /// share's picture is never the one from before the hold).
+    pub fn renew(&self) {
+        let _ = self.tx.send(Msg::Renew);
     }
 
     /// Every captured frame, resting or not, on the capture thread: counted, and turned into the
@@ -293,6 +303,17 @@ impl Worker {
                 Ok(Msg::Start) => {
                     if !self.started {
                         self.started = true;
+                        self.next = Some(Instant::now() + thumb::FIRST);
+                    }
+                }
+                Ok(Msg::Renew) => {
+                    // The last picture is not what shows now; a frame asked for meanwhile is not
+                    // either.
+                    self.last = None;
+                    self.waiting = None;
+                    self.extended = false;
+                    self.thumbs.wanted.store(false, Ordering::SeqCst);
+                    if self.started {
                         self.next = Some(Instant::now() + thumb::FIRST);
                     }
                 }

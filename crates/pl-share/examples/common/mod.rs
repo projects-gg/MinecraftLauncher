@@ -71,6 +71,16 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
 /// Opens the test window (client `w` x `h`, repainting every ~16 ms) on its own thread, behind
 /// other windows and without taking focus. Returns its handle.
 pub fn test_window(w: i32, h: i32) -> isize {
+    window_of(w, h, true)
+}
+
+/// SQOL-R3: as [`test_window`], painted once (a still source: its capture sends one frame).
+#[allow(dead_code)]
+pub fn still_window(w: i32, h: i32) -> isize {
+    window_of(w, h, false)
+}
+
+fn window_of(w: i32, h: i32, moving: bool) -> isize {
     let (tx, rx) = sync_channel(1);
     std::thread::spawn(move || unsafe {
         let instance = GetModuleHandleW(None).unwrap();
@@ -114,7 +124,9 @@ pub fn test_window(w: i32, h: i32) -> isize {
             0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         );
-        SetTimer(Some(hwnd), 1, 16, None);
+        if moving {
+            SetTimer(Some(hwnd), 1, 16, None);
+        }
         tx.send(hwnd.0 as isize).unwrap();
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).as_bool() {
@@ -133,6 +145,26 @@ pub fn close_window(hwnd: isize) {
     unsafe {
         let _ = PostMessageW(Some(HWND(hwnd as *mut _)), WM_CLOSE, WPARAM(0), LPARAM(0));
     }
+}
+
+/// SQOL-R3: whether the window still exists.
+#[allow(dead_code)]
+pub fn window_alive(hwnd: isize) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+    // SAFETY: a read-only query.
+    unsafe { IsWindow(Some(HWND(hwnd as *mut _))).as_bool() }
+}
+
+/// SQOL-R3: this process's open handles (a leak per new encoder shows as growth).
+#[allow(dead_code)]
+pub fn handles() -> u32 {
+    use windows::Win32::System::Threading::{GetCurrentProcess, GetProcessHandleCount};
+    let mut count = 0u32;
+    // SAFETY: the pseudo-handle of this process; `count` outlives the call.
+    unsafe {
+        let _ = GetProcessHandleCount(GetCurrentProcess(), &mut count);
+    }
+    count
 }
 
 /// CPU time (user + kernel) of this process, in seconds.
