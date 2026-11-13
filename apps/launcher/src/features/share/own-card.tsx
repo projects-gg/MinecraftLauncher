@@ -9,9 +9,9 @@
 // goes out ("1280×720 · 30 fps · Donanım").
 import {
   AppWindow,
-  ArrowLineDown,
   DotsThree,
   GameController,
+  Minus,
   Monitor,
   Pause,
   Play,
@@ -174,7 +174,8 @@ function Picture({
     status === "paused" ? (
       <Pause size={20} weight="fill" className="text-bone-100" />
     ) : status === "minimized" ? (
-      <ArrowLineDown size={20} weight="bold" className="text-bone-100" />
+      // The window's own minimise mark (an arrow down read as "download").
+      <Minus size={20} weight="bold" className="text-bone-100" />
     ) : lost ? (
       <Warning size={20} weight="fill" className="text-gold-400" />
     ) : null;
