@@ -94,11 +94,11 @@ import {
 } from "./actions";
 import { roomMenuItems } from "./crew-room-menu";
 import { useCrewRoomsUi, withPendingOrder } from "./crew-rooms-store";
-import { useDockWidth, useToastsBeside } from "./dock";
+import { useDockWidth, useToastsBeside, useWindowTaller } from "./dock";
 import { QualityBars, SpeakingFace } from "./faces";
 import { HeadphonesSlash } from "./icons";
 import { VoiceMeter } from "./meter";
-import { PanelChromeProvider, PanelClose, PanelTitle } from "./panel-chrome";
+import { PanelChromeProvider, PanelClose, PanelTitle, usePanelChrome } from "./panel-chrome";
 import { meterThreshold, setOutputVolume, useVoicePrefs } from "./prefs";
 import { PanelChatSection, usePanelChat } from "./room-chat";
 import {
@@ -464,13 +464,18 @@ function PeopleList({ room, compact }: { room: VoiceRoomView; compact: boolean }
 /**
  * SQOL-U3: the people over a chat. A call with one friend keeps its two faces (smaller, a band at
  * the top); otherwise "Odadakiler · 5" folds the list away (the player's choice, kept while the
- * launcher runs) and the list scrolls on its own within ~45 % of the panel.
+ * launcher runs) and the list scrolls on its own within ~45 % of the panel. Until the player
+ * chooses, a short panel starts folded (beside a stream under 800 px of window, over the page under
+ * 700): the chat would have room for a message or two.
  */
 function PeopleSection({ room }: { room: VoiceRoomView }) {
   const { t } = useTranslation();
+  const { docked } = usePanelChrome();
   const calling = useVoiceUi((s) => s.state.calling);
-  const open = useVoiceUi((s) => s.peopleOpen);
+  const chosen = useVoiceUi((s) => s.peopleOpen);
   const setOpen = useVoiceUi((s) => s.setPeopleOpen);
+  const tall = useWindowTaller(docked ? 800 : 700);
+  const open = chosen ?? tall;
   const listId = useId();
   if (isOneToOne({ room, calling })) {
     return (

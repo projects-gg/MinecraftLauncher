@@ -55,8 +55,11 @@ interface VoiceUi {
    */
   dock: number;
   setDock: (dock: number) => void;
-  /** The room's people show under their title with a chat below (folded: the title alone). */
-  peopleOpen: boolean;
+  /**
+   * The room's people show under their title with a chat below (folded: the title alone); null:
+   * as the panel's height suits (the player's own choice holds while the launcher runs).
+   */
+  peopleOpen: boolean | null;
   setPeopleOpen: (open: boolean) => void;
   ended: VoiceEnded | null;
   setEnded: (ended: VoiceEnded | null) => void;
@@ -132,7 +135,7 @@ export const useVoiceUi = create<VoiceUi>()((set, get) => ({
   setDock: (dock) => {
     if (get().dock !== dock) set({ dock });
   },
-  peopleOpen: true,
+  peopleOpen: null,
   setPeopleOpen: (peopleOpen) => set({ peopleOpen }),
   ended: null,
   setEnded: (ended) => set({ ended }),

@@ -1,7 +1,7 @@
 // How wide the room panel is while it is docked beside the stream's stage (SQOL-U3): about a third
 // of the window, 360 to 440 px. At the window's smallest (1024) a chat stays readable beside the
 // stage, and wider windows give the stage the rest.
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 export const DOCK_MIN = 360;
 export const DOCK_MAX = 440;
@@ -25,6 +25,20 @@ export function useToastsBeside(px: number) {
     document.head.append(style);
     return () => style.remove();
   }, [px]);
+}
+
+function onResize(listener: () => void) {
+  window.addEventListener("resize", listener);
+  return () => window.removeEventListener("resize", listener);
+}
+
+/** The window is at least `min` px tall (followed while the caller shows). */
+export function useWindowTaller(min: number): boolean {
+  return useSyncExternalStore(
+    onResize,
+    () => window.innerHeight >= min,
+    () => true,
+  );
 }
 
 /** The docked width for the window now, followed while `active` (a resize settles it again). */

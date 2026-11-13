@@ -20,7 +20,8 @@
 //   changes); BAN-TYPES: `restricted` the crew's "Genel", left a moment later for a voice chat ban
 //   (two days, on the hour; `staffMuted` refusals carry the same end). OVL-NEXT: `crewRoomsPtt`
 //   the kept rooms with "Taş Ocağı" push-to-talk only; `pttRoom` the player in it without a
-//   push-to-talk key (`&voiceKeys=ptt`: with one, while they talk hands-free).
+//   push-to-talk key (`&voiceKeys=ptt`: with one, while they talk hands-free). SQOL-U3: `crowd` a
+//   friend room of ten; `rchat=<scenario>` gives the room its chat (features/voice/room-chat/mock.ts).
 // - `speaking=<ids>|none`: who speaks (the scenario's own otherwise); `talking=1`: the player too.
 // - `call=answer|noAnswer|<refusal>`: what "Ara" gets (answered after 2.5 s by default).
 // - `join=ok|<refusal>`: what "Katıl" gets.
@@ -357,6 +358,17 @@ function stateFor(scenario: string): VoiceState {
           max: 4,
           ringing: [],
           people: [...friendRoom().people, person("304", { joinedAt: nowSec() - 100 })],
+        }),
+      };
+    // SQOL-U3: a friend room of ten (the room panel's people over its chat).
+    case "crowd":
+      return {
+        ...base,
+        room: friendRoom({
+          ringing: [],
+          people: ["301", "302", "303", "304", "305", "306", "307", "308", "909"].map((id, i) =>
+            person(id, { joinedAt: nowSec() - 900 + i * 60, speaking: id === "302" }),
+          ),
         }),
       };
     case "crew":
