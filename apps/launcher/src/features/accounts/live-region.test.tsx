@@ -5,7 +5,7 @@
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import i18n, { loadEnglish, setLanguage } from "@/lib/i18n";
-import { ANNOUNCE_CLEAR_MS, LiveRegion } from "./live-region";
+import { ANNOUNCE_CLEAR_MS, ANNOUNCE_MAX, LiveRegion } from "./live-region";
 import { announce } from "./use-accounts";
 
 const INVITE = "BuzKalesi seni oyuna çağırıyor";
@@ -67,7 +67,8 @@ describe("LiveRegion", () => {
     expect(said(view)).toBe("");
   });
 
-  it("a newer announcement takes the place of one waiting for its frame, and its own time", () => {
+  // SQOL-U3: a burst (two people coming in at once, three chat messages) is heard whole.
+  it("keeps every announcement of a burst as a line of its own, each leaving on its own time", () => {
     const view = render(<LiveRegion />);
     act(() => announce("first"));
     act(() => vi.advanceTimersToNextFrame());
@@ -75,11 +76,41 @@ describe("LiveRegion", () => {
     act(() => announce("second"));
     act(() => announce("third"));
     act(() => vi.advanceTimersToNextFrame());
-    expect(said(view)).toBe("third");
-    // The first one's clearing does not cut the newest short.
+    expect(lines(view)).toEqual(["first", "second", "third"]);
+    // The first one's time ends; the newer ones keep theirs.
     act(() => vi.advanceTimersByTime(200));
-    expect(said(view)).toBe("third");
+    expect(lines(view)).toEqual(["second", "third"]);
     act(() => vi.advanceTimersByTime(ANNOUNCE_CLEAR_MS));
     expect(said(view)).toBe("");
   });
+
+  it("reads only what is added, and the same words again as a new line", () => {
+    const view = render(<LiveRegion />);
+    const region = view.container.querySelector('[aria-live="polite"]');
+    expect(region?.getAttribute("aria-relevant")).toBe("additions");
+    expect(region?.getAttribute("aria-atomic")).toBeNull();
+    act(() => announce("KorAtesi odaya katıldı."));
+    act(() => vi.advanceTimersToNextFrame());
+    act(() => announce("KorAtesi odaya katıldı."));
+    act(() => vi.advanceTimersToNextFrame());
+    expect(lines(view)).toEqual(["KorAtesi odaya katıldı.", "KorAtesi odaya katıldı."]);
+  });
+
+  it("holds at most ANNOUNCE_MAX lines, the newest", () => {
+    const view = render(<LiveRegion />);
+    act(() => {
+      for (let i = 1; i <= ANNOUNCE_MAX + 2; i++) announce(`line ${i}`);
+    });
+    act(() => vi.advanceTimersToNextFrame());
+    const shown = lines(view);
+    expect(shown).toHaveLength(ANNOUNCE_MAX);
+    expect(shown.at(-1)).toBe(`line ${ANNOUNCE_MAX + 2}`);
+    expect(shown[0]).toBe("line 3");
+  });
 });
+
+function lines(view: ReturnType<typeof render>): string[] {
+  return [...view.container.querySelectorAll('[aria-live="polite"] > p')].map(
+    (p) => p.textContent ?? "",
+  );
+}

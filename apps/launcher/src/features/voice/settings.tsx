@@ -13,6 +13,7 @@
 // önce sor", and the microphone's meter as the call's (meter.tsx): in the test row, and as the
 // sensitivity itself, whose line sits on the meter (bars past it go out: Discord's and Steam's way,
 // so the line and what lights agree; it moved from "how much it hears" to "how loud to speak").
+// SQOL-U3: "Mesaj Önizlemelerini Göster" (on): the room chat's previews over the stream's stage.
 import { CaretDown, Warning } from "@phosphor-icons/react";
 import {
   Button,
@@ -48,6 +49,7 @@ import { askDiscord, DiscordInline, useDiscordAsk } from "./discord-offer";
 import { KeyPicker, useKeyLine } from "./key-picker";
 import { FULL_RANGE, VoiceMeter } from "./meter";
 import { keptVoicePrefs, meterThreshold, useVoicePrefs } from "./prefs";
+import { peekOf } from "./room-chat/settings";
 import { useVoiceUi } from "./store";
 
 /** A slider's value is saved this long after it stops moving. */
@@ -539,6 +541,15 @@ export function VoiceSettingsSection() {
                   checked={settings.askBeforeCall}
                   onCheckedChange={(on) => change({ askBeforeCall: on })}
                   label={t("voice.call.askFirst")}
+                  hideLabel
+                />
+              </Row>
+              {/* SQOL-U3: the room chat's previews over the stream's stage. */}
+              <Row title={t("roomChat.settings.peek")}>
+                <Switch
+                  checked={peekOf(settings)}
+                  onCheckedChange={(on) => change({ peek: on })}
+                  label={t("roomChat.settings.peek")}
                   hideLabel
                 />
               </Row>

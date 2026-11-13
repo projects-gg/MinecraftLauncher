@@ -12,6 +12,9 @@
 // VOICE-CALL: the microphone's meter before its button (its bars move with the player's voice while
 // the window is in front: meter.tsx), and in a call with one friend the call's time after the name
 // (call-time.tsx). Both keep their room, so nothing beside them shifts.
+//
+// SQOL-U3: while the room panel is closed, the room chat's unread messages show as chat's own small
+// count after the name (a call's friend's messages count on the friends entry, where they live).
 import {
   Headset,
   Microphone,
@@ -25,6 +28,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SharePillPart } from "@/features/share/pill-part";
+import { UnreadChip } from "@/features/social/chat/unread-chip";
 import { enter, leave, swap } from "@/features/social/motion";
 import { callFriend, leaveRoom, retryRoom, toggleDeaf, toggleMute } from "./actions";
 import { CallTime, callStart } from "./call-time";
@@ -32,6 +36,7 @@ import { QualityBars, SpeakingFace } from "./faces";
 import { HeadphonesSlash } from "./icons";
 import { VoiceMeter } from "./meter";
 import { meterThreshold, useVoicePrefs } from "./prefs";
+import { useRoomOwnUnread } from "./room-chat/unread";
 import { faceMark, micClosedLabel, pillPeople, roomTitle } from "./rules";
 import { useFace, useFaces, useVoiceUi, voiceOn } from "./store";
 
@@ -180,6 +185,17 @@ function Pill() {
   const micOff = Boolean(me && (me.mute || me.deaf || closed !== null));
   const micLabel = closed ?? (micOff ? t("voice.room.unmuteMic") : t("voice.room.muteMic"));
   const open = () => openPanel({ from: trigger.current });
+  // SQOL-U3: the room chat's unread messages, while its panel is closed.
+  const panelOpen = useVoiceUi((s) => s.panel);
+  const roomUnread = useRoomOwnUnread();
+  const unread = panelOpen || !room ? 0 : roomUnread;
+  const label = [
+    t("voice.pill.label", { room: words }),
+    weak ? t("voice.room.weak") : null,
+    unread > 0 ? t("chat.list.unread", { count: unread }) : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <motion.div
@@ -201,11 +217,7 @@ function Pill() {
         layout={layout ? "position" : false}
         type="button"
         aria-haspopup="dialog"
-        aria-label={
-          weak
-            ? `${t("voice.pill.label", { room: words })}, ${t("voice.room.weak")}`
-            : t("voice.pill.label", { room: words })
-        }
+        aria-label={label}
         disabled={!room}
         onClick={open}
         className={cn(
@@ -272,6 +284,10 @@ function Pill() {
         {mode === "live" && since !== null ? (
           <CallTime since={since} className="shrink-0 text-[12px] leading-[18px] text-ash-300" />
         ) : null}
+        {/* SQOL-U3: the room chat's unread messages (chat's own count). */}
+        <span className="flex shrink-0 empty:hidden">
+          <UnreadChip count={unread} mentioned={false} />
+        </span>
         {weak ? (
           <Tooltip content={t("voice.room.weak")}>
             <span className="flex shrink-0">

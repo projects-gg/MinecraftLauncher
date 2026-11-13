@@ -446,6 +446,19 @@ function stateFor(scenario: string): VoiceState {
   }
 }
 
+/**
+ * SQOL-U3: `rchat=<scenario>` (other than `off`; features/voice/room-chat/mock.ts) gives the room its
+ * chat as the launcher says it; a friend room grew once more than two were in it.
+ */
+function withRoomChat(state: VoiceState): VoiceState {
+  const room = state.room;
+  const rchat = param("rchat");
+  if (!room || !rchat || rchat === "off") return state;
+  const grew = room.grew === true || (room.kind === "friend" && room.people.length > 1);
+  if (room.chat === true && room.grew === grew) return state;
+  return { ...state, room: { ...room, chat: true, grew } };
+}
+
 /** Who a scenario has speaking (or `speaking=` says). */
 function speakingFor(state: VoiceState, override: string | null, talking: boolean): VoiceSpeaking {
   if (override !== null) {
@@ -617,7 +630,10 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
     askBeforeCall: options.ask ?? true,
     outputVolume: options.volume ?? 100,
   };
-  let state: VoiceState = { ...stateFor(scenario), askBeforeCall: settings.askBeforeCall };
+  let state: VoiceState = withRoomChat({
+    ...stateFor(scenario),
+    askBeforeCall: settings.askBeforeCall,
+  });
   /** Discord's keys until the player answers (then never again, as the launcher keeps it). */
   let discord = discordFor(options.discord);
   const stateListeners = new Set<(s: VoiceState) => void>();
@@ -637,7 +653,7 @@ export function createVoiceMock(options: VoiceMockOptions = {}): VoiceMock {
     if (timers) setTimeout(work, ms);
   };
   const commit = (next: VoiceState) => {
-    state = next;
+    state = withRoomChat(next);
     for (const listener of stateListeners) listener(state);
   };
   const notice = (n: VoiceNotice) => {

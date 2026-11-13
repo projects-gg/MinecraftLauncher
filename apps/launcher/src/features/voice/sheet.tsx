@@ -7,8 +7,19 @@
 // a press or a right click opens their menu (volume first). At the bottom "Mikrofon",
 // "Sağırlaştır" and "Ayrıl", and for the leader "Odayı kapat" with its one sentence. "Davet et"
 // slides in over the room as the friends panel's pages do.
+//
+// SQOL-U3 (the owner: "sesli sohbete girince orada bir metin sohbet alanı daha olsun"): with a chat
+// the panel reads header, the people (compact under "Odadakiler · 5", folding away, at most ~45 %
+// of the panel with their own scroll; a call with one friend keeps its two faces, smaller), the chat
+// in the rest (room-chat/panel-chat.tsx), then the bottom; without one the people take the room as
+// before. While the stream's stage is on the page the panel docks beside it instead of over it: no
+// scrim, the page stays live, a press outside leaves it, "Ses Odası" as a landmark; X and (focus
+// inside) Esc close it, and the stage leaves its width free (`dock`). It slides in on its own; a
+// stage that comes or goes while it shows changes its shell in place (no slide again, the field
+// keeps the focus it had). A stage over the whole window hides it until it is back.
 import {
   ArrowsClockwise,
+  CaretDown,
   CaretLeft,
   GearSix,
   Headphones,
@@ -23,7 +34,6 @@ import {
   User,
   UserPlus,
   Warning,
-  X,
 } from "@phosphor-icons/react";
 import {
   Button,
@@ -49,7 +59,15 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { Dialog } from "radix-ui";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { useRoomTargets } from "@/features/share/live";
 import { LiveAppear, LiveTag, LiveTagButton, useLivePreview } from "@/features/share/live-card";
@@ -76,10 +94,13 @@ import {
 } from "./actions";
 import { roomMenuItems } from "./crew-room-menu";
 import { useCrewRoomsUi, withPendingOrder } from "./crew-rooms-store";
+import { useDockWidth, useToastsBeside } from "./dock";
 import { QualityBars, SpeakingFace } from "./faces";
 import { HeadphonesSlash } from "./icons";
 import { VoiceMeter } from "./meter";
+import { PanelChromeProvider, PanelClose, PanelTitle } from "./panel-chrome";
 import { meterThreshold, setOutputVolume, useVoicePrefs } from "./prefs";
+import { PanelChatSection, usePanelChat } from "./room-chat";
 import {
   crewRoomList,
   crewRoomName,
@@ -96,7 +117,9 @@ import {
   type VoiceFace,
   voiceMark,
 } from "./rules";
+import { useSpeakingWord } from "./speaking-word";
 import { CallStage, isOneToOne } from "./stage";
+import { useStageMode } from "./stage-mode";
 import { useFace, useFaces, useVoiceUi } from "./store";
 
 // --- marks beside a person --------------------------------------------------------------------
@@ -174,27 +197,47 @@ function Marks({ marks }: { marks: Mark[] }) {
 
 const rowShape =
   "flex w-full items-center gap-3 rounded-[var(--radius-panel)] py-1.5 pr-2 pl-2 text-left outline-none";
+/** SQOL-U3: with a chat under them the rows are closer, their faces 32 px (whole pixels). */
+const compactRowShape =
+  "flex w-full items-center gap-2.5 rounded-[var(--radius-panel)] py-1 pr-2 pl-2 text-left outline-none";
+
+/** A row's face: 36 px, or 32 px over a chat. */
+const faceSize = (compact: boolean) => (compact ? 32 : 36);
 
 /** The name, then (SHARE-LIVE) "YAYINDA" right after it; the name truncates, the tag never does. */
 function NameBlock({
   name,
   second,
   tag,
+  compact = false,
 }: {
   name: string;
   second?: string | null;
   tag?: ReactNode;
+  compact?: boolean;
 }) {
   return (
     <span className="min-w-0 flex-1">
       <span className="flex min-w-0 items-center gap-[6px]">
-        <span className="truncate text-[14px] leading-[1.25] font-semibold text-bone-50">
+        <span
+          className={cn(
+            "truncate leading-[1.25] font-semibold text-bone-50",
+            compact ? "text-[13.5px]" : "text-[14px]",
+          )}
+        >
           {name}
         </span>
         {tag}
       </span>
       {second ? (
-        <span className="block truncate text-[12px] leading-[1.35] text-ash-400">{second}</span>
+        <span
+          className={cn(
+            "block truncate leading-[1.35] text-ash-400",
+            compact ? "text-[11.5px]" : "text-[12px]",
+          )}
+        >
+          {second}
+        </span>
       ) : null}
     </span>
   );
@@ -203,7 +246,7 @@ function NameBlock({
 /** Where a row's card sits: beside the panel, level with the row (as a friend's card does). */
 const ROW_CARD = { side: "left", align: "center", sideOffset: 14 } as const;
 
-function MeRow({ room }: { room: VoiceRoomView }) {
+function MeRow({ room, compact }: { room: VoiceRoomView; compact: boolean }) {
   const { t } = useTranslation();
   const me = useSocialUi((s) => s.view.me);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -220,11 +263,12 @@ function MeRow({ room }: { room: VoiceRoomView }) {
   const role = room.people.length ? roleWord(room.me.role, t) : null;
   const marks = marksOf(room.me, t);
   return (
-    <div ref={rowRef} className={rowShape}>
-      <SpeakingFace face={face} size={36} />
+    <div ref={rowRef} className={compact ? compactRowShape : rowShape}>
+      <SpeakingFace face={face} size={faceSize(compact)} />
       <NameBlock
         name={face.name}
         second={role}
+        compact={compact}
         tag={
           <LiveAppear show={live.length > 0}>
             <LiveTagButton targets={live} placement={{ ...ROW_CARD, anchor: rowRef }} />
@@ -238,11 +282,13 @@ function MeRow({ room }: { room: VoiceRoomView }) {
   );
 }
 
-function PersonRow({ person }: { person: VoicePerson }) {
+function PersonRow({ person, compact }: { person: VoicePerson; compact: boolean }) {
   const { t } = useTranslation();
   const face = useFace(person.id);
   const [open, setOpen] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
+  // SQOL-U3: the row's name says "konuşuyor" while they speak (after a moment, for a calm reader).
+  const speaking = useSpeakingWord(person.id);
   const ref = { id: face.id, name: face.name, avatar: face.avatar, avatarUrl: face.avatarUrl };
   // SHARE: "Yayını izle" first on someone live; a leader's or moderator's "Paylaşımı durdur" on
   // someone who shares.
@@ -260,6 +306,7 @@ function PersonRow({ person }: { person: VoicePerson }) {
   const marks = marksOf(person, t);
   const label = [
     face.name,
+    speaking ? t("roomChat.speaking") : null,
     kind ? t("share.row.mark", { kind: t(`share.kind.${kind}`) }) : null,
     role,
     ...marks.map((m) => m.label),
@@ -294,15 +341,16 @@ function PersonRow({ person }: { person: VoicePerson }) {
             }}
             aria-keyshortcuts={live.length ? "ArrowRight" : undefined}
             className={cn(
-              rowShape,
+              compact ? compactRowShape : rowShape,
               "min-w-0 flex-1",
               "cursor-pointer transition-[background-color,box-shadow] duration-150 hover:bg-white/[0.045] focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=open]:bg-white/[0.06]",
             )}
           >
-            <SpeakingFace face={face} size={36} />
+            <SpeakingFace face={face} size={faceSize(compact)} />
             <NameBlock
               name={face.name}
               second={role}
+              compact={compact}
               tag={
                 <LiveAppear show={live.length > 0}>
                   <span {...preview.tagProps} data-live-tag className="flex shrink-0">
@@ -321,13 +369,21 @@ function PersonRow({ person }: { person: VoicePerson }) {
   );
 }
 
-function RingingRow({ id, onCancel }: { id: string; onCancel: () => void }) {
+function RingingRow({
+  id,
+  onCancel,
+  compact,
+}: {
+  id: string;
+  onCancel: () => void;
+  compact: boolean;
+}) {
   const { t } = useTranslation();
   const face = useFace(id);
   return (
-    <div className={rowShape}>
-      <SpeakingFace face={face} size={36} dim speaking={false} />
-      <NameBlock name={face.name} second={t("voice.room.ringing")} />
+    <div className={compact ? compactRowShape : rowShape}>
+      <SpeakingFace face={face} size={faceSize(compact)} dim speaking={false} />
+      <NameBlock name={face.name} second={t("voice.room.ringing")} compact={compact} />
       <Button size="sm" variant="secondary" onClick={onCancel}>
         {t("voice.room.cancelRing")}
       </Button>
@@ -356,30 +412,32 @@ function People({ room }: { room: VoiceRoomView }) {
         {stage ? (
           <CallStage room={room} marksOf={(person) => <Marks marks={marksOf(person, t)} />} />
         ) : (
-          <PeopleList room={room} />
+          <PeopleList room={room} compact={false} />
         )}
       </motion.div>
     </AnimatePresence>
   );
 }
 
-function PeopleList({ room }: { room: VoiceRoomView }) {
+function PeopleList({ room, compact }: { room: VoiceRoomView; compact: boolean }) {
   const { reduce, layout } = useMotionPrefs();
   const calling = useVoiceUi((s) => s.state.calling);
   const rows: Array<{ key: string; node: ReactNode }> = [
-    { key: "me", node: <MeRow room={room} /> },
-    ...room.people.map((p) => ({ key: p.id, node: <PersonRow person={p} /> })),
+    { key: "me", node: <MeRow room={room} compact={compact} /> },
+    ...room.people.map((p) => ({ key: p.id, node: <PersonRow person={p} compact={compact} /> })),
     ...(calling
       ? [
           {
             key: `ring:${calling.friend}`,
-            node: <RingingRow id={calling.friend} onCancel={() => void leaveRoom()} />,
+            node: (
+              <RingingRow id={calling.friend} onCancel={() => void leaveRoom()} compact={compact} />
+            ),
           },
         ]
       : []),
     ...room.ringing.map((r) => ({
       key: `ring:${r.to}`,
-      node: <RingingRow id={r.to} onCancel={() => void cancelInvite(r.to)} />,
+      node: <RingingRow id={r.to} onCancel={() => void cancelInvite(r.to)} compact={compact} />,
     })),
   ];
   return (
@@ -400,6 +458,61 @@ function PeopleList({ room }: { room: VoiceRoomView }) {
         ))}
       </AnimatePresence>
     </ul>
+  );
+}
+
+/**
+ * SQOL-U3: the people over a chat. A call with one friend keeps its two faces (smaller, a band at
+ * the top); otherwise "Odadakiler · 5" folds the list away (the player's choice, kept while the
+ * launcher runs) and the list scrolls on its own within ~45 % of the panel.
+ */
+function PeopleSection({ room }: { room: VoiceRoomView }) {
+  const { t } = useTranslation();
+  const calling = useVoiceUi((s) => s.state.calling);
+  const open = useVoiceUi((s) => s.peopleOpen);
+  const setOpen = useVoiceUi((s) => s.setPeopleOpen);
+  const listId = useId();
+  if (isOneToOne({ room, calling })) {
+    return (
+      <div className="shrink-0 border-b border-white/8">
+        <CallStage room={room} compact marksOf={(person) => <Marks marks={marksOf(person, t)} />} />
+      </div>
+    );
+  }
+  const count = room.people.length + 1;
+  return (
+    <section className="flex max-h-[45%] min-h-0 shrink-0 flex-col border-b border-white/8">
+      <h3 className="shrink-0">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          aria-label={t("roomChat.people.label", { count })}
+          onClick={() => setOpen(!open)}
+          className="flex h-9 w-full cursor-pointer items-center gap-1.5 pr-4 pl-5 text-left text-[12.5px] font-semibold text-ash-300 outline-none transition-colors duration-150 hover:text-bone-50 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:ring-inset"
+        >
+          <span>{t("roomChat.people.title")}</span>
+          <span aria-hidden className="text-ash-500">
+            ·
+          </span>
+          <span className="tabular-nums">{count}</span>
+          <CaretDown
+            size={13}
+            weight="bold"
+            aria-hidden
+            className={cn(
+              "ml-auto text-ash-400 transition-transform duration-150 ease-out",
+              !open && "-rotate-90",
+            )}
+          />
+        </button>
+      </h3>
+      {open ? (
+        <div id={listId} className="min-h-0 overflow-y-auto overscroll-contain px-3 pb-2">
+          <PeopleList room={room} compact />
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -518,7 +631,7 @@ function RoomName({
   // on the window, which comes first (as SearchInput does).
   useEffect(() => {
     if (!editing) return;
-    const onKey = (event: KeyboardEvent) => {
+    const onKey = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
@@ -560,7 +673,7 @@ function RoomName({
             }}
             {...rise(reduce, 3, 0.2)}
           >
-            <Dialog.Title className="sr-only">{title}</Dialog.Title>
+            <PanelTitle className="sr-only">{title}</PanelTitle>
             <Input
               autoFocus
               value={draft}
@@ -587,9 +700,9 @@ function RoomName({
             className="flex min-w-0 items-center gap-1"
             {...rise(reduce, 3, 0.2)}
           >
-            <Dialog.Title className="truncate font-display text-[19px] leading-[1.2] font-semibold text-bone-50">
+            <PanelTitle className="truncate font-display text-[19px] leading-[1.2] font-semibold text-bone-50">
               {title}
-            </Dialog.Title>
+            </PanelTitle>
             {room.canRename ? (
               <IconButton
                 size="sm"
@@ -767,9 +880,7 @@ function RoomHeader({ room, title }: { room: VoiceRoomView; title: string }) {
             />
           </>
         )}
-        <Dialog.Close asChild>
-          <IconButton label={t("common.close")} icon={<X size={18} />} />
-        </Dialog.Close>
+        <PanelClose />
       </div>
       {room.kind === "crew" ? <CrewRooms room={room} /> : null}
     </header>
@@ -942,13 +1053,39 @@ function RoomPage({ room }: { room: VoiceRoomView }) {
   const faces = useFaces([...room.people.map((p) => p.id), ...(calling ? [calling.friend] : [])]);
   const nameOf = (id: string) => faces.find((f) => f.id === id)?.name ?? t("voice.someone");
   const title = roomTitle(room, nameOf, t, calling?.friend);
+  // SQOL-U3: a chat under the people when the room has one (or the call's friend's messages).
+  const chat = usePanelChat(room);
   return (
     <>
       <RoomHeader room={room} title={title} />
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 pt-3 pb-4">
-        <Notices room={room} />
-        <People room={room} />
-      </div>
+      <AnimatePresence initial={false} mode="wait">
+        {chat.kind === "none" ? (
+          <motion.div
+            key="people"
+            className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-3 pt-3 pb-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: enter(0.2) }}
+            exit={{ opacity: 0, transition: leave(0.12) }}
+          >
+            <Notices room={room} />
+            <People room={room} />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="chat"
+            className="flex min-h-0 flex-1 flex-col"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: enter(0.2) }}
+            exit={{ opacity: 0, transition: leave(0.12) }}
+          >
+            <div className="shrink-0 px-3 pt-3 empty:hidden">
+              <Notices room={room} />
+            </div>
+            <PeopleSection room={room} />
+            <PanelChatSection room={room} chat={chat} />
+          </motion.div>
+        )}
+      </AnimatePresence>
       <RoomFooter room={room} />
     </>
   );
@@ -1002,12 +1139,10 @@ function InvitePage({ room }: { room: VoiceRoomView }) {
           icon={<CaretLeft size={18} weight="bold" />}
           onClick={() => goTo("room")}
         />
-        <Dialog.Title className="min-w-0 flex-1 truncate font-display text-[19px] leading-tight font-semibold text-bone-50">
+        <PanelTitle className="min-w-0 flex-1 truncate font-display text-[19px] leading-tight font-semibold text-bone-50">
           {t("voice.invite.title")}
-        </Dialog.Title>
-        <Dialog.Close asChild>
-          <IconButton label={t("common.close")} icon={<X size={18} />} />
-        </Dialog.Close>
+        </PanelTitle>
+        <PanelClose />
       </header>
       <div className="shrink-0 px-4 pt-3">
         <SearchInput
@@ -1033,27 +1168,61 @@ function InvitePage({ room }: { room: VoiceRoomView }) {
   );
 }
 
-// --- the sheet --------------------------------------------------------------------------------
-
-export function RoomSheet() {
-  const panel = useVoiceUi((s) => s.panel);
-  const close = useVoiceUi((s) => s.closePanel);
-  const room = useVoiceUi((s) => s.state.room);
+/** The room and "Davet et" over it, sliding as the friends panel's pages do. */
+function PanelPages({ room }: { room: VoiceRoomView }) {
   const page = useVoiceUi((s) => s.page);
   const direction = useVoiceUi((s) => s.direction);
-  const returnFocus = useVoiceUi((s) => s.returnFocus);
-  const animate = useInteractionMotion();
   const { reduce } = useMotionPrefs();
-  // The sheet keeps the last room while it slides away.
-  const last = useRef<VoiceRoomView | null>(null);
-  if (room) last.current = room;
-  const shown = room ?? last.current;
-  const open = panel && room !== null;
   const variants = pageVariants(reduce);
+  return (
+    <ReducedMotionConfig>
+      <AnimatePresence mode="popLayout" initial={false} custom={direction}>
+        <motion.div
+          key={page}
+          custom={direction}
+          variants={variants}
+          initial="enter"
+          animate="center"
+          exit="exit"
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          {page === "invite" ? <InvitePage room={room} /> : <RoomPage room={room} />}
+        </motion.div>
+      </AnimatePresence>
+    </ReducedMotionConfig>
+  );
+}
+
+// --- the panel's two shells ---------------------------------------------------------------------
+
+/** How the panel arrives: sliding in (opened), or in place (its shell changed while it showed),
+ * with the focus where it was in it: the chat's field, the panel, or not in it at all. */
+interface Arrival {
+  moved: boolean;
+  focus: "field" | "panel" | null;
+}
+
+const FRESH: Arrival = { moved: false, focus: null };
+
+/** The panel as a sheet over the page (no stage on the page): a modal dialog, as before. */
+function SheetShell({
+  room,
+  open,
+  arrival,
+}: {
+  room: VoiceRoomView | null;
+  open: boolean;
+  arrival: Arrival;
+}) {
+  const close = useVoiceUi((s) => s.closePanel);
+  const returnFocus = useVoiceUi((s) => s.returnFocus);
+  const cueChatFocus = useVoiceUi((s) => s.cueChatFocus);
+  const animate = useInteractionMotion();
+  const motionOf = sheetMotion(!animate);
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && close()}>
       <AnimatePresence>
-        {open && shown ? (
+        {open && room ? (
           <EntranceGate key="sheet">
             <Dialog.Portal forceMount>
               <Dialog.Overlay asChild forceMount>
@@ -1068,9 +1237,23 @@ export function RoomSheet() {
                 aria-describedby={undefined}
                 onOpenAutoFocus={(event) => {
                   event.preventDefault();
-                  focusPanel(event.currentTarget as HTMLElement);
+                  // The stage went while the chat's field had the focus: the field keeps it.
+                  if (arrival.focus === "field") cueChatFocus();
+                  else focusPanel(event.currentTarget as HTMLElement);
                 }}
                 onCloseAutoFocus={(event) => {
+                  // Still open: its shell changed in place (the stage came) or the full-screen
+                  // stage hides it. The focus stays where it went.
+                  if (useVoiceUi.getState().panel) {
+                    event.preventDefault();
+                    return;
+                  }
+                  // Another layer took over meanwhile ("Ekip Sohbeti" opened the friends panel).
+                  const now = document.activeElement;
+                  if (now instanceof Element && now.closest("[role='dialog']")) {
+                    event.preventDefault();
+                    return;
+                  }
                   if (returnFocus?.isConnected) {
                     event.preventDefault();
                     returnFocus.focus();
@@ -1081,28 +1264,16 @@ export function RoomSheet() {
               >
                 <GatedMotion.aside
                   tabIndex={-1}
+                  data-chat-host=""
+                  data-room-panel=""
                   className="glass-strong fixed top-0 right-0 bottom-0 z-40 flex w-[min(440px,94vw)] flex-col overflow-hidden shadow-[-30px_0_80px_rgb(34_6_6/0.5)] outline-none"
-                  {...sheetMotion(!animate)}
+                  {...motionOf}
+                  // Its shell changed in place: it is already there, nothing slides in.
+                  {...(arrival.moved ? { initial: false } : {})}
                 >
-                  <ReducedMotionConfig>
-                    <AnimatePresence mode="popLayout" initial={false} custom={direction}>
-                      <motion.div
-                        key={page}
-                        custom={direction}
-                        variants={variants}
-                        initial="enter"
-                        animate="center"
-                        exit="exit"
-                        className="flex min-h-0 flex-1 flex-col"
-                      >
-                        {page === "invite" ? (
-                          <InvitePage room={shown} />
-                        ) : (
-                          <RoomPage room={shown} />
-                        )}
-                      </motion.div>
-                    </AnimatePresence>
-                  </ReducedMotionConfig>
+                  <PanelChromeProvider value={{ docked: false, shown: open, close }}>
+                    <PanelPages room={room} />
+                  </PanelChromeProvider>
                 </GatedMotion.aside>
               </Dialog.Content>
             </Dialog.Portal>
@@ -1110,5 +1281,141 @@ export function RoomSheet() {
         ) : null}
       </AnimatePresence>
     </Dialog.Root>
+  );
+}
+
+/**
+ * The panel docked beside the stage (SQOL §1.3 "Yanaşık panel"): no scrim, no focus trap, a press
+ * outside leaves it; "Ses Odası" as a complementary landmark after the stage in the page's order;
+ * X and Esc (with the focus inside) close it, the focus going back where it came from.
+ */
+function DockShell({
+  room,
+  open,
+  arrival,
+  width,
+}: {
+  room: VoiceRoomView | null;
+  open: boolean;
+  arrival: Arrival;
+  width: number;
+}) {
+  const { t } = useTranslation();
+  const close = useVoiceUi((s) => s.closePanel);
+  const returnFocus = useVoiceUi((s) => s.returnFocus);
+  const cueChatFocus = useVoiceUi((s) => s.cueChatFocus);
+  const animate = useInteractionMotion();
+  const panel = useRef<HTMLElement>(null);
+  const motionOf = sheetMotion(!animate);
+
+  // Opened: the focus goes in (the panel, or the chat's field when it was asked for or had it).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on opening only
+  useLayoutEffect(() => {
+    if (!open) return;
+    const element = panel.current;
+    if (arrival.focus === "field") cueChatFocus();
+    else if (element && (!arrival.moved || arrival.focus === "panel")) focusPanel(element);
+  }, [open]);
+
+  // Closed with the focus inside: it goes back to where the panel was opened from.
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (wasOpen.current && !open) {
+      const element = panel.current;
+      if (element?.contains(document.activeElement) && returnFocus?.isConnected) {
+        returnFocus.focus();
+      }
+    }
+    wasOpen.current = open;
+  }, [open, returnFocus]);
+
+  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    // A layer inside (a menu, the emoji picker, a field's own Esc) took it already.
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    event.preventDefault();
+    close();
+  };
+
+  return (
+    <>
+      {/* The sheet's scrim leaves as the panel docks (its shell changed in place). */}
+      {arrival.moved && open ? (
+        <motion.div
+          aria-hidden
+          className="pointer-events-none fixed inset-0 z-[22] bg-obsidian-950/55"
+          initial={{ opacity: 1 }}
+          animate={{ opacity: 0, transition: { duration: 0.18 } }}
+        />
+      ) : null}
+      <AnimatePresence>
+        {open && room ? (
+          <EntranceGate key="dock">
+            <GatedMotion.aside
+              ref={panel}
+              tabIndex={-1}
+              role="complementary"
+              aria-label={t("roomChat.panel.label")}
+              data-chat-host=""
+              data-room-panel=""
+              onKeyDown={onKeyDown}
+              style={{ width }}
+              className="glass-strong fixed top-titlebar right-0 bottom-0 z-[25] flex flex-col overflow-hidden border-l border-white/8 shadow-[-24px_0_60px_rgb(34_6_6/0.38)] outline-none"
+              {...motionOf}
+              {...(arrival.moved ? { initial: false } : {})}
+            >
+              <PanelChromeProvider value={{ docked: true, shown: open, close }}>
+                <PanelPages room={room} />
+              </PanelChromeProvider>
+            </GatedMotion.aside>
+          </EntranceGate>
+        ) : null}
+      </AnimatePresence>
+    </>
+  );
+}
+
+export function RoomSheet() {
+  const panel = useVoiceUi((s) => s.panel);
+  const room = useVoiceUi((s) => s.state.room);
+  const setDock = useVoiceUi((s) => s.setDock);
+  const stage = useStageMode();
+  const docked = stage === "page";
+  // A stage over the whole window covers everything: the panel waits behind it, still open.
+  const open = panel && room !== null && stage !== "full";
+  // The sheet keeps the last room while it slides away.
+  const last = useRef<VoiceRoomView | null>(null);
+  if (room) last.current = room;
+  const shown = room ?? last.current;
+  const width = useDockWidth(docked && open);
+
+  // The stage leaves the docked panel's width free: from the start of its slide in, until the
+  // start of its slide out. Toasts keep clear of it too.
+  const dock = docked && open ? width : 0;
+  useEffect(() => setDock(dock), [setDock, dock]);
+  useEffect(() => () => useVoiceUi.getState().setDock(0), []);
+  useToastsBeside(dock);
+
+  // The stage came or went while the panel showed: its shell changes in place. Where the focus was
+  // in it is read now, before the old shell goes.
+  const placed = useRef({ docked, open });
+  const arrival = useRef<Arrival>(FRESH);
+  if (open && placed.current.open && placed.current.docked !== docked) {
+    const active = typeof document === "undefined" ? null : document.activeElement;
+    const inside = active?.closest("[data-room-panel]") ? active : null;
+    arrival.current = {
+      moved: true,
+      focus: inside ? (inside instanceof HTMLTextAreaElement ? "field" : "panel") : null,
+    };
+  } else if (open && !placed.current.open) {
+    arrival.current = FRESH;
+  }
+  useEffect(() => {
+    placed.current = { docked, open };
+  });
+
+  return docked ? (
+    <DockShell room={shown} open={open} arrival={arrival.current} width={width} />
+  ) : (
+    <SheetShell room={shown} open={open} arrival={arrival.current} />
   );
 }

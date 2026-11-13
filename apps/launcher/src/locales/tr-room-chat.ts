@@ -1,0 +1,36 @@
+// The voice room panel's chat (SQOL-U3, sqol.md §1.3): the room's own chat, the call's friend's
+// messages over it, the people folded under one line, the previews over the stream. Titles in Title
+// Case; names never take a suffix. Everything else is chat's own words (`chat.*`, `chat2.*`).
+export const trRoomChat = {
+  panel: {
+    /** The docked panel's landmark name. */
+    label: "Ses Odası",
+  },
+  people: {
+    title: "Odadakiler",
+    label_one: "Odadakiler, {{count}} kişi",
+    label_other: "Odadakiler, {{count}} kişi",
+  },
+  title: "Oda Sohbeti",
+  dm: "Mesajlar",
+  crewChat: "Ekip Sohbeti",
+  empty: "Burada yazdıkların yalnız bu odadakilere görünür ve oda kapanınca silinir.",
+  composer: {
+    placeholder: "Odaya yaz",
+    label: "Odaya yaz",
+  },
+  tombstone: {
+    /** The room's leader or a moderator took it away. */
+    mod: "Bu mesaj kaldırıldı",
+  },
+  /** In a person's name for screen readers, while they speak. */
+  speaking: "konuşuyor",
+  announce: {
+    one: "Oda sohbeti, {{name}}: {{text}}",
+    many_one: "Oda sohbetinde {{count}} yeni mesaj",
+    many_other: "Oda sohbetinde {{count}} yeni mesaj",
+  },
+  settings: {
+    peek: "Mesaj Önizlemelerini Göster",
+  },
+};

@@ -125,6 +125,8 @@ export interface RowShared {
   members?: readonly Mentionable[];
   /** SOC-NOTE, crew chat: its pins, and whether the player pins (its leader and moderators). */
   pins?: { list: readonly ChatPin[]; manage: boolean };
+  /** SQOL-U3: false where links get no card (a voice room's chat): the link alone. */
+  cards?: boolean;
 }
 
 /** Failures the same text would meet again: the player writes it another way. */
@@ -387,7 +389,8 @@ function MessageRowView({
 
   // A card is asked for once, when the message comes on screen (and is younger than a week).
   const content = useRef<HTMLDivElement>(null);
-  const wantsCard = Boolean(cardLink) && !message.card && sent && weekOpen;
+  const cards = shared.cards !== false;
+  const wantsCard = cards && Boolean(cardLink) && !message.card && sent && weekOpen;
   useEffect(() => {
     const element = content.current;
     if (!wantsCard || !element || unfurled.has(message.key)) return;
@@ -538,7 +541,7 @@ function MessageRowView({
         >
           <span className="sr-only select-none">{speaker}</span>
           <MessageText text={text} links={links} mentions={mentions} searchKey={message.key} />
-          {cardLink && extras.links ? (
+          {cardLink && extras.links && cards ? (
             <LinkCard
               link={cardLink}
               card={card}

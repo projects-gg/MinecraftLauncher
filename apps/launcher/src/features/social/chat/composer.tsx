@@ -28,6 +28,7 @@
 import { Check, Info, LockSimple, PaperPlaneRight, PencilSimple, X } from "@phosphor-icons/react";
 import type { Sticker as StickerData } from "@pl/stickers";
 import { cn, IconButton } from "@pl/ui";
+import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type FormEvent,
@@ -88,7 +89,7 @@ const CARD_AFTER_MS = 600;
  * link with the rule it fails (CHAT2), links from a limited account (until when, Unix seconds),
  * or none.
  */
-type Problem = "phone" | "long" | "words" | { link: string } | { limited: number } | null;
+export type Problem = "phone" | "long" | "words" | { link: string } | { limited: number } | null;
 
 /** A bare domain in the text ("youtube.com/x"): the refusal adds "https:// ile yaz.". */
 const BARE = /(?<![\p{L}\p{N}@.\-/])[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,24}(?![\p{L}\p{N}])/iu;
@@ -96,9 +97,9 @@ const BARE = /(?<![\p{L}\p{N}@.\-/])[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,24}(?![
 /**
  * The composer's check. Without links on, any address is a link that cannot go (CHAT1). With
  * them, the links that pass may go and the rest of the text is checked without them; a link that
- * fails says why when its rule has words of its own.
+ * fails says why when its rule has words of its own. SQOL-U3: the room chat's field checks the same.
  */
-function problemOf(
+export function problemOf(
   value: string,
   links: ChatLinkRules | undefined,
   extras: boolean,
@@ -117,6 +118,25 @@ function problemOf(
     return { limited: limitedUntil };
   }
   return null;
+}
+
+/** What the field says under it about a text that cannot go (chat's words, SQOL-U3's too). */
+export function problemWords(
+  problem: NonNullable<Problem>,
+  t: TFunction,
+  context: { hasExtras: boolean; accountNew: boolean; nowMs: number },
+): string {
+  if (problem === "phone") return t("chat.composer.phone");
+  if (problem === "long") return t("chat.composer.long");
+  if (problem === "words") return t("chat.failure.words");
+  if ("limited" in problem) {
+    return t(context.accountNew ? "identity.limited.links" : "chat2.links.limited", {
+      when: opensIn(t, problem.limited, context.nowMs),
+    });
+  }
+  return context.hasExtras || problem.link !== "form"
+    ? t(`chat2.links.rules.${ruleWords(problem.link)}`)
+    : t("chat.composer.link");
 }
 
 /** A link's card over the field while the player writes it (what the others will see). */
@@ -481,19 +501,7 @@ export function Composer({
     error ??
     (problem === null
       ? null
-      : problem === "phone"
-        ? t("chat.composer.phone")
-        : problem === "long"
-          ? t("chat.composer.long")
-          : problem === "words"
-            ? t("chat.failure.words")
-            : "limited" in problem
-              ? t(accountNew ? "identity.limited.links" : "chat2.links.limited", {
-                  when: opensIn(t, problem.limited, Date.now()),
-                })
-              : hasExtras || problem.link !== "form"
-                ? t(`chat2.links.rules.${ruleWords(problem.link)}`)
-                : t("chat.composer.link"));
+      : problemWords(problem, t, { hasExtras, accountNew, nowMs: Date.now() }));
   const showCount = length >= CHAT_COUNT_FROM;
   // CHAT-CALM: the empty field's hint says the wait; with words in it the line under the field does.
   const waitShown = wait > 0 && hasText(text);

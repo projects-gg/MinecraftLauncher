@@ -42,6 +42,11 @@
 // messages fold into one quiet line each run ("Göster" opens it; a search result in it opens it
 // too), and a direct conversation with someone ignored is faded; the crew's names reach the rows
 // for mentions.
+//
+// SQOL-U3: the conversation also shows outside the friends panel (the room panel shows a call's
+// friend's messages): there `shown` says whether it is on screen (read marks, "Görüldü" and the
+// quiet notices follow it instead of the friends panel), `focusCue` gives its field the focus, and
+// its keys (Ctrl+F, the text size) answer only from inside that panel (focus.ts `chatKeyHere`).
 import { ArrowDown, CalendarBlank, HandWaving, PushPin } from "@phosphor-icons/react";
 import { cn, scrollBehavior, toast } from "@pl/ui";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
@@ -88,6 +93,7 @@ import { Composer, type ComposerState } from "./composer";
 import { crewOf, deletionOf, peerOf, readable, sameGroup, tombstoneKind } from "./conversations";
 import { useChatExtras, useLinkRules } from "./extras";
 import { firstRowUnder, floatingDayAt } from "./floating-day";
+import { chatKeyHere } from "./focus";
 import { MessageRow, type RowActions, type RowShared, rowWindows } from "./message-row";
 import { messageLine } from "./preview";
 import { quickReactions, REACTION_WINDOW_MS, reactVerdict, withMyReaction } from "./reactions";
@@ -221,16 +227,23 @@ export interface ConversationProps {
   empty: ReactNode;
   /** Local lines among the messages, at their time (a crew's plans). */
   lines?: readonly ChatLine[];
+  /**
+   * SQOL-U3: the conversation shows outside the friends panel (the room panel): whether it is on
+   * screen there. Without it, the friends panel being open says so.
+   */
+  shown?: boolean;
+  /** SQOL-U3: grows when the field should take the focus (the room panel opened for its chat). */
+  focusCue?: number;
 }
 
 /** The empty state keeps its own size whatever the text size: its pixel icon stays on whole
  * pixels. */
-function Unzoomed({ children }: { children: ReactNode }) {
+export function Unzoomed({ children }: { children: ReactNode }) {
   return <div className="[zoom:calc(1/var(--chat-zoom,1))]">{children}</div>;
 }
 
 /** The day over a row, when it starts one. */
-function DayLine({ text }: { text: string }) {
+export function DayLine({ text }: { text: string }) {
   return (
     <p className="flex justify-center px-2 pt-3 pb-2">
       <span className="text-[12px] font-medium text-ash-400">{text}</span>
@@ -401,7 +414,13 @@ const MessageItem = memo(function MessageItem({
  * LayoutGroup one member's update has every row note its place first: the rows that move glide,
  * though only the rows whose words changed draw again. It sits still at the list's top corner.
  */
-const LayoutCue = memo(function LayoutCue({ cue, layout }: { cue: unknown; layout: boolean }) {
+export const LayoutCue = memo(function LayoutCue({
+  cue,
+  layout,
+}: {
+  cue: unknown;
+  layout: boolean;
+}) {
   void cue;
   if (!layout) return null;
   return (
@@ -481,6 +500,8 @@ export function Conversation({
   onReport,
   empty,
   lines,
+  shown,
+  focusCue = 0,
 }: ConversationProps) {
   const { t, i18n } = useTranslation();
   const { reduce, layout } = useSocialMotion();
@@ -513,7 +534,9 @@ export function Conversation({
   // A row's window closed (below): the clock is read again.
   const [tick, setTick] = useState(0);
   const windowAway = useWindowAway();
-  const open = useSocialUi((s) => s.open);
+  // On screen in its panel: the friends panel open, or (SQOL-U3) as the panel that holds it says.
+  const friendsOpen = useSocialUi((s) => s.open);
+  const open = shown ?? friendsOpen;
   const me = useSocialUi((s) => s.view.me?.id);
   const shareRead = useSocialUi((s) => s.view.me?.privacy.shareRead !== false);
   const peerRead = useSocialUi(
@@ -635,12 +658,7 @@ export function Conversation({
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
       const key = zoomKeyOf(event, os);
-      if (!key) return;
-      const panel = box.closest<HTMLElement>("[role='dialog']") ?? box;
-      const target = event.target;
-      if (!(target instanceof Node) || (target !== document.body && !panel.contains(target))) {
-        return;
-      }
+      if (!key || !chatKeyHere(box, event.target)) return;
       event.preventDefault();
       resize(key === "reset" ? DEFAULT_TEXT_SIZE : stepTextSize(current(), key === "in" ? 1 : -1));
     };
@@ -656,11 +674,24 @@ export function Conversation({
     void load(conv);
   }, [conv, load]);
 
-  // Opened to be written in: the field takes the focus.
+  // Opened to be written in: the field takes the focus (the friends panel's ask: another panel
+  // that shows the same conversation leaves it to the friends panel).
   useEffect(() => {
-    if (focusAsked !== conv || !onScreen) return;
+    if (focusAsked !== conv || !onScreen || shown !== undefined) return;
     if (useSocialUi.getState().takeChatFocus(conv) && writable) setFocusRequest((n) => n + 1);
-  }, [focusAsked, conv, onScreen, writable]);
+  }, [focusAsked, conv, onScreen, writable, shown]);
+  // SQOL-U3: the panel that holds it asks for the field (the room panel opened for its chat).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only a new cue asks
+  useEffect(() => {
+    if (focusCue > 0 && writable) setFocusRequest((n) => n + 1);
+  }, [focusCue]);
+  // SQOL-U3: on screen outside the friends panel, its notices stay quiet as they do there.
+  const elsewhere = shown === true && onScreen;
+  useEffect(() => {
+    if (!elsewhere) return;
+    useSocialUi.getState().showElsewhere(conv, true);
+    return () => useSocialUi.getState().showElsewhere(conv, false);
+  }, [elsewhere, conv]);
 
   const messages = useMemo(() => thread?.messages ?? [], [thread?.messages]);
 
