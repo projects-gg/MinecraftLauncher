@@ -13368,8 +13368,12 @@ export type WatchCmd =
 { t: "offer"; sdp: string; mids: WatchMid[]; fresh: boolean } | 
 /**  TURN for the next peer connection (only after ICE failed). */
 { t: "ice"; ice: EngineIce } | 
-/**  Close the peer connection: nothing is watched on this page now. */
-{ t: "reset" };
+/**
+ *  Close the peer connection. `keep_turn`: the session is asked for anew (after a loss, which
+ *  is what TURN was asked for): TURN the page has stays for the next connection (MOB-WATCH).
+ *  Otherwise nothing is watched on this page now, or TURN ran out: it goes.
+ */
+{ t: "reset"; keepTurn: boolean };
 
 /**  What one of the watch session's m-lines carries. */
 export type WatchMid = {

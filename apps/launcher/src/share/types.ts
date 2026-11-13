@@ -342,7 +342,12 @@ export type WatchCmd =
   /** `fresh`: a new watch session (a new connection); `mids`: the m-lines this offer adds. */
   | { t: "offer"; sdp: string; mids: WatchMid[]; fresh: boolean }
   | { t: "ice"; ice: WatchIce }
-  | { t: "reset" };
+  /**
+   * The connection closes. `keepTurn`: the session is asked for anew (after a loss, which is what
+   * TURN was asked for), TURN stays for its next connection; otherwise nothing is watched here now,
+   * or TURN ran out.
+   */
+  | { t: "reset"; keepTurn: boolean };
 
 /** The watching page → launcher. */
 export type WatchReport =

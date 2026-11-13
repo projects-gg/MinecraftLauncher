@@ -153,17 +153,44 @@ describe("the watch engine", () => {
     await settle();
     advance(ICE_WAIT_MS);
     expect(reports.at(-1)).toEqual({ t: "needTurn" });
-    // TURN came: this connection ends, the launcher asks anew; the next one goes through TURN.
+    // TURN came: this connection ends, the launcher asks anew (its reset keeps TURN, MOB-WATCH);
+    // the next one goes through TURN.
     engine.handle({ t: "ice", ice: { urls: ["turn:x"], username: "u", credential: "c" } });
     await settle();
     expect(reports.at(-1)).toEqual({ t: "lost" });
-    engine.handle({ t: "offer", sdp: offer("def"), mids, fresh: false });
+    engine.handle({ t: "reset", keepTurn: true });
+    engine.handle({ t: "offer", sdp: offer("def"), mids, fresh: true });
     await settle();
     expect(peers[1]?.config.iceServers).toEqual([
       { urls: ["turn:x"], username: "u", credential: "c" },
     ]);
     advance(ICE_WAIT_MS);
     expect(reports.at(-1)).toEqual({ t: "lost" });
+    // Watching ends: TURN goes with it.
+    engine.handle({ t: "reset", keepTurn: false });
+    engine.handle({ t: "offer", sdp: offer("ghi"), mids, fresh: true });
+    await settle();
+    expect(peers[2]?.config.iceServers).toEqual([]);
+  });
+
+  it("keeps a connection that came up while TURN was on its way", async () => {
+    const { engine, reports, advance, settle, peers } = rig();
+    engine.handle({ t: "offer", sdp: offer("abc"), mids, fresh: true });
+    await settle();
+    advance(ICE_WAIT_MS);
+    expect(reports.at(-1)).toEqual({ t: "needTurn" });
+    peers[0]?.state("connected");
+    engine.handle({ t: "ice", ice: { urls: ["turn:x"], username: "u", credential: "c" } });
+    await settle();
+    expect(peers[0]?.closed).toBe(false);
+    expect(reports.at(-1)).toEqual({ t: "connected" });
+    // TURN serves the session's next connection.
+    engine.handle({ t: "reset", keepTurn: true });
+    engine.handle({ t: "offer", sdp: offer("def"), mids, fresh: true });
+    await settle();
+    expect(peers[1]?.config.iceServers).toEqual([
+      { urls: ["turn:x"], username: "u", credential: "c" },
+    ]);
   });
 
   it("says connected once and lost after a drop that lasts", async () => {
@@ -227,7 +254,7 @@ describe("the watch engine", () => {
     engine.handle({ t: "offer", sdp: offer("abc"), mids, fresh: false });
     await settle();
     peers[0]?.track("0", "video");
-    engine.handle({ t: "reset" });
+    engine.handle({ t: "reset", keepTurn: false });
     await settle();
     expect(peers[0]?.closed).toBe(true);
     expect(engine.stream("301", 1)).toBeNull();
