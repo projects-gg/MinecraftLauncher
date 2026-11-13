@@ -15,8 +15,8 @@ import net.minecraft.client.gui.screens.inventory.BookEditScreen;
  * SQOL-O: whether a text field in the game has the keyboard now ({@link TextFocusGuard} tells the launcher): the game's
  * window is active and its screen's focused element is a visible text box (the chat, an anvil, a command block), a
  * visible text box of the screen has the keys without being its focus (the creative search), the screen edits text
- * itself (a sign, a book), or the overlay's panel types (its own fields, the menu's name, the emoji search). The recipe
- * book's search keeps its focus to itself and is not seen.
+ * itself (a sign, a book), the recipe book's search is focused (the inventory, the crafting table, the furnaces:
+ * {@link RecipeSearch}), or the overlay's panel types (its own fields, the menu's name, the emoji search).
  */
 public final class TextFocus {
     /** Nested containers walked at most for the focused element. */
@@ -51,7 +51,7 @@ public final class TextFocus {
                 return true;
             }
         }
-        return false;
+        return RecipeSearch.typing(screen);
     }
 
     private static boolean textBox(GuiEventListener element) {
