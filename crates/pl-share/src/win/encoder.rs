@@ -291,7 +291,8 @@ struct EventSink {
 }
 
 impl EventSink {
-    fn arm(&self) -> Result<()> {
+    /// Asks for the next event; whether it asked (a stopped sink asks nothing).
+    fn arm(&self) -> Result<bool> {
         let generator = self
             .generator
             .lock()
@@ -302,15 +303,16 @@ impl EventSink {
             .lock()
             .ok()
             .and_then(|m| m.as_ref().map(|m| m.0.clone()));
-        if let (Some(generator), Some(me)) = (generator, me) {
-            self.set_out(true);
-            // SAFETY: live generator; the callback object outlives the request (cleared on stop).
-            if let Err(e) = unsafe { generator.BeginGetEvent(&me, None) } {
-                self.set_out(false);
-                return Err(e);
-            }
+        let (Some(generator), Some(me)) = (generator, me) else {
+            return Ok(false);
+        };
+        self.set_out(true);
+        // SAFETY: live generator; the callback object outlives the request (cleared on stop).
+        if let Err(e) = unsafe { generator.BeginGetEvent(&me, None) } {
+            self.set_out(false);
+            return Err(e);
         }
-        Ok(())
+        Ok(true)
     }
 
     fn set_out(&self, out: bool) {
@@ -369,8 +371,7 @@ impl EventSink {
         if kind == MEError.0 {
             return Ok(false);
         }
-        self.arm()?;
-        Ok(true)
+        self.arm()
     }
 }
 
@@ -1026,8 +1027,9 @@ impl Worker {
 
     /// SQOL-R3: the teardown in order, on the thread that made the encoder: nothing more goes in
     /// (queued input is dropped with its textures), streaming ends, the event requests stop, the
-    /// MFT shuts down, the request still out comes back (its callback is done), and only then
-    /// does the activation object shut it down and the last references go.
+    /// MFT shuts down (its own `IMFShutdown`, then its activation object's `ShutdownObject`),
+    /// the request still out is waited for a moment (its callback is done; the NVIDIA MFT answers
+    /// it only when released), and the last references go.
     fn shutdown(&mut self) {
         self.pending = None;
         let sink = self.mft.sink.take();

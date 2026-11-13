@@ -484,6 +484,8 @@ pub enum ShareEvent {
         n: u8,
         width: u32,
         height: u32,
+        /// SQOL-R4: the new source's window is minimized now.
+        minimized: bool,
     },
     /// SQOL: a switch did not happen (the old source goes on).
     SwitchFailed {

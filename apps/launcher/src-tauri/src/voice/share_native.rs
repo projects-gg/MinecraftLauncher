@@ -178,10 +178,11 @@ impl Native {
                 };
                 let _ = self.app.emit_to("main", PREVIEW_EVENT, view);
             }
-            E::Switched { n, w, h } => self.voice.share_event(ShareEvent::Switched {
+            E::Switched { n, w, h, minimized } => self.voice.share_event(ShareEvent::Switched {
                 n,
                 width: w,
                 height: h,
+                minimized,
             }),
             E::SwitchFailed { n, why } => {
                 tracing::info!(n, ?why, "share: the switch did not happen");

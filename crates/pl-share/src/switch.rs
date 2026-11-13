@@ -32,6 +32,13 @@ pub const SOURCE_CHECK_AFTER: Duration = Duration::from_secs(1);
 /// SQOL-R3: and again this often while its frames stay away (a still window sends none either).
 pub const SOURCE_CHECK_EVERY: Duration = Duration::from_secs(1);
 
+/// SQOL-R4: whether a source-closed signal (its capture number and source epoch) is about what is
+/// shared now: not while the source is gone already (told once), not for an earlier capture, and
+/// not for an earlier source (an old window's end told while a switch runs).
+pub fn closes_current(gone: bool, signal: (u64, u64), current: (u64, u64)) -> bool {
+    !gone && signal == current
+}
+
 /// SQOL-R3: when to look whether the shared window still lives: [`SOURCE_CHECK_AFTER`] past its
 /// last frame, then every [`SOURCE_CHECK_EVERY`] while no frame comes.
 pub fn source_check_due(last_frame: Instant, last_check: Option<Instant>) -> Instant {
@@ -203,6 +210,21 @@ mod tests {
             t0 + Duration::from_secs(30) + WINDOW_WAIT_EVERY
         );
         assert!(!wait.missed(t0 + GAME_WINDOW_WAIT));
+    }
+
+    /// SQOL-R4: a close signal counts only for the capture and the source shown now, once.
+    #[test]
+    fn only_the_current_sources_end_closes_it() {
+        // Capture 7 of source 3 is shown.
+        assert!(closes_current(false, (7, 3), (7, 3)));
+        // Told already.
+        assert!(!closes_current(true, (7, 3), (7, 3)));
+        // An earlier capture of the same source (a hold's end, new encoders).
+        assert!(!closes_current(false, (6, 3), (7, 3)));
+        // The old window's end told while the switch to source 4 runs (its watch read capture 7).
+        assert!(!closes_current(false, (7, 3), (7, 4)));
+        // The new source's own end, after the switch.
+        assert!(closes_current(false, (8, 4), (8, 4)));
     }
 
     /// SQOL-R3: frames flowing keep the look away; once they stop, a look a second.

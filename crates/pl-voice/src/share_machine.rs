@@ -84,9 +84,6 @@ struct Mine {
     switching: Option<Switching>,
     /// SQOL: a live change waits for the room: its `rid` and when it went.
     editing: Option<(u32, u64)>,
-    /// SQOL-R3: what that newest change asked for (a quick change back is measured against it,
-    /// not against what the room applied before).
-    asked: Asked,
     /// SQOL-R3: the player's own "Duraklat", kept while a closed source's wait shows instead: a
     /// new source comes paused when it was.
     player_hold: bool,
@@ -98,6 +95,25 @@ struct Mine {
 /// SQOL-R3: the values a live change asks the room for (none: unchanged); a refusal tells the
 /// page these (`refused`'s `change`).
 type Asked = crate::share::ShareAsked;
+
+/// SQOL-R4: what the changes of share `n` still out ask, the newest over the older (a change
+/// answered or refused leaves with its request; what a newer one asks stays).
+fn asked_waiting(pending: &BTreeMap<u32, Pending>, n: u8) -> Asked {
+    let mut out: Vec<(u32, Asked)> = pending
+        .iter()
+        .filter_map(|(rid, waiting)| match waiting {
+            Pending::ShareSet(m, asked) if *m == n => Some((*rid, *asked)),
+            _ => None,
+        })
+        .collect();
+    out.sort_by_key(|(rid, _)| *rid);
+    out.into_iter()
+        .fold(Asked::default(), |acc, (_, asked)| Asked {
+            preset: asked.preset.or(acc.preset),
+            fps: asked.fps.or(acc.fps),
+            audio: asked.audio.or(acc.audio),
+        })
+}
 
 /// SQOL: a source the publisher is switching to.
 #[derive(Debug, Clone)]
@@ -506,7 +522,6 @@ impl Machine {
             told: ShareSt::Live,
             switching: None,
             editing: None,
-            asked: Asked::default(),
             player_hold: false,
             audio_failed: false,
         });
@@ -624,7 +639,7 @@ impl Machine {
                 self.close_mine(n, Some(why), true, now, &mut out);
             }
             ShareEvent::SourceGone { n } => self.source_gone(n, now, &mut out),
-            ShareEvent::Switched { n, .. } => self.switched(n, &mut out),
+            ShareEvent::Switched { n, minimized, .. } => self.switched(n, minimized, &mut out),
             ShareEvent::SwitchFailed { n } => {
                 if let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == n)
                     && let Some(switching) = mine.switching.take()
@@ -849,15 +864,17 @@ impl Machine {
                             && mine.editing.is_some_and(|(asked, _)| asked == rid)
                         {
                             mine.editing = None;
-                            mine.asked = Asked::default();
                         }
-                        if asked != Asked::default()
+                        // SQOL-R4: the share and the change only for what the player asked (the
+                        // launcher's own report of a switch's kind asks nothing).
+                        let asked_something = asked != Asked::default();
+                        if asked_something
                             || matches!(refusal, ShareRefusal::Budget | ShareRefusal::NotAllowed)
                         {
                             out.push(Effect::ShareNotice(ShareNotice::Refused {
                                 refusal,
-                                n: Some(n),
-                                change: Some(asked),
+                                n: asked_something.then_some(n),
+                                change: asked_something.then_some(asked),
                             }));
                         }
                         out.push(Effect::Changed);
@@ -1082,6 +1099,8 @@ impl Machine {
     /// gets it): the session is new.
     fn resume_watching(&mut self, kept: Vec<WatchWire>, now: u64, out: &mut Vec<Effect>) {
         let held = self.share.held;
+        // SQOL-R4: the page's connection is up (an answer lost with the old socket never let it).
+        let connected = self.share.connected;
         let turn_lost = self
             .pending
             .values()
@@ -1093,6 +1112,7 @@ impl Machine {
             .map(|watch| {
                 !held
                     && !turn_lost
+                    && connected
                     && watch.sent
                     && watch.rid.is_none()
                     && kept.iter().any(|k| k.u == watch.u && k.n == watch.n)
@@ -1777,7 +1797,7 @@ impl Machine {
 
     /// The publisher shows the new source: the share is that now ("Artık … paylaşılıyor."). Unasked
     /// (the game recreated its window), the share just goes on.
-    fn switched(&mut self, n: u8, out: &mut Vec<Effect>) {
+    fn switched(&mut self, n: u8, minimized: bool, out: &mut Vec<Effect>) {
         let edit = self.share_edit();
         let system = self.store.settings().share.audio_source == ShareAudioSource::System;
         let generation = self.open_generation();
@@ -1785,7 +1805,9 @@ impl Machine {
             return;
         };
         let mine = &mut self.share.mine[at];
-        mine.minimized = false;
+        // SQOL-R4: the new source's window as the publisher saw it when the news went (changes
+        // after it come as their own news).
+        mine.minimized = minimized;
         let Some(switching) = mine.switching.take() else {
             self.sync_st(n, out);
             out.push(Effect::Changed);
@@ -1986,11 +2008,7 @@ impl Machine {
         if change.asks_room() {
             // SQOL-R3: measured against what the share will have once the change still waiting
             // for the room lands: a quick change back (sound on, then off at once) is a change too.
-            let waiting = if mine.editing.is_some() {
-                mine.asked
-            } else {
-                Asked::default()
-            };
+            let waiting = asked_waiting(&self.pending, n);
             let (now_preset, now_fps, now_audio) = (
                 waiting.preset.unwrap_or(mine.opts.preset),
                 waiting.fps.unwrap_or(mine.opts.fps),
@@ -2018,13 +2036,7 @@ impl Machine {
             {
                 let rid = self.rid();
                 self.pending.insert(rid, Pending::ShareSet(n, asked));
-                let mine = &mut self.share.mine[at];
-                mine.editing = Some((rid, now));
-                mine.asked = Asked {
-                    preset: asked.preset.or(waiting.preset),
-                    fps: asked.fps.or(waiting.fps),
-                    audio: asked.audio.or(waiting.audio),
-                };
+                self.share.mine[at].editing = Some((rid, now));
                 out.push(Effect::Send {
                     generation,
                     frame: ToRoom::ShareSet {
@@ -2062,7 +2074,6 @@ impl Machine {
         };
         if mine.editing.is_some_and(|(asked, _)| asked == rid) {
             mine.editing = None;
-            mine.asked = Asked::default();
         }
         let mut opts = mine.opts;
         if let Some(preset) = preset {
@@ -2178,17 +2189,28 @@ impl Machine {
         // a failed one, with what it asked: the page never rolls back silently).
         let pending = &mut self.pending;
         for mine in &mut self.share.mine {
-            if let Some((rid, asked)) = mine.editing
+            if let Some((_, asked)) = mine.editing
                 && now >= asked + EDIT_WAIT_MS
             {
                 mine.editing = None;
-                mine.asked = Asked::default();
-                if let Some(Pending::ShareSet(n, change)) = pending.remove(&rid) {
-                    out.push(Effect::ShareNotice(ShareNotice::Refused {
-                        refusal: ShareRefusal::Failed,
-                        n: Some(n),
-                        change: Some(change),
-                    }));
+                let n = mine.n;
+                let mut gone: Vec<(u32, Asked)> = pending
+                    .iter()
+                    .filter_map(|(rid, waiting)| match waiting {
+                        Pending::ShareSet(m, change) if *m == n => Some((*rid, *change)),
+                        _ => None,
+                    })
+                    .collect();
+                gone.sort_by_key(|(rid, _)| *rid);
+                for (rid, change) in gone {
+                    pending.remove(&rid);
+                    if change != Asked::default() {
+                        out.push(Effect::ShareNotice(ShareNotice::Refused {
+                            refusal: ShareRefusal::Failed,
+                            n: Some(n),
+                            change: Some(change),
+                        }));
+                    }
                 }
                 out.push(Effect::Changed);
             }

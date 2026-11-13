@@ -329,6 +329,8 @@ pub enum ShareEvent {
         n: ShareNo,
         w: u32,
         h: u32,
+        /// SQOL-R4: the new source's window is minimized now (its watch's state as this news goes).
+        minimized: bool,
     },
     /// SQOL: a [`ShareCmd::Switch`] did not happen; the old source goes on.
     SwitchFailed {

@@ -27,6 +27,8 @@ pub enum Ctl {
         n: ShareNo,
         generation: u64,
         capture: u64,
+        /// SQOL-R4: the source it is about (an old window's end never closes a new source).
+        epoch: u64,
     },
     /// SQOL: the graphics device under the share was lost.
     DeviceLost {
@@ -99,7 +101,8 @@ fn run(env: ShareEnv, rx: Receiver<Ctl>, internal: Sender<Ctl>, events: EventTx)
                 n,
                 generation,
                 capture,
-            } => backend.source_closed(n, generation, capture),
+                epoch,
+            } => backend.source_closed(n, generation, capture, epoch),
             Ctl::DeviceLost { n, generation } => backend.device_lost(n, generation),
             Ctl::Quit => break,
         }
@@ -152,7 +155,8 @@ mod stub {
 
         pub fn ended(&mut self, _n: ShareNo, _generation: u64) {}
 
-        pub fn source_closed(&mut self, _n: ShareNo, _generation: u64, _capture: u64) {}
+        pub fn source_closed(&mut self, _n: ShareNo, _generation: u64, _capture: u64, _epoch: u64) {
+        }
 
         pub fn device_lost(&mut self, _n: ShareNo, _generation: u64) {}
 

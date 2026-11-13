@@ -270,6 +270,7 @@ fn a_switch_keeps_the_watchers_and_tells_the_room_the_new_kind() {
             n: 1,
             width: 1280,
             height: 720,
+            minimized: false,
         },
         3_000,
     );
@@ -449,6 +450,7 @@ fn another_source_ends_the_wait() {
             n: 1,
             width: 1920,
             height: 1080,
+            minimized: false,
         },
         4_000,
     );
@@ -501,6 +503,7 @@ fn a_game_the_launcher_starts_takes_the_closed_games_place() {
             n: 1,
             width: 1280,
             height: 720,
+            minimized: false,
         },
         30_000,
     );
@@ -525,6 +528,7 @@ fn the_games_recreated_window_goes_on_without_a_word() {
             n: 1,
             width: 1920,
             height: 1080,
+            minimized: false,
         },
         3_000,
     );
@@ -791,6 +795,7 @@ fn a_refused_report_of_a_switchs_kind_stays_quiet() {
             n: 1,
             width: 1280,
             height: 720,
+            minimized: false,
         },
         2_500,
     );
@@ -876,6 +881,7 @@ fn a_pause_chosen_before_the_source_closed_stays_after_a_switch() {
             n: 1,
             width: 1280,
             height: 720,
+            minimized: false,
         },
         3_500,
     );
@@ -901,6 +907,7 @@ fn a_pause_chosen_before_the_source_closed_stays_after_a_switch() {
             n: 1,
             width: 1280,
             height: 720,
+            minimized: false,
         },
         4_500,
     );
@@ -999,17 +1006,79 @@ fn a_minimized_window_switched_to_reads_as_minimized() {
     machine
         .share_switch(1, window("30:40"), "Tarayıcı")
         .unwrap();
-    machine.share_event(
+    // SQOL-R4: the switch's news says it itself (a restore told before it is in it already).
+    let effects = machine.share_event(
         ShareEvent::Switched {
             n: 1,
             width: 1280,
             height: 720,
+            minimized: true,
         },
         2_500,
     );
-    let effects = machine.share_event(ShareEvent::Minimized { n: 1, on: true }, 2_500);
     assert_eq!(sent(&effects), [&ToRoom::share_st(1, ShareSt::Min)]);
     assert_eq!(machine.view(2_500, UNIX).share.mine[0].st, ShareSt::Min);
+    // Restored afterwards: its own news.
+    let effects = machine.share_event(ShareEvent::Minimized { n: 1, on: false }, 3_000);
+    assert_eq!(sent(&effects), [&ToRoom::share_st(1, ShareSt::Live)]);
+}
+
+/// SQOL-R4: the launcher's own report of a switch's kind, refused for the budget, says so without
+/// a share or a change (the player changed nothing to roll back).
+#[test]
+fn a_refused_report_of_a_switchs_kind_names_no_change() {
+    let mut machine = ready(true, true);
+    let generation = live(&mut machine, Vec::new());
+    sharing(&mut machine, generation, ShareSource::Game, 2_000);
+    machine
+        .share_switch(1, window("30:40"), "Tarayıcı")
+        .unwrap();
+    let effects = machine.share_event(
+        ShareEvent::Switched {
+            n: 1,
+            width: 1280,
+            height: 720,
+            minimized: false,
+        },
+        2_500,
+    );
+    let rid = set_rid(&effects).expect("the new kind goes to the room");
+    let effects = machine.socket_message(generation, error(rid, "budget"), 2_600, UNIX);
+    assert_eq!(
+        notices(&effects),
+        [&ShareNotice::refused(ShareRefusal::Budget)]
+    );
+}
+
+/// SQOL-R4: an older change the room refused no longer counts as waiting: asking for it again
+/// goes to the room (it was swallowed).
+#[test]
+fn a_refused_older_change_can_be_asked_again() {
+    let mut machine = ready(true, true);
+    let generation = live(&mut machine, Vec::new());
+    sharing(&mut machine, generation, ShareSource::Game, 2_000);
+    let fps = ShareChange {
+        fps: Some(15),
+        ..ShareChange::default()
+    };
+    let older = set_rid(&machine.share_update(1, fps, 2_100).unwrap()).unwrap();
+    let before = machine.view(2_100, UNIX).share.mine[0].audio;
+    set_rid(
+        &machine
+            .share_update(
+                1,
+                ShareChange {
+                    audio: Some(!before),
+                    ..ShareChange::default()
+                },
+                2_200,
+            )
+            .unwrap(),
+    )
+    .unwrap();
+    machine.socket_message(generation, error(older, "budget"), 2_300, UNIX);
+    // The newer one still waits; frame rate again: asked.
+    assert!(set_rid(&machine.share_update(1, fps, 2_400).unwrap()).is_some());
 }
 
 /// SQOL-R3 (P3): sound the publisher found none of stays off when a later answer of the room
@@ -1069,4 +1138,41 @@ fn sound_found_missing_stays_off_whatever_the_room_answers() {
         UNIX,
     );
     assert!(machine.view(2_500, UNIX).share.mine[0].audio);
+}
+
+/// SQOL-R4 (E2E): a window picked after the shown one closed is a source like the first: its own
+/// close holds again, and the minute after it ends the share.
+#[test]
+fn a_window_picked_after_a_close_closes_like_the_first() {
+    let mut machine = ready(true, true);
+    let generation = live(&mut machine, Vec::new());
+    sharing(&mut machine, generation, window("10:20"), 2_000);
+    machine.share_event(ShareEvent::SourceGone { n: 1 }, 3_000);
+    machine
+        .share_switch(1, window("30:40"), "SQOL Test A")
+        .unwrap();
+    machine.share_event(
+        ShareEvent::Switched {
+            n: 1,
+            width: 1280,
+            height: 720,
+            minimized: false,
+        },
+        3_500,
+    );
+    let view = machine.view(3_500, UNIX).share;
+    assert_eq!((view.mine[0].hold, view.mine[0].st), (None, ShareSt::Live));
+    let effects = machine.share_event(ShareEvent::SourceGone { n: 1 }, 10_000);
+    assert_eq!(
+        notices(&effects),
+        [&ShareNotice::SourceClosed {
+            n: 1,
+            src: ShareKind::Window
+        }]
+    );
+    let view = machine.view(10_000, UNIX).share;
+    assert_eq!(view.mine[0].hold, Some(ShareHoldWhy::Closed));
+    assert_eq!(view.mine[0].st, ShareSt::Hold);
+    let effects = machine.tick(10_000 + HOLD_STOP_MS, UNIX, 0);
+    assert_eq!(to_publisher(&effects), [&ShareCmd::Stop { n: 1 }]);
 }
