@@ -37,7 +37,7 @@ import { forgetOwnPreview, forgetOwnStats } from "./own-live";
 import { sayShare } from "./own-say";
 import {
   clearLost,
-  dropSettled,
+  dropRefused,
   isLost,
   type LostWhy,
   lostUntil,
@@ -144,9 +144,10 @@ export function showShareNotice(notice: ShareNotice) {
   for (const [n, at] of endedLost) if (now - at > RECENT_MS) endedLost.delete(n);
   switch (notice.kind) {
     case "refused": {
-      // The room refused a live change the launcher took (`share_update` asks it first): back
-      // as it was, in the change's words; else a refusal of a share or a watch, as before.
-      const change = CHANGE_REFUSALS.has(notice.refusal) ? dropSettled() : null;
+      // The room refused a live change the launcher took (`share_update` asks it first): only
+      // that change's quality, frame rate or sound goes back, in its words; else a refusal of a
+      // share or a watch, as before.
+      const change = CHANGE_REFUSALS.has(notice.refusal) ? dropRefused() : null;
       toast(change ? changeRefusedText(notice.refusal, change) : refusalText(notice.refusal));
       return;
     }

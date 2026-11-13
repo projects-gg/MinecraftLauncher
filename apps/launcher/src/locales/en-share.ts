@@ -101,6 +101,7 @@ export const enShare = {
     computerCap: "This computer can do {{quality}} at most.",
     fpsNeedsHigh: "60 fps only works at High quality.",
     changeOff: "This setting can't be changed right now.",
+    modMuted: "A moderator muted you, so you can't change this right now.",
     changeFailed: "Couldn't change this setting.",
     pauseFailed: "Couldn't pause your share.",
     resumeFailed: "Couldn't resume your share.",

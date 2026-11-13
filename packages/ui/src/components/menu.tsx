@@ -344,7 +344,7 @@ function menuRows(items: Array<MenuItem | null>, parts: MenuParts): ReactNode[] 
 function menuRow(item: MenuItem | null, i: number, parts: MenuParts): ReactNode {
   const { Item, Separator, Sub, SubTrigger, SubContent, Portal } = parts;
   if (item === null) {
-    // biome-ignore lint/suspicious/noArrayIndexKey: separators have no identity
+    // Separators have no identity: their place is their key.
     return <Separator key={`sep-${i}`} className="my-1.5 h-px bg-white/8" />;
   }
   if (item.slider) {
