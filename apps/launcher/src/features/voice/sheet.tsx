@@ -96,9 +96,11 @@ import { roomMenuItems } from "./crew-room-menu";
 import { useCrewRoomsUi, withPendingOrder } from "./crew-rooms-store";
 import { useDockWidth, useToastsBeside, useWindowTaller } from "./dock";
 import { QualityBars, SpeakingFace } from "./faces";
+import { FittedNames } from "./fitted-names";
 import { HeadphonesSlash } from "./icons";
 import { VoiceMeter } from "./meter";
 import { PanelChromeProvider, PanelClose, PanelTitle, usePanelChrome } from "./panel-chrome";
+import { titleNames } from "./panel-rules";
 import { meterThreshold, setOutputVolume, useVoicePrefs } from "./prefs";
 import { PanelChatSection, usePanelChat } from "./room-chat";
 import {
@@ -622,11 +624,14 @@ function Notices({ room }: { room: VoiceRoomView }) {
 function RoomName({
   room,
   title,
+  names,
   editing,
   setEditing,
 }: {
   room: VoiceRoomView;
   title: string;
+  /** SQOL-U3: an unnamed room's people, fitted to the title's line at a name's end. */
+  names: readonly string[] | null;
   /** The header gives the field its room while the name is typed. */
   editing: boolean;
   setEditing: (editing: boolean) => void;
@@ -636,6 +641,13 @@ function RoomName({
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const row = useRef<HTMLDivElement>(null);
+  const pencil = useRef<HTMLButtonElement>(null);
+  // The title's room: its row less the pencil and the gap before it (`gap-1`).
+  const titleRoom = () => {
+    const box = row.current;
+    return box ? box.clientWidth - (pencil.current ? pencil.current.offsetWidth + 4 : 0) : null;
+  };
   // Esc leaves the field, not the panel: the sheet listens on the document (capture), the field
   // on the window, which comes first (as SearchInput does).
   useEffect(() => {
@@ -706,14 +718,20 @@ function RoomName({
         ) : (
           <motion.div
             key="name"
+            ref={row}
             className="flex min-w-0 items-center gap-1"
             {...rise(reduce, 3, 0.2)}
           >
             <PanelTitle className="truncate font-display text-[19px] leading-[1.2] font-semibold text-bone-50">
-              {title}
+              {names ? (
+                <FittedNames names={names} room={titleRoom} box={row} refit={room.canRename} />
+              ) : (
+                title
+              )}
             </PanelTitle>
             {room.canRename ? (
               <IconButton
+                ref={pencil}
                 size="sm"
                 label={t("voice.room.rename")}
                 icon={<PencilSimple size={15} />}
@@ -843,10 +861,12 @@ function CrewRooms({ room }: { room: VoiceRoomView }) {
 function RoomHeader({
   room,
   title,
+  names,
   counted = false,
 }: {
   room: VoiceRoomView;
   title: string;
+  names: readonly string[] | null;
   /** SQOL-U3: the people's own line counts them ("Odadakiler · 5"): the header does not again. */
   counted?: boolean;
 }) {
@@ -876,7 +896,13 @@ function RoomHeader({
     <header className="shrink-0 border-b border-white/8 pt-4 pr-3 pb-3 pl-5">
       <div className="flex items-start gap-1.5">
         <div className="min-w-0 flex-1 pt-0.5">
-          <RoomName room={room} title={title} editing={editing} setEditing={setEditing} />
+          <RoomName
+            room={room}
+            title={title}
+            names={names}
+            editing={editing}
+            setEditing={setEditing}
+          />
           {second ? <p className="mt-0.5 truncate text-[12.5px] text-ash-400">{second}</p> : null}
         </div>
         {editing ? null : (
@@ -1080,7 +1106,12 @@ function RoomPage({ room }: { room: VoiceRoomView }) {
   const chat = usePanelChat(room);
   return (
     <>
-      <RoomHeader room={room} title={title} counted={chat.kind !== "none"} />
+      <RoomHeader
+        room={room}
+        title={title}
+        names={titleNames(room, nameOf)}
+        counted={chat.kind !== "none"}
+      />
       <AnimatePresence initial={false} mode="wait">
         {chat.kind === "none" ? (
           <motion.div

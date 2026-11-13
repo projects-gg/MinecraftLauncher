@@ -34,8 +34,10 @@ import { enter, leave, swap } from "@/features/social/motion";
 import { callFriend, leaveRoom, retryRoom, toggleDeaf, toggleMute } from "./actions";
 import { CallTime, callStart } from "./call-time";
 import { QualityBars, SpeakingFace } from "./faces";
+import { FittedNames } from "./fitted-names";
 import { HeadphonesSlash } from "./icons";
 import { VoiceMeter } from "./meter";
+import { titleNames } from "./panel-rules";
 import { meterThreshold, useVoicePrefs } from "./prefs";
 import { useRoomOwnUnread } from "./room-chat/unread";
 import { faceMark, micClosedLabel, pillPeople, roomTitle } from "./rules";
@@ -164,6 +166,14 @@ function Pill() {
         ? "noAnswer"
         : "failed";
   const title = room ? roomTitle(room, nameOf, t, calling?.friend) : "";
+  // SQOL-U3: an unnamed room's people, fitted to the name's box at a name's end.
+  const fitted = room && mode === "live" ? titleNames(room, nameOf) : null;
+  const nameBox = useRef<HTMLSpanElement>(null);
+  const nameRoom = () => {
+    const box = nameBox.current;
+    const max = box ? Number.parseFloat(getComputedStyle(box).maxWidth) : Number.NaN;
+    return Number.isFinite(max) ? max : null;
+  };
   const words =
     mode === "calling"
       ? t("voice.call.ringingName", { name: callee.name })
@@ -191,7 +201,7 @@ function Pill() {
   const roomUnread = useRoomOwnUnread();
   const unread = panelOpen || !room ? 0 : roomUnread;
   const label = [
-    t("voice.pill.label", { room: words }),
+    t("voice.pill.label", { room: fitted ? fitted.join(", ") : words }),
     weak ? t("voice.room.weak") : null,
     unread > 0 ? t("chat.list.unread", { count: unread }) : null,
   ]
@@ -261,6 +271,7 @@ function Pill() {
         </span>
         {/* A little narrower beside the meter (VOICE-CALL): the pill keeps its width at 1024. */}
         <span
+          ref={nameBox}
           className={cn(
             "relative grid min-w-0",
             metered ? "max-w-[clamp(72px,9vw,150px)]" : "max-w-[clamp(84px,11vw,160px)]",
@@ -277,7 +288,7 @@ function Pill() {
               )}
               {...swap(reduce, 0.18)}
             >
-              {words}
+              {fitted ? <FittedNames names={fitted} room={nameRoom} refit={metered} /> : words}
             </motion.span>
           </AnimatePresence>
         </span>
