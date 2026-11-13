@@ -1301,6 +1301,38 @@ fn a_turn_answer_lost_with_the_socket_is_not_waited_for() {
     ));
 }
 
+/// SQOL-R3 (the real-SFU run): the page reads a share's layer back from the state, so a new one
+/// is a change of the state, asked of the room or not (held, or not asked yet).
+#[test]
+fn a_new_layer_is_in_the_state_at_once() {
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1)], share_on());
+    machine.share_attach(ShareSurface::Main, 2_000);
+    machine.share_watch("a", 1, 2_000).unwrap();
+    machine.socket_message(generation, woffer(&[("a", 1)], true), 2_100, UNIX);
+    let layer = |machine: &mut Machine| machine.view(2_200, UNIX).share.watching[0].layer;
+    let effects = machine.share_layer("a", 1, ShareLayer::Q);
+    assert!(effects.contains(&Effect::Changed));
+    assert_eq!(layer(&mut machine), ShareLayer::Q);
+    let effects = machine.share_layer("a", 1, ShareLayer::F);
+    assert!(sent(&effects).contains(&&ToRoom::Layer {
+        u: "a".into(),
+        n: 1,
+        layer: ShareLayer::F
+    }));
+    assert!(effects.contains(&Effect::Changed));
+    assert_eq!(layer(&mut machine), ShareLayer::F);
+    // Out of sight long enough (held): nothing goes to the room, the state still follows.
+    machine.share_visible(ShareSurface::Main, false, 3_000);
+    machine.tick(3_000 + HIDDEN_GRACE_MS, UNIX, 3_000);
+    let effects = machine.share_layer("a", 1, ShareLayer::Q);
+    assert!(sent(&effects).is_empty());
+    assert!(effects.contains(&Effect::Changed));
+    assert_eq!(layer(&mut machine), ShareLayer::Q);
+    // The same layer again changes nothing.
+    assert!(machine.share_layer("a", 1, ShareLayer::Q).is_empty());
+}
+
 #[test]
 fn the_rooms_allowed_quality_and_the_months_budget() {
     let mut machine = ready();

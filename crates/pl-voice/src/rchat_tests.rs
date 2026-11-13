@@ -396,6 +396,44 @@ fn leaving_answers_waiting_messages_and_forgets_the_log() {
     assert!(machine.chat_log(ROOM).is_empty());
 }
 
+/// SQOL-R3: a slow answer still settles the sender's message (nothing waits on a clock in the
+/// machine); a socket that goes answers at once, since its answer can no longer come.
+#[test]
+fn a_slow_answer_still_settles_and_a_lost_socket_answers_at_once() {
+    let (mut machine, generation) = in_room(&["a"], true);
+    let (rid, _) = machine.chat_send(ROOM, Some("selam"), None).unwrap();
+    machine.tick(30_000, UNIX, 0);
+    let effects = machine.socket_message(
+        generation,
+        FromRoom::Ack {
+            rid: Some(rid),
+            ice: None,
+            until: None,
+            sdp: None,
+            n: None,
+            preset: None,
+            fps: None,
+            audio: None,
+            id: Some("1731500000123".into()),
+            at: Some(1_731_500_000_123),
+            m: Some(json!({"id": "1731500000123", "u": "me", "at": 1_731_500_000_123_i64, "text": "selam", "seal": "s"})),
+        },
+        31_000,
+        UNIX,
+    );
+    assert!(matches!(
+        chat_answer(&effects, rid),
+        Some(RoomChatSend::Sent { .. })
+    ));
+    assert_eq!(machine.chat_log(ROOM).len(), 1);
+    let (rid, _) = machine.chat_send(ROOM, Some("orada mısın"), None).unwrap();
+    let effects = machine.socket_closed(generation, None, 32_000);
+    assert_eq!(
+        chat_answer(&effects, rid),
+        Some(&RoomChatSend::refused(RoomChatError::Failed))
+    );
+}
+
 #[test]
 fn a_chat_switched_off_takes_its_messages() {
     let (mut machine, generation) = in_room(&["a"], true);
