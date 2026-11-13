@@ -139,6 +139,19 @@ impl Shortcuts {
         flags: u16,
         held: impl FnOnce() -> Held,
     ) -> Vec<KeyChange> {
+        self.keyboard_typing(make, flags, held, false)
+    }
+
+    /// As [`Self::keyboard`]; `typing` (SQOL): a text field of the launcher has the keyboard now, so
+    /// a shortcut on a key without modifiers does not go down (typing "v" never opens push-to-talk,
+    /// "m" never mutes); a key that was down still comes up.
+    pub fn keyboard_typing(
+        &mut self,
+        make: u16,
+        flags: u16,
+        held: impl FnOnce() -> Held,
+        typing: bool,
+    ) -> Vec<KeyChange> {
         let code = Watched::Scan(ScanCode {
             make,
             extended: flags & E0 != 0,
@@ -147,9 +160,10 @@ impl Shortcuts {
         let mut held = Lazy::new(held);
         let mut changes = Vec::new();
         for entry in &mut self.keys {
-            if entry.watched == code {
-                entry.press(down, &mut held, &mut changes);
+            if entry.watched != code || (typing && down && entry.mods.is_empty()) {
+                continue;
             }
+            entry.press(down, &mut held, &mut changes);
         }
         changes
     }
@@ -508,6 +522,36 @@ mod tests {
         )]);
         assert!(mouse.mouse(X2_DOWN | X2_UP, free).is_empty());
         assert_eq!(mouse.mouse(X2_DOWN | X2_UP, ctrl).len(), 2);
+    }
+
+    /// SQOL: typing in a launcher text field never fires a single-key shortcut; a combination
+    /// does, and a key held down before still comes up.
+    #[test]
+    fn typing_leaves_single_keys_alone() {
+        use VoiceModifier::Ctrl;
+        const M: u16 = 0x32;
+        const V_SCAN: u16 = 0x2F;
+        let mut keys = Shortcuts::new(&[
+            (VoiceShortcut::PushToTalk, keyboard("KeyV")),
+            (VoiceShortcut::Mute, keyboard("KeyM").with_mods(&[Ctrl])),
+        ]);
+        let ctrl = || Held {
+            ctrl: true,
+            ..Held::default()
+        };
+        assert!(keys.keyboard_typing(V_SCAN, 0, free, true).is_empty());
+        assert!(keys.keyboard_typing(V_SCAN, 1, free, true).is_empty());
+        assert_eq!(keys.keyboard_typing(M, 0, ctrl, true).len(), 1);
+        keys.keyboard_typing(M, 1, free, true);
+        // Held before the field took the keyboard: its release lets push-to-talk go.
+        assert_eq!(keys.keyboard_typing(V_SCAN, 0, free, false).len(), 1);
+        assert_eq!(
+            keys.keyboard_typing(V_SCAN, 1, free, true),
+            vec![KeyChange {
+                shortcut: VoiceShortcut::PushToTalk,
+                down: false
+            }]
+        );
     }
 
     #[test]

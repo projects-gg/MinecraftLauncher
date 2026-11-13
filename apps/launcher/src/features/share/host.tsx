@@ -4,7 +4,6 @@
 // minimized, it lets go of the picture after a few seconds and asks again when it is back), plays
 // the watched streams' sound (SQOL-U1: stream-env.ts) and says what changes in a polite live region.
 // No room that shares: no engine, no channel, no sound, nothing runs.
-import { toast } from "@pl/ui";
 import { useEffect } from "react";
 import { announce } from "@/features/accounts/use-accounts";
 import { isTauri } from "@/lib/platform";
@@ -12,7 +11,8 @@ import { isWindowAway, onWindowAwayChange } from "@/lib/window-away";
 import { shareApi } from "@/share/api";
 import { shareKey } from "@/share/types";
 import { createWatchEngine } from "@/share/watch";
-import { noticeText } from "./actions";
+// SQOL: the notices' toasts and the player's own shares' questions (own-notices.ts).
+import { useShareNotices } from "./own-notices";
 import { SharePicker } from "./picker";
 import { ShareStage } from "./stage";
 import { pageEngine, setPageEngine, useShare } from "./store";
@@ -20,17 +20,6 @@ import { followMainEnv, startStreamPlayback } from "./stream-env";
 import { setStreamSayer, useStreamSayings } from "./stream-say";
 // The sharer's person rows in the stream menu (this window only).
 import "./stream-person";
-
-function useShareNotices() {
-  useEffect(
-    () =>
-      shareApi.onNotice((notice) => {
-        const text = noticeText(notice);
-        if (text) toast(text);
-      }),
-    [],
-  );
-}
 
 /** The launcher window's watch engine and the streams' sound, while the room shares. */
 function useMainWatching() {

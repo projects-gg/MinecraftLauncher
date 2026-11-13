@@ -71,14 +71,18 @@ impl std::error::Error for TransportError {}
 /// From the media pipeline to the transport thread.
 #[derive(Debug)]
 pub enum ToTransport {
-    /// An encoded frame (Annex B). `at` is the capture instant, `rtp` 90 kHz ticks since the start.
+    /// An encoded frame (Annex B). `at` is the capture instant, `rtp` 90 kHz ticks since the start;
+    /// `generation` is its encoders' (SQOL: frames of replaced encoders are dropped, [`Self::Floor`]).
     Video {
         layer: Layer,
         data: Vec<u8>,
         at: Instant,
         rtp: u64,
         key: bool,
+        generation: u32,
     },
+    /// SQOL: encoders of this generation run now; frames of older ones still in flight are stale.
+    Floor(u32),
     /// One Opus packet; `rtp` in 48 kHz samples since the start.
     Audio {
         data: Vec<u8>,
@@ -387,6 +391,7 @@ async fn run(
     let mut connect_deadline = Some(started + CONNECT_TIMEOUT);
     let mut lost_at: Option<Instant> = None;
     let mut paused = false;
+    let mut floor = crate::switch::GenFloor::default();
     let mut policies = [KeyframePolicy::new(), KeyframePolicy::new()];
     let mut bwe_kbps = 0u32;
     let mut twcc_seen = false;
@@ -575,7 +580,11 @@ async fn run(
                         }
                         return None;
                     }
-                    ToTransport::Video { layer, data, at, rtp, key } => {
+                    ToTransport::Floor(generation) => floor.raise(generation),
+                    ToTransport::Video { generation, .. } if !floor.admits(generation) => {
+                        // A replaced encoder's last frames: the new stream began with its keyframe.
+                    }
+                    ToTransport::Video { layer, data, at, rtp, key, .. } => {
                         if key {
                             policies[layer.index()].produced(Instant::now());
                         }

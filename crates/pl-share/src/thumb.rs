@@ -28,21 +28,48 @@ pub const MAX_BYTES: usize = 12_000;
 /// JPEG qualities tried in turn until the picture fits.
 pub const QUALITIES: [f32; 4] = [0.70, 0.55, 0.40, 0.25];
 
+/// SQOL: the sharer's own live preview (the panel's card and their own tile on the stage): its long
+/// side, at most this many a second (only when a new frame came), and its JPEG.
+pub const PREVIEW_SIDE: u32 = 640;
+pub const PREVIEW_PER_SECOND: u32 = 2;
+pub const PREVIEW_EVERY: Duration = Duration::from_millis(1_000 / PREVIEW_PER_SECOND as u64);
+/// A preview goes to the launcher's own page only: a bit larger than the room's picture is fine.
+pub const PREVIEW_MAX_BYTES: usize = 60_000;
+pub const PREVIEW_QUALITIES: [f32; 3] = [0.60, 0.45, 0.30];
+
 /// The picture's size for content of `w` × `h`: the aspect kept, the long side [`SIDE`] (a smaller
 /// source is not enlarged), both sides even and at least 2.
 pub fn size(w: u32, h: u32) -> (u32, u32) {
+    size_within(w, h, SIDE)
+}
+
+/// The size for content of `w` × `h` with the long side at most `side`, as [`size`].
+pub fn size_within(w: u32, h: u32, side: u32) -> (u32, u32) {
     let (w, h) = (w.max(2), h.max(2));
-    let scale = (f64::from(SIDE) / f64::from(w.max(h))).min(1.0);
-    let side = |v: u32| ((f64::from(v) * scale).round() as u32).max(2) & !1;
-    (side(w), side(h))
+    let scale = (f64::from(side.max(2)) / f64::from(w.max(h))).min(1.0);
+    let even = |v: u32| ((f64::from(v) * scale).round() as u32).max(2) & !1;
+    (even(w), even(h))
 }
 
 /// The first of [`QUALITIES`] whose picture fits in [`MAX_BYTES`]; none when no quality fits (or
 /// the encoder failed every time).
-pub fn fit(mut encode: impl FnMut(f32) -> Option<Vec<u8>>) -> Option<Vec<u8>> {
-    QUALITIES
+pub fn fit(encode: impl FnMut(f32) -> Option<Vec<u8>>) -> Option<Vec<u8>> {
+    fit_in(&QUALITIES, MAX_BYTES, encode)
+}
+
+/// SQOL: the preview's JPEG, as [`fit`] with [`PREVIEW_QUALITIES`] and [`PREVIEW_MAX_BYTES`].
+pub fn fit_preview(encode: impl FnMut(f32) -> Option<Vec<u8>>) -> Option<Vec<u8>> {
+    fit_in(&PREVIEW_QUALITIES, PREVIEW_MAX_BYTES, encode)
+}
+
+fn fit_in(
+    qualities: &[f32],
+    max: usize,
+    mut encode: impl FnMut(f32) -> Option<Vec<u8>>,
+) -> Option<Vec<u8>> {
+    qualities
         .iter()
-        .find_map(|&quality| encode(quality).filter(|jpg| jpg.len() <= MAX_BYTES))
+        .find_map(|&quality| encode(quality).filter(|jpg| jpg.len() <= max))
 }
 
 /// Whether `jpg` looks like a JPEG (the room checks the same: `FF D8 FF`).
@@ -85,5 +112,27 @@ mod tests {
         assert_eq!(fit(|_| None), None);
         assert!(is_jpeg(&[0xFF, 0xD8, 0xFF, 0xE0]));
         assert!(!is_jpeg(&[0x89, b'P', b'N', b'G']));
+    }
+
+    #[test]
+    fn the_preview_is_larger_and_twice_a_second() {
+        assert_eq!(size_within(1920, 1080, PREVIEW_SIDE), (640, 360));
+        assert_eq!(size_within(1080, 1920, PREVIEW_SIDE), (360, 640));
+        assert_eq!(size_within(500, 300, PREVIEW_SIDE), (500, 300));
+        assert_eq!(PREVIEW_EVERY, Duration::from_millis(500));
+        let mut asked = Vec::new();
+        let jpg = fit_preview(|quality| {
+            asked.push(quality);
+            Some(vec![
+                0;
+                if quality > 0.5 {
+                    PREVIEW_MAX_BYTES + 1
+                } else {
+                    9_000
+                }
+            ])
+        });
+        assert_eq!(jpg.map(|jpg| jpg.len()), Some(9_000));
+        assert_eq!(asked, vec![0.60, 0.45]);
     }
 }

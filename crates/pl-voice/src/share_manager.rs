@@ -2,7 +2,10 @@
 //! the watching page's news, each one step of the machine (a child of [`crate::manager`]).
 
 use super::{Voice, lock};
-use crate::share::{ShareEvent, ShareLayer, ShareRefusal, ShareSource, ShareSurface, WatchReport};
+use crate::share::{
+    ShareChange, ShareEvent, ShareLayer, ShareRefusal, ShareSource, ShareSurface, ShareViewPrefs,
+    WatchReport,
+};
 use crate::view::VoiceAnswer;
 
 impl Voice {
@@ -118,5 +121,61 @@ impl Voice {
     pub async fn share_unshare(&self, person: String, n: u8) -> VoiceAnswer {
         self.request(|machine| machine.share_unshare(&person, n))
             .await
+    }
+
+    // SQOL ---------------------------------------------------------------------------------------
+
+    /// "Ekranı Değiştir" on a live share (`label`: the window's title or the screen's name, this
+    /// computer only). The result shows in the state and as a `share-notice`.
+    pub fn share_switch(
+        &self,
+        n: u8,
+        source: ShareSource,
+        label: String,
+    ) -> Result<(), ShareRefusal> {
+        self.step(
+            |machine, _, _| match machine.share_switch(n, source, &label) {
+                Ok(effects) => (Ok(()), effects),
+                Err(refusal) => (Err(refusal), Vec::new()),
+            },
+        )
+    }
+
+    /// A live change of a share (quality, frame rate, "Görüntü", cursor, sound, still picture).
+    pub fn share_update(&self, n: u8, change: ShareChange) -> Result<(), ShareRefusal> {
+        self.step(
+            |machine, now, _| match machine.share_update(n, change, now) {
+                Ok(effects) => (Ok(()), effects),
+                Err(refusal) => (Err(refusal), Vec::new()),
+            },
+        )
+    }
+
+    /// "Duraklat" (`on`) / "Sürdür".
+    pub fn share_hold(&self, n: u8, on: bool) -> Result<(), ShareRefusal> {
+        self.step(|machine, _, _| match machine.share_hold(n, on) {
+            Ok(effects) => (Ok(()), effects),
+            Err(refusal) => (Err(refusal), Vec::new()),
+        })
+    }
+
+    /// The player's own small live preview of a share (its card on screen).
+    pub fn share_preview(&self, n: u8, on: bool) {
+        self.effects(|machine, _, _| machine.share_preview(n, on));
+    }
+
+    /// The launcher started a game: a share whose game closed takes it.
+    pub fn share_game_started(&self) {
+        self.effects(|machine, _, _| machine.share_game_started());
+    }
+
+    /// The watching choices ("Yayın Kalitesi", the stream's ducking) from either window.
+    pub fn share_view_prefs(&self, prefs: ShareViewPrefs) {
+        let mut settings = self.settings();
+        let before = settings.share.clone();
+        prefs.apply(&mut settings.share);
+        if settings.share != before {
+            self.save_settings(settings);
+        }
     }
 }
