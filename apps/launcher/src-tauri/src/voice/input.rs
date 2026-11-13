@@ -131,8 +131,12 @@ mod platform {
     }
 
     /// SQOL: the player types in a launcher text field now: it said so, and a window of the
-    /// launcher is the one in front.
+    /// launcher is the one in front. SQOL-O: or a running game's overlay says a text field of the
+    /// game has the keyboard (the game's window in front; it stops saying so when it is not).
     fn typing() -> bool {
+        if crate::overlay::game_typing() {
+            return true;
+        }
         if !super::TYPING.load(std::sync::atomic::Ordering::SeqCst) {
             return false;
         }
