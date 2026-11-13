@@ -474,7 +474,10 @@ export function StageBody({
       {/* The room chat's peek: top right over the tiles, under the stage's own row. */}
       {popout || (dock && !full) ? null : (
         <div
-          className={cn("absolute right-5 flex flex-col items-end", controls ? "top-[56px]" : "top-5")}
+          className={cn(
+            "absolute right-5 flex flex-col items-end",
+            controls ? "top-[56px]" : "top-5",
+          )}
           style={dock ? { right: 20 + dock } : undefined}
         >
           <RoomChatPeek />
