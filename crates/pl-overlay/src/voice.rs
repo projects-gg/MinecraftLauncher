@@ -809,6 +809,9 @@ pub fn share_notice_of(notice: &ShareNotice) -> Option<VoiceNoticeView> {
         name: String::new(),
     };
     Some(match notice {
+        // SQOL-R4: a live change the room refused is the launcher's to say (the share goes on;
+        // the game's words are for a share that could not start).
+        ShareNotice::Refused { n: Some(_), .. } => return None,
         ShareNotice::Refused { refusal, .. } => view(
             "share-refused",
             Some(match refusal {
@@ -1982,6 +1985,18 @@ pub(crate) mod tests {
         );
         assert_eq!(notice(ShareNotice::WatchFailed), None);
         assert_eq!(notice(ShareNotice::refused(ShareRefusal::WatchFull)), None);
+        // SQOL-R4: a refused live change (the share goes on) is the launcher's to say.
+        assert_eq!(
+            notice(ShareNotice::Refused {
+                refusal: ShareRefusal::NotAllowed,
+                n: Some(1),
+                change: Some(pl_voice::share::ShareAsked {
+                    fps: Some(60),
+                    ..Default::default()
+                }),
+            }),
+            None
+        );
     }
 
     /// SQOL-O: the player's share says how its watchers see it, others' shares when they are paused

@@ -1080,10 +1080,11 @@ fn a_socket_that_comes_back_keeps_what_the_room_still_carries() {
     machine.share_attach(ShareSurface::Main, 2_000);
     machine.share_watch("a", 1, 2_000).unwrap();
     machine.socket_message(generation, woffer(&[("a", 1)], true), 2_100, UNIX);
+    machine.share_watch_report(ShareSurface::Main, WatchReport::Connected, 2_150);
     machine.share_watch("a", 2, 2_200).unwrap();
     let generation = come_back(&mut machine, generation, 3_000);
-    // The room still carries share 1 (its offer came): only share 2 is asked for again, the
-    // page keeps its connection.
+    // The room still carries share 1 (its offer came, the page connected): only share 2 is
+    // asked for again, the page keeps its connection.
     let effects = machine.socket_message(
         generation,
         hello_watching(
@@ -1177,6 +1178,7 @@ fn a_watch_whose_offer_went_to_the_old_socket_is_asked_for_anew() {
     // there and asked for anew.
     let now = 4_200 + crate::share::WATCH_OFFER_WAIT_MS;
     machine.socket_message(generation, woffer(&[("a", 1)], true), now + 100, UNIX);
+    machine.share_watch_report(ShareSurface::Main, WatchReport::Connected, now + 150);
     machine.share_watch("a", 2, now + 200).unwrap();
     let generation = come_back(&mut machine, generation, now + 1_000);
     let effects = machine.socket_message(
@@ -1295,6 +1297,69 @@ fn a_turn_answer_lost_with_the_socket_is_not_waited_for() {
         to_page(&effects)[..],
         [(ShareSurface::Main, WatchCmd::Reset { keep_turn: true })]
     ));
+}
+
+/// SQOL-R4: an offer that came but whose answer went with the old socket left the page without a
+/// connection: the room's copy is let go and the session asked for anew (not waited on).
+#[test]
+fn a_watch_whose_answer_went_with_the_old_socket_is_asked_for_anew() {
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1)], share_on());
+    machine.share_attach(ShareSurface::Main, 2_000);
+    machine.share_watch("a", 1, 2_000).unwrap();
+    machine.socket_message(generation, woffer(&[("a", 1)], true), 2_100, UNIX);
+    // The page answered; the socket went before the room had it: no connection.
+    let generation = come_back(&mut machine, generation, 3_000);
+    let effects = machine.socket_message(
+        generation,
+        hello_watching(
+            vec![person("me", Vec::new()), person("a", vec![shared(1)])],
+            &[("a", 1)],
+        ),
+        4_200,
+        UNIX,
+    );
+    assert!(matches!(
+        sent(&effects)[..],
+        [
+            ToRoom::Set { .. },
+            ToRoom::Unwatch { n: 1, .. },
+            ToRoom::Watch { n: 1, .. }
+        ]
+    ));
+    assert!(matches!(
+        to_page(&effects)[..],
+        [(ShareSurface::Main, WatchCmd::Reset { keep_turn: true })]
+    ));
+}
+
+/// SQOL-R4 (E2E's one 21 s watch): a direct connection asks for nothing more: no TURN, no new
+/// session, and once its offer came no wait of watching's runs (the offer's own 20 s wait is the
+/// only clock before it; TURN is asked only by a page whose ICE did not connect in 5 s).
+#[test]
+fn a_direct_watch_connects_without_turn_or_a_new_session() {
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1)], share_on());
+    machine.share_attach(ShareSurface::Main, 2_000);
+    let effects = machine.share_watch("a", 1, 2_000).unwrap();
+    assert!(matches!(sent(&effects)[..], [ToRoom::Watch { .. }]));
+    assert_eq!(
+        machine.next_deadline(2_000),
+        Some(2_000 + crate::share::WATCH_OFFER_WAIT_MS)
+    );
+    let effects = machine.socket_message(generation, woffer(&[("a", 1)], true), 2_100, UNIX);
+    assert!(matches!(
+        to_page(&effects)[..],
+        [(ShareSurface::Main, WatchCmd::Offer { fresh: true, .. })]
+    ));
+    let effects = machine.share_watch_report(ShareSurface::Main, WatchReport::Connected, 2_300);
+    assert!(sent(&effects).is_empty());
+    assert!(to_page(&effects).is_empty());
+    assert!(
+        machine
+            .next_deadline(2_300)
+            .is_none_or(|at| at > 2_300 + crate::share::WATCH_OFFER_WAIT_MS)
+    );
 }
 
 /// SQOL-R3 (the real-SFU run): the page reads a share's layer back from the state, so a new one

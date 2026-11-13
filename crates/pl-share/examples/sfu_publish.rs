@@ -85,6 +85,7 @@ async fn main() {
         "--unhold-at",
         "--update-at",
         "--close-at",
+        "--close-second-at",
     ]
     .into_iter()
     .filter_map(|name| at(name).map(|second| (second, name)))
@@ -149,15 +150,13 @@ async fn main() {
         }
     };
 
-    // SQOL-R3: `--other-process`: the first window belongs to a child process of its own (closing
-    // it ends that program, as E2E's WinForms window did).
-    let mut child = None;
-    let (hwnd, main_pid) = if args.iter().any(|a| a == "--other-process") {
+    // SQOL-R3: `--other-process`: the windows belong to child processes of their own (closing one
+    // ends that program, as E2E's WinForms windows did).
+    let other_process = args.iter().any(|a| a == "--other-process");
+    let spawn_window = |w: i32, h: i32, still: bool| {
         let mut command = std::process::Command::new(std::env::current_exe().expect("exe"));
-        command
-            .arg("--window-only")
-            .arg(format!("{}x{}", size.0, size.1));
-        if still_main {
+        command.arg("--window-only").arg(format!("{w}x{h}"));
+        if still {
             command.arg("--still");
         }
         let mut spawned = command
@@ -174,7 +173,12 @@ async fn main() {
             .and_then(|s| s.parse().ok())
             .expect("a window handle");
         let pid = spawned.id();
-        child = Some(spawned);
+        (hwnd, pid, spawned)
+    };
+    let mut children = Vec::new();
+    let (hwnd, main_pid) = if other_process {
+        let (hwnd, pid, spawned) = spawn_window(size.0, size.1, still_main);
+        children.push(spawned);
         (hwnd, pid)
     } else if still_main {
         (common::still_window(size.0, size.1), std::process::id())
@@ -183,19 +187,25 @@ async fn main() {
     };
     // SQOL: the second window to switch to (4:3: another picture size).
     let still = args.iter().any(|a| a == "--still");
-    let second = (!plan.is_empty()).then(|| {
-        if still {
-            common::still_window(1024, 768)
-        } else {
-            common::test_window(1024, 768)
-        }
-    });
+    let (second, second_pid) = if plan.is_empty() {
+        (None, std::process::id())
+    } else if other_process {
+        let (hwnd, pid, spawned) = spawn_window(1024, 768, still);
+        children.push(spawned);
+        (Some(hwnd), pid)
+    } else if still {
+        (Some(common::still_window(1024, 768)), std::process::id())
+    } else {
+        (Some(common::test_window(1024, 768)), std::process::id())
+    };
     std::thread::sleep(Duration::from_millis(300));
     let main_window = hwnd;
     let window = |hwnd: isize| SourceId::Window {
         hwnd: hwnd as u32,
         pid: if hwnd == main_window {
             main_pid
+        } else if Some(hwnd) == second {
+            second_pid
         } else {
             std::process::id()
         },
@@ -344,6 +354,14 @@ async fn main() {
                             common::close_window(hwnd);
                             None
                         }
+                        // SQOL-R4: the window switched to after the first one closed closes too:
+                        // its own sourceGone must come.
+                        "--close-second-at" => {
+                            if let Some(other) = second {
+                                common::close_window(other);
+                            }
+                            None
+                        }
                         _ => None,
                     };
                     if let Some(cmd) = cmd {
@@ -382,7 +400,7 @@ async fn main() {
     }
     tokio::time::sleep(Duration::from_millis(500)).await;
     let _ = hwnd;
-    if let Some(mut child) = child {
+    for mut child in children {
         let _ = child.kill();
         let _ = child.wait();
     }

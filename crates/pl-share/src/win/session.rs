@@ -225,11 +225,11 @@ impl Backend {
 
     /// SQOL: a capture's source closed (its window, its monitor): the share holds a blank picture
     /// and, for the game, looks for its new window a moment.
-    pub fn source_closed(&mut self, n: ShareNo, generation: u64, capture: u64) {
+    pub fn source_closed(&mut self, n: ShareNo, generation: u64, capture: u64, epoch: u64) {
         if let Some(s) = self.sessions.get_mut(&n)
             && s.generation == generation
         {
-            s.source_closed(capture, Instant::now());
+            s.source_closed(capture, epoch, Instant::now());
         }
     }
 
@@ -888,12 +888,14 @@ impl Session {
             },
         );
         let closed = self.shared.clone();
+        let epoch = self.shared.source_epoch.load(Ordering::SeqCst);
         let on_closed = Box::new(move || {
             // SQOL: the share goes on (the controller decides what comes instead).
             let _ = closed.internal.send(Ctl::SourceClosed {
                 n: closed.n,
                 generation: closed.generation,
                 capture: number,
+                epoch,
             });
         });
         Capture::start(
@@ -935,6 +937,7 @@ impl Session {
                         n: closed.n,
                         generation: closed.generation,
                         capture: closed.capture.load(Ordering::SeqCst),
+                        epoch,
                     });
                 }
             }),
@@ -1325,8 +1328,8 @@ impl Session {
             n: self.shared.n,
             w,
             h,
+            minimized: self.shared.minimized.load(Ordering::SeqCst),
         });
-        self.tell_minimized();
     }
 
     /// SQOL: captures `source` in place of what the share shows now. The old capture's frames stop
@@ -1354,6 +1357,9 @@ impl Session {
         );
         self.adopt(source, src_size, target_pid, hwnd);
         let number = self.next_capture();
+        // SQOL-R4: the new source's own epoch from here: an old window's end, told while this
+        // switch runs, is told apart (it no longer closes the new source).
+        self.shared.source_epoch.fetch_add(1, Ordering::SeqCst);
         let specs = layers(src_size, &self.opts, self.software);
         if (rebuild || restart_needed(&old_layers, &specs))
             && let Err(why) = self.restart_encoders()
@@ -1379,11 +1385,13 @@ impl Session {
             match self.start_capture(number, &item, thumbs) {
                 Ok(capture) => Some(capture),
                 Err(why) => {
-                    // The old source goes on: captured anew, so even a still one shows again.
+                    // The old source goes on: captured anew, so even a still one shows again,
+                    // and watched anew under the epoch it has now.
                     let (source, src_size, target_pid, hwnd) = before;
                     self.adopt(source, src_size, target_pid, hwnd);
                     if !self.gone {
                         self.fresh();
+                        self.arm_watch();
                     }
                     return Err(why);
                 }
@@ -1400,16 +1408,24 @@ impl Session {
             self.fresh_on_resume = true;
         }
         self.gone = false;
-        self.shared.source_epoch.fetch_add(1, Ordering::SeqCst);
-        self.shared.minimized.store(false, Ordering::SeqCst);
         self.sync_held();
+        self.arm_watch();
+        self.retarget_sound();
+        Ok(())
+    }
+
+    /// SQOL-R4: the current source's window watched (its minimize events and its end), the old
+    /// watch gone; the window's state now is where its changes count from.
+    fn arm_watch(&mut self) {
+        if let Stage::Live(live) = &mut self.stage {
+            live.minimize = None;
+        }
         let (minimize, minimized) = self.watch_minimize();
         self.start_minimized = minimized;
+        self.shared.minimized.store(minimized, Ordering::SeqCst);
         if let Stage::Live(live) = &mut self.stage {
             live.minimize = minimize;
         }
-        self.retarget_sound();
-        Ok(())
     }
 
     fn adopt(
@@ -1457,9 +1473,17 @@ impl Session {
 
     /// SQOL: capture `number`'s source closed. The share holds a blank picture; the game's new
     /// window (a fullscreen switch recreates it) is looked for a moment, any other source is gone.
-    fn source_closed(&mut self, number: u64, now: Instant) {
-        // Told once: the capture's `Closed` and the window's end may both come.
-        if self.gone || self.shared.capture.load(Ordering::SeqCst) != number {
+    fn source_closed(&mut self, number: u64, epoch: u64, now: Instant) {
+        // Told once: the capture's `Closed` and the window's end may both come; an old source's
+        // end (its epoch is not the current one) closes nothing (SQOL-R4).
+        if !crate::switch::closes_current(
+            self.gone,
+            (number, epoch),
+            (
+                self.shared.capture.load(Ordering::SeqCst),
+                self.shared.source_epoch.load(Ordering::SeqCst),
+            ),
+        ) {
             return;
         }
         info!("share {}: its source closed", self.shared.n);
@@ -1512,7 +1536,8 @@ impl Session {
             {
                 info!("share {}: the shared window is gone", self.shared.n);
                 let number = self.shared.capture.load(Ordering::SeqCst);
-                self.source_closed(number, now);
+                let epoch = self.shared.source_epoch.load(Ordering::SeqCst);
+                self.source_closed(number, epoch, now);
             }
         }
         let Some(mut wait) = self.waiting else {
