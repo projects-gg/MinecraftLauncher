@@ -107,6 +107,7 @@ import { PanelChromeProvider, PanelClose, PanelTitle, usePanelChrome } from "./p
 import {
   closeInMenu,
   connectionWords,
+  footerActions,
   headerLine,
   panelTitle,
   renameBesideTitle,
@@ -1052,59 +1053,63 @@ function useOutputVolumeItem(): MenuItem[] {
   ];
 }
 
+/**
+ * SQOL-U3: the footer's actions as tiles, the glyph above the words, so a label that says what a
+ * press does ("Mikrofonu Kapat", "Sağırlaştırmayı Kaldır") fits a 360 px panel on two lines.
+ */
+const footerTile =
+  "h-auto min-h-[54px] w-full flex-col justify-start gap-1 whitespace-normal px-1.5 pt-2 pb-1.5";
+const footerWords = "block text-center text-[12px] leading-[1.15]";
+
 function RoomFooter({ room }: { room: VoiceRoomView }) {
   const { t } = useTranslation();
   const { me } = room;
   // OVL-NEXT: no push-to-talk key in a push-to-talk-only room keeps it closed too.
   const closed = micClosedLabel(me, t);
   const micOff = me.mute || me.deaf || closed !== null;
-  const micLabel = closed ?? (micOff ? t("voice.room.unmuteMic") : t("voice.room.muteMic"));
-  const deafLabel = me.deaf ? t("voice.room.deafenOff") : t("voice.room.deafenOn");
+  // SQOL-U3: each label says what a press does, from the state it is in (as the pill's buttons
+  // and Discord's do), so no `aria-pressed` beside it: a label that changes with its state and a
+  // pressed state would say the state twice, one of them backwards.
+  const { mic: micAction, deaf: deafAction } = footerActions(me, closed !== null, t);
   const volume = useOutputVolumeItem();
   const threshold = useVoicePrefs((s) => meterThreshold(s.settings));
-  // VOICE-CALL: on the call's stage the footer is its only way out ("İptal" while it rings) and a
-  // call of two has nothing to close for the other (leaving is hanging up, as on Discord).
+  // VOICE-CALL: on the call's stage the footer is its only way out ("İptal" while it rings).
   const stage = useVoiceUi((s) => isOneToOne(s.state));
   const ringing = useVoiceUi((s) => Boolean(s.state.calling)) && stage;
   return (
     <footer className="shrink-0 border-t border-white/8 px-4 pt-3 pb-3.5">
       {/* SHARE: the player's shares and "Ekranını paylaş". */}
       <ShareFooterRow />
-      {/* "Mikrofon" a little wider: its meter beside the word ("Microphone" in English). */}
-      <div className="grid grid-cols-[1.3fr_1fr_1fr] gap-2">
-        <Tooltip content={micLabel}>
+      <div className="grid grid-cols-3 gap-2">
+        {/* Closed by a moderator or a missing push-to-talk key: why, in its tooltip and name. */}
+        <Tooltip content={closed} disabled={closed === null}>
           <Button
             size="lg"
             variant="secondary"
-            aria-label={micLabel}
+            aria-label={closed === null ? undefined : `${micAction}. ${closed}`}
             aria-disabled={closed !== null || undefined}
-            className={cn("w-full px-2", closed !== null && "opacity-60")}
+            className={cn(footerTile, closed !== null && "opacity-60")}
             icon={
-              micOff ? (
-                <MicrophoneSlash size={17} weight="bold" className="text-flare-400" />
-              ) : (
-                <Microphone size={17} weight="bold" />
-              )
-            }
-            // What the microphone hears, beside its word (VOICE-CALL); still while it is off.
-            iconRight={
-              <VoiceMeter threshold={threshold} className={cn("ml-0.5", micOff && "opacity-60")} />
+              // What the microphone hears, beside its glyph (VOICE-CALL); still while it is off.
+              <span className="flex items-center gap-1">
+                {micOff ? (
+                  <MicrophoneSlash size={17} weight="bold" className="text-flare-400" />
+                ) : (
+                  <Microphone size={17} weight="bold" />
+                )}
+                <VoiceMeter threshold={threshold} className={cn(micOff && "opacity-60")} />
+              </span>
             }
             onClick={closed !== null ? undefined : () => void toggleMute()}
           >
-            {t("voice.room.mic")}
+            <span className={footerWords}>{micAction}</span>
           </Button>
         </Tooltip>
-        <ContextMenu
-          items={volume}
-          disabled={!volume.length}
-          wrapTrigger={(trigger) => <Tooltip content={deafLabel}>{trigger}</Tooltip>}
-        >
+        <ContextMenu items={volume} disabled={!volume.length}>
           <Button
             size="lg"
             variant="secondary"
-            aria-label={deafLabel}
-            className="w-full px-2"
+            className={footerTile}
             icon={
               me.deaf ? (
                 <HeadphonesSlash size={17} className="text-flare-400" />
@@ -1114,20 +1119,22 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
             }
             onClick={() => void toggleDeaf()}
           >
-            {t("voice.room.deafen")}
+            <span className={footerWords}>{deafAction}</span>
           </Button>
         </ContextMenu>
         <Button
           size="lg"
           variant="secondary"
-          className="w-full px-2"
+          className={footerTile}
           // Leaving ends nothing for the others: a plate with a red glyph, the footer's only red
           // action ("Odayı Kapat" is the header menu's last row).
           icon={<PhoneDisconnect size={17} weight="bold" className="text-flare-400" />}
           aria-label={ringing ? t("voice.call.cancelLabel") : undefined}
           onClick={() => void leaveRoom()}
         >
-          {ringing ? t("voice.room.cancelRing") : t("voice.room.leave")}
+          <span className={footerWords}>
+            {ringing ? t("voice.room.cancelRing") : t("voice.room.leave")}
+          </span>
         </Button>
       </div>
     </footer>

@@ -7,6 +7,7 @@ import {
   closeInMenu,
   connectionWords,
   fitNames,
+  footerActions,
   headerLine,
   namesLines,
   panelTitle,
@@ -99,6 +100,20 @@ describe("a crew room's header", () => {
     const two = [{ id: "a" }] as VoicePerson[];
     expect(renameBesideTitle({ canRename: true, kind: "friend", people: two })).toBe(false);
     expect(renameBesideTitle({ canRename: true, kind: "friend", people: [] })).toBe(false);
+  });
+});
+
+describe("the footer's labels", () => {
+  it("say what a press does, from the state each is in", () => {
+    const on = { mute: false, deaf: false };
+    expect(footerActions(on, false, t)).toEqual({ mic: "Mikrofonu Kapat", deaf: "Sağırlaştır" });
+    expect(footerActions({ ...on, mute: true }, false, t).mic).toBe("Mikrofonu Aç");
+    expect(footerActions({ mute: false, deaf: true }, false, t)).toEqual({
+      mic: "Mikrofonu Aç",
+      deaf: "Sağırlaştırmayı Kaldır",
+    });
+    // Closed by a moderator or a missing push-to-talk key: the press it waits for.
+    expect(footerActions(on, true, t).mic).toBe("Mikrofonu Aç");
   });
 });
 

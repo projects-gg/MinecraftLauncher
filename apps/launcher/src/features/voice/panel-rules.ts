@@ -1,6 +1,6 @@
-// The room panel's header and marks, in plain rules (SQOL-U3): who an unnamed room's title names
-// when its line is short, a crew room's title and the line under it, and where renaming and
-// closing the room live.
+// The room panel's header, marks and footer, in plain rules (SQOL-U3): who an unnamed room's title
+// names when its line is short, a crew room's title and the line under it, where renaming and
+// closing the room live, the footer's labels and a connection's words.
 import type { TFunction } from "i18next";
 import type { VoiceQuality, VoiceRoomView } from "@/lib/api/voice-types";
 import { namesLine, roomTitle } from "./rules";
@@ -91,6 +91,23 @@ export function renameBesideTitle(
 /** "Adı Değiştir" in the header's menu: a crew's own rooms ("Genel" is never renamed). */
 export function renameInMenu(room: Pick<VoiceRoomView, "canRename" | "kind" | "general">): boolean {
   return room.canRename && room.kind === "crew" && !room.general;
+}
+
+/**
+ * The footer's microphone and headphones, each labelled by what a press does from the state it is
+ * in: "Mikrofonu Aç" while the microphone is off, deafened or `closed` (a moderator, a missing
+ * push-to-talk key), else "Mikrofonu Kapat"; "Sağırlaştırmayı Kaldır" while deafened, else
+ * "Sağırlaştır".
+ */
+export function footerActions(
+  me: Pick<VoiceRoomView["me"], "mute" | "deaf">,
+  closed: boolean,
+  t: TFunction,
+): { mic: string; deaf: string } {
+  return {
+    mic: me.mute || me.deaf || closed ? t("voice.room.unmuteMic") : t("voice.room.muteMic"),
+    deaf: me.deaf ? t("voice.room.deafenOff") : t("voice.room.deafenOn"),
+  };
 }
 
 /** A connection's words, for its bars' tooltip and screen readers ("Bağlantı: Zayıf"). */
