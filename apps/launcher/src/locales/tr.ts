@@ -61,6 +61,7 @@ import { trQaFix } from "./tr-qa-fix";
 import { trQol } from "./tr-qol";
 import { trReminders } from "./tr-reminders";
 import { trReports } from "./tr-reports";
+import { trRoomChat } from "./tr-room-chat";
 import { trSafety } from "./tr-safety";
 import { trSetup } from "./tr-setup";
 import { trShare } from "./tr-share";
@@ -163,6 +164,7 @@ export const tr = {
   stars: trStars,
   voice: trVoice,
   share: trShare,
+  roomChat: trRoomChat,
   socNext: trSocNext,
   socNote: trSocNote,
   telemetry: trTelemetry,
