@@ -61,6 +61,10 @@ pub const LEVEL_EVENT: &str = "voice-level";
 pub const LEVELS_EVENT: &str = "voice-levels";
 /// SHARE: screen sharing's moments worth a toast (`ShareNotice`).
 pub const SHARE_NOTICE_EVENT: &str = "share-notice";
+/// SQOL: what the "Yayın" window plays streams with, when it changes (`PopoutAudio`).
+pub const SHARE_AUDIO_EVENT: &str = "share-audio";
+/// SQOL: the voice room chat's news (`VoiceChatEvent`).
+pub const CHAT_EVENT: &str = "voice-chat";
 
 /// How long the hub may take to answer a call.
 const CALL_WAIT: Duration = Duration::from_secs(10);
@@ -513,6 +517,8 @@ pub struct AppPlatform {
     input: Mutex<Option<input::Watch>>,
     /// What the tray shows of the room (its label, the microphone off).
     tray: Mutex<Option<(String, bool)>>,
+    /// SQOL: what the "Yayın" window was last told it plays streams with.
+    popout_audio: Mutex<Option<pl_voice::share::PopoutAudio>>,
 }
 
 impl AppPlatform {
@@ -527,6 +533,46 @@ impl AppPlatform {
             in_sight: pl_voice::sight::SightCache::new(),
             input: Mutex::new(None),
             tray: Mutex::new(None),
+            popout_audio: Mutex::new(None),
+        }
+    }
+
+    /// SQOL: the "Yayın" window is open (it plays streams and ducks them). Only whether it exists:
+    /// asking a window's state waits for the main thread, which must never wait on voice chat.
+    fn popout_in_sight(&self) -> bool {
+        self.app
+            .get_webview_window(pl_voice::share::SHARE_WINDOW)
+            .is_some()
+    }
+
+    /// SQOL: the "Yayın" window hears what it plays streams with when that changes (it asks
+    /// once itself as it opens: `share_popout_audio`).
+    fn tell_popout_audio(&self, state: &VoiceState) {
+        let Some(voice) = self.voice.get() else {
+            return;
+        };
+        if self
+            .app
+            .get_webview_window(pl_voice::share::SHARE_WINDOW)
+            .is_none()
+        {
+            *lock(&self.popout_audio) = None;
+            return;
+        }
+        let audio = share::popout_audio_of(&voice.settings(), state);
+        let changed = {
+            let mut last = lock(&self.popout_audio);
+            if last.as_ref() == Some(&audio) {
+                false
+            } else {
+                *last = Some(audio.clone());
+                true
+            }
+        };
+        if changed {
+            let _ = self
+                .app
+                .emit_to(pl_voice::share::SHARE_WINDOW, SHARE_AUDIO_EVENT, audio);
         }
     }
 
@@ -803,6 +849,8 @@ impl Platform for AppPlatform {
                 });
             }
         }
+        // SQOL: the "Yayın" window's output device, volume, deafness and ducking.
+        self.tell_popout_audio(&state);
         let _ = self.app.emit(STATE_EVENT, state);
     }
 
@@ -820,7 +868,13 @@ impl Platform for AppPlatform {
         }
         // A resting page would only queue them; it reads the state when it comes back.
         if self.window_in_sight() {
-            let _ = self.app.emit(SPEAKING_EVENT, speaking);
+            let _ = self.app.emit_to("main", SPEAKING_EVENT, &speaking);
+        }
+        // SQOL: the "Yayın" window ducks its streams while someone speaks.
+        if self.popout_in_sight() {
+            let _ = self
+                .app
+                .emit_to(pl_voice::share::SHARE_WINDOW, SPEAKING_EVENT, &speaking);
         }
     }
 
@@ -867,6 +921,12 @@ impl Platform for AppPlatform {
 
     fn share_popout(&self, open: bool) {
         share::popout(&self.app, open);
+    }
+
+    // SQOL -----------------------------------------------------------------------------------
+    fn voice_chat(&self, event: pl_voice::rchat::VoiceChatEvent) {
+        // The room panel lives in the main window (the in-game overlay's chip comes later).
+        let _ = self.app.emit_to("main", CHAT_EVENT, event);
     }
 }
 

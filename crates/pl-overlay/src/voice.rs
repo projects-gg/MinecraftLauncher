@@ -820,7 +820,11 @@ pub fn share_notice_of(notice: &ShareNotice) -> Option<VoiceNoticeView> {
                 ShareRefusal::RoomFull => "room-full",
                 ShareRefusal::Budget => "budget",
                 ShareRefusal::Failed => "failed",
-                ShareRefusal::WatchFull | ShareRefusal::WatchMax | ShareRefusal::Gone => {
+                // SQOL: `inUse` is the picker's own (it never offers such a source).
+                ShareRefusal::WatchFull
+                | ShareRefusal::WatchMax
+                | ShareRefusal::Gone
+                | ShareRefusal::InUse => {
                     return None;
                 }
             }),
@@ -840,7 +844,13 @@ pub fn share_notice_of(notice: &ShareNotice) -> Option<VoiceNoticeView> {
             }),
         ),
         ShareNotice::AudioOff => view("share-audio-off", None),
-        ShareNotice::WatchStopped | ShareNotice::WatchFailed => return None,
+        // SQOL: a switch and a closed source's wait are the launcher's (its card offers the
+        // choices); the game hears the end as `share-closed` when it comes.
+        ShareNotice::WatchStopped
+        | ShareNotice::WatchFailed
+        | ShareNotice::Switched { .. }
+        | ShareNotice::SwitchFailed { .. }
+        | ShareNotice::SourceClosed { .. } => return None,
     })
 }
 
@@ -994,6 +1004,8 @@ pub(crate) mod tests {
                 can_rename: false,
                 can_close: false,
                 ptt: false,
+                chat: false,
+                grew: false,
             }),
             calling: Some(VoiceCalling {
                 friend: "f-can".into(),
@@ -1654,6 +1666,7 @@ pub(crate) mod tests {
             watchers: 1,
             since: 1_800_000_000,
             th: Some(1_800_000_060),
+            st: pl_voice::share::ShareSt::Live,
         }];
         state
     }
@@ -1675,6 +1688,13 @@ pub(crate) mod tests {
             watchers: (0..watchers).map(|i| format!("u-{i}")).collect(),
             since: 1_800_000_000,
             th: None,
+            source: pl_voice::share::ShareSource::Game,
+            st: pl_voice::share::ShareSt::Live,
+            hold: None,
+            hold_until: None,
+            motion: pl_voice::share::ShareMotion::Auto,
+            cursor: true,
+            thumbs: true,
         }
     }
 

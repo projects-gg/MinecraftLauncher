@@ -2346,6 +2346,8 @@ fn voice_room() -> pl_voice::view::VoiceState {
             can_rename: true,
             can_close: true,
             ptt: false,
+            chat: false,
+            grew: false,
         }),
         rings: vec![VoiceRing {
             room: "c0123456789abcdef".into(),

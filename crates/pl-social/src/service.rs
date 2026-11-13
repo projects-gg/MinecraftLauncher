@@ -4438,6 +4438,43 @@ impl SocialService {
         Ok(())
     }
 
+    /// SQOL: "Rapor Et" on a message of a voice room's own chat (`rchat1`): the message as the room
+    /// sealed it and the room's messages before it this launcher holds (at most 20), through the
+    /// chat message report path with the conversation `v:<room>` (the room checks that both people
+    /// were in it together). `message` and `before` are the room's `m` objects as held: `id` is
+    /// their time `at`, `from` their `u`, `sticker` their `st`, `mac` their `seal`.
+    pub async fn report_room_chat(
+        &self,
+        room: &str,
+        message: serde_json::Value,
+        before: Vec<serde_json::Value>,
+        reason: ReportReason,
+        note: Option<String>,
+    ) -> Result<()> {
+        let conv = format!("v:{room}");
+        let sealed = |m: &serde_json::Value| room_chat_sealed(&conv, m);
+        let message = sealed(&message);
+        if !crate::voice::is_room_id(room) || message.is_none() {
+            return Err(SocialError::InvalidInput("voice room message"));
+        }
+        let mut before: Vec<serde_json::Value> = before.iter().filter_map(sealed).collect();
+        let older = before.len().saturating_sub(REPORT_CONTEXT);
+        before.drain(..older);
+        let wire = serde_json::json!({
+            "kind": "message",
+            "message": message,
+            "before": before,
+        });
+        let reason = report_reason(reason, false);
+        self.call(|session| async move {
+            session
+                .report_with(wire, reason, note.as_deref(), false, None)
+                .await
+        })
+        .await?;
+        Ok(())
+    }
+
     /// The launcher showed these moderators' notes: they leave the view and the service hears it.
     pub async fn notices_seen(&self, ids: Vec<String>) {
         let generation = self.lock().generation;
@@ -4711,6 +4748,24 @@ fn badge_refusal(error: &SocialError, now: i64) -> Option<BadgeRefusal> {
 
 /// BAN-TYPES: a report's reason as it goes: "Sesli sohbet ihlali" only with its voice room, else
 /// "Diğer" (the service refuses it without one).
+/// SQOL: a voice room chat message (the room's `m`) as the report path takes a sealed chat
+/// message: `{conv, id, from, text | sticker, mac}`; none when it lacks what its seal covers.
+fn room_chat_sealed(conv: &str, m: &serde_json::Value) -> Option<serde_json::Value> {
+    let at = m.get("at")?.as_i64()?;
+    let from = m.get("u")?.as_str()?;
+    let mac = m.get("seal")?.as_str()?;
+    let mut sealed = serde_json::json!({ "conv": conv, "id": at, "from": from, "mac": mac });
+    match (
+        m.get("text").and_then(serde_json::Value::as_str),
+        m.get("st").and_then(serde_json::Value::as_str),
+    ) {
+        (_, Some(sticker)) => sealed["sticker"] = sticker.into(),
+        (Some(text), None) => sealed["text"] = text.into(),
+        (None, None) => return None,
+    }
+    Some(sealed)
+}
+
 fn report_reason(reason: ReportReason, with_room: bool) -> ReportReason {
     if reason == ReportReason::Voice && !with_room {
         ReportReason::Other
@@ -5699,6 +5754,33 @@ mod tests {
     const FRIENDS: &str = r#"{"friends":[{"id":"223456789012345678","username":"bora","displayName":"Bora",
         "avatar":"preset:fox","avatarHash":null,"since":"2026-10-01","lastSeen":"today"}],
         "incoming":[],"outgoing":[],"blocked":[],"limits":{"friends":200,"outgoingRequests":50}}"#;
+
+    /// SQOL: a voice room chat message goes to the report path as a sealed chat message.
+    #[test]
+    fn a_room_chat_message_is_reported_as_the_room_sealed_it() {
+        let text = serde_json::json!({"id":"1731500000123","u":"u2","at":1_731_500_000_123_i64,
+            "text":"selam","seal":"s".repeat(22)});
+        assert_eq!(
+            room_chat_sealed("v:f0123456789abcdef", &text),
+            Some(
+                serde_json::json!({"conv":"v:f0123456789abcdef","id":1_731_500_000_123_i64,
+                "from":"u2","mac":"s".repeat(22),"text":"selam"})
+            )
+        );
+        let sticker = serde_json::json!({"id":"1","u":"u2","at":1,"st":"pl1/gg","seal":"x"});
+        assert_eq!(
+            room_chat_sealed("v:r", &sticker).unwrap()["sticker"],
+            "pl1/gg"
+        );
+        assert_eq!(
+            room_chat_sealed(
+                "v:r",
+                &serde_json::json!({"id":"1","u":"u2","at":1,"text":"x"})
+            ),
+            None,
+            "no seal: nothing the service could check"
+        );
+    }
 
     #[test]
     fn a_voice_report_goes_with_its_room_or_as_other() {

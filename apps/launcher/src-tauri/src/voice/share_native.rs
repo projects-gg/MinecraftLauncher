@@ -19,9 +19,9 @@ use pl_voice::share::{
     ShareCmd, ShareEvent, ShareLostWhy, ShareOpts, SharePreset, ShareSource, ShareSourceInfo,
     ShareSources,
 };
-use tauri::AppHandle;
 #[cfg(windows)]
 use tauri::Manager;
+use tauri::{AppHandle, Emitter};
 
 use super::share::Publisher;
 
@@ -34,6 +34,8 @@ type Listed = (Vec<SourceInfo>, ShareCaps);
 pub(super) struct Native {
     controller: ShareController,
     voice: Voice,
+    /// SQOL: the page hears a share's numbers and the player's own preview from here.
+    app: AppHandle,
     /// The picker's request waiting for its list.
     waiting: Mutex<Option<mpsc::Sender<Listed>>>,
 }
@@ -61,6 +63,7 @@ impl Native {
         let native = Arc::new(Self {
             controller,
             voice: voice.clone(),
+            app: app.clone(),
             waiting: Mutex::new(None),
         });
         let pump = native.clone();
@@ -150,11 +153,51 @@ impl Native {
                     jpg: pl_voice::share::ThumbJpeg(jpg),
                 });
             }
-            // The panel shows the room's state, not the encoder's numbers; a stop is the machine's.
-            E::Stats { .. } | E::Stopped { .. } => {}
+            // SQOL: the share's numbers for its card ("1280×720 · 30 fps · donanım"), the main
+            // window's only.
+            E::Stats { n, stats } => {
+                let view = pl_voice::share::ShareStatsView {
+                    n,
+                    w: stats.w,
+                    h: stats.h,
+                    fps: stats.fps,
+                    kbps: stats.kbps,
+                    hw: !stats.software,
+                };
+                let _ = self.app.emit_to("main", STATS_EVENT, view);
+            }
+            // SQOL: the player's own preview, for the main window only (never kept, never sent).
+            E::PreviewFrame { n, jpg } => {
+                use base64::Engine as _;
+                let view = pl_voice::share::SharePreviewView {
+                    n,
+                    data_url: format!(
+                        "data:image/jpeg;base64,{}",
+                        base64::engine::general_purpose::STANDARD.encode(&jpg)
+                    ),
+                };
+                let _ = self.app.emit_to("main", PREVIEW_EVENT, view);
+            }
+            E::Switched { n, w, h } => self.voice.share_event(ShareEvent::Switched {
+                n,
+                width: w,
+                height: h,
+            }),
+            E::SwitchFailed { n, why } => {
+                tracing::info!(n, ?why, "share: the switch did not happen");
+                self.voice.share_event(ShareEvent::SwitchFailed { n });
+            }
+            E::Minimized { n, on } => self.voice.share_event(ShareEvent::Minimized { n, on }),
+            // A stop is the machine's.
+            E::Stopped { .. } => {}
         }
     }
 }
+
+/// SQOL: a live share's numbers (`ShareStatsView`, every 5 s).
+pub const STATS_EVENT: &str = "share-stats";
+/// SQOL: the player's own preview (`SharePreviewView`).
+pub const PREVIEW_EVENT: &str = "share-preview";
 
 fn preset(preset: SharePreset) -> Preset {
     match preset {
@@ -292,6 +335,17 @@ impl Publisher for Native {
                 super::thumb::forget_own(n);
                 C::Stop { n }
             }
+            // SQOL: the game's id is the one the launcher runs now (a new game after the old one
+            // closed, too).
+            ShareCmd::Switch { n, source } => match source_id(&source, game_pid) {
+                Some(source) => C::Switch { n, source },
+                None => {
+                    self.voice.share_event(ShareEvent::SwitchFailed { n });
+                    return;
+                }
+            },
+            ShareCmd::Hold { n, on } => C::Hold { n, on },
+            ShareCmd::Preview { n, on } => C::Preview { n, on },
         };
         self.controller.send(cmd);
     }
