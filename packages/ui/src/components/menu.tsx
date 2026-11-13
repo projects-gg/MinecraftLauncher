@@ -36,6 +36,12 @@ export interface MenuItem {
    * track under them. The menu stays open while it changes; `onSelect` is not used then.
    */
   slider?: MenuSlider;
+  /**
+   * One quiet sentence under the label: why a dimmed row is off ("Bu bilgisayarda en çok
+   * Normal."). With `disabled` the row stays in the arrows' reach (APG: a disabled item is
+   * focusable), reads its reason with its name, and a press on it does nothing.
+   */
+  hint?: string;
 }
 
 /** A row's value (`MenuItem.slider`). */
@@ -146,9 +152,11 @@ const CONTEXT: MenuParts = {
   Portal: RadixContextMenu.Portal,
 };
 
-function Icon({ item }: { item: MenuItem }) {
+function Icon({ item, className }: { item: MenuItem; className?: string }) {
   return item.icon ? (
-    <span className={cn("flex", item.danger ? "text-flare-400" : "text-ash-300")}>{item.icon}</span>
+    <span className={cn("flex", item.danger ? "text-flare-400" : "text-ash-300", className)}>
+      {item.icon}
+    </span>
   ) : null;
 }
 
@@ -324,11 +332,15 @@ function menuRows(items: Array<MenuItem | null>, parts: MenuParts): ReactNode[] 
         </Sub>
       );
     }
+    // A dimmed row that says why (`hint`) stays reachable and does nothing when pressed.
+    const hinted = item.hint !== undefined;
+    const reasoned = item.disabled === true && hinted;
     return (
       <Item
         key={item.label}
-        disabled={item.disabled}
-        onSelect={item.onSelect}
+        disabled={item.disabled && !reasoned}
+        aria-disabled={reasoned || undefined}
+        onSelect={reasoned ? (event) => event.preventDefault() : item.onSelect}
         // A closing menu leaves the focus alone: when the item opened a sheet or a dialog, the
         // layer coming up under the pointer made Radix focus the fading menu again, and the
         // layer's focus trap took the focus back as keyboard focus (rings on every tab after a
@@ -347,20 +359,35 @@ function menuRows(items: Array<MenuItem | null>, parts: MenuParts): ReactNode[] 
         aria-checked={item.checked}
         className={cn(
           rowClass,
+          hinted && "items-start",
           item.danger
             ? "text-flare-400 data-[highlighted]:bg-flare-400/12"
             : "text-bone-100 data-[highlighted]:bg-white/8",
+          reasoned && "cursor-default data-[highlighted]:bg-white/[0.04]",
         )}
       >
-        <Icon item={item} />
-        <span className="min-w-0 flex-1">{item.label}</span>
+        <Icon item={item} className={cn(hinted && "mt-[2px]", reasoned && "opacity-45")} />
+        {hinted ? (
+          <span className="min-w-0 flex-1">
+            <span className={cn("block", reasoned && "opacity-45")}>{item.label}</span>
+            <span className="mt-0.5 block text-[12px] leading-[1.35] text-ash-400">
+              {item.hint}
+            </span>
+          </span>
+        ) : (
+          <span className="min-w-0 flex-1">{item.label}</span>
+        )}
         {item.shortcut ? <Kbd>{item.shortcut}</Kbd> : null}
         {item.checked === undefined ? null : (
           <Check
             size={15}
             weight="bold"
             aria-hidden
-            className={cn("shrink-0 text-bone-100", !item.checked && "invisible")}
+            className={cn(
+              "shrink-0 text-bone-100",
+              hinted && "mt-[2px]",
+              !item.checked && "invisible",
+            )}
           />
         )}
       </Item>
@@ -378,6 +405,8 @@ const PANEL_PX = 10;
 const STRIP_PX = 50;
 /** The title line (`titleClass`). */
 const TITLE_PX = 25;
+/** A row's reason under its label (`MenuItem.hint`). */
+const HINT_PX = 18;
 /** How far a menu keeps from the window's edges when it opens beside its trigger. */
 const MENU_MARGIN = 8;
 
@@ -389,11 +418,13 @@ export function menuHeight(
 ): number {
   const rows = items.filter((item) => item !== null).length;
   const sliders = items.filter((item) => item?.slider).length;
+  const hints = items.filter((item) => item?.hint !== undefined && !item.slider).length;
   const separators = items.length - rows;
   return (
     PANEL_PX +
     rows * ROW_PX +
     sliders * (SLIDER_PX - ROW_PX) +
+    hints * HINT_PX +
     separators * SEPARATOR_PX +
     (strip?.length ? STRIP_PX : 0) +
     (title ? TITLE_PX : 0)
