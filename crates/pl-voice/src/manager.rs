@@ -40,6 +40,10 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 #[path = "share_manager.rs"]
 mod share_manager;
 
+/// SQOL: the room chat's commands (its own file; a child, as screen sharing's).
+#[path = "rchat_manager.rs"]
+mod rchat_manager;
+
 /// A room the friends service gave a ticket to (`POST /v1/voice/crew`, `…/crew/new`).
 #[derive(Debug, Clone)]
 pub struct CrewTicket {
@@ -104,6 +108,8 @@ pub trait Platform: Send + Sync + 'static {
     fn share_privacy(&self, _hide: bool, _quiet: bool) {}
     /// Open (or bring to the front) or close the "Yayın" window.
     fn share_popout(&self, _open: bool) {}
+    /// SQOL: the room chat's news for the page (`voice-chat`).
+    fn voice_chat(&self, _event: crate::rchat::VoiceChatEvent) {}
 }
 
 /// How long an action waits for the room's answer.
@@ -120,6 +126,8 @@ struct Inner {
     timer: Notify,
     sockets: Mutex<HashMap<u64, mpsc::UnboundedSender<ToRoom>>>,
     waiters: Mutex<HashMap<u32, oneshot::Sender<VoiceAnswer>>>,
+    /// SQOL: room chat requests waiting for the room's answer.
+    chat_waiters: Mutex<HashMap<u32, oneshot::Sender<crate::rchat::RoomChatSend>>>,
     /// Effects in the machine's order, for the `voice-effects` thread.
     queue: Mutex<std::sync::mpsc::Sender<Batch>>,
     /// Discord's keys as offered, until the player answers (VOICE-KEYS).
@@ -169,6 +177,7 @@ impl Voice {
                 timer: Notify::new(),
                 sockets: Mutex::new(HashMap::new()),
                 waiters: Mutex::new(HashMap::new()),
+                chat_waiters: Mutex::new(HashMap::new()),
                 queue: Mutex::new(queue),
                 discord: Mutex::new(None),
             }),
@@ -257,6 +266,12 @@ impl Voice {
                 Effect::ShareNotice(notice) => platform.share_notice(notice),
                 Effect::SharePrivacy { hide, quiet } => platform.share_privacy(hide, quiet),
                 Effect::SharePopout(open) => platform.share_popout(open),
+                Effect::Chat(event) => platform.voice_chat(event),
+                Effect::ChatAnswer { rid, answer } => {
+                    if let Some(waiter) = lock(&self.inner.chat_waiters).remove(&rid) {
+                        let _ = waiter.send(answer);
+                    }
+                }
             }
         }
         if let Some(view) = view {

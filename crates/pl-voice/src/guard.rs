@@ -11,8 +11,9 @@ use crate::VOICE_WINDOW;
 /// The voice page's commands (`voice_page_attach`, `voice_page_report`).
 pub const PAGE_COMMANDS: [&str; 2] = ["voice_page_attach", "voice_page_report"];
 
-/// SHARE: what the "Yayın" window calls: its stage's commands and the state to draw it from.
-pub const SHARE_WINDOW_COMMANDS: [&str; 12] = [
+/// SHARE: what the "Yayın" window calls: its stage's commands and the state to draw it from
+/// (SQOL: and what it plays streams with, its watching choices).
+pub const SHARE_WINDOW_COMMANDS: [&str; 14] = [
     "voice_state",
     "share_watch",
     "share_unwatch",
@@ -25,6 +26,8 @@ pub const SHARE_WINDOW_COMMANDS: [&str; 12] = [
     "share_popout_on_top",
     "share_fullscreen",
     "share_stream_volume",
+    "share_popout_audio",
+    "share_view_prefs",
 ];
 
 /// Whether `window` may call the app command `command`.
@@ -79,6 +82,9 @@ mod tests {
         for other in [
             "share_start",
             "share_sources",
+            "share_switch",
+            "voice_chat_send",
+            "voice_save_settings",
             "voice_call",
             "voice_page_report",
             "social_send_request",

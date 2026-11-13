@@ -68,6 +68,10 @@ pub struct Room {
     /// OVL-NEXT: the crew made it push-to-talk only (the launcher applies it while the friends
     /// service allows such rooms).
     pub ptt: bool,
+    /// SQOL: the room has its own text chat now.
+    pub chat: bool,
+    /// SQOL: a friend room that held three or more at some time (the room's word).
+    pub grew: bool,
 }
 
 impl Room {
@@ -101,6 +105,8 @@ impl Room {
             people: others,
             my_sm,
             ptt: room.ptt,
+            chat: room.chat,
+            grew: room.grew,
             ringing: rings
                 .into_iter()
                 .map(|ring| (ring.to, ring.until))
@@ -189,11 +195,15 @@ impl Room {
                 mods,
                 max,
                 ptt,
+                chat,
                 ..
             } => {
                 self.name = name.clone();
                 // OVL-NEXT: "Yalnız bas-konuş" went on or off.
                 self.ptt = *ptt;
+                // SQOL: the room's chat is on while its `room` message says so (Studio, the chat
+                // switch).
+                self.chat = *chat;
                 self.leader = leader.clone();
                 self.mods = mods.clone();
                 // VOICE-ROOMS: the crew changed the room's limit ("Oda dolu." follows it).
@@ -267,6 +277,8 @@ mod tests {
                 max: 10,
                 share_by: None,
                 ptt: false,
+                chat: false,
+                grew: false,
             },
             Role::Leader,
             vec![person("me", 1), person("b", 3), person("a", 2)],
@@ -375,10 +387,12 @@ mod tests {
             max: None,
             share_by: None,
             ptt: false,
+            chat: true,
         });
         assert_eq!(room.role_of("a"), Role::Leader);
         assert_eq!(room.name.as_deref(), Some("Gece"));
         assert_eq!(room.max, max, "an older service's message keeps the limit");
+        assert!(room.chat, "SQOL: the room's chat went on");
         // VOICE-ROOMS: the crew changed the room's limit.
         room.apply(&FromRoom::Room {
             name: Some("Gece".into()),
@@ -387,9 +401,14 @@ mod tests {
             max: Some(4),
             share_by: None,
             ptt: true,
+            chat: false,
         });
         assert_eq!(room.max, 4);
         assert!(room.ptt, "OVL-NEXT: the crew made it push-to-talk only");
+        assert!(
+            !room.chat,
+            "SQOL: a `room` message without `chat`: the chat is off"
+        );
     }
 
     #[test]
