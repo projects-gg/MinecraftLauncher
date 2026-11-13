@@ -47,6 +47,7 @@ beforeEach(() => {
   useVoiceUi
     .getState()
     .setState(createVoiceMock({ scenario: "shareLive", timers: false }).current());
+  useVoiceUi.setState({ panel: false });
 });
 
 describe("the own share's notices", () => {
@@ -110,6 +111,25 @@ describe("the own share's notices", () => {
     expect(toast).toHaveBeenCalledTimes(2);
     expect(toast.dismiss).not.toHaveBeenCalled();
     expect(said).not.toHaveBeenCalled();
+  });
+
+  it("leave the question to the open panel's card, and ask in a toast once it closes", () => {
+    const lost: VoiceMyShare = { ...base, st: "hold", hold: "closed" };
+    useVoiceUi.setState({ panel: true });
+    watchOwnShares([lost]);
+    expect(toast).not.toHaveBeenCalled();
+    // The panel closes while the share still waits: a toast asks.
+    useVoiceUi.setState({ panel: false });
+    watchOwnShares([lost]);
+    expect(toast).toHaveBeenLastCalledWith("Paylaştığın pencere kapandı.", expect.anything());
+    // Open again: the card has the same buttons, the toast goes.
+    useVoiceUi.setState({ panel: true });
+    watchOwnShares([lost]);
+    expect(toast.dismiss).toHaveBeenCalledWith("share-own-1");
+    // A switch from the card: said to a screen reader, no toast over the card.
+    showShareNotice({ kind: "switched", n: 1, src: "window", label: "Sunucu haritası" });
+    expect(said).toHaveBeenLastCalledWith('Artık "Sunucu haritası" paylaşılıyor.');
+    expect(toast).toHaveBeenCalledTimes(1);
   });
 
   it("say a minimised window and its coming back, without a toast", () => {

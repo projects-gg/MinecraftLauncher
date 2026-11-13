@@ -2,11 +2,13 @@
 // of sqol-r.md "API"), mounted once with the launcher window's voice chat. Every `share-notice`
 // comes here; the player's own shares are also watched, so whichever comes first (the launcher's
 // notice or its state) says it once:
-// - the window, screen or game a share showed closed: "Paylaştığın pencere kapandı." / "Oyun
-//   kapandı." with "Başka Ekran Seç" and "Paylaşımı Durdur" for the minute it waits; in its place
-//   then "Artık … paylaşılıyor." (a switch, or the launcher's new game window), "Paylaşım
-//   sürüyor." (it went on by itself) or "Paylaşım durdu." (the minute ran out);
-// - a switch: "Artık … paylaşılıyor." or, the old source going on, "Bu pencere paylaşılamadı.";
+// - the window, screen or game a share showed closed: with the room panel open its card asks
+//   ("Başka Ekran Seç", "Paylaşımı Durdur"); closed, a toast asks the same for the minute it waits
+//   (opening the panel hands the question back to the card, closing it asks in a toast again). How
+//   it ended then: "Artık … paylaşılıyor." (a switch, or the launcher's new game window), "Paylaşım
+//   sürüyor." (by itself), "Paylaşım durdu." (the minute ran out). Over the open panel's card a
+//   sentence the card already shows is a status message, not a toast hiding its buttons;
+// - a switch that failed: "Bu pencere paylaşılamadı." (the old source goes on);
 // - a minimised window and its coming back: a status message only (the card shows it; a toast at
 //   each Alt+Tab out of a full screen game would be noise).
 import { toast } from "@pl/ui";
@@ -49,6 +51,8 @@ import {
 const endedLost = new Map<number, number>();
 /** Each share's state as last seen, for the status messages of a change. */
 const lastStatus = new Map<number, OwnStatus>();
+/** Shares a `switched` notice answered: their state going live then says nothing more. */
+const switchedLately = new Set<number>();
 
 const RECENT_MS = 5_000;
 
@@ -60,6 +64,20 @@ const CHANGE_REFUSALS: ReadonlySet<ShareRefusal> = new Set([
   "failed",
 ]);
 
+/** The room panel is open: the player's cards say their shares' states themselves. */
+const panelOpen = () => useVoiceUi.getState().panel;
+
+/** In share `n`'s place: its toast, or (the open panel's card showing it) a status message. */
+function sayInPlace(n: number, text: string) {
+  if (ownQuestion(n) !== undefined || !panelOpen()) ownToast(n, text);
+  else sayShare(text);
+}
+
+/** A question toast still up goes (its share went on, or the open panel's card asks now). */
+function takeQuestionBack(n: number) {
+  if (droppedOwnQuestion(n)) toast.dismiss(ownToastId(n));
+}
+
 function ask(share: VoiceMyShare, why: LostWhy, until: number | null) {
   if (ownQuestion(share.n) === why) return;
   // Its minute ran out just now (the notice came before the state let the share go).
@@ -68,14 +86,14 @@ function ask(share: VoiceMyShare, why: LostWhy, until: number | null) {
   askOwnQuestion(share.n, why, until, share.kind);
 }
 
-/** "Paylaşım durdu." where the question was (its minute ran out). */
+/** "Paylaşım durdu." where the question was (its minute ran out; the card went with it). */
 function stoppedInPlace(n: number) {
   clearLost(n);
   endedLost.set(n, Date.now());
   ownToast(n, i18n.t("share.notice.stopped"));
 }
 
-/** The player's shares changed: their toasts and status messages follow. */
+/** The player's shares changed (or the panel opened or closed): their toasts and messages follow. */
 export function watchOwnShares(mine: readonly VoiceMyShare[]) {
   const { lost } = useOwnUi.getState();
   const t = i18n.t.bind(i18n);
@@ -84,34 +102,41 @@ export function watchOwnShares(mine: readonly VoiceMyShare[]) {
     const before = lastStatus.get(share.n);
     lastStatus.set(share.n, status);
     if (isLost(status)) {
-      ask(share, status, lostUntil(share, lost[share.n]));
+      // The open panel's card asks (a toast over it would hide its buttons); else a toast.
+      if (panelOpen()) takeQuestionBack(share.n);
+      else ask(share, status, lostUntil(share, lost[share.n]));
       continue;
     }
-    // Still asking (no switch answered it): the share went on by itself.
-    if (ownQuestion(share.n) !== undefined) {
-      if (status === "live") ownToast(share.n, t("share.own.resumedSaid"));
-      else if (droppedOwnQuestion(share.n)) toast.dismiss(ownToastId(share.n));
+    if (isLost(before)) {
+      // A switch said "Artık … paylaşılıyor." already; else it went on by itself.
+      if (switchedLately.has(share.n)) takeQuestionBack(share.n);
+      else if (status === "live") sayInPlace(share.n, t("share.own.resumedSaid"));
+      else takeQuestionBack(share.n);
+      switchedLately.delete(share.n);
       continue;
     }
+    switchedLately.delete(share.n);
     if (before === undefined || before === status) continue;
     if (status === "minimized") sayShare(t("share.own.minimizedSaid"));
     else if (status === "live" && before === "minimized") sayShare(t("share.own.resumedSaid"));
   }
   for (const n of [...lastStatus.keys()]) {
     if (mine.some((share) => share.n === n)) continue;
+    const before = lastStatus.get(n);
     lastStatus.delete(n);
+    switchedLately.delete(n);
     forgetOwnPreview(n);
     forgetOwnStats(n);
-    if (ownQuestion(n) === undefined) continue;
-    // Its minute ran out while the player stayed; left the room meanwhile: nothing more to say.
-    if (useVoiceUi.getState().state.room) {
-      stoppedInPlace(n);
-    } else {
-      droppedOwnQuestion(n);
-      toast.dismiss(ownToastId(n));
-    }
+    if (!isLost(before) && ownQuestion(n) === undefined) continue;
+    // Its minute ran out while the player stayed: said in a toast; left the room meanwhile:
+    // nothing more to say.
+    if (useVoiceUi.getState().state.room) stoppedInPlace(n);
+    else takeQuestionBack(n);
   }
 }
+
+/** A share waiting for a new source as last seen (its toast or its card asking). */
+const waitingShare = (n: number) => ownQuestion(n) !== undefined || isLost(lastStatus.get(n));
 
 /** A `share-notice`: its toast, or the own share's question and its answers. */
 export function showShareNotice(notice: ShareNotice) {
@@ -121,8 +146,7 @@ export function showShareNotice(notice: ShareNotice) {
     case "refused": {
       // The room refused a live change the launcher took (`share_update` asks it first): back
       // as it was, in the change's words; else a refusal of a share or a watch, as before.
-      const forChange = CHANGE_REFUSALS.has(notice.refusal);
-      const change = forChange ? dropSettled() : null;
+      const change = CHANGE_REFUSALS.has(notice.refusal) ? dropSettled() : null;
       toast(change ? changeRefusedText(notice.refusal, change) : refusalText(notice.refusal));
       return;
     }
@@ -133,7 +157,8 @@ export function showShareNotice(notice: ShareNotice) {
     case "switched":
       switchAnswered(notice.n, true);
       clearLost(notice.n);
-      ownToast(notice.n, switchedText(notice.src, notice.label));
+      switchedLately.add(notice.n);
+      sayInPlace(notice.n, switchedText(notice.src, notice.label));
       return;
     case "switchFailed": {
       const kind = switchAnswered(notice.n, false) ?? "window";
@@ -145,8 +170,8 @@ export function showShareNotice(notice: ShareNotice) {
       const n = "n" in notice && typeof notice.n === "number" ? notice.n : null;
       if (notice.why === "sourceGone" || notice.why === "error") {
         if (endedLost.size > 0 && (n === null || endedLost.has(n))) return;
-        const waiting = n ?? [...lastStatus.keys()].find((each) => ownQuestion(each)) ?? null;
-        if (waiting !== null && ownQuestion(waiting) !== undefined) {
+        const waiting = n ?? [...lastStatus.keys()].find(waitingShare) ?? null;
+        if (waiting !== null && waitingShare(waiting)) {
           stoppedInPlace(waiting);
           return;
         }
@@ -169,7 +194,8 @@ export function useShareNotices() {
     const look = () => watchOwnShares(useVoiceUi.getState().state.share?.mine ?? []);
     look();
     const stopVoice = useVoiceUi.subscribe((now, before) => {
-      if (now.state.share !== before.state.share) look();
+      // The panel opening hands a question to the card; closing it asks in a toast again.
+      if (now.state.share !== before.state.share || now.panel !== before.panel) look();
     });
     const stopOwn = useOwnUi.subscribe((now, before) => {
       if (now.lost !== before.lost) look();
@@ -186,4 +212,5 @@ export function resetOwnNotices() {
   forgetOwnQuestions();
   endedLost.clear();
   lastStatus.clear();
+  switchedLately.clear();
 }

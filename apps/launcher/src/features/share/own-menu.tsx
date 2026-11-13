@@ -10,7 +10,7 @@ import {
   Play,
   SlidersHorizontal,
   SpeakerHigh,
-  Stop,
+  StopCircle,
   Swap,
 } from "@phosphor-icons/react";
 import type { MenuItem } from "@pl/ui";
@@ -83,7 +83,8 @@ export function ownShareItems(
   const { n } = mine;
   const stop: MenuItem = {
     label: t("share.own.menu.stop"),
-    icon: <Stop size={16} />,
+    // A ring around the square: a plain square read as an empty checkbox beside "Sesi de Paylaş".
+    icon: <StopCircle size={16} />,
     onSelect: () => act.stop(n),
   };
   // Nothing changes before it is live, nor on a service that does not let it.

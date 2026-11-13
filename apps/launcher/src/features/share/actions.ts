@@ -238,10 +238,14 @@ function ownLostNow(n: number): { why: LostWhy; until: number | null; kind: Shar
   return isLost(status) ? { why: status, until: lostUntil(mine, mark), kind: mine.kind } : null;
 }
 
-/** A switch that failed: said in the share's toast, still asking while its source is gone. */
+/**
+ * A switch that failed: said in the share's toast, still asking while its source is gone (unless
+ * the open room panel's card asks: then the sentence alone, its buttons left in sight).
+ */
 export function sayOwnSwitchFailed(n: number, text: string) {
   const lost = ownLostNow(n);
-  if (lost) askOwnQuestion(n, lost.why, lost.until, lost.kind, text);
+  if (lost && !useVoiceUi.getState().panel)
+    askOwnQuestion(n, lost.why, lost.until, lost.kind, text);
   else ownToast(n, text);
 }
 
