@@ -7,13 +7,12 @@
 // same from the room chat's host, gathered, so the previews themselves are out of their reading
 // and out of the Tab order. "Mesaj Önizlemelerini Göster" (Ayarlar → Sesli Sohbet) turns them off.
 //
-// SQOL-U1's stage places `<RoomChatPeek />` in its top right corner. `PeekFallback` (voice chat's
-// host) places them itself while no stage of the page has one.
+// SQOL-U1's stage places `<RoomChatPeek />` in its top right corner (not while the panel is docked
+// beside it: the chat itself is in view then).
 import { cn } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { create } from "zustand";
 import { messageLine } from "@/features/social/chat/preview";
 import { enter, glide, leave, useSocialMotion } from "@/features/social/motion";
 import { SocialFace } from "@/features/social/social-face";
@@ -25,9 +24,6 @@ import { useRoomPeople } from "./people";
 import { heldPeeks, livePeeks, nextPeekEnd } from "./rules";
 import { usePeekSetting } from "./settings";
 import { useRoomChat } from "./store";
-
-/** How many stages place the previews now (the fallback stays away while one does). */
-const usePeekHosts = create<{ hosts: number }>()(() => ({ hosts: 0 }));
 
 /** The previews show now: over the stage, the panel not beside it, the setting on. */
 function usePeekShown(): boolean {
@@ -168,29 +164,5 @@ function PeekList() {
 
 /** The previews, for the stage's top right corner (SQOL §4: SQOL-U1 places it). */
 export function RoomChatPeek() {
-  useEffect(() => {
-    usePeekHosts.setState((s) => ({ hosts: s.hosts + 1 }));
-    return () => usePeekHosts.setState((s) => ({ hosts: s.hosts - 1 }));
-  }, []);
   return <PeekList />;
-}
-
-/**
- * The previews while no stage places them (voice chat's host): at the stage's top right, under the
- * title bar (over the whole window when the stage fills it).
- */
-export function PeekFallback() {
-  const hosts = usePeekHosts((s) => s.hosts);
-  const stage = useStageMode();
-  if (hosts > 0 || (stage !== "page" && stage !== "full")) return null;
-  return (
-    <div
-      className={cn(
-        "pointer-events-none fixed right-5",
-        stage === "full" ? "top-16 z-[61]" : "top-[calc(var(--spacing-titlebar)+64px)] z-[25]",
-      )}
-    >
-      <PeekList />
-    </div>
-  );
 }
