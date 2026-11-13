@@ -1,8 +1,9 @@
 // The room panel's header and marks, in plain rules (SQOL-U3): who an unnamed room's title names
-// when its line is short, and what the header's room menu holds.
+// when its line is short, a crew room's title and the line under it, and where renaming and
+// closing the room live.
 import type { TFunction } from "i18next";
 import type { VoiceRoomView } from "@/lib/api/voice-types";
-import { namesLine } from "./rules";
+import { namesLine, roomTitle } from "./rules";
 
 /**
  * The ways to say who is in a room, longest first: every name (two and "ve N kişi daha" past
@@ -45,6 +46,45 @@ export function titleNames(
 ): string[] | null {
   if (room.general || room.name || !room.people.length) return null;
   return room.people.map((p) => nameOf(p.id));
+}
+
+/**
+ * The panel's title: a crew room's is the crew's name (the room is the chip lit under it, so the
+ * title never repeats it); any other room's is `roomTitle`.
+ */
+export function panelTitle(
+  room: Pick<VoiceRoomView, "kind" | "name" | "people" | "general">,
+  crewName: string | null | undefined,
+  nameOf: (id: string) => string,
+  t: TFunction,
+  calling?: string | null,
+): string {
+  if (room.kind === "crew" && crewName) return crewName;
+  return roomTitle(room, nameOf, t, calling);
+}
+
+/**
+ * The quiet line under the title: a call says it is one; a crew's chips and a chat's people line
+ * count the people, so the header then says only a full room; else how many are in the room.
+ */
+export function headerLine(
+  room: Pick<VoiceRoomView, "kind" | "people">,
+  where: { stage: boolean; counted: boolean; full: boolean },
+  t: TFunction,
+): string | null {
+  if (where.stage) return t("voice.call.kind");
+  if (room.kind === "crew" || where.counted) return where.full ? t("voice.refused.roomFull") : null;
+  return t("voice.room.count", { count: room.people.length + 1 });
+}
+
+/** The pencil beside the title: a crew's title is the crew's name, its rooms renamed from the menu. */
+export function renameBesideTitle(room: Pick<VoiceRoomView, "canRename" | "kind">): boolean {
+  return room.canRename && room.kind !== "crew";
+}
+
+/** "Adı Değiştir" in the header's menu: a crew's own rooms ("Genel" is never renamed). */
+export function renameInMenu(room: Pick<VoiceRoomView, "canRename" | "kind" | "general">): boolean {
+  return room.canRename && room.kind === "crew" && !room.general;
 }
 
 /**

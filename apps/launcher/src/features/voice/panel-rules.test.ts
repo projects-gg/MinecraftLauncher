@@ -3,7 +3,16 @@ import { describe, expect, it } from "vitest";
 import "@/lib/i18n";
 import type { VoicePerson } from "@/lib/api/voice-types";
 import i18n from "@/lib/i18n";
-import { closeInMenu, fitNames, namesLines, titleNames } from "./panel-rules";
+import {
+  closeInMenu,
+  fitNames,
+  headerLine,
+  namesLines,
+  panelTitle,
+  renameBesideTitle,
+  renameInMenu,
+  titleNames,
+} from "./panel-rules";
 
 const t = i18n.getFixedT("tr") as TFunction;
 
@@ -46,6 +55,41 @@ describe("an unnamed room's names on a short line", () => {
     expect(titleNames({ name: "Taş Ocağı", general: false, people }, nameOf)).toBeNull();
     expect(titleNames({ name: "Genel", general: true, people }, nameOf)).toBeNull();
     expect(titleNames({ name: null, general: false, people: [] }, nameOf)).toBeNull();
+  });
+});
+
+describe("a crew room's header", () => {
+  const people = [{ id: "a" }] as VoicePerson[];
+  const nameOf = () => "KorAtesi";
+  const crewRoom = { kind: "crew" as const, name: "Genel", general: true, people };
+
+  it("is titled by the crew, its chips saying which room", () => {
+    expect(panelTitle(crewRoom, "Ateş Ekibi", nameOf, t)).toBe("Ateş Ekibi");
+    // The crew not known yet: the room's own name.
+    expect(panelTitle(crewRoom, undefined, nameOf, t)).toBe("Genel");
+    expect(
+      panelTitle({ ...crewRoom, kind: "friend", general: false, name: null }, "X", nameOf, t),
+    ).toBe("KorAtesi");
+  });
+
+  it("does not count the people again under the title, only says a full room", () => {
+    const quiet = { stage: false, counted: false, full: false };
+    expect(headerLine(crewRoom, quiet, t)).toBeNull();
+    expect(headerLine(crewRoom, { ...quiet, full: true }, t)).toBe("Oda dolu.");
+    expect(headerLine({ kind: "friend", people }, quiet, t)).toBe("2 kişi");
+    expect(headerLine({ kind: "friend", people }, { ...quiet, counted: true }, t)).toBeNull();
+    expect(headerLine({ kind: "friend", people }, { ...quiet, stage: true }, t)).toBe(
+      t("voice.call.kind"),
+    );
+  });
+
+  it('renames a crew\'s room from the menu, never "Genel", and a friend room beside its title', () => {
+    expect(renameInMenu({ canRename: true, kind: "crew", general: false })).toBe(true);
+    expect(renameInMenu({ canRename: true, kind: "crew", general: true })).toBe(false);
+    expect(renameInMenu({ canRename: false, kind: "crew", general: false })).toBe(false);
+    expect(renameInMenu({ canRename: true, kind: "friend", general: false })).toBe(false);
+    expect(renameBesideTitle({ canRename: true, kind: "crew" })).toBe(false);
+    expect(renameBesideTitle({ canRename: true, kind: "friend" })).toBe(true);
   });
 });
 

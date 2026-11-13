@@ -103,7 +103,14 @@ import { FittedNames } from "./fitted-names";
 import { HeadphonesSlash } from "./icons";
 import { VoiceMeter } from "./meter";
 import { PanelChromeProvider, PanelClose, PanelTitle, usePanelChrome } from "./panel-chrome";
-import { closeInMenu, titleNames } from "./panel-rules";
+import {
+  closeInMenu,
+  headerLine,
+  panelTitle,
+  renameBesideTitle,
+  renameInMenu,
+  titleNames,
+} from "./panel-rules";
 import { meterThreshold, setOutputVolume, useVoicePrefs } from "./prefs";
 import { PanelChatSection, usePanelChat } from "./room-chat";
 import {
@@ -117,7 +124,6 @@ import {
   roleWord,
   roomFull,
   roomPowers,
-  roomTitle,
   shownRoomName,
   type VoiceFace,
   voiceMark,
@@ -669,8 +675,17 @@ function RoomName({
     if (!room.canRename) setEditing(false);
   }, [room.canRename, setEditing]);
 
-  // The field starts with the name as shown ("Room 2" for the service's "Oda 2").
+  // The field starts with the name as shown ("Room 2" for the service's "Oda 2"), whichever way
+  // it opened (the pencil, a crew room's menu).
   const shown = room.name ? shownRoomName(room.name, t) : "";
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only as the field opens (a rename by someone else while typing keeps the draft)
+  useLayoutEffect(() => {
+    if (!editing) return;
+    setDraft(shown);
+    setError(null);
+  }, [editing]);
+  // SQOL-U3: a crew's title is the crew's name: its rooms are renamed from the header's menu.
+  const pencilShown = renameBesideTitle(room);
   const save = async () => {
     // Unchanged: nothing to send (an English "Room 2" would rename the crew's "Oda 2").
     if (draft.trim() === shown) {
@@ -727,22 +742,18 @@ function RoomName({
           >
             <PanelTitle className="truncate font-display text-[19px] leading-[1.2] font-semibold text-bone-50">
               {names ? (
-                <FittedNames names={names} room={titleRoom} box={row} refit={room.canRename} />
+                <FittedNames names={names} room={titleRoom} box={row} refit={pencilShown} />
               ) : (
                 title
               )}
             </PanelTitle>
-            {room.canRename ? (
+            {pencilShown ? (
               <IconButton
                 ref={pencil}
                 size="sm"
                 label={t("voice.room.rename")}
                 icon={<PencilSimple size={15} />}
-                onClick={() => {
-                  setDraft(shown);
-                  setError(null);
-                  setEditing(true);
-                }}
+                onClick={() => setEditing(true)}
               />
             ) : null}
           </motion.div>
@@ -875,24 +886,14 @@ function RoomHeader({
 }) {
   const { t } = useTranslation();
   const goTo = useVoiceUi((s) => s.goTo);
-  const crew = useSocialUi((s) => s.view.crews.find((c) => c.id === room.crew));
-  // While the name is typed, the field takes the header's room ("Davet et" and the settings wait).
+  // While the name is typed, the field takes the header's room ("Davet et" and the menu wait).
   const [editing, setEditing] = useState(false);
   const full = roomFull(room);
-  const count = room.people.length + 1;
   // VOICE-CALL: the call's stage says what it is ("1 kişi" read wrong above two faces while ringing).
   const stage = useVoiceUi((s) => isOneToOne(s.state));
-  // SQOL-U3: over a chat the people's line counts them; the header then says only a full room.
-  const second =
-    room.kind === "crew" && crew
-      ? t("voice.room.crewOf", { crew: crew.name })
-      : stage
-        ? t("voice.call.kind")
-        : counted
-          ? full
-            ? t("voice.refused.roomFull")
-            : null
-          : t("voice.room.count", { count });
+  // SQOL-U3: a crew's chips and a chat's people line count the people; the header then says only
+  // a full room.
+  const second = headerLine(room, { stage, counted, full }, t);
   return (
     <header className="shrink-0 border-b border-white/8 pt-4 pr-3 pb-3 pl-5">
       <div className="flex items-start gap-1.5">
@@ -920,7 +921,7 @@ function RoomHeader({
                 {t("voice.room.invite")}
               </Button>
             </Tooltip>
-            <RoomMenu room={room} />
+            <RoomMenu room={room} onRename={() => setEditing(true)} />
           </>
         )}
         <PanelClose />
@@ -931,10 +932,11 @@ function RoomHeader({
 }
 
 /**
- * The header's room menu (SQOL-U3): the voice settings and, last and in flare, "Odayı Kapat" with
- * its one sentence ("Oda herkes için kapanır."). The footer keeps "Ayrıl" as its only red action.
+ * The header's room menu (SQOL-U3): the voice settings, a crew room's "Adı Değiştir" (its title is
+ * the crew's name), and, last and in flare, "Odayı Kapat" with its one sentence ("Oda herkes için
+ * kapanır."). The footer keeps "Ayrıl" as its only red action.
  */
-function RoomMenu({ room }: { room: VoiceRoomView }) {
+function RoomMenu({ room, onRename }: { room: VoiceRoomView; onRename: () => void }) {
   const { t } = useTranslation();
   const closePanel = useVoiceUi((s) => s.closePanel);
   const navigate = useNavigate();
@@ -950,6 +952,9 @@ function RoomMenu({ room }: { room: VoiceRoomView }) {
         void navigate({ to: "/settings", search: { section: "voice" } });
       },
     },
+    ...(renameInMenu(room)
+      ? [{ label: t("voice.room.rename"), icon: <PencilSimple size={16} />, onSelect: onRename }]
+      : []),
     ...(closeInMenu(room, stage)
       ? [
           null,
@@ -1126,7 +1131,9 @@ function RoomPage({ room }: { room: VoiceRoomView }) {
   const calling = useVoiceUi((s) => s.state.calling);
   const faces = useFaces([...room.people.map((p) => p.id), ...(calling ? [calling.friend] : [])]);
   const nameOf = (id: string) => faces.find((f) => f.id === id)?.name ?? t("voice.someone");
-  const title = roomTitle(room, nameOf, t, calling?.friend);
+  // SQOL-U3: a crew room's title is the crew's name; its chips say which room.
+  const crewName = useSocialUi((s) => s.view.crews.find((c) => c.id === room.crew)?.name);
+  const title = panelTitle(room, crewName, nameOf, t, calling?.friend);
   // SQOL-U3: a chat under the people when the room has one (or the call's friend's messages).
   const chat = usePanelChat(room);
   return (
