@@ -481,18 +481,27 @@ export function SharePicker() {
     if (showsSource(target, info, label)) return "current";
     return others.some((m) => showsSource(m, info, label)) ? "taken" : "free";
   };
+  // One switch or one start per opening: the closing panel still takes the second press of a
+  // double click (two switches, two shares).
+  const acted = useRef(false);
+  useEffect(() => {
+    if (open) acted.current = false;
+  }, [open]);
   const choose = (info: ShareSourceInfo, label: string) => {
     if (target) {
-      if (busyOf(info, label) !== "free") return;
+      if (!open || acted.current || busyOf(info, label) !== "free") return;
+      acted.current = true;
       const n = target.n;
       close();
       void switchShare(n, info.source, label);
       return;
     }
+    if (!open || acted.current) return;
     setChosen({ source: info.source, label });
   };
   const go = () => {
-    if (!chosen) return;
+    if (!chosen || !open || acted.current) return;
+    acted.current = true;
     close();
     void startShare(chosen.source, chosen.label, share.mineMax);
   };
