@@ -16,6 +16,7 @@
 // SQOL-U3: while the room panel is closed, the room chat's unread messages show as chat's own small
 // count after the name (a call's friend's messages count on the friends entry, where they live).
 import {
+  ChatCircleDots,
   Headset,
   Microphone,
   MicrophoneSlash,
@@ -284,9 +285,14 @@ function Pill() {
         {mode === "live" && since !== null ? (
           <CallTime since={since} className="shrink-0 text-[12px] leading-[18px] text-ash-300" />
         ) : null}
-        {/* SQOL-U3: the room chat's unread messages (chat's own count). */}
+        {/* SQOL-U3: the room chat's unread messages (chat's own count, with its bubble: beside
+            the faces a bare number read as a count of people). */}
         <span className="flex shrink-0 empty:hidden">
-          <UnreadChip count={unread} mentioned={false} />
+          <UnreadChip
+            count={unread}
+            mentioned={false}
+            icon={<ChatCircleDots size={11} weight="fill" aria-hidden />}
+          />
         </span>
         {weak ? (
           <Tooltip content={t("voice.room.weak")}>

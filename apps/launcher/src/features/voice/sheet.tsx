@@ -513,7 +513,11 @@ function PeopleSection({ room }: { room: VoiceRoomView }) {
         </button>
       </h3>
       {open ? (
-        <div id={listId} className="min-h-0 overflow-y-auto overscroll-contain px-3 pb-2">
+        // A soft bottom edge: a row cut there reads as "more below".
+        <div
+          id={listId}
+          className="min-h-0 overflow-y-auto overscroll-contain px-3 pb-3 [mask-image:linear-gradient(to_top,transparent,black_14px)]"
+        >
           <PeopleList room={room} compact />
         </div>
       ) : null}

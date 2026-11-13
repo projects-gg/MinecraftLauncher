@@ -127,6 +127,11 @@ export interface RowShared {
   pins?: { list: readonly ChatPin[]; manage: boolean };
   /** SQOL-U3: false where links get no card (a voice room's chat): the link alone. */
   cards?: boolean;
+  /**
+   * SQOL-U3: px a row keeps free beside its bubbles for the toolbar (92 by default: reactions,
+   * reply and the menu; a chat with the menu alone needs about 40), so bubbles use the rest.
+   */
+  toolbarRoom?: number;
 }
 
 /** Failures the same text would meet again: the player writes it another way. */
@@ -639,6 +644,14 @@ function MessageRowView({
               ? "max-w-[calc(100%_-_92px_/_var(--chat-zoom,1))] items-end"
               : "max-w-[calc(100%_-_92px_/_var(--chat-zoom,1)_-_32px)] items-start",
           )}
+          // SQOL-U3: a chat whose toolbar is the menu alone keeps only its width free.
+          style={
+            shared.toolbarRoom === undefined
+              ? undefined
+              : {
+                  maxWidth: `calc(100% - ${shared.toolbarRoom}px / var(--chat-zoom, 1)${mine ? "" : " - 32px"})`,
+                }
+          }
         >
           {place.crew && !mine && place.first ? (
             <PersonContextMenu person={{ id: message.from, ...sender }} place={personPlace}>
@@ -701,40 +714,44 @@ function MessageRowView({
           ) : null}
           <AnimatePresence initial={false}>
             {failed ? (
+              // The reason on its line, its two answers together under it (SQOL-U3: in a narrow
+              // panel the last one wrapped alone and read as the next message's).
               <motion.span
                 key="failed"
-                className="mt-1.5 flex flex-wrap items-center justify-end gap-x-2 gap-y-1 px-1"
+                className="mt-1.5 flex flex-col items-end gap-0.5 px-1"
                 {...rise(reduce, 4, 0.2)}
               >
-                <span className="text-[12px] text-flare-300">{failureWords}</span>
-                {REWRITE.has(failure) && !sticker ? (
+                <span className="text-right text-[12px] text-flare-300">{failureWords}</span>
+                <span className="flex items-center gap-1">
+                  {REWRITE.has(failure) && !sticker ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7"
+                      onClick={() => actions.onRewrite(message)}
+                    >
+                      {t("chat.actions.edit")}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7"
+                      icon={<ArrowClockwise size={13} />}
+                      onClick={() => actions.onRetry(message)}
+                    >
+                      {t("chat.actions.retry")}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
                     className="h-7"
-                    onClick={() => actions.onRewrite(message)}
+                    onClick={() => actions.onDiscard(message)}
                   >
-                    {t("chat.actions.edit")}
+                    {t("chat.actions.discard")}
                   </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7"
-                    icon={<ArrowClockwise size={13} />}
-                    onClick={() => actions.onRetry(message)}
-                  >
-                    {t("chat.actions.retry")}
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7"
-                  onClick={() => actions.onDiscard(message)}
-                >
-                  {t("chat.actions.discard")}
-                </Button>
+                </span>
               </motion.span>
             ) : null}
           </AnimatePresence>

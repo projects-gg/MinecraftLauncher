@@ -16,8 +16,8 @@ export const enRoomChat: typeof trRoomChat = {
   crewChat: "Crew Chat",
   empty: "Only people in this room see what you write here, and it's deleted when the room closes.",
   composer: {
-    placeholder: "Write to the room",
-    label: "Write to the room",
+    placeholder: "Message the room",
+    label: "Message the room",
   },
   tombstone: {
     mod: "This message was removed",

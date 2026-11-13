@@ -252,6 +252,8 @@ export function RoomChat({ room, visible }: { room: VoiceRoomView; visible: bool
       quick: [],
       people,
       cards: false,
+      // The menu alone beside a bubble (no reactions or replies here): bubbles take the rest.
+      toolbarRoom: 40,
     }),
     [room.id, chatExtras.links, linkRules, me, people],
   );
@@ -405,7 +407,8 @@ export function RoomChat({ room, visible }: { room: VoiceRoomView; visible: bool
           ref={scroller}
           layoutScroll
           onScroll={onScroll}
-          className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pt-1 [scrollbar-gutter:stable]"
+          // A soft top edge: a message cut there reads as "more above", not as a broken row.
+          className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pt-2 [scrollbar-gutter:stable] [mask-image:linear-gradient(to_bottom,transparent,black_16px)]"
         >
           <div
             ref={content}
