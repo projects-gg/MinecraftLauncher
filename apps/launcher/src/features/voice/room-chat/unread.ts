@@ -1,5 +1,7 @@
 // What the room panel's chat has waiting, for the places that open it (SQOL §1.3 "Okunmamış"): the
 // title bar's room pill and the stage's "Sohbet" (SQOL-U1).
+import { useShareStage } from "@/features/share/store";
+import { leaveFullscreen } from "@/features/share/stream-actions";
 import { useSocialUi } from "@/features/social/store";
 import { useVoiceUi } from "../store";
 import { usePanelChat } from "./panel-chat";
@@ -8,9 +10,11 @@ import { useRoomChat } from "./store";
 /**
  * Opens the room panel (beside the stage while the stage is on the page); `focus: "chat"` puts the
  * focus in its chat's field. `from` gets the focus back when it closes (the focused element when
- * none is given).
+ * none is given). A full-screen stage covers the panel: it goes back to the page first (SQOL-U1's
+ * own way out), so "Sohbet" and a preview pressed there open the panel docked beside it.
  */
 export function openRoomPanel(options?: { focus?: "chat"; from?: HTMLElement | null }): void {
+  if (useShareStage.getState().mode === "full") leaveFullscreen();
   const from =
     options?.from ??
     (document.activeElement instanceof HTMLElement ? document.activeElement : null);

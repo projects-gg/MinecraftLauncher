@@ -95,10 +95,13 @@ describe("RoomChatPeek", () => {
     expect(keys()).toEqual(["r:b"]);
   });
 
-  it("goes with Esc", () => {
+  it("goes with Esc, which it keeps: a full-screen stage under it leaves on the next one", () => {
     render(<RoomChatPeek />);
-    fireEvent.keyDown(document, { key: "Escape" });
+    // `false`: the key was taken (SQOL-U1's full-screen Esc yields to a taken key).
+    expect(fireEvent.keyDown(document, { key: "Escape" })).toBe(false);
     expect(keys()).toEqual([]);
+    // Nothing left to take away: the next Esc goes on to whatever is under them.
+    expect(fireEvent.keyDown(document, { key: "Escape" })).toBe(true);
   });
 
   it("leaves an Esc another layer took", () => {
