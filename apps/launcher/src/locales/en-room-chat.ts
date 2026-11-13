@@ -7,6 +7,9 @@ export const enRoomChat: typeof trRoomChat = {
     label: "Voice Room",
     menu: "Room Options",
   },
+  call: {
+    title: "Voice Call",
+  },
   resize: {
     label: "Panel Width",
     tooltip: "Drag to Widen",

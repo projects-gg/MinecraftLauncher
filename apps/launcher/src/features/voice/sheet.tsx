@@ -98,6 +98,7 @@ import {
   toggleDeaf,
   toggleMute,
 } from "./actions";
+import { CallTime, callStart } from "./call-time";
 import { ConnectionMark } from "./connection";
 import { roomMenuItems } from "./crew-room-menu";
 import { useCrewRoomsUi, withPendingOrder } from "./crew-rooms-store";
@@ -979,6 +980,9 @@ function RoomHeader({
   // SQOL-U3: a crew's chips and a chat's people line count the people; the header then says only
   // a full room.
   const second = headerLine(room, { stage, counted, full }, t);
+  // SQOL-U3: a call's time after "Sesli Arama" (the page's one clock; a timer to screen readers,
+  // read when they reach it, never announced on its own).
+  const since = useVoiceUi((s) => callStart(s.state));
   return (
     <header className="shrink-0 border-b border-white/8 pt-4 pr-3 pb-3 pl-5">
       <div className="flex items-start gap-1.5">
@@ -990,7 +994,17 @@ function RoomHeader({
             editing={editing}
             setEditing={setEditing}
           />
-          {second ? <p className="mt-0.5 truncate text-[12.5px] text-ash-400">{second}</p> : null}
+          {second ? (
+            <p className="mt-0.5 truncate text-[12.5px] text-ash-400">
+              {second}
+              {stage && since !== null ? (
+                <>
+                  {" ("}
+                  <CallTime since={since} />)
+                </>
+              ) : null}
+            </p>
+          ) : null}
         </div>
         {editing ? null : (
           <>

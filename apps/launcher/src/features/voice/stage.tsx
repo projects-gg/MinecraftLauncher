@@ -1,7 +1,7 @@
 // The call with one friend on the room panel (VOICE-CALL; the owner: "discord gibi güzel şeyler"):
 // instead of a list of two, both faces large side by side, the friend first, each with the speaking
 // ring and the ring that follows the voice (it reaches furthest here), the name and what they
-// turned off under it, and the call's time under the two. While the player's call rings the
+// turned off under it. While the player's call rings the
 // friend's face waits faded with "Aranıyor…" ("Başka bir odada" when they are in another room:
 // §3.2); the one way out is the footer's button, which says "İptal" then. A press or a right click
 // on the friend opens their menu, as a row's does. SHARE-LIVE: a friend who shares has "YAYINDA" and
@@ -11,7 +11,8 @@
 // SQOL-U3: with a chat under it the stage is compact (faces at 48 px, a band at the panel's top),
 // and the friend's face says "konuşuyor" to screen readers while they speak. In a wide panel's
 // people column the two faces stand one over the other. The player's own seat no longer says "Sen"
-// on screen (the owner: everyone knows who they are), only to screen readers.
+// on screen (the owner: everyone knows who they are), only to screen readers; the call's time is in
+// the panel's header ("Sesli Arama (12:34)"), not under the faces.
 import { cn, Menu, useMotionPrefs } from "@pl/ui";
 import { motion } from "motion/react";
 import { type ReactNode, type RefObject, useRef, useState } from "react";
@@ -23,7 +24,6 @@ import { glide } from "@/features/social/motion";
 import { usePersonItems } from "@/features/social/person-menu";
 import { useSocialUi } from "@/features/social/store";
 import type { VoicePerson, VoiceRoomView, VoiceState } from "@/lib/api/voice-types";
-import { CallTime, callStart } from "./call-time";
 import { SpeakingFace } from "./faces";
 import { presenceOf, roleWord, type VoiceFace } from "./rules";
 import { useSpeakingWord } from "./speaking-word";
@@ -205,7 +205,6 @@ export function CallStage({
   const { t } = useTranslation();
   const me = useSocialUi((s) => s.view.me);
   const calling = useVoiceUi((s) => s.state.calling);
-  const since = useVoiceUi((s) => callStart(s.state));
   const friend = room.people[0];
   const stageRef = useRef<HTMLElement>(null);
   // What comes and goes under a seat ("YAYINDA", "İzle") moves the stage's middle: it glides there.
@@ -227,7 +226,7 @@ export function CallStage({
       // its top.
       className={cn(
         "flex flex-col items-center px-2",
-        compact ? "pt-3 pb-2" : "flex-1 justify-center pt-4 pb-14",
+        compact ? "pt-3 pb-3" : "flex-1 justify-center pt-4 pb-14",
       )}
       data-voice-stage=""
     >
@@ -257,18 +256,6 @@ export function CallStage({
             </LiveAppear>
           }
         />
-      </motion.div>
-      {/* The call's time; its room is kept while the call still rings, so nothing moves on an answer. */}
-      <motion.div
-        {...moves}
-        className={cn("flex items-center", compact ? "mt-1.5 h-6" : "mt-5 h-8")}
-      >
-        {since !== null ? (
-          <CallTime
-            since={since}
-            className={cn("font-semibold text-ash-300", compact ? "text-[13px]" : "text-[15px]")}
-          />
-        ) : null}
       </motion.div>
     </section>
   );
