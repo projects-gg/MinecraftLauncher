@@ -95,13 +95,9 @@ struct Mine {
     audio_failed: bool,
 }
 
-/// SQOL-R3: the values a live change asks the room for (none: unchanged).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct Asked {
-    preset: Option<SharePreset>,
-    fps: Option<u8>,
-    audio: Option<bool>,
-}
+/// SQOL-R3: the values a live change asks the room for (none: unchanged); a refusal tells the
+/// page these (`refused`'s `change`).
+type Asked = crate::share::ShareAsked;
 
 /// SQOL: a source the publisher is switching to.
 #[derive(Debug, Clone)]
@@ -279,7 +275,7 @@ impl Pending {
     fn is_share(&self) -> bool {
         matches!(
             self,
-            Self::ShareOpen(_) | Self::Watch(..) | Self::WatchTurn | Self::ShareSet(_)
+            Self::ShareOpen(_) | Self::Watch(..) | Self::WatchTurn | Self::ShareSet(..)
         )
     }
 }
@@ -553,7 +549,7 @@ impl Machine {
             });
         }
         self.pending.retain(|_, pending| {
-            *pending != Pending::ShareOpen(n) && *pending != Pending::ShareSet(n)
+            !matches!(pending, Pending::ShareOpen(m) | Pending::ShareSet(m, _) if *m == n)
         });
         // The player's own preview of it goes with it.
         let me = self.me.clone();
@@ -807,7 +803,7 @@ impl Machine {
                         None => self.close_mine(n, Some(ShareClosedWhy::Error), true, now, out),
                     },
                     // SQOL: the room's applied values of a live change.
-                    Some(Pending::ShareSet(n)) => self.edited(n, rid, preset, fps, audio, out),
+                    Some(Pending::ShareSet(n, _)) => self.edited(n, rid, preset, fps, audio, out),
                     Some(Pending::WatchTurn) => match ice {
                         Some(ice) if !ice.urls.is_empty() => {
                             // MOB-WATCH: it serves the session's new connections until shortly
@@ -842,11 +838,12 @@ impl Machine {
                 match self.pending.remove(&rid) {
                     Some(Pending::ShareOpen(n)) => {
                         self.close_mine(n, None, false, now, out);
-                        out.push(Effect::ShareNotice(ShareNotice::Refused { refusal }));
+                        out.push(Effect::ShareNotice(ShareNotice::refused(refusal)));
                     }
                     // SQOL: a live change the room refused: nothing changes. The budget and the
-                    // room's rule are told; a room that does not take changes yet stays quiet.
-                    Some(Pending::ShareSet(n)) => {
+                    // room's rule are told (SQOL-R3: with the share and what it asked, so the page
+                    // rolls back exactly that); a room that does not take changes yet stays quiet.
+                    Some(Pending::ShareSet(n, asked)) => {
                         if let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == n)
                             && mine.editing.is_some_and(|(asked, _)| asked == rid)
                         {
@@ -854,13 +851,17 @@ impl Machine {
                             mine.asked = Asked::default();
                         }
                         if matches!(refusal, ShareRefusal::Budget | ShareRefusal::NotAllowed) {
-                            out.push(Effect::ShareNotice(ShareNotice::Refused { refusal }));
+                            out.push(Effect::ShareNotice(ShareNotice::Refused {
+                                refusal,
+                                n: Some(n),
+                                change: Some(asked),
+                            }));
                         }
                         out.push(Effect::Changed);
                     }
                     Some(Pending::Watch(u, n)) => {
                         self.drop_watch(&u, n, false, out);
-                        out.push(Effect::ShareNotice(ShareNotice::Refused { refusal }));
+                        out.push(Effect::ShareNotice(ShareNotice::refused(refusal)));
                     }
                     Some(Pending::WatchTurn) => self.watch_lost(now, out),
                     _ => {}
@@ -1050,7 +1051,8 @@ impl Machine {
         {
             for (n, src) in kinds {
                 let rid = self.rid();
-                self.pending.insert(rid, Pending::ShareSet(n));
+                self.pending
+                    .insert(rid, Pending::ShareSet(n, Asked::default()));
                 out.push(Effect::Send {
                     generation,
                     frame: ToRoom::ShareSet {
@@ -1827,7 +1829,8 @@ impl Machine {
             && let Some(generation) = generation
         {
             let rid = self.rid();
-            self.pending.insert(rid, Pending::ShareSet(n));
+            self.pending
+                .insert(rid, Pending::ShareSet(n, Asked::default()));
             out.push(Effect::Send {
                 generation,
                 frame: ToRoom::ShareSet {
@@ -2011,7 +2014,7 @@ impl Machine {
                 && let Some(generation) = generation
             {
                 let rid = self.rid();
-                self.pending.insert(rid, Pending::ShareSet(n));
+                self.pending.insert(rid, Pending::ShareSet(n, asked));
                 let mine = &mut self.share.mine[at];
                 mine.editing = Some((rid, now));
                 mine.asked = Asked {

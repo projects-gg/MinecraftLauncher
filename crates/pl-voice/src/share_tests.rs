@@ -516,9 +516,7 @@ fn shares_are_held_to_the_rooms_limits() {
     assert!(sent(&effects).is_empty());
     assert_eq!(
         notices(&effects),
-        [&ShareNotice::Refused {
-            refusal: ShareRefusal::RoomFull
-        }]
+        [&ShareNotice::refused(ShareRefusal::RoomFull)]
     );
     assert!(machine.view(2_200, UNIX).share.mine.is_empty());
     // Who may share is the room's: a member it does not allow.
@@ -779,9 +777,7 @@ fn at_most_two_watched_and_the_rooms_refusal() {
     );
     assert_eq!(
         notices(&effects),
-        [&ShareNotice::Refused {
-            refusal: ShareRefusal::WatchFull
-        }]
+        [&ShareNotice::refused(ShareRefusal::WatchFull)]
     );
     assert_eq!(machine.view(2_100, UNIX).share.watching.len(), 1);
     machine.share_watch("a", 2, 2_200).unwrap();

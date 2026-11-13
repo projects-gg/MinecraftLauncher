@@ -10,6 +10,13 @@ export type ShareKind = "game" | "window" | "screen";
 /** "Kalite": Düşük (480p30) / Normal (720p30) / Yüksek (1080p30; a game's "Akıcılık" 1080p60). */
 export type SharePreset = "low" | "normal" | "high";
 
+/** SQOL-R3: the room-checked values a live change asked for, as sent (absent: not asked). */
+export interface ShareAsked {
+  preset?: SharePreset | null;
+  fps?: number | null;
+  audio?: boolean | null;
+}
+
 /** A watcher's simulcast layer: full, or a quarter for a small tile. */
 export type ShareLayer = "f" | "q";
 
@@ -271,7 +278,14 @@ export type ShareClosedWhy =
 /** A moment worth a toast (`share-notice`). */
 export type ShareNotice =
   | { kind: "closed"; why: ShareClosedWhy; src: ShareKind }
-  | { kind: "refused"; refusal: ShareRefusal }
+  // SQOL-R3: a live change of share `n` the room refused carries what it asked (`change`), so the
+  // page rolls back exactly that; a share or a watch that could not start carries neither.
+  | {
+      kind: "refused";
+      refusal: ShareRefusal;
+      n?: number | null;
+      change?: ShareAsked | null;
+    }
   | { kind: "audioOff" }
   | { kind: "watchStopped" }
   | { kind: "watchFailed" }

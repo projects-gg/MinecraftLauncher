@@ -873,14 +873,34 @@ impl<'de> Deserialize<'de> for ShareClosedWhy {
     }
 }
 
+/// SQOL-R3: the room-checked values a live change asked for (`share_set`), as sent; none: not
+/// asked.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareAsked {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset: Option<SharePreset>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fps: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<bool>,
+}
+
 /// A moment of screen sharing worth a toast (`share-notice`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ShareNotice {
     /// One of the player's shares ended without them (`src`: what it showed).
     Closed { why: ShareClosedWhy, src: ShareKind },
-    /// A share or a watch could not start.
-    Refused { refusal: ShareRefusal },
+    /// A share or a watch could not start; SQOL-R3: or a live change of share `n` the room
+    /// refused, with what it asked (`change`: the page rolls back exactly those).
+    Refused {
+        refusal: ShareRefusal,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        n: Option<u8>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        change: Option<ShareAsked>,
+    },
     /// The share goes on without its sound.
     AudioOff,
     /// Watching stopped: nobody answered "Hâlâ izliyor musun?".
@@ -899,6 +919,17 @@ pub enum ShareNotice {
     /// kapandı."): "Başka Ekran Seç" / "Paylaşımı Durdur"; the share ends after [`HOLD_STOP_MS`]
     /// (`closed`, `sourceGone`).
     SourceClosed { n: u8, src: ShareKind },
+}
+
+impl ShareNotice {
+    /// A share or a watch that could not start.
+    pub fn refused(refusal: ShareRefusal) -> Self {
+        Self::Refused {
+            refusal,
+            n: None,
+            change: None,
+        }
+    }
 }
 
 // --- the room socket's share frames --------------------------------------------------------------
@@ -1267,6 +1298,25 @@ mod tests {
         assert_eq!(
             serde_json::to_value(WatchCmd::Reset { keep_turn: true }).unwrap(),
             json!({"t":"reset","keepTurn":true})
+        );
+        // SQOL-R3: a refused live change says its share and what it asked; a share or a watch
+        // that could not start says neither.
+        assert_eq!(
+            serde_json::to_value(ShareNotice::refused(ShareRefusal::Full)).unwrap(),
+            json!({"kind":"refused","refusal":"full"})
+        );
+        assert_eq!(
+            serde_json::to_value(ShareNotice::Refused {
+                refusal: ShareRefusal::Budget,
+                n: Some(1),
+                change: Some(ShareAsked {
+                    preset: Some(SharePreset::High),
+                    fps: Some(60),
+                    audio: None,
+                }),
+            })
+            .unwrap(),
+            json!({"kind":"refused","refusal":"budget","n":1,"change":{"preset":"high","fps":60}})
         );
         let report: WatchReport =
             serde_json::from_value(json!({"t":"answer","sdp":"v=0"})).unwrap();

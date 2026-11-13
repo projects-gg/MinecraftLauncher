@@ -263,8 +263,9 @@ enum Pending {
     Watch(String, u8),
     WatchTurn,
     Unshare,
-    // SQOL: a live change of share `n` (`share_set` with `rid`), a room chat message, a deletion.
-    ShareSet(u8),
+    // SQOL: a live change of share `n` (`share_set` with `rid`; SQOL-R3: with what it asked), a
+    // room chat message, a deletion.
+    ShareSet(u8, crate::share::ShareAsked),
     Rchat,
     RchatDel,
 }

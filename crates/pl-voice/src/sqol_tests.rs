@@ -9,9 +9,9 @@ use crate::engine::PageReport;
 use crate::machine::{Effect, Machine, ServiceVoice, StayStart};
 use crate::settings::Store;
 use crate::share::{
-    HOLD_STOP_MS, ServiceShare, ShareBy, ShareChange, ShareClosedWhy, ShareCmd, ShareEvent,
-    ShareHoldWhy, ShareKind, ShareMotion, ShareNotice, SharePreset, ShareRefusal, ShareSource,
-    ShareSt, ShareWire, ThumbJpeg,
+    HOLD_STOP_MS, ServiceShare, ShareAsked, ShareBy, ShareChange, ShareClosedWhy, ShareCmd,
+    ShareEvent, ShareHoldWhy, ShareKind, ShareMotion, ShareNotice, SharePreset, ShareRefusal,
+    ShareSource, ShareSt, ShareWire, ThumbJpeg,
 };
 use crate::wire::{FromRoom, MeWire, PersonWire, Role, RoomKind, RoomWire, Sdp, Ticket, ToRoom};
 
@@ -709,7 +709,12 @@ fn live_changes_hold_to_what_is_allowed() {
     assert_eq!(
         notices(&effects),
         [&ShareNotice::Refused {
-            refusal: ShareRefusal::Budget
+            refusal: ShareRefusal::Budget,
+            n: Some(1),
+            change: Some(ShareAsked {
+                fps: Some(15),
+                ..ShareAsked::default()
+            }),
         }]
     );
     let effects = machine
