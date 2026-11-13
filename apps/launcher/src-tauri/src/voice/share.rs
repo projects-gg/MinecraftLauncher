@@ -116,6 +116,8 @@ pub fn service_of(status: &pl_social::VoiceStatus) -> Option<pl_voice::share::Se
         },
         open: share.open,
         watch: share.watch,
+        // SQOL: live changes of a share (`hello.voice.share.edit`).
+        edit: share.edit,
     })
 }
 
@@ -155,11 +157,43 @@ pub fn command(cmd: ShareCmd) {
             ShareCmd::Prepare {
                 source: pl_voice::share::ShareSource::Game,
                 ..
+            } | ShareCmd::Switch {
+                source: pl_voice::share::ShareSource::Game,
+                ..
             }
         )
         .then(|| game_pid(&parts.app))
         .flatten();
         parts.publisher.command(cmd, game);
+    }
+}
+
+/// SQOL: the launcher started a game: a share whose game closed takes it (when its window comes).
+pub fn game_started(app: &AppHandle) {
+    if let Some(state) = app.try_state::<crate::state::AppState>() {
+        state.voice.share_game_started();
+    }
+}
+
+/// SQOL: what the "Yayın" window plays streams with now.
+pub fn popout_audio(voice: &Voice) -> pl_voice::share::PopoutAudio {
+    popout_audio_of(&voice.settings(), &voice.state())
+}
+
+/// SQOL: the "Yayın" window's sound from voice chat's settings and state.
+pub fn popout_audio_of(
+    settings: &pl_voice::settings::VoiceSettings,
+    state: &pl_voice::view::VoiceState,
+) -> pl_voice::share::PopoutAudio {
+    pl_voice::share::PopoutAudio {
+        device: settings.output_device.clone(),
+        volume: settings.output_volume,
+        deaf: state.room.as_ref().is_some_and(|room| room.me.deaf),
+        volume_max: state.volume_max,
+        duck: settings.share.duck,
+        duck_level: settings.share.duck_level,
+        duck_self: settings.share.duck_self,
+        view_quality: settings.share.view_quality,
     }
 }
 

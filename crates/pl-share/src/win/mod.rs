@@ -5,6 +5,7 @@ pub mod capture;
 pub mod convert;
 pub mod d3d;
 pub mod encoder;
+pub mod minimize;
 pub mod session;
 pub mod sources;
 pub mod thumb;

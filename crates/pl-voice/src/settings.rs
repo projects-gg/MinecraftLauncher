@@ -182,6 +182,9 @@ pub struct VoiceSettings {
     pub output_volume: u16,
     /// SHARE: "Ekran paylaşımı" (Settings → Sesli sohbet, and what the picker chose last).
     pub share: crate::share::VoiceShareSettings,
+    /// SQOL "Mesaj Önizlemelerini Göster": the room chat's newest messages over the stage while
+    /// the room's panel is closed.
+    pub peek: bool,
 }
 
 impl Default for VoiceSettings {
@@ -203,6 +206,7 @@ impl Default for VoiceSettings {
             ask_before_call: true,
             output_volume: 100,
             share: crate::share::VoiceShareSettings::default(),
+            peek: true,
         }
     }
 }
@@ -374,7 +378,7 @@ impl Store {
             .map(|list| {
                 list.into_iter()
                     .filter(|(id, _)| valid_person(id))
-                    .map(|(id, (volume, muted))| (id, (volume.min(100), muted)))
+                    .map(|(id, (volume, muted))| (id, (volume.min(VOLUME_MAX), muted)))
                     .take(STREAMS_MAX)
                     .collect()
             })
@@ -401,7 +405,7 @@ impl Store {
         }
     }
 
-    /// SHARE: a sharer's stream sound for the player (percent 0–100, muted).
+    /// SHARE: a sharer's stream sound for the player (percent 0–200 since SQOL, muted).
     pub fn stream(&self, id: &str) -> (u16, bool) {
         self.streams
             .iter()
@@ -411,7 +415,7 @@ impl Store {
 
     /// SHARE: changes a sharer's stream sound; true when anything changed.
     pub fn set_stream(&mut self, id: &str, volume: u16, muted: bool) -> bool {
-        let value = (volume.min(100), muted);
+        let value = (volume.min(VOLUME_MAX), muted);
         if !valid_person(id) || self.stream(id) == value {
             return false;
         }

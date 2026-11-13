@@ -9,9 +9,21 @@
 //! A process has one Raw Input target per device kind, and tao registered its own for device
 //! events: the watch reads what was registered before and puts it back when it stops.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use pl_voice::Voice;
 use pl_voice::settings::VoiceKey;
 use pl_voice::view::VoiceShortcut;
+
+/// SQOL: a launcher text field has the keyboard (`voice_typing`).
+static TYPING: AtomicBool = AtomicBool::new(false);
+
+/// SQOL: a launcher text field took the keyboard (`on`) or let it go: meanwhile single-key voice
+/// shortcuts do nothing, as long as the launcher is the window in front (a page that forgets to
+/// say it let go never keeps the shortcuts from the game).
+pub fn set_typing(on: bool) {
+    TYPING.store(on, Ordering::SeqCst);
+}
 
 /// Milliseconds since the computer was last touched (keyboard, mouse, pen; the inactivity rule).
 pub fn idle_ms() -> u64 {
@@ -116,6 +128,18 @@ mod platform {
     thread_local! {
         /// The watched keys and who hears their changes, on the input thread.
         static WATCH: RefCell<Option<(Shortcuts, Voice)>> = const { RefCell::new(None) };
+    }
+
+    /// SQOL: the player types in a launcher text field now: it said so, and a window of the
+    /// launcher is the one in front.
+    fn typing() -> bool {
+        if !super::TYPING.load(std::sync::atomic::Ordering::SeqCst) {
+            return false;
+        }
+        let mut pid = 0u32;
+        // SAFETY: plain queries of the window in front and its process.
+        let _ = unsafe { GetWindowThreadProcessId(GetForegroundWindow(), Some(&mut pid)) };
+        pid == std::process::id()
     }
 
     /// The modifiers held now, from Windows' own key state (asked only when a combination's key
@@ -368,7 +392,7 @@ mod platform {
                         let changes = if kind == RIM_TYPEKEYBOARD.0 {
                             // SAFETY: a keyboard report.
                             let key = unsafe { input.data.keyboard };
-                            shortcuts.keyboard(key.MakeCode, key.Flags, held)
+                            shortcuts.keyboard_typing(key.MakeCode, key.Flags, held, typing())
                         } else if kind == RIM_TYPEMOUSE.0 {
                             // SAFETY: a mouse report.
                             let flags =

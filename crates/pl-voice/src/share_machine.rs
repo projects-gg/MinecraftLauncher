@@ -13,6 +13,12 @@
 //!   opens or closes) asks anew from there. Half an hour without a touch asks "Hâlâ izliyor musun?";
 //!   a minute without an answer stops watching.
 //! - Someone who shares or watches is no idle player: the inactivity rule waits while they do.
+//! - **SQOL (`share2`, the lead's contract `docs/tasks/sqol.md` §1.2, §2.1):** while the service
+//!   allows live changes (`share.edit`), a live share changes its source ("Ekranı Değiştir", the
+//!   watchers staying), its quality, frame rate and sound (the room asked first, its applied values
+//!   used), and holds a blank picture ("Duraklat"). A closed window no longer ends the share: it
+//!   holds a minute for another source ("Başka Ekran Seç"), and a game the launcher starts meanwhile
+//!   takes its place. Watchers hear what they see (`st`: `hold`, `min`).
 
 use std::collections::BTreeMap;
 
@@ -21,15 +27,19 @@ use base64::Engine as _;
 use super::{Effect, Machine, Pending};
 use crate::engine::EngineSound;
 use crate::share::{
-    ALONE_STOP_MS, HIDDEN_GRACE_MS, PAUSE_AFTER_MS, SOUND_GAP_MS, STILL_ANSWER_MS, STILL_ASK_MS,
-    ServiceShare, ShareBy, ShareClosedWhy, ShareCmd, ShareEvent, ShareKind, ShareLayer,
-    ShareLostWhy, ShareMinePhase, ShareNotice, ShareOpts, SharePreset, ShareRefusal, ShareSource,
-    ShareSurface, ShareWatchPhase, ShareWire, THUMB_MAX_BYTES, VoiceLiveShare, VoiceMyShare,
-    VoiceShareView, VoiceStreamVolume, VoiceWatch, WATCH_LOSSES_MAX, WATCH_MAX,
-    WATCH_OFFER_WAIT_MS, WatchCmd, WatchMid, WatchReport, WatchWire,
+    ALONE_STOP_MS, HIDDEN_GRACE_MS, HOLD_STOP_MS, PAUSE_AFTER_MS, SOUND_GAP_MS, STILL_ANSWER_MS,
+    STILL_ASK_MS, ServiceShare, ShareAudioSource, ShareBy, ShareChange, ShareClosedWhy, ShareCmd,
+    ShareEvent, ShareHoldWhy, ShareKind, ShareLayer, ShareLostWhy, ShareMinePhase, ShareMotion,
+    ShareNotice, ShareOpts, SharePreset, ShareRefusal, ShareSource, ShareSt, ShareSurface,
+    ShareWatchPhase, ShareWire, THUMB_MAX_BYTES, VoiceLiveShare, VoiceMyShare, VoiceShareView,
+    VoiceStreamVolume, VoiceWatch, WATCH_LOSSES_MAX, WATCH_MAX, WATCH_OFFER_WAIT_MS, WatchCmd,
+    WatchMid, WatchReport, WatchWire, normal_fps,
 };
 use crate::view::{VoiceAnswer, VoiceRefusal};
 use crate::wire::{FromRoom, ModAct, ToRoom};
+
+/// SQOL: a live change the room has not answered by then is given up (nothing changes).
+const EDIT_WAIT_MS: u64 = 10_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MinePhase {
@@ -55,6 +65,54 @@ struct Mine {
     since: i64,
     /// SHARE-LIVE: when the room took its last still picture (the room's `th`).
     th: Option<i64>,
+    /// SQOL: "Görüntü" as chosen (`opts.motion` is what it means for the source).
+    motion: ShareMotion,
+    /// SQOL: "Önizleme Resmini Paylaş" for this share.
+    thumbs: bool,
+    /// SQOL: why the picture is blank (none: the source shows).
+    hold: Option<ShareHoldWhy>,
+    /// SQOL: a closed source's share ends at this moment unless another source comes.
+    hold_until: Option<u64>,
+    /// SQOL: the shared window is minimized.
+    minimized: bool,
+    /// SQOL: what the room was last told watchers see.
+    told: ShareSt,
+    /// SQOL: a switch on its way.
+    switching: Option<Switching>,
+    /// SQOL: a live change waits for the room: its `rid` and when it went.
+    editing: Option<(u32, u64)>,
+}
+
+/// SQOL: a source the publisher is switching to.
+#[derive(Debug, Clone)]
+struct Switching {
+    source: ShareSource,
+    label: String,
+    /// The launcher's own (the game it started for a share whose game closed): no word when it
+    /// does not happen.
+    auto: bool,
+}
+
+impl Mine {
+    /// What watchers see now.
+    fn st(&self) -> ShareSt {
+        if self.hold.is_some() {
+            ShareSt::Hold
+        } else if self.minimized {
+            ShareSt::Min
+        } else {
+            ShareSt::Live
+        }
+    }
+}
+
+/// "Görüntü" for a source of `kind`: `auto` moves for a game, reads for the rest.
+fn motion_of(choice: ShareMotion, kind: ShareKind) -> bool {
+    match choice {
+        ShareMotion::Auto => kind == ShareKind::Game,
+        ShareMotion::Clarity => false,
+        ShareMotion::Motion => true,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -195,7 +253,10 @@ fn slot(surface: ShareSurface) -> usize {
 impl Pending {
     /// Requests the share part answers itself (`unshare` waits like any moderator's action).
     fn is_share(&self) -> bool {
-        matches!(self, Self::ShareOpen(_) | Self::Watch(..) | Self::WatchTurn)
+        matches!(
+            self,
+            Self::ShareOpen(_) | Self::Watch(..) | Self::WatchTurn | Self::ShareSet(_)
+        )
     }
 }
 
@@ -208,7 +269,34 @@ impl Machine {
         vec![
             crate::share::CAP.to_owned(),
             crate::share::LIVE_CAP.to_owned(),
+            crate::share::SHARE2_CAP.to_owned(),
+            crate::share::RCHAT_CAP.to_owned(),
         ]
+    }
+
+    /// SQOL: the player's shares change live (the service's `share.edit` in a sharing room).
+    fn share_edit(&self) -> bool {
+        self.share_on() && self.share.service.is_some_and(|service| service.edit)
+    }
+
+    /// SQOL: tells the room what watchers of share `n` see, when that changed.
+    fn sync_st(&mut self, n: u8, out: &mut Vec<Effect>) {
+        let edit = self.share_edit();
+        let generation = self.open_generation();
+        let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == n) else {
+            return;
+        };
+        let st = mine.st();
+        if !edit || mine.phase != MinePhase::Live || st == mine.told {
+            return;
+        }
+        if let Some(generation) = generation {
+            mine.told = st;
+            out.push(Effect::Send {
+                generation,
+                frame: ToRoom::share_st(n, st),
+            });
+        }
     }
 
     /// SHARE-LIVE: one of sharing's sounds (the voice page plays it, as "Sesli sohbet sesleri"
@@ -371,12 +459,9 @@ impl Machine {
             return Err(ShareRefusal::Full);
         };
         let kind = source.kind();
-        let opts = ShareOpts::of(
-            &self.store.settings().share,
-            kind,
-            self.max_preset(),
-            self.share.audio,
-        );
+        let settings = &self.store.settings().share;
+        let opts = ShareOpts::of(settings, kind, self.max_preset(), self.share.audio);
+        let (motion, thumbs) = (settings.motion, settings.thumbs);
         let label = match kind {
             ShareKind::Game => String::new(),
             _ => crate::share::clip_label(label),
@@ -393,6 +478,14 @@ impl Machine {
             alone_since: None,
             since: unix,
             th: None,
+            motion,
+            thumbs,
+            hold: None,
+            hold_until: None,
+            minimized: false,
+            told: ShareSt::Live,
+            switching: None,
+            editing: None,
         });
         let mut out = vec![Effect::Share(ShareCmd::Prepare { n, source, opts })];
         self.sync_privacy(&mut out);
@@ -432,8 +525,9 @@ impl Machine {
                 frame: ToRoom::ShareClose { n },
             });
         }
-        self.pending
-            .retain(|_, pending| *pending != Pending::ShareOpen(n));
+        self.pending.retain(|_, pending| {
+            *pending != Pending::ShareOpen(n) && *pending != Pending::ShareSet(n)
+        });
         // The player's own preview of it goes with it.
         let me = self.me.clone();
         if self
@@ -497,7 +591,7 @@ impl Machine {
                 });
             }
             // The panel says "Yayında" from the room's answer; frames and numbers change nothing
-            // the page shows.
+            // the page shows (SQOL: the launcher hands the numbers to the page itself).
             ShareEvent::Started { .. } | ShareEvent::Stats { .. } => {}
             ShareEvent::Lost { n, why } => {
                 let why = match why {
@@ -506,8 +600,27 @@ impl Machine {
                 };
                 self.close_mine(n, Some(why), true, now, &mut out);
             }
-            ShareEvent::SourceGone { n } => {
-                self.close_mine(n, Some(ShareClosedWhy::SourceGone), true, now, &mut out);
+            ShareEvent::SourceGone { n } => self.source_gone(n, now, &mut out),
+            ShareEvent::Switched { n, .. } => self.switched(n, &mut out),
+            ShareEvent::SwitchFailed { n } => {
+                if let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == n)
+                    && let Some(switching) = mine.switching.take()
+                {
+                    // The launcher's own try (a game it started) says nothing; the wait goes on.
+                    if !switching.auto {
+                        out.push(Effect::ShareNotice(ShareNotice::SwitchFailed { n }));
+                    }
+                    out.push(Effect::Changed);
+                }
+            }
+            ShareEvent::Minimized { n, on } => {
+                if let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == n)
+                    && mine.minimized != on
+                {
+                    mine.minimized = on;
+                    self.sync_st(n, &mut out);
+                    out.push(Effect::Changed);
+                }
             }
             ShareEvent::AudioUnavailable { n } => {
                 if let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == n)
@@ -521,11 +634,12 @@ impl Machine {
             // SHARE-LIVE: a live share's still picture goes to the room (a `live1` room keeps it
             // for member lists; an older one answers `bad_request`, which nobody waits for).
             ShareEvent::Thumb { n, jpg } => {
+                // SQOL: only while "Önizleme Resmini Paylaş" is on for it.
                 let live = self
                     .share
                     .mine
                     .iter()
-                    .any(|mine| mine.n == n && mine.phase == MinePhase::Live);
+                    .any(|mine| mine.n == n && mine.phase == MinePhase::Live && mine.thumbs);
                 let jpeg = jpg.0.len() <= THUMB_MAX_BYTES && jpg.0.starts_with(&[0xFF, 0xD8, 0xFF]);
                 if live
                     && jpeg
@@ -575,7 +689,7 @@ impl Machine {
                             if let Some(generation) = generation {
                                 out.push(Effect::Send {
                                     generation,
-                                    frame: ToRoom::ShareSet { n, paused: false },
+                                    frame: ToRoom::share_paused(n, false),
                                 });
                             }
                         }
@@ -630,6 +744,8 @@ impl Machine {
                 sdp,
                 ice,
                 preset,
+                fps,
+                audio,
                 ..
             } if self.pending.get(&rid).is_some_and(Pending::is_share) => {
                 match self.pending.remove(&rid) {
@@ -654,11 +770,15 @@ impl Machine {
                                 }
                                 // SHARE-LIVE: the room took it: the player is live.
                                 self.share_sound(EngineSound::ShareStart, now, out);
+                                // SQOL: a share whose picture held before the room took it.
+                                self.sync_st(n, out);
                                 out.push(Effect::Changed);
                             }
                         }
                         None => self.close_mine(n, Some(ShareClosedWhy::Error), true, now, out),
                     },
+                    // SQOL: the room's applied values of a live change.
+                    Some(Pending::ShareSet(n)) => self.edited(n, rid, preset, fps, audio, out),
                     Some(Pending::WatchTurn) => match ice {
                         Some(ice) if !ice.urls.is_empty() => self.deliver(
                             WatchCmd::Ice {
@@ -687,6 +807,19 @@ impl Machine {
                     Some(Pending::ShareOpen(n)) => {
                         self.close_mine(n, None, false, now, out);
                         out.push(Effect::ShareNotice(ShareNotice::Refused { refusal }));
+                    }
+                    // SQOL: a live change the room refused: nothing changes. The budget and the
+                    // room's rule are told; a room that does not take changes yet stays quiet.
+                    Some(Pending::ShareSet(n)) => {
+                        if let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == n)
+                            && mine.editing.is_some_and(|(asked, _)| asked == rid)
+                        {
+                            mine.editing = None;
+                        }
+                        if matches!(refusal, ShareRefusal::Budget | ShareRefusal::NotAllowed) {
+                            out.push(Effect::ShareNotice(ShareNotice::Refused { refusal }));
+                        }
+                        out.push(Effect::Changed);
                     }
                     Some(Pending::Watch(u, n)) => {
                         self.drop_watch(&u, n, false, out);
@@ -828,6 +961,8 @@ impl Machine {
             self.close_mine(n, Some(ShareClosedWhy::Error), tell, now, out);
         }
         let generation = self.open_generation();
+        // SQOL: shares whose source changed kind while the socket was away (the room's evidence).
+        let mut kinds: Vec<(u8, ShareKind)> = Vec::new();
         for share in listed {
             if ended.contains(&share.n) {
                 continue;
@@ -844,6 +979,11 @@ impl Machine {
             let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == share.n) else {
                 continue;
             };
+            if mine.kind != share.src {
+                kinds.push((share.n, mine.kind));
+            }
+            // SQOL: what the room believes watchers see; told again below when it differs.
+            mine.told = share.st;
             if share.w == 0 {
                 mine.alone_since.get_or_insert(now);
             } else {
@@ -857,14 +997,36 @@ impl Machine {
                     if let Some(generation) = generation {
                         out.push(Effect::Send {
                             generation,
-                            frame: ToRoom::ShareSet {
-                                n: share.n,
-                                paused: false,
-                            },
+                            frame: ToRoom::share_paused(share.n, false),
                         });
                     }
                 }
                 out.push(Effect::Share(ShareCmd::KeyFrame { n: share.n }));
+            }
+        }
+        let ns: Vec<u8> = self.share.mine.iter().map(|mine| mine.n).collect();
+        for n in ns {
+            self.sync_st(n, out);
+        }
+        if self.share_edit()
+            && let Some(generation) = generation
+        {
+            for (n, src) in kinds {
+                let rid = self.rid();
+                self.pending.insert(rid, Pending::ShareSet(n));
+                out.push(Effect::Send {
+                    generation,
+                    frame: ToRoom::ShareSet {
+                        n,
+                        rid: Some(rid),
+                        paused: None,
+                        src: Some(src),
+                        audio: None,
+                        preset: None,
+                        fps: None,
+                        st: None,
+                    },
+                });
             }
         }
     }
@@ -1422,8 +1584,9 @@ impl Machine {
         }
     }
 
-    /// A sharer's stream sound for the player (percent 0–100, muted).
+    /// A sharer's stream sound for the player (percent 0 to `volume_max`, SQOL: up to 200; muted).
     pub fn set_stream_volume(&mut self, person: &str, volume: u16, muted: bool) -> Vec<Effect> {
+        let volume = volume.min(self.playout().max_percent());
         let changed = self.store.set_stream(person, volume, muted);
         if changed {
             vec![Effect::Changed]
@@ -1469,6 +1632,341 @@ impl Machine {
     }
 
     // ---------------------------------------------------------------------------------------
+    // SQOL: live changes of the player's own shares
+
+    /// A live share of the player's that changes now (`share_switch`, `share_update`,
+    /// `share_hold`), or why not.
+    fn editable(&self, n: u8) -> Result<usize, ShareRefusal> {
+        if !self.share_on() || !self.share_edit() {
+            return Err(ShareRefusal::Off);
+        }
+        let at = self
+            .share
+            .mine
+            .iter()
+            .position(|mine| mine.n == n)
+            .ok_or(ShareRefusal::Gone)?;
+        if self.share.mine[at].phase != MinePhase::Live {
+            return Err(ShareRefusal::Failed);
+        }
+        Ok(at)
+    }
+
+    /// "Ekranı Değiştir": share `source` in share `n` instead, the watchers staying (`label`: the
+    /// window's title or the screen's name, this computer only). The publisher answers.
+    pub fn share_switch(
+        &mut self,
+        n: u8,
+        source: ShareSource,
+        label: &str,
+    ) -> Result<Vec<Effect>, ShareRefusal> {
+        let at = self.editable(n)?;
+        if !self.share.publisher {
+            return Err(ShareRefusal::Unsupported);
+        }
+        if !source.is_plausible() {
+            return Err(ShareRefusal::Failed);
+        }
+        if self
+            .share
+            .mine
+            .iter()
+            .any(|mine| mine.n != n && mine.source == source)
+        {
+            return Err(ShareRefusal::InUse);
+        }
+        let mine = &mut self.share.mine[at];
+        if mine.source == source && mine.hold.is_none() {
+            return Ok(Vec::new());
+        }
+        let label = match source.kind() {
+            ShareKind::Game => String::new(),
+            _ => crate::share::clip_label(label),
+        };
+        mine.switching = Some(Switching {
+            source: source.clone(),
+            label,
+            auto: false,
+        });
+        Ok(vec![
+            Effect::Share(ShareCmd::Switch { n, source }),
+            Effect::Changed,
+        ])
+    }
+
+    /// The publisher shows the new source: the share is that now ("Artık … paylaşılıyor."). Unasked
+    /// (the game recreated its window), the share just goes on.
+    fn switched(&mut self, n: u8, out: &mut Vec<Effect>) {
+        let edit = self.share_edit();
+        let system = self.store.settings().share.audio_source == ShareAudioSource::System;
+        let generation = self.open_generation();
+        let Some(at) = self.share.mine.iter().position(|mine| mine.n == n) else {
+            return;
+        };
+        let mine = &mut self.share.mine[at];
+        mine.minimized = false;
+        let Some(switching) = mine.switching.take() else {
+            self.sync_st(n, out);
+            out.push(Effect::Changed);
+            return;
+        };
+        let was = mine.kind;
+        mine.kind = switching.source.kind();
+        mine.source = switching.source;
+        mine.label = switching.label.clone();
+        // A closed source's wait is over; a pause the player chose stays.
+        if matches!(
+            mine.hold,
+            Some(ShareHoldWhy::Closed | ShareHoldWhy::GameClosed)
+        ) {
+            mine.hold = None;
+            mine.hold_until = None;
+            out.push(Effect::Share(ShareCmd::Hold { n, on: false }));
+        }
+        // "Görüntü" and the sound follow the new source (a game moves; a screen's sound is the
+        // whole computer's).
+        let mut opts = mine.opts;
+        opts.motion = motion_of(mine.motion, mine.kind);
+        opts.audio_system = mine.kind == ShareKind::Screen || system;
+        if opts != mine.opts {
+            mine.opts = opts;
+            out.push(Effect::Share(ShareCmd::Update { n, opts }));
+        }
+        let src = mine.kind;
+        out.push(Effect::ShareNotice(ShareNotice::Switched {
+            n,
+            src,
+            label: switching.label,
+        }));
+        // The room keeps what is shared (its evidence for a report) and shows its kind.
+        if edit
+            && src != was
+            && let Some(generation) = generation
+        {
+            let rid = self.rid();
+            self.pending.insert(rid, Pending::ShareSet(n));
+            out.push(Effect::Send {
+                generation,
+                frame: ToRoom::ShareSet {
+                    n,
+                    rid: Some(rid),
+                    paused: None,
+                    src: Some(src),
+                    audio: None,
+                    preset: None,
+                    fps: None,
+                    st: None,
+                },
+            });
+        }
+        self.sync_st(n, out);
+        out.push(Effect::Changed);
+    }
+
+    /// The shared window closed or the game ended: the share holds a blank picture a minute for
+    /// another source (a share the room cannot tell watchers about ends as before).
+    fn source_gone(&mut self, n: u8, now: u64, out: &mut Vec<Effect>) {
+        let edit = self.share_edit();
+        let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == n) else {
+            return;
+        };
+        if !edit || mine.phase != MinePhase::Live {
+            self.close_mine(n, Some(ShareClosedWhy::SourceGone), true, now, out);
+            return;
+        }
+        mine.minimized = false;
+        mine.hold = Some(if mine.kind == ShareKind::Game {
+            ShareHoldWhy::GameClosed
+        } else {
+            ShareHoldWhy::Closed
+        });
+        mine.hold_until = Some(now + HOLD_STOP_MS);
+        let src = mine.kind;
+        out.push(Effect::ShareNotice(ShareNotice::SourceClosed { n, src }));
+        self.sync_st(n, out);
+        out.push(Effect::Changed);
+    }
+
+    /// The launcher started a game: a share whose game closed takes it (when its window comes).
+    pub fn share_game_started(&mut self) -> Vec<Effect> {
+        let shown = self
+            .share
+            .mine
+            .iter()
+            .any(|mine| mine.source == ShareSource::Game && mine.hold.is_none());
+        if shown {
+            return Vec::new();
+        }
+        let Some(mine) = self.share.mine.iter_mut().find(|mine| {
+            mine.phase == MinePhase::Live
+                && mine.hold == Some(ShareHoldWhy::GameClosed)
+                && mine.switching.is_none()
+        }) else {
+            return Vec::new();
+        };
+        mine.switching = Some(Switching {
+            source: ShareSource::Game,
+            label: String::new(),
+            auto: true,
+        });
+        vec![Effect::Share(ShareCmd::Switch {
+            n: mine.n,
+            source: ShareSource::Game,
+        })]
+    }
+
+    /// "Duraklat" (`on`) / "Sürdür": watchers see a blank picture meanwhile. A share whose source
+    /// closed has nothing to go on with ("gone": pick another).
+    pub fn share_hold(&mut self, n: u8, on: bool) -> Result<Vec<Effect>, ShareRefusal> {
+        let at = self.editable(n)?;
+        let mine = &mut self.share.mine[at];
+        match (on, mine.hold) {
+            (true, None) => mine.hold = Some(ShareHoldWhy::Paused),
+            (false, Some(ShareHoldWhy::Paused)) => mine.hold = None,
+            (false, Some(_)) => return Err(ShareRefusal::Gone),
+            (true, Some(_)) | (false, None) => return Ok(Vec::new()),
+        }
+        let mut out = vec![Effect::Share(ShareCmd::Hold { n, on })];
+        self.sync_st(n, &mut out);
+        out.push(Effect::Changed);
+        Ok(out)
+    }
+
+    /// The player's own small live preview of share `n` (its card on screen).
+    pub fn share_preview(&mut self, n: u8, on: bool) -> Vec<Effect> {
+        if self.share.mine.iter().any(|mine| mine.n == n) {
+            vec![Effect::Share(ShareCmd::Preview { n, on })]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// A live change of share `n`: "Görüntü", "İmleci Göster" and "Önizleme Resmini Paylaş" at once;
+    /// "Kalite", "Kare Hızı" and "Sesi de Paylaş" asked of the room first (held to the room's and
+    /// this computer's best), its applied values used when it answers.
+    pub fn share_update(
+        &mut self,
+        n: u8,
+        change: ShareChange,
+        now: u64,
+    ) -> Result<Vec<Effect>, ShareRefusal> {
+        let at = if change.asks_room() {
+            self.editable(n)?
+        } else {
+            if !self.share_on() {
+                return Err(ShareRefusal::Off);
+            }
+            self.share
+                .mine
+                .iter()
+                .position(|mine| mine.n == n)
+                .ok_or(ShareRefusal::Gone)?
+        };
+        if change.audio == Some(true) && !self.share.audio {
+            return Err(ShareRefusal::Unsupported);
+        }
+        let max = self.max_preset();
+        let generation = self.open_generation();
+        // The room must hear it (its socket is coming back): nothing changes now.
+        if change.asks_room() && generation.is_none() {
+            return Err(ShareRefusal::Failed);
+        }
+        let mut out = Vec::new();
+        let mine = &mut self.share.mine[at];
+        let mut opts = mine.opts;
+        if let Some(motion) = change.motion {
+            mine.motion = motion;
+            opts.motion = motion_of(motion, mine.kind);
+        }
+        if let Some(cursor) = change.cursor {
+            opts.cursor = cursor;
+        }
+        if let Some(thumbs) = change.thumbs {
+            mine.thumbs = thumbs;
+        }
+        if opts != mine.opts {
+            mine.opts = opts;
+            out.push(Effect::Share(ShareCmd::Update { n, opts }));
+        }
+        if change.asks_room() {
+            let preset = change.preset.map(|preset| preset.min(max));
+            let target = preset.unwrap_or(mine.opts.preset);
+            let top = if target == SharePreset::High { 60 } else { 30 };
+            // 60 frames only with "Yüksek": a lower quality takes the rate down with it.
+            let fps = change
+                .fps
+                .map(|fps| normal_fps(fps).min(top))
+                .or_else(|| (mine.opts.fps > top).then_some(top));
+            let asked = (
+                preset.filter(|preset| *preset != mine.opts.preset),
+                fps.filter(|fps| *fps != mine.opts.fps),
+                change.audio.filter(|audio| *audio != mine.opts.audio),
+            );
+            if asked != (None, None, None)
+                && let Some(generation) = generation
+            {
+                let rid = self.rid();
+                self.pending.insert(rid, Pending::ShareSet(n));
+                self.share.mine[at].editing = Some((rid, now));
+                out.push(Effect::Send {
+                    generation,
+                    frame: ToRoom::ShareSet {
+                        n,
+                        rid: Some(rid),
+                        paused: None,
+                        src: None,
+                        audio: asked.2,
+                        preset: asked.0,
+                        fps: asked.1,
+                        st: None,
+                    },
+                });
+            }
+        }
+        out.push(Effect::Changed);
+        Ok(out)
+    }
+
+    /// The room's applied values of a live change (`ack`): the share goes on with them (held to
+    /// this computer's best).
+    fn edited(
+        &mut self,
+        n: u8,
+        rid: u32,
+        preset: Option<SharePreset>,
+        fps: Option<u8>,
+        audio: Option<bool>,
+        out: &mut Vec<Effect>,
+    ) {
+        let max = self.max_preset();
+        let can_audio = self.share.audio;
+        let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == n) else {
+            return;
+        };
+        if mine.editing.is_some_and(|(asked, _)| asked == rid) {
+            mine.editing = None;
+        }
+        let mut opts = mine.opts;
+        if let Some(preset) = preset {
+            opts.preset = preset.min(max);
+        }
+        if let Some(fps) = fps {
+            opts.fps = normal_fps(fps);
+        }
+        if opts.preset != SharePreset::High {
+            opts.fps = opts.fps.min(30);
+        }
+        if let Some(audio) = audio {
+            opts.audio = audio && can_audio;
+        }
+        if opts != mine.opts {
+            mine.opts = opts;
+            out.push(Effect::Share(ShareCmd::Update { n, opts }));
+        }
+        out.push(Effect::Changed);
+    }
+
+    // ---------------------------------------------------------------------------------------
     // Time
 
     /// The moments sharing wants a tick at.
@@ -1479,6 +1977,13 @@ impl Machine {
                     at(since + PAUSE_AFTER_MS);
                 }
                 at(since + ALONE_STOP_MS);
+            }
+            // SQOL: a closed source's minute, a live change's answer.
+            if let Some(until) = mine.hold_until {
+                at(until);
+            }
+            if let Some((_, asked)) = mine.editing {
+                at(asked + EDIT_WAIT_MS);
             }
         }
         if let Some(since) = self.share.hidden_since {
@@ -1530,10 +2035,7 @@ impl Machine {
                 if let Some(generation) = generation {
                     out.push(Effect::Send {
                         generation,
-                        frame: ToRoom::ShareSet {
-                            n: mine.n,
-                            paused: true,
-                        },
+                        frame: ToRoom::share_paused(mine.n, true),
                     });
                 }
                 out.push(Effect::Changed);
@@ -1541,6 +2043,28 @@ impl Machine {
         }
         for n in ended {
             self.close_mine(n, Some(ShareClosedWhy::Idle), true, now, out);
+        }
+        // SQOL: a closed source's minute ran out: the share ends ("Paylaşım durdu.").
+        let gone: Vec<u8> = self
+            .share
+            .mine
+            .iter()
+            .filter(|mine| mine.hold_until.is_some_and(|until| now >= until))
+            .map(|mine| mine.n)
+            .collect();
+        for n in gone {
+            self.close_mine(n, Some(ShareClosedWhy::SourceGone), true, now, out);
+        }
+        // SQOL: a live change the room never answered changes nothing.
+        let pending = &mut self.pending;
+        for mine in &mut self.share.mine {
+            if let Some((rid, asked)) = mine.editing
+                && now >= asked + EDIT_WAIT_MS
+            {
+                mine.editing = None;
+                pending.remove(&rid);
+                out.push(Effect::Changed);
+            }
         }
         // Out of sight long enough: let go.
         if self
@@ -1582,8 +2106,13 @@ impl Machine {
     // ---------------------------------------------------------------------------------------
     // The page's view
 
-    pub(super) fn share_view(&self) -> VoiceShareView {
+    pub(super) fn share_view(&self, now: u64, unix: i64) -> VoiceShareView {
         let on = self.share_on();
+        let hw_max = if self.share.high {
+            SharePreset::High
+        } else {
+            SharePreset::Normal
+        };
         // The crew room form's "Kim paylaşabilir", in a room or not.
         let crew_mods: Vec<String> = self
             .crews
@@ -1599,6 +2128,7 @@ impl Machine {
                 can_share: self.share.publisher,
                 audio: self.share.audio,
                 surface: self.share.surface,
+                hw_max,
                 ..VoiceShareView::default()
             };
         }
@@ -1625,14 +2155,22 @@ impl Machine {
                     watchers: share.w,
                     since: share.at,
                     th: share.th,
+                    st: share.st,
                 })
             })
             .collect();
         let mut volumes = BTreeMap::new();
+        let top = self.playout().max_percent();
         for share in &live {
             let (volume, muted) = self.store.stream(&share.person);
             if (volume, muted) != (100, false) {
-                volumes.insert(share.person.clone(), VoiceStreamVolume { volume, muted });
+                volumes.insert(
+                    share.person.clone(),
+                    VoiceStreamVolume {
+                        volume: volume.min(top),
+                        muted,
+                    },
+                );
             }
         }
         let connected = self.share.connected;
@@ -1672,6 +2210,15 @@ impl Machine {
                     watchers: mine.watchers.clone(),
                     since: mine.since,
                     th: mine.th,
+                    source: mine.source.clone(),
+                    st: mine.st(),
+                    hold: mine.hold,
+                    hold_until: mine.hold_until.map(|until| {
+                        unix + i64::try_from(until.saturating_sub(now) / 1_000).unwrap_or(0)
+                    }),
+                    motion: mine.motion,
+                    cursor: mine.opts.cursor,
+                    thumbs: mine.thumbs,
                 })
                 .collect(),
             live,
@@ -1696,6 +2243,8 @@ impl Machine {
             still_asking: self.share.asking_since.is_some(),
             volumes,
             names: BTreeMap::new(),
+            edit: self.share_edit(),
+            hw_max,
         }
     }
 

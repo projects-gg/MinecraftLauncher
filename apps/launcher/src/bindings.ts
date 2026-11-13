@@ -433,6 +433,65 @@ export const commands = {
 	 */
 	voiceIgnored: (ids: string[]) => typedError<null, CmdError>(__TAURI_INVOKE("voice_ignored", { ids })),
 	/**
+	 *  SQOL: a launcher text field has the keyboard (`on`) or no longer: single keys without Ctrl,
+	 *  Alt or Shift (push-to-talk "V", mute "M") do nothing meanwhile, so typing never opens the
+	 *  microphone. Only while the launcher's window is the one in front.
+	 */
+	voiceTyping: (on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("voice_typing", { on })),
+	/**  SQOL: "Gönder" in the voice room's chat (a text, or a sticker); waits for the room's answer. */
+	voiceChatSend: (room: string, text: string | null, sticker: string | null) => typedError<RoomChatSend, CmdError>(__TAURI_INVOKE("voice_chat_send", { room, text, sticker })),
+	/**
+	 *  SQOL: "Sil" on a room chat message (the player's own; a leader's or moderator's anyone's):
+	 *  null when it went.
+	 */
+	voiceChatDelete: (room: string, id: string) => typedError<
+/**  The room has no chat now (Studio, the chat switch, an older room). */
+"off" | 
+/**  Studio switched the chat's stickers off. */
+"stickersOff" | 
+/**  The filters refused it (`reason`, `rule`). */
+"rejected" | 
+/**  Too many at once (`retryAfter`). */
+"rateLimited" | 
+/**  A chat mute of Projects' moderators runs (`until`). */
+"muted" | 
+/**  A new (limited) account may not send that (a link; `until`). */
+"limited" | 
+/**  Deleting someone else's message without the right to. */
+"notAllowed" | 
+/**  Not in that room (any more), or no such message. */
+"gone" | 
+/**  The room did not answer, or did not take it. */
+"failed" | null, CmdError>(__TAURI_INVOKE("voice_chat_delete", { room, id })),
+	/**
+	 *  SQOL: "Rapor Et" on a room chat message: the message as the room sealed it and the ones before
+	 *  it go to Projects' moderators (the friends service's report path). Null when it went.
+	 */
+	voiceChatReport: (room: string, id: string, reason: ReportReason, note: string | null) => typedError<
+/**  The room has no chat now (Studio, the chat switch, an older room). */
+"off" | 
+/**  Studio switched the chat's stickers off. */
+"stickersOff" | 
+/**  The filters refused it (`reason`, `rule`). */
+"rejected" | 
+/**  Too many at once (`retryAfter`). */
+"rateLimited" | 
+/**  A chat mute of Projects' moderators runs (`until`). */
+"muted" | 
+/**  A new (limited) account may not send that (a link; `until`). */
+"limited" | 
+/**  Deleting someone else's message without the right to. */
+"notAllowed" | 
+/**  Not in that room (any more), or no such message. */
+"gone" | 
+/**  The room did not answer, or did not take it. */
+"failed" | null, CmdError>(__TAURI_INVOKE("voice_chat_report", { room, id, reason, note })),
+	/**
+	 *  SQOL: the room chat's messages this launcher holds (the page's start; `voice-chat` brings the
+	 *  rest).
+	 */
+	voiceChatLog: (room: string) => typedError<RoomChatMsg[], CmdError>(__TAURI_INVOKE("voice_chat_log", { room })),
+	/**
 	 *  The voice page (the hidden `voice` window only): hands over its channel for the launcher's
 	 *  commands; the launcher configures it and, in a room, starts the call.
 	 */
@@ -467,7 +526,9 @@ export const commands = {
 /**  That share ended. */
 "gone" | 
 /**  The room did not answer: "Bağlanamadı.". */
-"failed" | null, CmdError>(__TAURI_INVOKE("share_start", { source, label })),
+"failed" | 
+/**  SQOL: that source is in another of the player's shares already. */
+"inUse" | null, CmdError>(__TAURI_INVOKE("share_start", { source, label })),
 	/**  "Durdur" on one of the player's shares. */
 	shareStop: (n: number) => typedError<null, CmdError>(__TAURI_INVOKE("share_stop", { n })),
 	/**  "İzle": null when asked for. */
@@ -493,7 +554,9 @@ export const commands = {
 /**  That share ended. */
 "gone" | 
 /**  The room did not answer: "Bağlanamadı.". */
-"failed" | null, CmdError>(__TAURI_INVOKE("share_watch", { person, n })),
+"failed" | 
+/**  SQOL: that source is in another of the player's shares already. */
+"inUse" | null, CmdError>(__TAURI_INVOKE("share_watch", { person, n })),
 	/**  "İzlemeyi bırak". */
 	shareUnwatch: (person: string, n: number) => typedError<null, CmdError>(__TAURI_INVOKE("share_unwatch", { person, n })),
 	/**  The tile of a watched share grew or shrank: the full or the small layer. */
@@ -512,7 +575,7 @@ export const commands = {
 	sharePopoutOnTop: (on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("share_popout_on_top", { on })),
 	/**  The watching window fills the screen (or not). */
 	shareFullscreen: (on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("share_fullscreen", { on })),
-	/**  A sharer's stream sound for the player (percent 0–100, muted). */
+	/**  A sharer's stream sound for the player (percent 0 to `volumeMax`, SQOL: up to 200; muted). */
 	shareStreamVolume: (person: string, volume: number, muted: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("share_stream_volume", { person, volume, muted })),
 	/**  "Paylaşımı durdur" on someone else's share (a leader or moderator; the room checks). */
 	shareUnshare: (person: string, n: number) => typedError<VoiceAnswer, CmdError>(__TAURI_INVOKE("share_unshare", { person, n })),
@@ -525,6 +588,107 @@ export const commands = {
 	 *  Someone outside the player's room has one share as far as the list knows: `n` 1.
 	 */
 	shareThumb: (room: string, user: string, n: number) => typedError<ShareThumb, CmdError>(__TAURI_INVOKE("share_thumb", { room, user, n })),
+	/**
+	 *  SQOL "Ekranı Değiştir": share `source` in share `n` instead (the watchers stay): null when it
+	 *  went to the publisher; the result comes in the state and as `share-notice` (`switched`,
+	 *  `switchFailed`).
+	 */
+	shareSwitch: (n: number, source: ShareSource, label: string) => typedError<
+/**  Sharing is off (Studio, not in a room, an older room): "Ekran paylaşımı şu an kullanılamıyor." */
+"off" | 
+/**  This computer cannot share. */
+"unsupported" | 
+/**  The room lets only its leader and moderators share. */
+"notAllowed" | 
+/**  A new (limited) account may watch but not share yet. */
+"limited" | 
+/**  The player shares as much as they may. */
+"full" | 
+/**  The room has as many shares as it may. */
+"roomFull" | 
+/**  The share has as many watchers as it may. */
+"watchFull" | 
+/**  The player watches as many as they may. */
+"watchMax" | 
+/**  The month's budget: no new share or watch now. */
+"budget" | 
+/**  That share ended. */
+"gone" | 
+/**  The room did not answer: "Bağlanamadı.". */
+"failed" | 
+/**  SQOL: that source is in another of the player's shares already. */
+"inUse" | null, CmdError>(__TAURI_INVOKE("share_switch", { n, source, label })),
+	/**
+	 *  SQOL: a live change of share `n` ("Kalite", "Kare Hızı", "Görüntü", "İmleci Göster", "Sesi de
+	 *  Paylaş", "Önizleme Resmini Paylaş"): null when asked; the values the room applied come in the
+	 *  state.
+	 */
+	shareUpdate: (n: number, change: ShareChange) => typedError<
+/**  Sharing is off (Studio, not in a room, an older room): "Ekran paylaşımı şu an kullanılamıyor." */
+"off" | 
+/**  This computer cannot share. */
+"unsupported" | 
+/**  The room lets only its leader and moderators share. */
+"notAllowed" | 
+/**  A new (limited) account may watch but not share yet. */
+"limited" | 
+/**  The player shares as much as they may. */
+"full" | 
+/**  The room has as many shares as it may. */
+"roomFull" | 
+/**  The share has as many watchers as it may. */
+"watchFull" | 
+/**  The player watches as many as they may. */
+"watchMax" | 
+/**  The month's budget: no new share or watch now. */
+"budget" | 
+/**  That share ended. */
+"gone" | 
+/**  The room did not answer: "Bağlanamadı.". */
+"failed" | 
+/**  SQOL: that source is in another of the player's shares already. */
+"inUse" | null, CmdError>(__TAURI_INVOKE("share_update", { n, change })),
+	/**  SQOL "Duraklat" (`on`) / "Sürdür": watchers see a blank picture meanwhile. */
+	shareHold: (n: number, on: boolean) => typedError<
+/**  Sharing is off (Studio, not in a room, an older room): "Ekran paylaşımı şu an kullanılamıyor." */
+"off" | 
+/**  This computer cannot share. */
+"unsupported" | 
+/**  The room lets only its leader and moderators share. */
+"notAllowed" | 
+/**  A new (limited) account may watch but not share yet. */
+"limited" | 
+/**  The player shares as much as they may. */
+"full" | 
+/**  The room has as many shares as it may. */
+"roomFull" | 
+/**  The share has as many watchers as it may. */
+"watchFull" | 
+/**  The player watches as many as they may. */
+"watchMax" | 
+/**  The month's budget: no new share or watch now. */
+"budget" | 
+/**  That share ended. */
+"gone" | 
+/**  The room did not answer: "Bağlanamadı.". */
+"failed" | 
+/**  SQOL: that source is in another of the player's shares already. */
+"inUse" | null, CmdError>(__TAURI_INVOKE("share_hold", { n, on })),
+	/**
+	 *  SQOL: the player's own small live preview of share `n` while its card is on screen
+	 *  (`share-preview`, at most twice a second, only for new frames).
+	 */
+	sharePreview: (n: number, on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("share_preview", { n, on })),
+	/**
+	 *  SQOL: what the "Yayın" window plays streams with (it cannot read voice chat's settings);
+	 *  changes come as `share-audio`.
+	 */
+	sharePopoutAudio: () => typedError<PopoutAudio, CmdError>(__TAURI_INVOKE("share_popout_audio")),
+	/**
+	 *  SQOL: the watching choices ("Yayın Kalitesi", "Biri Konuşunca Yayın Sesini Kıs" and its
+	 *  amount), from either window.
+	 */
+	shareViewPrefs: (change: ShareViewPrefs) => typedError<null, CmdError>(__TAURI_INVOKE("share_view_prefs", { change })),
 	/**
 	 *  Server List Ping. Never fails: an unreachable server is reported as offline. Without a name
 	 *  and address it pings the featured server Studio published (else `play.projects.gg`).
@@ -9483,6 +9647,25 @@ export type PlusWindowCaps = {
 	week?: number,
 };
 
+/**
+ *  What the "Yayın" window plays streams with (`share_popout_audio`, `share-audio`): it cannot
+ *  read voice chat's settings itself.
+ */
+export type PopoutAudio = {
+	/**  Ses çıkışı (none: the system's default). */
+	device: string | null,
+	/**  "Herkesin Sesi", percent 0–200. */
+	volume: number,
+	/**  Deafened: streams are silent too. */
+	deaf: boolean,
+	/**  The stream volume slider's top (percent). */
+	volumeMax: number,
+	duck: boolean,
+	duckLevel: number,
+	duckSelf: boolean,
+	viewQuality: ShareViewQuality,
+};
+
 /**  What the command bar shows (`prepare-status`, `prepare_status`). */
 export type PrepareStatusView = 
 /**  Nothing to show. */
@@ -10198,6 +10381,63 @@ export type ResumeView = {
 	quickPlay: QuickPlay,
 };
 
+/**
+ *  Who deleted a message (`rchat_deleted.by`): its sender, the room's leader or a moderator, or
+ *  Projects' moderators.
+ */
+export type RoomChatBy = "self" | "mod" | "staff";
+
+/**  Why a message (or a deletion, or a report) did not go. */
+export type RoomChatError = 
+/**  The room has no chat now (Studio, the chat switch, an older room). */
+"off" | 
+/**  Studio switched the chat's stickers off. */
+"stickersOff" | 
+/**  The filters refused it (`reason`, `rule`). */
+"rejected" | 
+/**  Too many at once (`retryAfter`). */
+"rateLimited" | 
+/**  A chat mute of Projects' moderators runs (`until`). */
+"muted" | 
+/**  A new (limited) account may not send that (a link; `until`). */
+"limited" | 
+/**  Deleting someone else's message without the right to. */
+"notAllowed" | 
+/**  Not in that room (any more), or no such message. */
+"gone" | 
+/**  The room did not answer, or did not take it. */
+"failed";
+
+/**  One message of the room's chat. */
+export type RoomChatMsg = {
+	id: string,
+	/**  Who sent it (the player too). */
+	from: string,
+	/**  The room's time of it (Unix milliseconds). */
+	at: number,
+	/**  Its text, or none for a sticker. */
+	text: string | null,
+	/**  A sticker's id ("Küp" stickers), or none for a text. */
+	sticker: string | null,
+};
+
+/**
+ *  What the filters found (`chat_rejected`'s `reason`, as the friends' chat names them), or the
+ *  launcher's own `length`.
+ */
+export type RoomChatReason = "phone" | "link" | "words" | "length";
+
+/**  The answer to `voice_chat_send` (and, inside the launcher, to a deletion). */
+export type RoomChatSend = 
+/**  The room took it: its id and time (the message itself comes as `voice-chat` too). */
+{ kind: "sent"; id: string; at: number } | { kind: "refused"; error: RoomChatError; reason: RoomChatReason | null; 
+/**  The link rule that matched (`chat_rejected`, `link`). */
+rule: string | null; 
+/**  Seconds to wait (`rateLimited`). */
+retryAfter: number | null; 
+/**  A chat mute's end (Unix seconds, `muted`). */
+until: number | null };
+
 export type ScheduledTask = {
 	name?: string,
 	/**  Raw MCC action: `send /kit`, `log hello`, `script file.cs`. */
@@ -10572,6 +10812,19 @@ export type ShareAudioSource = "app" | "system";
  */
 export type ShareBy = "mods" | "all";
 
+/**
+ *  "Kalite", "Kare Hızı", "Görüntü", "İmleci Göster", "Sesi de Paylaş" and "Önizleme Resmini
+ *  Paylaş" on a live share (`share_update`): only what changes is given.
+ */
+export type ShareChange = {
+	preset?: SharePreset | null,
+	fps?: number | null,
+	motion?: ShareMotion | null,
+	cursor?: boolean | null,
+	audio?: boolean | null,
+	thumbs?: boolean | null,
+};
+
 /**  Why one of the player's shares ended without the player. */
 export type ShareClosedWhy = 
 /**  A leader or moderator stopped it: "Bir moderatör paylaşımını durdurdu." */
@@ -10590,6 +10843,15 @@ export type ShareClosedWhy =
 "network" | 
 /**  Anything else (also any reason a newer service names). */
 "error";
+
+/**  SQOL: why one of the player's shares holds a blank picture. */
+export type ShareHoldWhy = 
+/**  "Duraklat". */
+"paused" | 
+/**  The shared window closed or the screen went: "Paylaştığın pencere kapandı." */
+"closed" | 
+/**  The shared game closed: "Oyun kapandı." */
+"gameClosed";
 
 /**  What is shared: the game the launcher started, a window, or a whole screen (wire `src`). */
 export type ShareKind = "game" | "screen" | 
@@ -10623,13 +10885,30 @@ export type ShareNotice =
 /**  Watching stopped: nobody answered "Hâlâ izliyor musun?". */
 { kind: "watchStopped" } | 
 /**  Watching could not connect. */
-{ kind: "watchFailed" };
+{ kind: "watchFailed" } | 
+/**  SQOL: "Artık {label} paylaşılıyor." (`label` empty for the game: the page names it). */
+{ kind: "switched"; n: number; src: ShareKind; label: string } | 
+/**  SQOL: "Bu pencere paylaşılamadı." (the old source goes on). */
+{ kind: "switchFailed"; n: number } | 
+/**
+ *  SQOL: the shared window closed ("Paylaştığın pencere kapandı.") or the game did ("Oyun
+ *  kapandı."): "Başka Ekran Seç" / "Paylaşımı Durdur"; the share ends after [`HOLD_STOP_MS`]
+ *  (`closed`, `sourceGone`).
+ */
+{ kind: "sourceClosed"; n: number; src: ShareKind };
 
 /**
  *  "Kalite": Düşük (480p30) / Normal (720p30) / Yüksek (1080p30; 1080p60 for a game with
  *  "Akıcılık"). Ordered: Studio's `shareMaxPreset` and the budget's step cap it.
  */
 export type SharePreset = "low" | "normal" | "high";
+
+/**  SQOL `share-preview`: the player's own small live picture of a share (while asked for). */
+export type SharePreviewView = {
+	n: number,
+	/**  `data:image/jpeg;base64,…`. */
+	dataUrl: string,
+};
 
 /**  Why a share or a watch was refused (`share_start`, `share_watch` and the room's errors). */
 export type ShareRefusal = 
@@ -10654,7 +10933,9 @@ export type ShareRefusal =
 /**  That share ended. */
 "gone" | 
 /**  The room did not answer: "Bağlanamadı.". */
-"failed";
+"failed" | 
+/**  SQOL: that source is in another of the player's shares already. */
+"inUse";
 
 /**
  *  What the player picked to share. Titles and ids stay on this computer: the room hears only the
@@ -10695,6 +10976,29 @@ export type ShareSources = {
 	audio: boolean,
 };
 
+/**
+ *  SQOL: what watchers see of a share (wire `st`): its picture, a blank one ("Yayın
+ *  duraklatıldı."), or the minimized window's last frame ("Paylaşılan pencere küçültüldü.").
+ */
+export type ShareSt = "live" | "hold" | "min";
+
+/**
+ *  SQOL `share-stats`: one of the player's live shares now (every 5 s while it sends): "1280×720 ·
+ *  30 fps · donanım".
+ */
+export type ShareStatsView = {
+	n: number,
+	/**  The full layer's size. */
+	w: number,
+	h: number,
+	/**  Frames sent a second. */
+	fps: number,
+	/**  Everything sent (both layers and the sound), kbit/s. */
+	kbps: number,
+	/**  The hardware encoder ("donanım"); false: the software one ("yazılım"). */
+	hw: boolean,
+};
+
 /**  Where the player watches: the launcher's window, or its own "Yayın" window. */
 export type ShareSurface = "main" | "popout";
 
@@ -10706,6 +11010,23 @@ export type ShareThumb =
 { kind: "locked" } | 
 /**  No picture yet, or nothing to show. */
 { kind: "none" };
+
+/**
+ *  The watching choices both windows change (`share_view_prefs`): "Yayın Kalitesi" and the
+ *  stream's ducking; only what changes is given.
+ */
+export type ShareViewPrefs = {
+	viewQuality?: ShareViewQuality | null,
+	duck?: boolean | null,
+	duckLevel?: number | null,
+	duckSelf?: boolean | null,
+};
+
+/**
+ *  SQOL "Yayın Kalitesi" while watching: `auto` (the small layer for a small tile or a weak
+ *  connection), `high` (always the full layer), `saver` (always the small layer).
+ */
+export type ShareViewQuality = "auto" | "high" | "saver";
 
 /**  Where one watched share is. */
 export type ShareWatchPhase = 
@@ -12203,6 +12524,15 @@ export type VoiceCalling = {
 	until: number,
 };
 
+/**  The room chat's news for the page (`voice-chat`). */
+export type VoiceChatEvent = 
+/**  A new message (the player's own too). */
+{ kind: "msg"; room: string; msg: RoomChatMsg } | 
+/**  A message went. */
+{ kind: "del"; room: string; id: string; by: RoomChatBy } | 
+/**  The whole log anew (joining, coming back, someone blocked): replaces what the page shows. */
+{ kind: "log"; room: string; msgs: RoomChatMsg[] };
+
 /**
  *  VOICE-ROOMS: a change of a crew's rooms from the crew page (`voice_crew_change`). The friends
  *  service checks the role (leader, moderators, a room's opener), the switch and the day's count;
@@ -12423,6 +12753,8 @@ export type VoiceLiveShare = {
 	 *  room from before SHARE-LIVE). The hover card's `share_thumb` keeps its answer by it.
 	 */
 	th: number | null,
+	/**  SQOL: what watchers see of it now (a room from before SQOL: always live). */
+	st: ShareSt,
 };
 
 /**  The player in the room. */
@@ -12518,6 +12850,20 @@ export type VoiceMyShare = {
 	 *  clock); none before the first. `share_thumb` answers the player's own from this computer.
 	 */
 	th: number | null,
+	/**  SQOL: what is shared now (this computer only): the picker marks it "Paylaşılıyor". */
+	source: ShareSource,
+	/**  SQOL: what watchers see. */
+	st: ShareSt,
+	/**  SQOL: why the picture is blank (`st` "hold"). */
+	hold: ShareHoldWhy | null,
+	/**  SQOL: a closed source's share ends then unless another source is picked (Unix seconds). */
+	holdUntil: number | null,
+	/**  SQOL: "Görüntü" as chosen (`auto` follows the source). */
+	motion: ShareMotion,
+	/**  SQOL: "İmleci Göster". */
+	cursor: boolean,
+	/**  SQOL: "Önizleme Resmini Paylaş" for this share. */
+	thumbs: boolean,
 };
 
 /**
@@ -12738,6 +13084,13 @@ export type VoiceRoomView = {
 	 *  holds their push-to-talk key, whatever "Mikrofon ne zaman açık" says.
 	 */
 	ptt: boolean,
+	/**  SQOL: the room has its own text chat ("Oda Sohbeti"). */
+	chat: boolean,
+	/**
+	 *  SQOL: more than two people were in the room at some moment of the player's stay (a friend
+	 *  room's panel then shows the room's chat for good, not the friend's private messages).
+	 */
+	grew: boolean,
 };
 
 /**  Settings → Sesli sohbet. */
@@ -12781,6 +13134,11 @@ export type VoiceSettings = {
 	outputVolume?: number,
 	/**  SHARE: "Ekran paylaşımı" (Settings → Sesli sohbet, and what the picker chose last). */
 	share?: VoiceShareSettings,
+	/**
+	 *  SQOL "Mesaj Önizlemelerini Göster": the room chat's newest messages over the stage while
+	 *  the room's panel is closed.
+	 */
+	peek?: boolean,
 };
 
 /**
@@ -12811,6 +13169,16 @@ export type VoiceShareSettings = {
 	selfPreview?: boolean,
 	/**  The "Yayın" window stays on top ("Her zaman üstte"). */
 	alwaysOnTop?: boolean,
+	/**  SQOL "Biri Konuşunca Yayın Sesini Kıs" (watching; off by default). */
+	duck?: boolean,
+	/**  SQOL "Kısma Miktarı": percent, 20–90. */
+	duckLevel?: number,
+	/**  SQOL "Ben Konuşunca da Kıs". */
+	duckSelf?: boolean,
+	/**  SQOL "Yayın Kalitesi" while watching. */
+	viewQuality?: ShareViewQuality,
+	/**  SQOL "Önizleme Resmini Paylaş": the room gets the share's still picture (`share_thumb`). */
+	thumbs?: boolean,
 };
 
 /**  Screen sharing in the room now (`VoiceState.share`). */
@@ -12857,6 +13225,16 @@ export type VoiceShareView = {
 	volumes: { [key in string]: VoiceStreamVolume },
 	/**  Names for the "Yayın" window, which has no friend list (the launcher fills them). */
 	names: { [key in string]: string },
+	/**
+	 *  SQOL: the player's shares change live here ("Ekranı Değiştir", quality, sound, "Duraklat";
+	 *  the service's `share.edit` and a `share2` room). False: only "Durdur".
+	 */
+	edit: boolean,
+	/**
+	 *  SQOL: this computer's best quality (no hardware encoder: "normal", "Bu bilgisayarda en çok
+	 *  Normal."), apart from the room's (`max_preset` holds both).
+	 */
+	hwMax: SharePreset,
 };
 
 /**  Which shortcut a key is for. */
@@ -12961,7 +13339,7 @@ export type VoiceState = {
 
 /**  A sharer's stream sound for the player (kept per person, like their voice). */
 export type VoiceStreamVolume = {
-	/**  Percent, 0–100. */
+	/**  Percent, 0 to `VoiceState.volumeMax` (SQOL: up to 200). */
 	volume: number,
 	muted: boolean,
 };

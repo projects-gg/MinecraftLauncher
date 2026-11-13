@@ -211,6 +211,11 @@ pub struct VoiceRoomView {
     /// OVL-NEXT: the crew made it push-to-talk only: the microphone opens only while the player
     /// holds their push-to-talk key, whatever "Mikrofon ne zaman açık" says.
     pub ptt: bool,
+    /// SQOL: the room has its own text chat ("Oda Sohbeti").
+    pub chat: bool,
+    /// SQOL: more than two people were in the room at some moment of the player's stay (a friend
+    /// room's panel then shows the room's chat for good, not the friend's private messages).
+    pub grew: bool,
 }
 
 impl VoiceRoomView {
@@ -869,6 +874,8 @@ mod tests {
             can_rename: false,
             can_close: false,
             ptt: false,
+            chat: false,
+            grew: false,
         };
         assert_eq!(
             room(Some("Genel"), true).shown_name(true).as_deref(),

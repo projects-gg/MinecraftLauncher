@@ -23,6 +23,7 @@
 //! - [`sight`]: whether the launcher's window is on screen, looked at with no lock held;
 //! - [`share`]: screen sharing in a room (SHARE): its frames, its view, the publisher's commands
 //!   and events, the player's choices; the machine's part of it is `share_machine.rs`;
+//! - [`rchat`]: the room's own text chat (SQOL); the machine's part of it is `rchat_machine.rs`;
 //! - [`discord`]: Discord's own push-to-talk, mute and deafen keys on this computer, offered once
 //!   as the player first opens voice chat (read with [`leveldb`], nothing leaves the computer);
 //! - [`probe`]: VOICE-0's measurement run (debug builds).
@@ -43,6 +44,7 @@ pub mod machine;
 pub mod manager;
 pub mod permission;
 pub mod probe;
+pub mod rchat;
 pub mod room;
 pub mod settings;
 pub mod share;
@@ -54,7 +56,11 @@ pub mod wire;
 #[cfg(test)]
 mod machine_tests;
 #[cfg(test)]
+mod rchat_tests;
+#[cfg(test)]
 mod share_tests;
+#[cfg(test)]
+mod sqol_tests;
 
 pub use manager::{CrewTicket, Platform, Service, Voice};
 

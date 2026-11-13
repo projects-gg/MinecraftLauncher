@@ -185,6 +185,27 @@ pub enum ShareCmd {
     Env {
         env: ShareEnv,
     },
+    /// SQOL: share another source in the same share (no new SFU session: watchers stay). The new
+    /// source is captured first, then the old capture goes → [`ShareEvent::Switched`]; when it
+    /// cannot be captured the old source goes on → [`ShareEvent::SwitchFailed`]. A game whose
+    /// window is not up yet (a game that is starting) is waited for up to
+    /// [`crate::switch::GAME_WINDOW_WAIT`].
+    Switch {
+        n: ShareNo,
+        source: SourceId,
+    },
+    /// SQOL "Duraklat": watchers see a blank picture and hear nothing until `on: false` (never the
+    /// last frame: the player may have paused to hide something).
+    Hold {
+        n: ShareNo,
+        on: bool,
+    },
+    /// SQOL: the sharer's own small live picture ([`ShareEvent::PreviewFrame`], at most
+    /// [`crate::thumb::PREVIEW_PER_SECOND`] a second, only for new frames) while `on`.
+    Preview {
+        n: ShareNo,
+        on: bool,
+    },
 }
 
 /// Why a share ended on its own.
@@ -202,8 +223,21 @@ pub enum LostWhy {
     Encoder,
     /// The answer was not usable (codec or simulcast not accepted).
     Negotiation,
+    /// SQOL: the graphics device was lost (a driver update or reset) and the share could not be
+    /// rebuilt on a new one.
+    Device,
     /// Anything else (logged).
     Internal,
+}
+
+/// SQOL: why a [`ShareCmd::Switch`] did not happen (the old source goes on).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SwitchWhy {
+    /// The window closed or the monitor went away meanwhile (or the game's window never came).
+    Gone,
+    /// It cannot be captured (protected content, an error).
+    Capture,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -265,7 +299,10 @@ pub enum ShareEvent {
         n: ShareNo,
         why: LostWhy,
     },
-    /// The shared window closed or the monitor went away; the launcher sends `share_close`.
+    /// The shared window closed (for the game: no new window of it came within
+    /// [`crate::switch::GAME_REACQUIRE`], as when it goes fullscreen) or the monitor went away.
+    /// SQOL: the share goes on with a blank picture and no sound until a [`ShareCmd::Switch`] or a
+    /// [`ShareCmd::Stop`]; the launcher decides.
     SourceGone {
         n: ShareNo,
     },
@@ -283,6 +320,29 @@ pub enum ShareEvent {
     /// after `Started`, then once a minute, also while encoding rests. The launcher sends it to the
     /// room (`share_thumb`) and keeps nothing on disk.
     Thumb {
+        n: ShareNo,
+        jpg: Vec<u8>,
+    },
+    /// SQOL: the share shows its new source (a [`ShareCmd::Switch`], or the game's window found
+    /// again after it was recreated, unasked): the full layer's size now.
+    Switched {
+        n: ShareNo,
+        w: u32,
+        h: u32,
+    },
+    /// SQOL: a [`ShareCmd::Switch`] did not happen; the old source goes on.
+    SwitchFailed {
+        n: ShareNo,
+        why: SwitchWhy,
+    },
+    /// SQOL: the shared window was minimized (`on`) or came back: watchers keep its last picture.
+    Minimized {
+        n: ShareNo,
+        on: bool,
+    },
+    /// SQOL: the sharer's own preview (a JPEG, [`crate::thumb::PREVIEW_SIDE`] px on its long side)
+    /// while [`ShareCmd::Preview`] is on; never sent anywhere else, never written to disk.
+    PreviewFrame {
         n: ShareNo,
         jpg: Vec<u8>,
     },

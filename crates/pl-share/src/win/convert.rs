@@ -7,9 +7,9 @@ use std::sync::Arc;
 
 use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Direct3D11::{
-    D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE, D3D11_TEX2D_VPIV, D3D11_TEX2D_VPOV,
-    D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT, D3D11_VIDEO_COLOR, D3D11_VIDEO_COLOR_0,
-    D3D11_VIDEO_COLOR_YCbCrA, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
+    D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE, D3D11_SUBRESOURCE_DATA, D3D11_TEX2D_VPIV,
+    D3D11_TEX2D_VPOV, D3D11_TEXTURE2D_DESC, D3D11_USAGE_DEFAULT, D3D11_VIDEO_COLOR,
+    D3D11_VIDEO_COLOR_0, D3D11_VIDEO_COLOR_YCbCrA, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE,
     D3D11_VIDEO_PROCESSOR_CONTENT_DESC, D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC,
     D3D11_VIDEO_PROCESSOR_INPUT_VIEW_DESC_0, D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC,
     D3D11_VIDEO_PROCESSOR_OUTPUT_VIEW_DESC_0, D3D11_VIDEO_PROCESSOR_STREAM,
@@ -20,7 +20,7 @@ use windows::Win32::Graphics::Direct3D11::{
 };
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709, DXGI_COLOR_SPACE_YCBCR_STUDIO_G22_LEFT_P709,
-    DXGI_FORMAT_NV12, DXGI_RATIONAL, DXGI_SAMPLE_DESC,
+    DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_NV12, DXGI_RATIONAL, DXGI_SAMPLE_DESC,
 };
 use windows::core::BOOL;
 use windows::core::{Interface, Result};
@@ -43,6 +43,8 @@ pub struct Scaler {
     out: (u32, u32),
     ring: Vec<(ID3D11Texture2D, Option<ID3D11VideoProcessorOutputView>)>,
     next: usize,
+    /// SQOL: a small black picture, made the first time a blank frame is needed.
+    black: Option<ID3D11Texture2D>,
 }
 
 // SAFETY: D3D11 video objects are free-threaded; the immediate context is serialised by
@@ -65,11 +67,22 @@ impl Scaler {
             out,
             ring,
             next: 0,
+            black: None,
         })
     }
 
     pub fn size(&self) -> (u32, u32) {
         self.out
+    }
+
+    /// SQOL: a black frame at the output size (a switch, a hold, a closed source): through the
+    /// same conversion as a captured frame, so every encoder takes it as it takes those.
+    pub fn blank(&mut self) -> Result<(ID3D11Texture2D, RECT)> {
+        if self.black.is_none() {
+            self.black = Some(black_texture(&self.gpu)?);
+        }
+        let black = self.black.clone().ok_or_else(windows::core::Error::empty)?;
+        self.convert(&black, (BLACK_SIDE, BLACK_SIDE))
     }
 
     fn processor(
@@ -258,6 +271,47 @@ fn letterbox(content: (u32, u32), out: (u32, u32)) -> RECT {
     }
 }
 
+/// The black picture's side (letterboxed into any output with black bars: all of it is black;
+/// video processors take inputs this small, as the encoders' smallest picture).
+const BLACK_SIDE: u32 = 64;
+
+/// An opaque black BGRA texture, the kind a capture delivers.
+fn black_texture(gpu: &Gpu) -> Result<ID3D11Texture2D> {
+    let side = BLACK_SIDE as usize;
+    let mut pixels = vec![0u8; side * side * 4];
+    for pixel in pixels.as_chunks_mut::<4>().0 {
+        pixel[3] = 0xFF;
+    }
+    let desc = D3D11_TEXTURE2D_DESC {
+        Width: BLACK_SIDE,
+        Height: BLACK_SIDE,
+        MipLevels: 1,
+        ArraySize: 1,
+        Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+        SampleDesc: DXGI_SAMPLE_DESC {
+            Count: 1,
+            Quality: 0,
+        },
+        Usage: D3D11_USAGE_DEFAULT,
+        BindFlags: (D3D11_BIND_RENDER_TARGET.0 | D3D11_BIND_SHADER_RESOURCE.0) as u32,
+        CPUAccessFlags: 0,
+        MiscFlags: 0,
+    };
+    let data = D3D11_SUBRESOURCE_DATA {
+        pSysMem: pixels.as_ptr().cast(),
+        SysMemPitch: (side * 4) as u32,
+        SysMemSlicePitch: 0,
+    };
+    let mut texture = None;
+    // SAFETY: valid descriptor; `pixels` outlives the call and holds a full mip level.
+    unsafe {
+        gpu.device
+            .CreateTexture2D(&desc, Some(&data), Some(&mut texture))
+    }
+    .map_err(at("black texture"))?;
+    texture.ok_or_else(windows::core::Error::empty)
+}
+
 fn nv12_texture(gpu: &Gpu, size: (u32, u32)) -> Result<ID3D11Texture2D> {
     let desc = D3D11_TEXTURE2D_DESC {
         Width: size.0,
@@ -286,6 +340,57 @@ fn nv12_texture(gpu: &Gpu, size: (u32, u32)) -> Result<ID3D11Texture2D> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// SQOL, on this computer's GPU (`cargo test -p pl-share -- --ignored`): the blank frame is
+    /// studio-range black everywhere (luma 16, no colour), at the scaler's size.
+    #[test]
+    #[ignore = "needs a GPU with a video processor"]
+    fn a_blank_frame_is_black() {
+        use windows::Win32::Graphics::Direct3D11::{
+            D3D11_CPU_ACCESS_READ, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE, D3D11_USAGE_STAGING,
+        };
+        super::super::com_mta();
+        let gpu = Arc::new(Gpu::new().expect("a GPU"));
+        let mut scaler = Scaler::new(gpu.clone(), (640, 360)).unwrap();
+        let (texture, _) = scaler.blank().unwrap();
+        let desc = D3D11_TEXTURE2D_DESC {
+            Width: 640,
+            Height: 360,
+            MipLevels: 1,
+            ArraySize: 1,
+            Format: DXGI_FORMAT_NV12,
+            SampleDesc: DXGI_SAMPLE_DESC {
+                Count: 1,
+                Quality: 0,
+            },
+            Usage: D3D11_USAGE_STAGING,
+            BindFlags: 0,
+            CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
+            MiscFlags: 0,
+        };
+        let mut staging = None;
+        // SAFETY: valid descriptor; the copy and the map are on live textures of one size.
+        unsafe {
+            gpu.device
+                .CreateTexture2D(&desc, None, Some(&mut staging))
+                .unwrap();
+            let staging = staging.unwrap();
+            let _lock = gpu.lock();
+            gpu.context.CopyResource(&staging, &texture);
+            let mut map = D3D11_MAPPED_SUBRESOURCE::default();
+            gpu.context
+                .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut map))
+                .unwrap();
+            let pitch = map.RowPitch as usize;
+            let rows = std::slice::from_raw_parts(map.pData as *const u8, pitch * 360 * 3 / 2);
+            for (y, x) in [(0, 0), (180, 320), (359, 639)] {
+                assert!(rows[y * pitch + x].abs_diff(16) <= 2, "luma at {x},{y}");
+            }
+            let chroma = &rows[pitch * 360..];
+            assert!(chroma[pitch * 90 + 320].abs_diff(128) <= 2);
+            gpu.context.Unmap(&staging, 0);
+        }
+    }
 
     #[test]
     fn letterbox_centres_and_keeps_aspect() {

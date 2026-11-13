@@ -86,6 +86,13 @@ impl Gpu {
         })
     }
 
+    /// SQOL: the device was lost (a driver update or reset, the GPU removed): everything made on it
+    /// is unusable and the share is rebuilt on a new device.
+    pub fn removed(&self) -> bool {
+        // SAFETY: a plain query on a live device.
+        unsafe { self.device.GetDeviceRemovedReason() }.is_err()
+    }
+
     /// Holds the immediate context for a sequence of calls.
     pub fn lock(&self) -> ContextLock<'_> {
         // SAFETY: balanced by Leave in Drop.
