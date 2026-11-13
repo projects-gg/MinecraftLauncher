@@ -402,13 +402,7 @@ export function StageBody({
         return <EndedTile person={tile.person} className={className} />;
       case "own":
         return (
-          <OwnTile
-            n={tile.n}
-            full={full}
-            idle={idle}
-            onClose={hideOwnTile}
-            className={className}
-          />
+          <OwnTile n={tile.n} full={full} idle={idle} onClose={hideOwnTile} className={className} />
         );
     }
   };
