@@ -1,9 +1,9 @@
 // What the stage takes from the other SQOL parts (sqol.md §4). The player's own share's (SQOL-U2):
 // its menu, its live preview (asked while the tile shows, counted with the card's), the tile its
 // card's picture asks for, and what it sends ("Yayın Bilgileri" on the own tile). The room panel's
-// (SQOL-U3: `useVoiceUi(s => s.dock)`, `openRoomPanel({focus: "chat"})`, `useRoomChatOffered()`,
-// `useRoomChatUnread()`, `<RoomChatPeek/>`) until its branch lands: each stand-in is what the stage
-// does without that part; when it lands, its line here becomes a re-export.
+// (SQOL-U3): how wide the docked panel is, "Sohbet" opening it on its chat, whether the room has a
+// chat and what is unread in it, and the chat's previews over the stage.
+import { openRoomPanel } from "@/features/voice/room-chat";
 import { useVoiceUi } from "@/features/voice/store";
 import { isTauri } from "@/lib/platform";
 import { param } from "@/share/param";
@@ -32,28 +32,17 @@ export function useOwnShareInfo(n: number): string | null {
 
 // --- SQOL-U3 ------------------------------------------------------------------------------------
 
-/** SQOL-U3: how wide the docked room panel is (px; 0 while it is closed or not docked). */
+// The room has a chat area ("Oda Sohbeti" or the call's friend's messages); what the player has not
+// seen in it while the panel was closed; up to three short previews of new messages, top right of
+// the stage (the panel's own stand-in steps back while the stage shows them).
+export { RoomChatPeek, useRoomChatOffered, useRoomChatUnread } from "@/features/voice/room-chat";
+
+/** How wide the docked room panel is (px; 0 while it is closed, hidden or not docked). */
 export function useStageDock(): number {
-  return 0;
+  return useVoiceUi((s) => s.dock);
 }
 
-/** SQOL-U3: the room has a chat area ("Oda Sohbeti" or the friend's messages). */
-export function useRoomChatOffered(): boolean {
-  return param("chat") === "1";
-}
-
-/** SQOL-U3: messages the player has not seen while the panel was closed. */
-export function useRoomChatUnread(): number {
-  const value = Number(param("unread"));
-  return Number.isFinite(value) && value > 0 ? value : 0;
-}
-
-/** SQOL-U3: "Sohbet" on the stage opens the room panel on its chat. */
+/** "Sohbet" on the stage opens the room panel on its chat (the focus goes to its field). */
 export function openRoomChat(from: HTMLElement | null): void {
-  useVoiceUi.getState().openPanel({ from });
-}
-
-/** SQOL-U3: up to three short previews of new messages, top right of the stage. */
-export function RoomChatPeek() {
-  return null;
+  openRoomPanel({ focus: "chat", from });
 }

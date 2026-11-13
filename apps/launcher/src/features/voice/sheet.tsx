@@ -75,7 +75,7 @@ import { useTranslation } from "react-i18next";
 import { useRoomTargets } from "@/features/share/live";
 import { LiveAppear, LiveTag, LiveTagButton, useLivePreview } from "@/features/share/live-card";
 import { useUnshareItem, useWatchItem } from "@/features/share/menu";
-import { ShareFooterRow, WatchButton } from "@/features/share/panel";
+import { ShareFooterRow, useShareRuleItems, WatchButton } from "@/features/share/panel";
 import { openMenuFromKey } from "@/features/social/menu-key";
 import { enter, glide, leave, pageVariants, rise } from "@/features/social/motion";
 import { usePersonItems } from "@/features/social/person-menu";
@@ -944,8 +944,9 @@ function RoomHeader({
 
 /**
  * The header's room menu (SQOL-U3): the voice settings, a crew room's "Adı Değiştir" (its title is
- * the crew's name), and, last and in flare, "Odayı Kapat" with its one sentence ("Oda herkes için
- * kapanır."). The footer keeps "Ayrıl" as its only red action.
+ * the crew's name), the room's sharing rule (SQOL-U2's "Kim Paylaşabilir"), and, last and in flare,
+ * "Odayı Kapat" with its one sentence ("Oda herkes için kapanır."). The footer keeps "Ayrıl" as its
+ * only red action.
  */
 function RoomMenu({ room, onRename }: { room: VoiceRoomView; onRename: () => void }) {
   const { t } = useTranslation();
@@ -954,6 +955,8 @@ function RoomMenu({ room, onRename }: { room: VoiceRoomView; onRename: () => voi
   const stage = useVoiceUi((s) => isOneToOne(s.state));
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
+  // SQOL-U2: "Kim Paylaşabilir" › "Herkes" / "Lider ve Moderatörler" (a friend room's leader).
+  const shareRule = useShareRuleItems();
   const items: Array<MenuItem | null> = [
     {
       label: t("voice.room.settings"),
@@ -966,6 +969,7 @@ function RoomMenu({ room, onRename }: { room: VoiceRoomView; onRename: () => voi
     ...(renameInMenu(room)
       ? [{ label: t("voice.room.rename"), icon: <PencilSimple size={16} />, onSelect: onRename }]
       : []),
+    ...(shareRule.length ? [null, ...shareRule] : []),
     ...(closeInMenu(room, stage)
       ? [
           null,
