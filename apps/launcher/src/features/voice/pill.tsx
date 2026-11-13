@@ -12,7 +12,11 @@
 // VOICE-CALL: the microphone's meter before its button (its bars move with the player's voice while
 // the window is in front: meter.tsx), and in a call with one friend the call's time after the name
 // (call-time.tsx). Both keep their room, so nothing beside them shifts.
+//
+// SQOL-U3: while the room panel is closed, the room chat's unread messages show as chat's own small
+// count after the name (a call's friend's messages count on the friends entry, where they live).
 import {
+  ChatCircleDots,
   Headset,
   Microphone,
   MicrophoneSlash,
@@ -25,13 +29,18 @@ import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SharePillPart } from "@/features/share/pill-part";
+import { UnreadChip } from "@/features/social/chat/unread-chip";
 import { enter, leave, swap } from "@/features/social/motion";
 import { callFriend, leaveRoom, retryRoom, toggleDeaf, toggleMute } from "./actions";
 import { CallTime, callStart } from "./call-time";
-import { QualityBars, SpeakingFace } from "./faces";
+import { ConnectionMark } from "./connection";
+import { SpeakingFace } from "./faces";
+import { FittedNames } from "./fitted-names";
 import { HeadphonesSlash } from "./icons";
 import { VoiceMeter } from "./meter";
+import { connectionWords, titleNames } from "./panel-rules";
 import { meterThreshold, useVoicePrefs } from "./prefs";
+import { useRoomOwnUnread } from "./room-chat/unread";
 import { faceMark, micClosedLabel, pillPeople, roomTitle } from "./rules";
 import { useFace, useFaces, useVoiceUi, voiceOn } from "./store";
 
@@ -158,6 +167,14 @@ function Pill() {
         ? "noAnswer"
         : "failed";
   const title = room ? roomTitle(room, nameOf, t, calling?.friend) : "";
+  // SQOL-U3: an unnamed room's people, fitted to the name's box at a name's end.
+  const fitted = room && mode === "live" ? titleNames(room, nameOf) : null;
+  const nameBox = useRef<HTMLSpanElement>(null);
+  const nameRoom = () => {
+    const box = nameBox.current;
+    const max = box ? Number.parseFloat(getComputedStyle(box).maxWidth) : Number.NaN;
+    return Number.isFinite(max) ? max : null;
+  };
   const words =
     mode === "calling"
       ? t("voice.call.ringingName", { name: callee.name })
@@ -180,6 +197,17 @@ function Pill() {
   const micOff = Boolean(me && (me.mute || me.deaf || closed !== null));
   const micLabel = closed ?? (micOff ? t("voice.room.unmuteMic") : t("voice.room.muteMic"));
   const open = () => openPanel({ from: trigger.current });
+  // SQOL-U3: the room chat's unread messages, while its panel is closed.
+  const panelOpen = useVoiceUi((s) => s.panel);
+  const roomUnread = useRoomOwnUnread();
+  const unread = panelOpen || !room ? 0 : roomUnread;
+  const label = [
+    t("voice.pill.label", { room: fitted ? fitted.join(", ") : words }),
+    weak ? connectionWords(quality, t) : null,
+    unread > 0 ? t("chat.list.unread", { count: unread }) : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <motion.div
@@ -201,11 +229,7 @@ function Pill() {
         layout={layout ? "position" : false}
         type="button"
         aria-haspopup="dialog"
-        aria-label={
-          weak
-            ? `${t("voice.pill.label", { room: words })}, ${t("voice.room.weak")}`
-            : t("voice.pill.label", { room: words })
-        }
+        aria-label={label}
         disabled={!room}
         onClick={open}
         className={cn(
@@ -248,6 +272,7 @@ function Pill() {
         </span>
         {/* A little narrower beside the meter (VOICE-CALL): the pill keeps its width at 1024. */}
         <span
+          ref={nameBox}
           className={cn(
             "relative grid min-w-0",
             metered ? "max-w-[clamp(72px,9vw,150px)]" : "max-w-[clamp(84px,11vw,160px)]",
@@ -264,7 +289,7 @@ function Pill() {
               )}
               {...swap(reduce, 0.18)}
             >
-              {words}
+              {fitted ? <FittedNames names={fitted} room={nameRoom} refit={metered} /> : words}
             </motion.span>
           </AnimatePresence>
         </span>
@@ -272,14 +297,24 @@ function Pill() {
         {mode === "live" && since !== null ? (
           <CallTime since={since} className="shrink-0 text-[12px] leading-[18px] text-ash-300" />
         ) : null}
-        {weak ? (
-          <Tooltip content={t("voice.room.weak")}>
-            <span className="flex shrink-0">
-              <QualityBars quality={quality} />
-            </span>
-          </Tooltip>
-        ) : null}
+        {/* SQOL-U3: the room chat's unread messages (chat's own count, with its bubble: beside
+            the faces a bare number read as a count of people). */}
+        <span className="flex shrink-0 empty:hidden">
+          <UnreadChip
+            count={unread}
+            mentioned={false}
+            icon={<ChatCircleDots size={11} weight="fill" aria-hidden />}
+          />
+        </span>
       </motion.button>
+
+      {/* SQOL-U3: a weak connection's bars beside the name, a stop of their own ("Bağlantı:
+          Zayıf" by keyboard too), outside the button that opens the panel. */}
+      {weak ? (
+        <motion.span layout={layout ? "position" : false} className="-ml-1 flex pr-1">
+          <ConnectionMark quality={quality} />
+        </motion.span>
+      ) : null}
 
       <motion.span layout={layout ? "position" : false} className="flex items-center gap-0.5">
         {mode === "calling" ? (

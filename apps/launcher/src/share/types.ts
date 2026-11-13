@@ -25,6 +25,9 @@ export type ShareSurface = "main" | "popout";
 /** "Kim paylaşabilir": everyone, or the room's leader and moderators. */
 export type ShareBy = "all" | "mods";
 
+/** SQOL: "Yayın Kalitesi" while watching: Otomatik / Yüksek (always `f`) / Veri Tasarrufu (`q`). */
+export type ShareViewQuality = "auto" | "high" | "saver";
+
 /** Settings → Sesli sohbet → "Ekran paylaşımı" (also what the picker chose last). */
 export interface VoiceShareSettings {
   quality: SharePreset;
@@ -46,6 +49,14 @@ export interface VoiceShareSettings {
   alwaysOnTop: boolean;
   /** SQOL: "Önizleme Resmini Paylaş" (the room's small picture of the share; off: none goes). */
   thumbs?: boolean;
+  /** SQOL-U1: "Yayın Kalitesi" (every share the player watches). */
+  viewQuality: ShareViewQuality;
+  /** SQOL-U1: "Biri Konuşunca Yayın Sesini Kıs". */
+  duck: boolean;
+  /** SQOL-U1: "Kısma Miktarı", percent 20–90. */
+  duckLevel: number;
+  /** SQOL-U1: "Ben Konuşunca da Kıs". */
+  duckSelf: boolean;
 }
 
 export const DEFAULT_SHARE_SETTINGS: VoiceShareSettings = {
@@ -60,6 +71,10 @@ export const DEFAULT_SHARE_SETTINGS: VoiceShareSettings = {
   selfPreview: false,
   alwaysOnTop: false,
   thumbs: true,
+  viewQuality: "auto",
+  duck: false,
+  duckLevel: 60,
+  duckSelf: false,
 };
 
 /** What the player picked (ids stay on this computer; the room hears only the kind). */
@@ -140,6 +155,8 @@ export interface VoiceLiveShare {
    * preview asks again when it changes. None yet: no picture so far (or an older launcher).
    */
   th?: number | null;
+  /** SQOL: paused by its sharer or its window minimized (absent: live, or an older room). */
+  st?: ShareState;
 }
 
 /**

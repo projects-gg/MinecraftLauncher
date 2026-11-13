@@ -13,6 +13,7 @@
 // önce sor", and the microphone's meter as the call's (meter.tsx): in the test row, and as the
 // sensitivity itself, whose line sits on the meter (bars past it go out: Discord's and Steam's way,
 // so the line and what lights agree; it moved from "how much it hears" to "how loud to speak").
+// SQOL-U3: "Mesaj Önizlemelerini Göster" (on): the room chat's previews over the stream's stage.
 import { CaretDown, Warning } from "@phosphor-icons/react";
 import {
   Button,
@@ -48,6 +49,7 @@ import { askDiscord, DiscordInline, useDiscordAsk } from "./discord-offer";
 import { KeyPicker, useKeyLine } from "./key-picker";
 import { FULL_RANGE, VoiceMeter } from "./meter";
 import { keptVoicePrefs, meterThreshold, useVoicePrefs } from "./prefs";
+import { peekOf } from "./room-chat/settings";
 import { useVoiceUi } from "./store";
 
 /** A slider's value is saved this long after it stops moving. */
@@ -418,10 +420,10 @@ export function VoiceSettingsSection() {
   const volumeMax = useVoiceUi((s) => s.state.volumeMax ?? 200);
   // OVL-NEXT: in a push-to-talk-only room the push-to-talk key matters in "Konuşunca" too.
   const pttRoom = useVoiceUi((s) => s.state.room?.ptt === true);
-  // SHARE: "Ekran paylaşımı" only while the service offers sharing and this computer can share.
-  const shareOffered = useVoiceUi((s) =>
-    Boolean(s.state.share?.service && s.state.share?.canShare),
-  );
+  // SHARE: "Ekran paylaşımı" only while the service offers sharing; its sharing choices only where
+  // this computer can share (SQOL-U1: the watching ones everywhere).
+  const shareOffered = useVoiceUi((s) => Boolean(s.state.share?.service));
+  const canShare = useVoiceUi((s) => Boolean(s.state.share?.canShare));
 
   // The engine runs for the devices and the level only while the page is open; a test the player
   // left running ends with it.
@@ -542,6 +544,15 @@ export function VoiceSettingsSection() {
                   hideLabel
                 />
               </Row>
+              {/* SQOL-U3: the room chat's previews over the stream's stage. */}
+              <Row title={t("roomChat.settings.peek")}>
+                <Switch
+                  checked={peekOf(settings)}
+                  onCheckedChange={(on) => change({ peek: on })}
+                  label={t("roomChat.settings.peek")}
+                  hideLabel
+                />
+              </Row>
               <h3 className="mt-5 mb-0.5 text-[12.5px] font-semibold text-ash-300">
                 {t("voice.settings.shortcuts")}
               </h3>
@@ -560,7 +571,11 @@ export function VoiceSettingsSection() {
               <Advanced settings={settings} change={change} />
               {/* SHARE: "Ekran paylaşımı", what a new share starts with (only while offered). */}
               {shareOffered ? (
-                <ShareSettingsRows value={settings.share} onChange={(share) => change({ share })} />
+                <ShareSettingsRows
+                  value={settings.share}
+                  onChange={(share) => change({ share })}
+                  canShare={canShare}
+                />
               ) : null}
             </motion.div>
           </motion.div>

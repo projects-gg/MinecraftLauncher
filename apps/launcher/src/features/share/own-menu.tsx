@@ -142,32 +142,31 @@ export function ownShareItems(
   const cursor = mine.cursor ?? settings.cursor;
   const thumbs = mine.thumbs ?? settings.thumbs ?? true;
   const motion = mine.motion ?? settings.motion;
+  // Two levels at most: the frame rate and the picture as named groups of choices, the switches
+  // after them (a third level opened over the menu it came from).
   const advanced: MenuItem = {
     label: t("share.advanced.label"),
     icon: <GearSix size={16} />,
     onSelect: nothing,
     items: [
-      {
-        label: t("share.advanced.fps"),
-        onSelect: nothing,
-        items: RATES.map((fps) => {
-          const needsHigh = fps === 60 && mine.preset !== "high";
-          return {
-            label: t("share.own.fps", { fps }),
-            radio: true,
-            checked: mine.fps === fps,
-            disabled: needsHigh,
-            hint: needsHigh ? t("share.own.fpsNeedsHigh") : undefined,
-            onSelect: () => {
-              if (mine.fps !== fps) act.change(n, { fps });
-            },
-          };
-        }),
-      },
-      {
-        label: t("share.advanced.motion"),
-        onSelect: nothing,
-        items: MOTIONS.map((value) => ({
+      { label: t("share.advanced.fps"), heading: true, onSelect: nothing },
+      ...RATES.map((fps): MenuItem => {
+        const needsHigh = fps === 60 && mine.preset !== "high";
+        return {
+          label: t("share.own.fps", { fps }),
+          radio: true,
+          checked: mine.fps === fps,
+          disabled: needsHigh,
+          hint: needsHigh ? t("share.own.fpsNeedsHigh") : undefined,
+          onSelect: () => {
+            if (mine.fps !== fps) act.change(n, { fps });
+          },
+        };
+      }),
+      null,
+      { label: t("share.advanced.motion"), heading: true, onSelect: nothing },
+      ...MOTIONS.map(
+        (value): MenuItem => ({
           label:
             value === "auto"
               ? t("share.advanced.motionAuto")
@@ -179,8 +178,9 @@ export function ownShareItems(
           onSelect: () => {
             if (motion !== value) act.change(n, { motion: value });
           },
-        })),
-      },
+        }),
+      ),
+      null,
       {
         label: t("share.advanced.cursor"),
         checked: cursor,

@@ -115,9 +115,16 @@ describe("the voice pill", () => {
     expect(mute).not.toHaveBeenCalled();
   });
 
-  it("says a weak connection in the room's name", () => {
+  it("says a weak connection in the room's name, and its bars say it by keyboard too", () => {
     show(scenario("weak"));
-    expect(screen.getByRole("button", { name: /Bağlantı zayıf/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bağlantı: Orta/ })).toBeTruthy();
+    // SQOL-U3: the bars are a stop of their own, outside the button that opens the panel.
+    const bars = screen.getByRole("img", { name: "Bağlantı: Orta" });
+    expect(bars.tabIndex).toBe(0);
+    expect(bars.closest("button")).toBeNull();
+    cleanup();
+    show(scenario("bad"));
+    expect(screen.getByRole("img", { name: "Bağlantı: Zayıf" })).toBeTruthy();
   });
 
   it("shows a call with one friend's time, and the microphone's meter (VOICE-CALL)", () => {

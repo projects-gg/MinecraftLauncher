@@ -1,11 +1,17 @@
 // What voice chat's interface keeps (VOICE-L3): the backend's state (`voiceApi`), who speaks now,
 // the room panel and its page, and what the title bar's pill says for a moment after a stay ended
 // on its own ("Cevap yok" with "Tekrar ara", "Bağlanamadı" with "Tekrar dene").
+//
+// SQOL-U3: the room panel docked beside the stream's stage takes `dock` px of the window's right
+// (the stage leaves them free), the chat's field takes the focus when the panel is opened for it
+// (`chatFocus`), and the room's people fold away under their title (`peopleOpen`).
 import { useMemo } from "react";
 import { create } from "zustand";
 import { useSocialUi } from "@/features/social/store";
 import { HIDDEN_VOICE_STATE, type VoiceSpeaking, type VoiceState } from "@/lib/api/voice-types";
 import i18n from "@/lib/i18n";
+import { isTauri } from "@/lib/platform";
+import { param } from "@/share/param";
 import { toldMissed } from "./quiet";
 import { faceOf, type VoiceFace } from "./rules";
 
@@ -28,9 +34,33 @@ interface VoiceUi {
   direction: 1 | -1;
   /** Focus goes back here when the panel closes. */
   returnFocus: HTMLElement | null;
-  openPanel: (options?: { from?: HTMLElement | null; page?: VoicePage }) => void;
+  /**
+   * `focus: "chat"`: the chat's field takes the focus once it shows (the stage's "Sohbet", a
+   * preview's press); the panel already open takes it there too.
+   */
+  openPanel: (options?: { from?: HTMLElement | null; page?: VoicePage; focus?: "chat" }) => void;
   closePanel: () => void;
   goTo: (page: VoicePage) => void;
+  /** Grows when the panel's chat field should take the focus. */
+  chatFocus: number;
+  /** The last `chatFocus` a field took (a field that comes later does not take an old one). */
+  chatFocusTaken: number;
+  /** The chat's field on screen takes the focus asked for it (true once per ask). */
+  takeChatFocus: () => boolean;
+  /** Asks the chat's field for the focus (the panel changed its place while it had it). */
+  cueChatFocus: () => void;
+  /**
+   * SQOL-U3: the px the room panel takes at the window's right while it is docked beside the
+   * stage (0 while it is closed, hidden or over the page as a sheet). The stage reads it.
+   */
+  dock: number;
+  setDock: (dock: number) => void;
+  /**
+   * The room's people show under their title with a chat below (folded: the title alone); null:
+   * as the panel's height suits (the player's own choice holds while the launcher runs).
+   */
+  peopleOpen: boolean | null;
+  setPeopleOpen: (open: boolean) => void;
   ended: VoiceEnded | null;
   setEnded: (ended: VoiceEnded | null) => void;
   /** Who shared a room with the player lately (this run): person → the room and when they parted.
@@ -70,24 +100,43 @@ export const useVoiceUi = create<VoiceUi>()((set, get) => ({
     if (same(sorted, s.speaking) && me === s.meTalking) return;
     set({ speaking: sorted, meTalking: me });
   },
-  panel: false,
+  // The browser preview may start with it open (`roomPanel=1`).
+  panel: !isTauri() && param("roomPanel") === "1",
   page: "room",
   direction: 1,
   returnFocus: null,
-  // After the menu or the button that asked has let go of the focus.
+  // After the menu or the button that asked has let go of the focus. Opened again while open, it
+  // keeps its page and the place focus goes back to.
   openPanel: (options) =>
     window.setTimeout(
       () =>
-        set({
+        set((s) => ({
           panel: true,
-          page: options?.page ?? "room",
+          page: options?.page ?? (s.panel && !options?.focus ? s.page : "room"),
           direction: 1,
-          returnFocus: options?.from ?? null,
-        }),
+          returnFocus: s.panel && !options?.from ? s.returnFocus : (options?.from ?? null),
+          chatFocus: options?.focus === "chat" ? s.chatFocus + 1 : s.chatFocus,
+        })),
       0,
     ),
-  closePanel: () => set({ panel: false }),
+  // An ask for the chat's field nobody took goes with the panel.
+  closePanel: () => set((s) => ({ panel: false, chatFocusTaken: s.chatFocus })),
   goTo: (page) => set({ page, direction: page === "room" ? -1 : 1 }),
+  chatFocus: 0,
+  chatFocusTaken: 0,
+  takeChatFocus: () => {
+    const { chatFocus, chatFocusTaken } = get();
+    if (chatFocus <= chatFocusTaken) return false;
+    set({ chatFocusTaken: chatFocus });
+    return true;
+  },
+  cueChatFocus: () => set((s) => ({ chatFocus: s.chatFocus + 1 })),
+  dock: 0,
+  setDock: (dock) => {
+    if (get().dock !== dock) set({ dock });
+  },
+  peopleOpen: null,
+  setPeopleOpen: (peopleOpen) => set({ peopleOpen }),
   ended: null,
   setEnded: (ended) => set({ ended }),
   recent: {},
