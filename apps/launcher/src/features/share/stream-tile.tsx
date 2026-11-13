@@ -625,6 +625,8 @@ export function StreamTile({
           </div>
         </div>
       )}
+      {/* A minimized window's last frame may be bright: a veil keeps its line readable. */}
+      {minimized ? <span aria-hidden className="absolute inset-0 bg-obsidian-950/50" /> : null}
       {note ? <TileNote>{note}</TileNote> : null}
 
       {/* Top left: "Yayın Bilgileri" and the zoom's chip (a press gives the whole picture back). */}
@@ -645,7 +647,7 @@ export function StreamTile({
                 type="button"
                 aria-label={t("shareView.zoom.label", { value: formatPercent(percent) })}
                 onClick={() => applyZoom(NO_ZOOM)}
-                className="flex h-7 cursor-pointer items-center rounded-[7px] bg-obsidian-950/78 px-2 font-display text-[12.5px] font-semibold text-bone-50 tabular-nums ring-1 ring-white/10 outline-none transition-[background-color,transform,scale] duration-150 hover:bg-obsidian-800/95 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.96]"
+                className="flex h-7 cursor-pointer items-center rounded-[7px] bg-obsidian-950/78 px-2 text-[12.5px] font-semibold text-bone-50 tabular-nums ring-1 ring-white/10 outline-none transition-[background-color,transform,scale] duration-150 hover:bg-obsidian-800/95 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.96]"
               >
                 {formatPercent(percent)}
               </button>

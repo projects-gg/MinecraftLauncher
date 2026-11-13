@@ -99,12 +99,9 @@ export function useEndedShares(
   live: VoiceLiveShare[],
   on: boolean,
 ): EndedShare[] {
-  const [ended, setEnded] = useState<EndedShare[]>(() => {
-    const seeded = mockEnded();
-    return seeded
-      ? [{ ...seeded, key: shareKey(seeded.person, seeded.n), at: Number.POSITIVE_INFINITY }]
-      : [];
-  });
+  const [ended, setEnded] = useState<EndedShare[]>([]);
+  // The preview's card (`ended=301:1`) stays for the screenshot, once the room shares.
+  const seed = useRef(mockEnded());
   const watchKeys = watches.map((w) => shareKey(w.person, w.n)).join(" ");
   const liveKeys = live.map((l) => shareKey(l.person, l.n)).join(" ");
   const before = useRef<string[]>(watchKeys ? watchKeys.split(" ") : []);
@@ -114,6 +111,12 @@ export function useEndedShares(
       before.current = [];
       setEnded((list) => (list.length ? [] : list));
       return;
+    }
+    const seeded = seed.current;
+    if (seeded) {
+      seed.current = null;
+      const key = shareKey(seeded.person, seeded.n);
+      setEnded((list) => [...list, { ...seeded, key, at: Number.POSITIVE_INFINITY }]);
     }
     const still = new Set(liveKeys ? liveKeys.split(" ") : []);
     const gone = before.current.filter((key) => !now.includes(key) && !still.has(key));
@@ -433,7 +436,8 @@ export function StageBody({
           <div key={lead.key} className="flex min-h-0 min-w-0 flex-1">
             {render(lead, 0, "flex-1")}
           </div>
-          <div className="flex w-[clamp(200px,24%,340px)] shrink-0 flex-col gap-3">
+          {/* Below the stage's own controls (top right), never under them. */}
+          <div className="flex w-[clamp(200px,24%,340px)] shrink-0 flex-col gap-3 pt-11">
             <AnimatePresence initial={false}>
               {rest.map((tile, i) => (
                 <motion.div key={tile.key} className="flex aspect-video w-full" {...tileMotion}>
@@ -577,11 +581,8 @@ export function ShareStage() {
   const main = share.surface === "main";
   const watches = main ? stageWatches(share, me) : [];
   const ended = useEndedShares(watches, share.live, share.on);
-  // The player's own preview, while that share lives.
+  // The player's own preview, while that share lives (SQOL-U2's store lets go of an ended one).
   const ownShown = own !== null && share.mine.some((m) => m.n === own) ? own : null;
-  useEffect(() => {
-    if (own !== null && ownShown === null) hideOwnTile();
-  }, [own, ownShown]);
   const shown = watches.length > 0 || ended.length > 0 || ownShown !== null;
   const first = watches[0];
   const corner = shown && small && !full && first !== undefined;
