@@ -2575,6 +2575,9 @@ export const en: DeepPartial<Strings> = {
         corruptedFiles: "Game files look broken",
         accessDenied: "The game couldn't access its files",
         noOutput: "The game closed before it started",
+        notResponding: "The game froze and was closed",
+        otherProgram: "Another program closed the game",
+        modCrash: "A mod crashed the game",
         unknown: "The game closed unexpectedly",
       },
       hints: {
@@ -2592,6 +2595,11 @@ export const en: DeepPartial<Strings> = {
         corruptedFiles: "Some game files are missing or broken.",
         accessDenied: "Security software may be blocking the launcher or Java.",
         noOutput: "Security software may be blocking Java.",
+        notResponding:
+          "The game froze for a while. Try a lower render distance and turning shaders off.",
+        otherProgram:
+          "A program like an FPS counter, a screen recorder or a chat overlay crashed the game. Close it and try again.",
+        modCrash: "A mod failed while you were playing.",
         unknown: "The details are in the game log.",
       },
       memory: "Maximum memory will change from {{from}} to {{to}}.",

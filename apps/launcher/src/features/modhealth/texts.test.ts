@@ -149,6 +149,12 @@ describe("mod health texts", () => {
     expect(crashTitle(t, "outOfMemory", "x")).toBe("Oyunun belleği yetmedi");
     expect(crashTitle(t, undefined, "Kendi başlığı")).toBe("Kendi başlığı");
     expect(crashHint(t, "graphicsDriver", "")).toContain("sürücünü güncelleyip");
+    // TELEM-FIX: a frozen game, another program's overlay, a mod failing in game.
+    expect(crashTitle(t, "notResponding", "x")).toBe("Oyun donduğu için kapandı");
+    expect(crashTitle(t, "otherProgram", "x")).toBe("Başka bir program oyunu kapattı");
+    expect(crashTitle(t, "modCrash", "x")).toBe("Bir mod oyunu çökertti");
+    expect(crashHint(t, "notResponding", "")).toContain("Görüş mesafesini");
+    expect(crashHint(t, "otherProgram", "")).toContain("FPS göstergesi");
   });
 
   it("formats memory sizes", () => {

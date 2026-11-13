@@ -1352,6 +1352,7 @@ fn mod_crash(kind: CrashKind) -> bool {
             | CrashKind::MissingDependency
             | CrashKind::DuplicateMods
             | CrashKind::ModError
+            | CrashKind::ModCrash
     )
 }
 
@@ -1431,6 +1432,8 @@ pub(crate) async fn crash_view(
             | CrashKind::InvalidJvmArgument
             | CrashKind::AccessDenied
             | CrashKind::NoOutput
+            | CrashKind::NotResponding
+            | CrashKind::OtherProgram
     );
     if modded && not_mods {
         health(app)

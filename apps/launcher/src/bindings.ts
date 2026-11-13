@@ -4716,7 +4716,13 @@ export type CrashKind =
 /**  Mixin failures and other mod crashes. */
 "modError" | "corruptedFiles" | "accessDenied" | 
 /**  Exited without printing anything (often security software). */
-"noOutput" | "unknown";
+"noOutput" | 
+/**  It froze, and Windows closed it as a program that stopped responding. */
+"notResponding" | 
+/**  A program drawing over games (an FPS counter, a recorder, a chat overlay) crashed it. */
+"otherProgram" | 
+/**  A mod's code failed while the game was on screen. */
+"modCrash" | "unknown";
 
 /**  A mod the crash points at, for the UI. */
 export type CrashSuspectView = {

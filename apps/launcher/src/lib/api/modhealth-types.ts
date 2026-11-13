@@ -234,6 +234,9 @@ export type CrashKind =
   | "corruptedFiles"
   | "accessDenied"
   | "noOutput"
+  | "notResponding"
+  | "otherProgram"
+  | "modCrash"
   | "unknown";
 
 export type SuspectReason =
