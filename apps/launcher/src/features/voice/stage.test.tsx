@@ -21,7 +21,12 @@ beforeAll(() => {
   useSocialUi.setState((s) => ({
     view: {
       ...s.view,
-      me: { id: "100", name: "EjderAvcisi", avatar: "discord" } as SocialSnapshot["me"],
+      me: {
+        id: "100",
+        name: "EjderAvcisi",
+        avatar: "discord",
+        privacy: { shareServer: true, shareLastSeen: true },
+      } as SocialSnapshot["me"],
     },
   }));
 });
