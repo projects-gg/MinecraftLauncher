@@ -6,13 +6,29 @@ import { setAppReducedMotion, TooltipProvider } from "@pl/ui";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import "@/lib/i18n";
+import { useSocialUi } from "@/features/social/store";
+import type { SocialSnapshot } from "@/lib/api/social-types";
 import { createVoiceMock } from "@/lib/api/voice-mock";
 import { HIDDEN_VOICE_STATE } from "@/lib/api/voice-types";
 import { CallStage } from "./stage";
 import { useVoiceUi } from "./store";
 
-beforeAll(() => setAppReducedMotion(true));
-afterAll(() => setAppReducedMotion(false));
+const before = useSocialUi.getState().view;
+
+beforeAll(() => {
+  setAppReducedMotion(true);
+  // The player as the launcher knows them (their own seat shows their name).
+  useSocialUi.setState((s) => ({
+    view: {
+      ...s.view,
+      me: { id: "100", name: "EjderAvcisi", avatar: "discord" } as SocialSnapshot["me"],
+    },
+  }));
+});
+afterAll(() => {
+  setAppReducedMotion(false);
+  useSocialUi.setState({ view: before });
+});
 afterEach(() => {
   cleanup();
   useVoiceUi.setState({ state: HIDDEN_VOICE_STATE, ended: null, speaking: [], meTalking: false });
@@ -33,6 +49,7 @@ function show(stacked = false) {
 describe("a call's stage", () => {
   it('keeps "Sen" for screen readers only', () => {
     show();
+    expect(screen.getByText("EjderAvcisi")).toBeTruthy();
     const you = screen.getByText("Sen");
     expect(you.classList.contains("sr-only")).toBe(true);
   });
