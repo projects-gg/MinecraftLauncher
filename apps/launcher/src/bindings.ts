@@ -10801,6 +10801,32 @@ export type ShaderView = {
 };
 
 /**
+ *  SQOL-R3: the room-checked values a live change asked for (`share_set`), as sent; none: not
+ *  asked.
+ */
+export type ShareAsked = ShareAsked_Serialize | ShareAsked_Deserialize;
+
+/**
+ *  SQOL-R3: the room-checked values a live change asked for (`share_set`), as sent; none: not
+ *  asked.
+ */
+export type ShareAsked_Deserialize = {
+	preset: SharePreset | null,
+	fps: number | null,
+	audio: boolean | null,
+};
+
+/**
+ *  SQOL-R3: the room-checked values a live change asked for (`share_set`), as sent; none: not
+ *  asked.
+ */
+export type ShareAsked_Serialize = {
+	preset?: SharePreset | null,
+	fps?: number | null,
+	audio?: boolean | null,
+};
+
+/**
  *  Where a share's sound comes from (Gelişmiş): the shared app's processes, or the whole computer
  *  without voice chat. A screen always shares the whole computer's.
  */
@@ -10875,27 +10901,59 @@ export type ShareMinePhase =
 export type ShareMotion = "auto" | "clarity" | "motion";
 
 /**  A moment of screen sharing worth a toast (`share-notice`). */
-export type ShareNotice = 
+export type ShareNotice = ShareNotice_Serialize | ShareNotice_Deserialize;
+
+/**  A moment of screen sharing worth a toast (`share-notice`). */
+export type ShareNotice_Deserialize = 
 /**  One of the player's shares ended without them (`src`: what it showed). */
-{ kind: "closed"; why: ShareClosedWhy; src: ShareKind } | 
-/**  A share or a watch could not start. */
-{ kind: "refused"; refusal: ShareRefusal } | 
+({ kind: "closed"; why: ShareClosedWhy; src: ShareKind }) & { change?: never; label?: never; n?: never; refusal?: never } | 
+/**
+ *  A share or a watch could not start; SQOL-R3: or a live change of share `n` the room
+ *  refused, with what it asked (`change`: the page rolls back exactly those).
+ */
+({ kind: "refused"; refusal: ShareRefusal; n?: number | null; change?: ShareAsked_Deserialize | null }) & { label?: never; src?: never; why?: never } | 
 /**  The share goes on without its sound. */
-{ kind: "audioOff" } | 
+({ kind: "audioOff" }) & { change?: never; label?: never; n?: never; refusal?: never; src?: never; why?: never } | 
 /**  Watching stopped: nobody answered "Hâlâ izliyor musun?". */
-{ kind: "watchStopped" } | 
+({ kind: "watchStopped" }) & { change?: never; label?: never; n?: never; refusal?: never; src?: never; why?: never } | 
 /**  Watching could not connect. */
-{ kind: "watchFailed" } | 
+({ kind: "watchFailed" }) & { change?: never; label?: never; n?: never; refusal?: never; src?: never; why?: never } | 
 /**  SQOL: "Artık {label} paylaşılıyor." (`label` empty for the game: the page names it). */
-{ kind: "switched"; n: number; src: ShareKind; label: string } | 
+({ kind: "switched"; n: number; src: ShareKind; label: string }) & { change?: never; refusal?: never; why?: never } | 
 /**  SQOL: "Bu pencere paylaşılamadı." (the old source goes on). */
-{ kind: "switchFailed"; n: number } | 
+({ kind: "switchFailed"; n: number }) & { change?: never; label?: never; refusal?: never; src?: never; why?: never } | 
 /**
  *  SQOL: the shared window closed ("Paylaştığın pencere kapandı.") or the game did ("Oyun
  *  kapandı."): "Başka Ekran Seç" / "Paylaşımı Durdur"; the share ends after [`HOLD_STOP_MS`]
  *  (`closed`, `sourceGone`).
  */
-{ kind: "sourceClosed"; n: number; src: ShareKind };
+({ kind: "sourceClosed"; n: number; src: ShareKind }) & { change?: never; label?: never; refusal?: never; why?: never };
+
+/**  A moment of screen sharing worth a toast (`share-notice`). */
+export type ShareNotice_Serialize = 
+/**  One of the player's shares ended without them (`src`: what it showed). */
+({ kind: "closed"; why: ShareClosedWhy; src: ShareKind }) & { change?: never; label?: never; n?: never; refusal?: never } | 
+/**
+ *  A share or a watch could not start; SQOL-R3: or a live change of share `n` the room
+ *  refused, with what it asked (`change`: the page rolls back exactly those).
+ */
+({ kind: "refused"; refusal: ShareRefusal; n?: number | null; change?: ShareAsked_Serialize | null }) & { label?: never; src?: never; why?: never } | 
+/**  The share goes on without its sound. */
+({ kind: "audioOff" }) & { change?: never; label?: never; n?: never; refusal?: never; src?: never; why?: never } | 
+/**  Watching stopped: nobody answered "Hâlâ izliyor musun?". */
+({ kind: "watchStopped" }) & { change?: never; label?: never; n?: never; refusal?: never; src?: never; why?: never } | 
+/**  Watching could not connect. */
+({ kind: "watchFailed" }) & { change?: never; label?: never; n?: never; refusal?: never; src?: never; why?: never } | 
+/**  SQOL: "Artık {label} paylaşılıyor." (`label` empty for the game: the page names it). */
+({ kind: "switched"; n: number; src: ShareKind; label: string }) & { change?: never; refusal?: never; why?: never } | 
+/**  SQOL: "Bu pencere paylaşılamadı." (the old source goes on). */
+({ kind: "switchFailed"; n: number }) & { change?: never; label?: never; refusal?: never; src?: never; why?: never } | 
+/**
+ *  SQOL: the shared window closed ("Paylaştığın pencere kapandı.") or the game did ("Oyun
+ *  kapandı."): "Başka Ekran Seç" / "Paylaşımı Durdur"; the share ends after [`HOLD_STOP_MS`]
+ *  (`closed`, `sourceGone`).
+ */
+({ kind: "sourceClosed"; n: number; src: ShareKind }) & { change?: never; label?: never; refusal?: never; why?: never };
 
 /**
  *  "Kalite": Düşük (480p30) / Normal (720p30) / Yüksek (1080p30; 1080p60 for a game with
