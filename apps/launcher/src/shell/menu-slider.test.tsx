@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 // A menu row that sets a value (@pl/ui `MenuItem.slider`; VOICE's person volume): read out as a
-// slider with its words ("%140"), ← and → step it, PageUp/PageDown ten steps, Home/End its ends; a
-// selection keeps the menu open; the value follows its owner unless a drag holds it.
+// slider with its words ("%140"), ← and → step it, PageUp/PageDown ten steps, Home/End its ends,
+// the value kept once the steps rest (not a settings write per press); a selection keeps the menu
+// open; the value follows its owner unless a drag holds it.
 import { Menu, type MenuItem, setAppReducedMotion, TooltipProvider } from "@pl/ui";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -59,13 +60,42 @@ describe("a menu's slider row", () => {
     fireEvent.keyDown(slider, { key: "End" });
     fireEvent.keyDown(slider, { key: "Home" });
     expect(change.mock.calls).toEqual([
-      [105, true],
-      [100, true],
-      [150, true],
-      [200, true],
-      [200, true],
-      [0, true],
+      [105, false],
+      [100, false],
+      [150, false],
+      [200, false],
+      [200, false],
+      [0, false],
     ]);
+  });
+
+  it("keeps a key step's value once the steps rest, not at each press", () => {
+    const change = vi.fn();
+    const slider = open([volume(100, change)]);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      fireEvent.keyDown(slider, { key: "ArrowRight" });
+      vi.advanceTimersByTime(400);
+      fireEvent.keyDown(slider, { key: "ArrowRight" });
+      vi.advanceTimersByTime(499);
+      expect(change.mock.calls.filter(([, final]) => final)).toEqual([]);
+      vi.advanceTimersByTime(1);
+      expect(change).toHaveBeenLastCalledWith(110, true);
+      expect(change.mock.calls.filter(([, final]) => final)).toHaveLength(1);
+      // Leaving the row keeps it at once.
+      fireEvent.keyDown(slider, { key: "ArrowLeft" });
+      fireEvent.focusOut(slider);
+      expect(change).toHaveBeenLastCalledWith(105, true);
+      vi.advanceTimersByTime(1_000);
+      expect(change.mock.calls.filter(([, final]) => final)).toHaveLength(2);
+      // So does the menu closing.
+      fireEvent.keyDown(slider, { key: "Home" });
+      cleanup();
+      expect(change).toHaveBeenLastCalledWith(0, true);
+      expect(change.mock.calls.filter(([, final]) => final)).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps the menu open when chosen", () => {
