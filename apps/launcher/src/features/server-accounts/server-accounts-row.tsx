@@ -228,13 +228,17 @@ export function ServerAccountsRow({ accounts }: { accounts: readonly AccountSumm
   };
 
   const done = added !== null;
+  // One name: the title in the singular.
+  const single = done ? added.length === 1 : missing.length === 1;
   return (
     // The row's exit leaves the flow at once, so the rows below glide up (their LayoutGroup).
     <AnimatePresence initial={false} mode="popLayout">
       {shown ? (
         <motion.div
           key="server-accounts"
-          className="mb-3"
+          // With no account yet it sits between the empty state's title and the ways to add one,
+          // as far from each; above the list, close to it.
+          className={accounts.length === 0 ? "mt-4" : "mb-3"}
           layout="position"
           transition={{ layout: springSnappy }}
           initial={calm({ opacity: 0, y: 6 })}
@@ -260,7 +264,7 @@ export function ServerAccountsRow({ accounts }: { accounts: readonly AccountSumm
             </span>
             <div className="min-w-0 flex-1">
               <span id={titleId} className="block text-[14px] font-medium text-bone-50">
-                {t("serverAccounts.title")}
+                {single ? t("serverAccounts.titleOne") : t("serverAccounts.title")}
               </span>
               <div className="grid grid-cols-[minmax(0,1fr)]">
                 <Layer on={!done} className="min-w-0">
@@ -268,7 +272,7 @@ export function ServerAccountsRow({ accounts }: { accounts: readonly AccountSumm
                 </Layer>
                 <Layer on={done}>
                   <span className="block text-[12.5px] text-jade-400">
-                    {t("serverAccounts.added")}
+                    {t("serverAccounts.added", { count: added?.length ?? 0 })}
                   </span>
                 </Layer>
               </div>
