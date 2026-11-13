@@ -14,7 +14,6 @@ import {
   ArrowsInSimple,
   ArrowsOut,
   ChatCircleText,
-  CornersIn,
   PushPin,
   PushPinSlash,
   Screencast,
@@ -165,11 +164,24 @@ function useIdle(active: boolean) {
   return { idle: active && idle && menus === 0, wake };
 }
 
-/** The stage's own controls (top right). */
-function StageControls({ popout, full, idle }: { popout: boolean; full: boolean; idle: boolean }) {
+/**
+ * The stage's own controls, in a row of their own above the tiles (over a tile they read as that
+ * tile's): "Sohbet", "Küçült" on the page, "Her Zaman Üstte" in the "Yayın" window. Full screen has
+ * no row of its own unless the chat is there (every tile has "Tam Ekrandan Çık", and Esc).
+ */
+function StageControls({
+  popout,
+  full,
+  idle,
+  chat,
+}: {
+  popout: boolean;
+  full: boolean;
+  idle: boolean;
+  chat: boolean;
+}) {
   const { t } = useTranslation();
   const setSmall = useShareUi((s) => s.setSmall);
-  const chat = useRoomChatOffered();
   const unread = useRoomChatUnread();
   // The launcher's word (the "Yayın" window has no settings of its own to read).
   const onTop = useShare().onTop;
@@ -231,11 +243,6 @@ function StageControls({ popout, full, idle }: { popout: boolean; full: boolean;
           <ArrowsInSimple size={16} weight="bold" />
         </StageButton>
       )}
-      {full ? (
-        <StageButton label={t("shareView.menu.exitFullscreen")} onClick={leaveFullscreen}>
-          <CornersIn size={16} weight="bold" />
-        </StageButton>
-      ) : null}
     </div>
   );
 }
@@ -371,8 +378,10 @@ export function StageBody({
   const share = useShare();
   const full = useShareUi((s) => s.full);
   const forward = useShareUi((s) => s.forward);
+  const chat = useRoomChatOffered() && !popout;
   const { idle, wake } = useIdle(full);
   useEscLeavesFull(full);
+  const controls = popout || !full || chat;
 
   const tiles: StageTile[] = [
     ...watches.map(
@@ -430,14 +439,18 @@ export function StageBody({
       onWheel={wake}
       onKeyDown={wake}
     >
+      {controls ? (
+        <div className="flex shrink-0 justify-end pb-3">
+          <StageControls popout={popout} full={full} idle={idle} chat={chat} />
+        </div>
+      ) : null}
       {lead ? (
         <div className="flex min-h-0 flex-1 gap-3">
           {/* The forward one changes at once: two big tiles crossing would push each other aside. */}
           <div key={lead.key} className="flex min-h-0 min-w-0 flex-1">
             {render(lead, 0, "flex-1")}
           </div>
-          {/* Below the stage's own controls (top right), never under them. */}
-          <div className="flex w-[clamp(200px,24%,340px)] shrink-0 flex-col gap-3 pt-11">
+          <div className="flex w-[clamp(200px,24%,340px)] shrink-0 flex-col gap-3">
             <AnimatePresence initial={false}>
               {rest.map((tile, i) => (
                 <motion.div key={tile.key} className="flex aspect-video w-full" {...tileMotion}>
@@ -458,13 +471,15 @@ export function StageBody({
           </AnimatePresence>
         </div>
       )}
-      <div
-        className="absolute top-5 right-5 flex flex-col items-end gap-2"
-        style={dock ? { right: 20 + dock } : undefined}
-      >
-        <StageControls popout={popout} full={full} idle={idle} />
-        {popout || (dock && !full) ? null : <RoomChatPeek />}
-      </div>
+      {/* The room chat's peek: top right over the tiles, under the stage's own row. */}
+      {popout || (dock && !full) ? null : (
+        <div
+          className={cn("absolute right-5 flex flex-col items-end", controls ? "top-[56px]" : "top-5")}
+          style={dock ? { right: 20 + dock } : undefined}
+        >
+          <RoomChatPeek />
+        </div>
+      )}
       <AnimatePresence>{share.stillAsking ? <StillAsk watches={watches} /> : null}</AnimatePresence>
     </div>
   );
@@ -635,7 +650,7 @@ export function ShareStage() {
           key="stage"
           aria-label={t("shareView.stage.label")}
           className={cn(
-            "fixed flex flex-col bg-obsidian-950/92 backdrop-blur-md",
+            "fixed flex flex-col bg-obsidian-950",
             full ? "inset-0 z-[35]" : "top-titlebar right-0 bottom-0 left-rail z-20",
           )}
           initial={{ opacity: 0, y: reduce ? 0 : 8 }}

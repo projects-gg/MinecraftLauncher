@@ -136,7 +136,7 @@ export function StreamBackdrop({ face }: { face: BackdropFace }) {
           <SocialFace source={face} size={296} />
         </span>
       ) : null}
-      <span className="absolute inset-0 bg-obsidian-950/62" />
+      <span className="absolute inset-0 bg-obsidian-950/72" />
     </div>
   );
 }
@@ -151,13 +151,10 @@ function TileNote({ children }: { children: ReactNode }) {
 }
 
 /** The name, always there (a small label while the bar rests). */
-function NamePlate({ name, detail }: { name: string; detail?: string }) {
+function NamePlate({ name }: { name: string }) {
   return (
-    <span className="flex min-w-0 items-center gap-2 rounded-[8px] bg-obsidian-950/78 px-2.5 py-1.5 ring-1 ring-white/10">
+    <span className="flex min-w-0 items-center rounded-[8px] bg-obsidian-950/78 px-2.5 py-1.5 ring-1 ring-white/10">
       <span className="truncate text-[13px] leading-[1.3] font-semibold text-bone-50">{name}</span>
-      {detail ? (
-        <span className="shrink-0 text-[12px] leading-[1.3] text-ash-300">{detail}</span>
-      ) : null}
     </span>
   );
 }
@@ -633,7 +630,7 @@ export function StreamTile({
       {info || zoomed ? (
         <span className="absolute top-2 left-2 flex items-center gap-1.5">
           {info ? (
-            <span className="rounded-[7px] bg-obsidian-950/78 px-2 py-1 text-[12px] leading-[1.3] font-medium text-bone-100 tabular-nums ring-1 ring-white/10">
+            <span className="rounded-[7px] bg-obsidian-950/78 px-2 py-1 text-[12px] leading-[1.3] font-medium text-bone-100 tabular-nums ring-1 ring-white/10 @max-[22rem]/tile:hidden">
               {t("shareView.info.line", {
                 size: `${info.w}×${info.h}`,
                 fps: info.fps,
@@ -809,7 +806,17 @@ export function OwnTile({
         className="absolute inset-x-2 bottom-2 flex items-end justify-between gap-2"
         {...chrome.bar}
       >
-        <NamePlate name={name} detail={t("shareView.own.preview")} />
+        <span className="flex min-w-0 items-center gap-1.5">
+          <NamePlate name={name} />
+          <span
+            className={cn(
+              "shrink-0 pl-0.5 text-[12px] leading-[1.3] text-ash-200",
+              fade(chrome.shown),
+            )}
+          >
+            {t("shareView.own.preview")}
+          </span>
+        </span>
         <span className={cn("flex shrink-0 gap-1.5", fade(chrome.shown))}>
           <StageButton
             label={full ? t("shareView.menu.exitFullscreen") : t("shareView.menu.fullscreen")}

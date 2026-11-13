@@ -74,8 +74,8 @@ export const enShareView = {
     sharing: "While Sharing",
     quality: "Stream Quality",
     duck: "Lower the Stream When Someone Talks",
-    duckLevel: "How Much Quieter",
-    duckSelf: "Also When I Talk",
+    duckLevel: "Lower By",
+    duckSelf: "Lower When I Talk Too",
     thumbs: "Share a Preview Picture",
   },
 };
