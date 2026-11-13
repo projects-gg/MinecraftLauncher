@@ -415,6 +415,26 @@ pub fn category(raw: &str) -> String {
     }
 }
 
+/// A game crash's trace (`native/gpu-amd`, `java/NullPointerException/sodium`, `exit/-1`), kept
+/// only in that shape: a source, then one or two parts of at most 40 letters, digits, `.`, `_` or
+/// `-`. The analysis builds it from closed lists; anything else is not sent.
+pub fn trace(raw: &str) -> Option<String> {
+    let mut parts = raw.split('/');
+    let source = parts.next()?;
+    if !matches!(source, "native" | "exit" | "java") {
+        return None;
+    }
+    let rest: Vec<&str> = parts.collect();
+    let part_ok = |part: &&str| {
+        !part.is_empty()
+            && part.len() <= 40
+            && part
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || ".-_".contains(c))
+    };
+    (matches!(rest.len(), 1 | 2) && rest.iter().all(part_ok)).then(|| raw.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

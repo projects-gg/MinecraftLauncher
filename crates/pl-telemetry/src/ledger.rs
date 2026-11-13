@@ -20,6 +20,9 @@ pub const CRASHES_KEPT: usize = 8;
 pub const CRASHES_SENT: usize = 3;
 /// Voice setup samples one batch keeps.
 pub const SETUP_SAMPLES: usize = 16;
+/// Distinct game crash traces the file keeps (a batch sends the most frequent [`GAMES_SENT`]).
+pub const GAMES_KEPT: usize = 6;
+pub const GAMES_SENT: usize = 2;
 
 /// What a crash summary is about.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -59,6 +62,34 @@ impl CrashNote {
         self.kind == other.kind
             && self.at == other.at
             && self.msg == other.msg
+            && self.ver == other.ver
+    }
+}
+
+/// One game crash's coarse trace (TELEM-FIX), already scrubbed ([`crate::scrub::trace`]): what
+/// kind of code failed and where, from closed lists (`pl_mc`'s `CrashTrace`), never a path, a
+/// name, a world or a stack.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameCrash {
+    /// The crash analysis' kind (`modCrash`, `unknown`).
+    pub kind: String,
+    /// `java/NullPointerException/sodium`, `native/gpu-amd`, `exit/hung`.
+    pub sig: String,
+    /// Where the game was, from the crash report (`Rendering overlay`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
+    /// The launcher version it happened in.
+    pub ver: String,
+    /// How often, since the last send.
+    pub n: u32,
+}
+
+impl GameCrash {
+    fn same(&self, other: &Self) -> bool {
+        self.kind == other.kind
+            && self.sig == other.sig
+            && self.phase == other.phase
             && self.ver == other.ver
     }
 }
@@ -208,6 +239,8 @@ pub struct Ledger {
     pub crashes: Vec<CrashNote>,
     /// When crash summaries went out on their own (Unix seconds, the last day's).
     pub crash_sends: Vec<i64>,
+    /// Game crash traces; only the daily batch carries them.
+    pub games: Vec<GameCrash>,
 }
 
 impl Ledger {
@@ -261,8 +294,49 @@ impl Ledger {
         }
     }
 
+    pub fn add_game(&mut self, game: GameCrash, now: i64) {
+        self.touch(now);
+        if let Some(known) = self.games.iter_mut().find(|known| known.same(&game)) {
+            known.n = known.n.saturating_add(game.n.max(1));
+            return;
+        }
+        if self.games.len() >= GAMES_KEPT
+            && let Some(rarest) = self
+                .games
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, known)| known.n)
+                .map(|(index, _)| index)
+        {
+            self.games.remove(rarest);
+        }
+        self.games.push(game);
+    }
+
+    /// The game crash traces a daily batch carries: the most frequent first.
+    pub fn games_to_send(&self) -> Vec<GameCrash> {
+        let mut games = self.games.clone();
+        games.sort_by_key(|game| std::cmp::Reverse(game.n));
+        games.truncate(GAMES_SENT);
+        games
+    }
+
+    /// Takes away the traces a batch carried.
+    pub fn drop_games(&mut self, sent: &[GameCrash]) {
+        for gone in sent {
+            if let Some(index) = self.games.iter().position(|known| known.same(gone)) {
+                let left = self.games[index].n.saturating_sub(gone.n);
+                if left == 0 {
+                    self.games.remove(index);
+                } else {
+                    self.games[index].n = left;
+                }
+            }
+        }
+    }
+
     pub fn has_counts(&self) -> bool {
-        !self.counts.is_empty() || !self.crashes.is_empty()
+        !self.counts.is_empty() || !self.crashes.is_empty() || !self.games.is_empty()
     }
 }
 

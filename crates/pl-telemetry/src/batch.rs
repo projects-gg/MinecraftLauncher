@@ -14,7 +14,7 @@ use std::io::Write;
 use serde::Serialize;
 
 use crate::facts::AppFacts;
-use crate::ledger::{Counts, CrashKind, CrashNote, Ledger};
+use crate::ledger::{Counts, CrashKind, CrashNote, GameCrash, Ledger};
 
 /// The wire format's version.
 pub const WIRE_VERSION: u8 = 1;
@@ -100,12 +100,34 @@ fn crashes(notes: &[CrashNote]) -> Vec<WireCrash> {
         .collect()
 }
 
+/// Game crash traces after the launcher's own crashes (TELEM-FIX): `k: "game"`, the trace where a
+/// launcher crash has its place in the code, its kind and phase as the message. A service that
+/// takes only the first [`crate::ledger::CRASHES_SENT`] items and knows no `game` keeps the
+/// launcher's crashes.
+fn games(games: &[GameCrash]) -> Vec<WireCrash> {
+    games
+        .iter()
+        .map(|game| WireCrash {
+            k: "game",
+            at: game.sig.clone(),
+            msg: match &game.phase {
+                Some(phase) => format!("{}, {phase}", game.kind),
+                None => game.kind.clone(),
+            },
+            ver: game.ver.clone(),
+            n: game.n,
+        })
+        .collect()
+}
+
 /// What a request carried: taken away from the ledger once the service has it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Carried {
     /// The daily counts (none for a crash summary on its own).
     pub counts: Option<Counts>,
     pub crashes: Vec<CrashNote>,
+    /// Game crash traces (only the daily batch carries them).
+    pub games: Vec<GameCrash>,
 }
 
 /// A request ready to go.
@@ -122,6 +144,9 @@ pub struct Outgoing {
 pub fn daily(ledger: &Ledger, facts: &AppFacts) -> Outgoing {
     let counts = ledger.counts.clone();
     let notes = ledger.crashes_to_send();
+    let traces = ledger.games_to_send();
+    let mut crash = crashes(&notes);
+    crash.extend(games(&traces));
     let voice = &counts.voice;
     let wire = Wire {
         v: WIRE_VERSION,
@@ -149,13 +174,14 @@ pub fn daily(ledger: &Ledger, facts: &AppFacts) -> Outgoing {
             rec: voice.reconnects,
             setup_ms: median(&voice.setup_ms),
         }),
-        crash: crashes(&notes),
+        crash,
     };
     outgoing(
         &wire,
         Carried {
             counts: Some(counts),
             crashes: notes,
+            games: traces,
         },
     )
 }
@@ -185,6 +211,7 @@ pub fn crash_only(ledger: &Ledger, facts: &AppFacts) -> Outgoing {
         Carried {
             counts: None,
             crashes: notes,
+            games: Vec::new(),
         },
     )
 }

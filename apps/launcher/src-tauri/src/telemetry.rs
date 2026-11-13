@@ -3,9 +3,10 @@
 //! Off until Studio turns on the signed config's `features.telemetry`, and off for good with the
 //! player's "Kullanım verisi gönder" (Settings → Veri). While on, the launcher counts what it does
 //! anyway: its starts (how long until the window showed), its launches and their failures (the
-//! command error's code, the crash analysis' kind), the feature commands the page invokes (one
-//! table, `pl_telemetry::feature`), voice chat's stays (the voice state the page gets) and its own
-//! panics and page errors, scrubbed. Nothing looks at other programs, windows, keys or files.
+//! command error's code, the crash analysis' kind and coarse trace), the feature commands the
+//! page invokes (one table, `pl_telemetry::feature`), voice chat's stays (the voice state the
+//! page gets) and its own panics and page errors, scrubbed. Nothing looks at other programs,
+//! windows, keys or files.
 //!
 //! Nothing wakes the launcher for it: the daily batch goes with the daily tidy-up's round
 //! (`commands::cleanup::start_housekeeping`, 90 s after the start, then daily), a crash summary
@@ -22,7 +23,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use pl_telemetry::{
-    Answer, AppFacts, CrashKind, CrashNote, Feature, Launch, Outgoing, Phase, Recorder, VoiceSeen,
+    Answer, AppFacts, CrashKind, CrashNote, Feature, GameTrace, Launch, Outgoing, Phase, Recorder,
+    VoiceSeen,
 };
 use pl_voice::view::{VoicePhase, VoiceRoomKind, VoiceState};
 use serde::Serialize;
@@ -157,16 +159,23 @@ pub fn game_shown() {
     }
 }
 
-/// A game crashed: its kind as the crash analysis names it (`modError`).
-pub fn game_crashed(kind: pl_mc::launch::crash::CrashKind) {
+/// A game crashed: its kind as the crash analysis names it (`modError`) and its coarse trace
+/// (`pl_mc::launch::crash::CrashTrace`: closed lists only, TELEM-FIX).
+pub fn game_crashed(diagnosis: &pl_mc::launch::crash::CrashDiagnosis) {
     let Some(recorder) = recorder() else {
         return;
     };
-    let name = serde_json::to_value(kind)
+    let name = serde_json::to_value(diagnosis.kind)
         .ok()
         .and_then(|value| value.as_str().map(str::to_owned))
         .unwrap_or_else(|| "unknown".to_owned());
-    recorder.game_crashed(&name, now_ms());
+    let trace = &diagnosis.trace;
+    let trace = (!trace.sig.is_empty()).then_some(GameTrace {
+        sig: &trace.sig,
+        phase: trace.phase,
+    });
+    let version = VERSION.get().map_or("", String::as_str);
+    recorder.game_crashed(&name, trace, version, now_ms());
 }
 
 /// Every voice state (`voice::AppPlatform::state`): a stay's quality is read from them.

@@ -22,8 +22,9 @@ import { DropdownMenu } from "radix-ui";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountFace, type FaceAccount } from "@/features/accounts/account-face";
+import { holdPlay } from "@/features/accounts/play-hold";
 import { useAccountsUi } from "@/features/accounts/store";
-import { useAccounts } from "@/features/accounts/use-accounts";
+import { ACCOUNTS_KEY, useAccounts } from "@/features/accounts/use-accounts";
 import {
   useOthersInGame,
   useOwnLaunch,
@@ -39,12 +40,12 @@ import { sortInstances, useLibraryView } from "@/features/library/library-view";
 import { useOfficialOffer } from "@/features/library/official";
 import { usePrepareSync } from "@/features/prepare/use-prepare-sync";
 import { ResumeButton, useResumeTarget } from "@/features/resume/resume-button";
-import { api, type InstanceSummary } from "@/lib/api";
+import { type AccountSummary, api, type InstanceSummary } from "@/lib/api";
 import { copyDetails } from "@/lib/clipboard";
 import { formatCount, formatDuration, formatRelative, formatSpeed } from "@/lib/format";
 import { detectOs } from "@/lib/platform";
 import { ariaKeyShortcuts } from "@/lib/shortcuts";
-import { isOpening, type LaunchPhase, useLaunch } from "@/stores/launch";
+import { isOpening, type LaunchPhase, lastPlay, resumePlay, useLaunch } from "@/stores/launch";
 import { barPhase, inProgress } from "@/stores/launch-owner";
 import { usePrefs } from "@/stores/prefs";
 import { type PrepareHint, usePrepare } from "@/stores/prepare";
@@ -772,24 +773,37 @@ export function CommandBar() {
       // account only when asked to; else it played with the selected one.
       const launch = useLaunch.getState();
       const account = launch.account?.id ?? launch.selected ?? null;
+      const name = queryClient
+        .getQueryData<AccountSummary[]>(ACCOUNTS_KEY)
+        ?.find((a) => a.id === account)?.username;
+      // Once that account is signed in again, the launch that stopped starts by itself.
+      const again = lastPlay();
       // Its own line: the backend's ends with what the button says ("... yeniden giriş yap.").
-      toast.error(t("qol.launch.signedOut"), {
+      toast.error(name ? t("telemFix.signedOut", { name }) : t("qol.launch.signedOut"), {
         id: "launch-sign-in",
         duration: 10_000,
         action: {
           label: t("accounts.center.relogin"),
-          onClick: () => useAccountsUi.getState().openLogin(account),
+          onClick: () => {
+            if (again && account) holdPlay(again, { kind: "signIn", account }, resumePlay);
+            useAccountsUi.getState().openLogin(account);
+          },
         },
       });
     } else if (action === "addAccount") {
-      // The backend's line points to Ayarlar > Hesaplar; the button opens it. Nothing failed, a
-      // step is missing: the neutral info mark, not an error's red one.
+      // A launch from elsewhere (OYNA itself asks for an account first, TELEM-FIX). The backend's
+      // line points to Ayarlar > Hesaplar; the button opens it, and the launch starts once an
+      // account is there. Nothing failed, a step is missing: the neutral info mark.
+      const again = lastPlay();
       toast.info(t("qol.launch.noAccount"), {
         id: "launch-no-account",
         duration: 10_000,
         action: {
           label: t("accounts.add"),
-          onClick: () => useAccountsUi.getState().openCenter({ focus: "add" }),
+          onClick: () => {
+            if (again) holdPlay(again, { kind: "account" }, resumePlay);
+            useAccountsUi.getState().openCenter({ focus: "add" });
+          },
         },
       });
     } else if (action === "makeSpace") {
@@ -826,7 +840,7 @@ export function CommandBar() {
       });
     }
     reset();
-  }, [phase, reset, t, navigate, launchId, selectedLaunchId]);
+  }, [phase, reset, t, navigate, launchId, selectedLaunchId, queryClient]);
 
   const state: PlayState = (() => {
     switch (phase.kind) {

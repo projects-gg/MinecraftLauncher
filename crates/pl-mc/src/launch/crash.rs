@@ -24,6 +24,10 @@ use crate::mods::check::{CheckEnvironment, DisableReason, ModFix, older_copies};
 use crate::mods::scan::{DeclaredMod, ModSnapshot, ScannedJar};
 use crate::mods::version::{Mismatch, VersionReq, minimum_java};
 
+mod trace;
+
+pub use trace::{CrashTrace, NOT_RESPONDING_EXIT};
+
 /// Exits sooner than this count as failed when a crash report was written, even with code 0.
 pub const SHORT_RUN: Duration = Duration::from_secs(20);
 /// Crash reports older than the launch minus this margin belong to an earlier run.
@@ -49,6 +53,12 @@ pub enum CrashKind {
     AccessDenied,
     /// Exited without printing anything (often security software).
     NoOutput,
+    /// It froze, and Windows closed it as a program that stopped responding.
+    NotResponding,
+    /// A program drawing over games (an FPS counter, a recorder, a chat overlay) crashed it.
+    OtherProgram,
+    /// A mod's code failed while the game was on screen.
+    ModCrash,
     Unknown,
 }
 
@@ -109,6 +119,9 @@ pub struct CrashDiagnosis {
     /// Repairs in the pre-launch check's vocabulary; filled by [`attribute_crash`].
     #[serde(default)]
     pub mod_fixes: Vec<ModFix>,
+    /// The crash's coarse trace for usage data (TELEM-FIX); never shown, never saved.
+    #[serde(skip)]
+    pub trace: CrashTrace,
 }
 
 /// What the logs say a suspected mod did.
@@ -445,7 +458,7 @@ static JAVA_CLASS_TOO_NEW: LazyLock<Regex> = LazyLock::new(|| {
 /// A native crash inside a graphics driver (`[nvoglv64.dll+0xd5c3a]`). The bare file names also
 /// appear in harmless lines (Sodium's graphics adapter line, the crash report's module list).
 static GPU_DRIVER_FRAME: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)\[(?:nvoglv64|nvoglv32|atio6axx|atioglxx|atig6txx|ig9icd64|ig9icd32|ig75icd64|igxelpicd64)\.dll\+0x[0-9a-f]+\]")
+    Regex::new(r"(?i)\[(?:nvoglv64|nvoglv32|nvwgf2umx|nvd3dumx|atio6axx|atioglxx|atig6txx|amdvlk64|amdxx64|atiumd64|ig9icd64|ig9icd32|ig75icd64|ig7icd64|igxelpicd64|igvk64|igdumdim64)\.dll\+0x[0-9a-f]+\]")
         .expect("valid regex")
 });
 /// A mod declaring an incompatibility (Fabric, NeoForge); not other uses of the words, such as
@@ -776,6 +789,10 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
                 .map(|c| c[1].to_owned()),
         );
         (CrashKind::IncompatibleMods, mods, None)
+    } else if trace::overlay_crash(&text).is_some() {
+        // The JVM died in the hook of a program that draws over games (RivaTuner, Discord's,
+        // Steam's or NVIDIA's overlay, OBS): above the driver, before or after the window showed.
+        (CrashKind::OtherProgram, Vec::new(), None)
     } else if any(&[
         "does not support required extensions",
         "does not have required feature",
@@ -835,6 +852,10 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
         "could not create the java virtual machine",
     ]) {
         (CrashKind::MemoryReserve, Vec::new(), None)
+    } else if input.exit_code == Some(NOT_RESPONDING_EXIT) {
+        // Windows closed it after it stopped responding (the player chose "Close the program"):
+        // a freeze, not a crash with a report.
+        (CrashKind::NotResponding, Vec::new(), None)
     } else if input.output.trim().is_empty() && input.crash_report.is_none() {
         (CrashKind::NoOutput, Vec::new(), None)
     } else {
@@ -850,12 +871,20 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
     {
         suspects.retain(|suspect| suspect.reason != SuspectReason::InStackTrace);
     }
-    let mods = if kind == CrashKind::ModError {
+    // The game wrote its crash report while it was on screen, and the report's own stack names
+    // mods (their mixins, their classes at its top): a mod failed in game (TELEM-FIX). Only the
+    // report counts: the output's earlier stacks are of errors the game lived through.
+    let (kind, suspects) = match in_game_mod_suspects(kind, input) {
+        Some(found) => (CrashKind::ModCrash, found),
+        None => (kind, suspects),
+    };
+    let mods = if matches!(kind, CrashKind::ModError | CrashKind::ModCrash) {
         mod_error_names(&suspects)
     } else {
         mods
     };
     let mods = dedup_names(mods);
+    let trace = trace::trace(&text, input.crash_report, input.exit_code, kind, &suspects);
     let (title_tr, hint_tr, mut suggested_actions) = describe(kind, &mods, required, input);
     if input.crash_report.is_some() {
         suggested_actions.push(SuggestedAction::OpenCrashReport);
@@ -873,7 +902,30 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
         log_file: None,
         suspects,
         mod_fixes: Vec::new(),
+        trace,
     }
+}
+
+/// The mods an unexplained crash's own crash report names, when the game was on screen: Mixin
+/// failures, mod frames and the report's "Suspected Mods", else the mod classes at the top of its
+/// stack ([`trace::mod_frames`]). `None` when the crash is explained, or no mod is named.
+fn in_game_mod_suspects(kind: CrashKind, input: &CrashInput<'_>) -> Option<Vec<CrashSuspect>> {
+    if kind != CrashKind::Unknown || !input.window_shown {
+        return None;
+    }
+    let report = input
+        .crash_report
+        .filter(|report| report.contains(trace::REPORT_HEADER))?;
+    let mut found = collect_suspects(report, CrashKind::Unknown);
+    if found.is_empty()
+        && let Some(class) = trace::mod_frames(report).into_iter().next()
+    {
+        found.push(CrashSuspect {
+            class_name: Some(class),
+            ..CrashSuspect::new(SuspectReason::InStackTrace)
+        });
+    }
+    (!found.is_empty()).then_some(found)
 }
 
 /// The JVM did not start because of one of the player's own JVM arguments: the option it
@@ -1305,6 +1357,44 @@ fn describe(
                 SuggestedAction::RepairInstallation,
             ],
         ),
+        CrashKind::NotResponding => (
+            s("Oyun donduğu için kapandı"),
+            s(
+                "Oyun bir süre yanıt vermedi ve Windows onu kapattı. Görüş mesafesini düşürüp \
+               shader'ı kapatmak çoğu zaman yardımcı olur.",
+            ),
+            Vec::new(),
+        ),
+        CrashKind::OtherProgram => (
+            s("Başka bir program oyunu kapattı"),
+            s(
+                "Oyunun üstünde çalışan bir program (FPS göstergesi, ekran kaydı ya da sohbet \
+               katmanı) oyunu çökertti. O programı ya da oyun içi katmanını kapatıp tekrar dene.",
+            ),
+            Vec::new(),
+        ),
+        CrashKind::ModCrash => {
+            let hint = match mods.len() {
+                0 => s("Oyun açıkken bir mod hata verdi. Modlarını güncelleyip tekrar dene."),
+                1 => format!(
+                    "Oyun açıkken şu mod hata verdi: {}. Modu güncelle ya da kapatıp tekrar dene.",
+                    mods[0]
+                ),
+                _ => format!(
+                    "Oyun açıkken şu modlar hata verdi: {}. Bu modları güncelle ya da kapatıp \
+                     tekrar dene.",
+                    list(mods)
+                ),
+            };
+            let mut actions = Vec::new();
+            if !mods.is_empty() {
+                actions.push(SuggestedAction::UpdateMods {
+                    mods: mods.to_vec(),
+                });
+            }
+            actions.push(SuggestedAction::TryWithoutMods);
+            (s("Bir mod oyunu çökertti"), hint, actions)
+        }
         CrashKind::Unknown => (
             s("Oyun beklenmedik şekilde kapandı"),
             s(
@@ -1357,6 +1447,8 @@ fn names_mods(kind: CrashKind) -> bool {
             | CrashKind::GraphicsDriver
             | CrashKind::AccessDenied
             | CrashKind::NoOutput
+            | CrashKind::NotResponding
+            | CrashKind::OtherProgram
     )
 }
 

@@ -115,8 +115,10 @@ export async function mockLaunchStop(
   const key = disk === "low" || disk === "full" ? disk : flag("launchError");
   const stop = stops[key];
   if (!stop) return false;
-  // A world open in another game is told before anything is downloaded.
-  const steps = key === "full" ? 14 : key === "worldOpen" ? 0 : 3;
+  // A world open in another game, a missing account and a session only a new sign-in fixes are
+  // told before anything is downloaded (TELEM-FIX).
+  const early = key === "worldOpen" || key === "signIn" || key === "noAccount";
+  const steps = key === "full" ? 14 : early ? 0 : 3;
   for (let step = 1; step <= steps; step++) {
     if (job.cancelled) throw new Error("cancelled");
     await wait(110);

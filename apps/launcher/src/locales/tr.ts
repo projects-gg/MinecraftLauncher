@@ -77,6 +77,7 @@ import { trSocial } from "./tr-social";
 import { trStars } from "./tr-stars";
 import { trTeam6 } from "./tr-team6";
 import { trTeams } from "./tr-teams";
+import { trTelemFix } from "./tr-telem-fix";
 import { trTelemetry } from "./tr-telemetry";
 import { trTray } from "./tr-tray";
 import { trTuning } from "./tr-tuning";
@@ -170,6 +171,7 @@ export const tr = {
   socNext: trSocNext,
   socNote: trSocNote,
   telemetry: trTelemetry,
+  telemFix: trTelemFix,
   crewUi: trCrewUi,
   tweaks: trTweaks,
   nav: {
@@ -2265,6 +2267,9 @@ export const tr = {
         corruptedFiles: "Oyun dosyaları bozuk görünüyor",
         accessDenied: "Oyun dosyalarına erişilemedi",
         noOutput: "Oyun hiç açılmadan kapandı",
+        notResponding: "Oyun donduğu için kapandı",
+        otherProgram: "Başka bir program oyunu kapattı",
+        modCrash: "Bir mod oyunu çökertti",
         unknown: "Oyun beklenmedik şekilde kapandı",
       },
       hints: {
@@ -2283,6 +2288,11 @@ export const tr = {
         corruptedFiles: "Oyunun bazı dosyaları eksik ya da bozuk.",
         accessDenied: "Güvenlik yazılımın launcher'ı ya da Java'yı engelliyor olabilir.",
         noOutput: "Güvenlik yazılımın Java'yı engelliyor olabilir.",
+        notResponding:
+          "Oyun bir süre donup kaldı. Görüş mesafesini düşürüp shader'ı kapatmayı dene.",
+        otherProgram:
+          "FPS göstergesi, ekran kaydı ya da sohbet katmanı gibi bir program oyunu çökertti. Onu kapatıp tekrar dene.",
+        modCrash: "Oyun açıkken bir mod hata verdi.",
         unknown: "Ayrıntılar oyun kaydında.",
       },
       memory: "En yüksek bellek {{from}} yerine {{to}} olacak.",

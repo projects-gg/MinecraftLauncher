@@ -419,6 +419,10 @@ export function mockCrash(instanceId: string, scenario: string) {
     reserve: "memoryReserve",
     graphics: "graphicsDriver",
     java: "javaTooOld",
+    // TELEM-FIX: a frozen game Windows closed, an overlay program's hook, a mod failing in game.
+    freeze: "notResponding",
+    overlay: "otherProgram",
+    modcrash: "modCrash",
   };
   const kind = kinds[scenario] ?? "unknown";
   switch (scenario) {
@@ -474,6 +478,19 @@ export function mockCrash(instanceId: string, scenario: string) {
         hint: "Bu sürüm Java 21 veya daha yenisini gerektiriyor.",
         repairable: true,
       };
+    case "modcrash":
+      return {
+        ...base,
+        kind,
+        title: "Bir mod oyunu çökertti",
+        hint: "Oyun açıkken şu mod hata verdi: Xaero's Minimap.",
+        mods: ["Xaero's Minimap"],
+        suspects: [{ name: "Xaero's Minimap", reason: "inStackTrace" as const, strong: false }],
+        reinstall: true,
+      };
+    case "freeze":
+    case "overlay":
+      return { ...base, kind, title: "", hint: "" };
     default:
       return { ...base, kind, title: "Oyun beklenmedik şekilde kapandı", hint: "" };
   }

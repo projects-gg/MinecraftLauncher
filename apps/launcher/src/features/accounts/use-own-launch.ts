@@ -14,6 +14,7 @@ import {
   ownLaunch,
   playingAccountIds,
 } from "@/stores/launch-owner";
+import { noteSelected } from "./play-hold";
 import { ACCOUNTS_KEY } from "./use-accounts";
 
 /** The selected account's id: `undefined` while the accounts load, `null` with none. */
@@ -34,6 +35,8 @@ export function useSelectedAccountMirror() {
   const selected = useSelectedAccountId();
   useEffect(() => {
     useLaunch.setState({ selected });
+    // A launch waiting for an account starts once one is selected (TELEM-FIX).
+    noteSelected(selected);
   }, [selected]);
 }
 
