@@ -727,15 +727,28 @@ fn live_changes_hold_to_what_is_allowed() {
             4_000,
         )
         .unwrap();
+    // SQOL-R3: any other refusal of the player's change is told too, with what it asked (the
+    // page never rolls back silently).
     let effects = machine.socket_message(
         generation,
         error(set_rid(&effects).unwrap(), "share_off"),
         4_100,
         UNIX,
     );
-    assert!(notices(&effects).is_empty());
+    assert!(matches!(
+        notices(&effects)[..],
+        [ShareNotice::Refused {
+            n: Some(1),
+            change: Some(ShareAsked {
+                fps: Some(15),
+                preset: None,
+                audio: None
+            }),
+            ..
+        }]
+    ));
     assert_eq!(machine.view(4_100, UNIX).share.mine[0].fps, 30);
-    // An answer that never comes changes nothing after a while.
+    // An answer that never comes changes nothing after a while, and says so.
     let effects = machine
         .share_update(
             1,
@@ -748,8 +761,42 @@ fn live_changes_hold_to_what_is_allowed() {
         .unwrap();
     assert!(set_rid(&effects).is_some());
     assert!(machine.next_deadline(5_000).is_some_and(|at| at <= 15_000));
-    machine.tick(15_000, UNIX, 15_000);
+    let effects = machine.tick(15_000, UNIX, 15_000);
+    assert_eq!(
+        notices(&effects),
+        [&ShareNotice::Refused {
+            refusal: ShareRefusal::Failed,
+            n: Some(1),
+            change: Some(ShareAsked {
+                fps: Some(15),
+                ..ShareAsked::default()
+            }),
+        }]
+    );
     assert_eq!(machine.view(15_000, UNIX).share.mine[0].fps, 30);
+}
+
+/// SQOL-R3: the launcher's own report of a switch's kind (nothing the player asked) stays quiet
+/// when a room that does not take changes refuses it.
+#[test]
+fn a_refused_report_of_a_switchs_kind_stays_quiet() {
+    let mut machine = ready(true, true);
+    let generation = live(&mut machine, Vec::new());
+    sharing(&mut machine, generation, ShareSource::Game, 2_000);
+    machine
+        .share_switch(1, window("30:40"), "Tarayıcı")
+        .unwrap();
+    let effects = machine.share_event(
+        ShareEvent::Switched {
+            n: 1,
+            width: 1280,
+            height: 720,
+        },
+        2_500,
+    );
+    let rid = set_rid(&effects).expect("the new kind goes to the room");
+    let effects = machine.socket_message(generation, error(rid, "bad_request"), 2_600, UNIX);
+    assert!(notices(&effects).is_empty());
 }
 
 #[test]
