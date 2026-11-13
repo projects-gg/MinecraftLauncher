@@ -223,7 +223,8 @@ async fn main() {
     let mut previews = 0u32;
     let deadline = t0 + Duration::from_secs(secs);
     // SQOL-R3: the stress run's own clock and dice (xorshift: no dependency for an example).
-    let mut seed = t0.elapsed().as_nanos() as u64 ^ 0x9e37_79b9_7f4a_7c15 ^ u64::from(std::process::id());
+    let mut seed =
+        t0.elapsed().as_nanos() as u64 ^ 0x9e37_79b9_7f4a_7c15 ^ u64::from(std::process::id());
     let mut roll = move |lo: u64, hi: u64| {
         seed ^= seed << 13;
         seed ^= seed >> 7;

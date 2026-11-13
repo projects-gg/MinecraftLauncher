@@ -1484,10 +1484,13 @@ impl Session {
     }
 
     fn deadline(&self) -> Option<Instant> {
-        [self.waiting.map(|wait| wait.deadline()), self.source_check_at()]
-            .into_iter()
-            .flatten()
-            .min()
+        [
+            self.waiting.map(|wait| wait.deadline()),
+            self.source_check_at(),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
     }
 
     /// SQOL-R3: when to look whether the shared window (a window's, a game's) still lives: its
@@ -1496,10 +1499,7 @@ impl Session {
         if self.gone || self.hwnd.is_none() || !matches!(self.stage, Stage::Live(_)) {
             return None;
         }
-        Some(source_check_due(
-            self.shared.last_frame_at(),
-            self.checked,
-        ))
+        Some(source_check_due(self.shared.last_frame_at(), self.checked))
     }
 
     /// SQOL: looks for the game's window when it is time (SQOL-R3: and whether the shared window
