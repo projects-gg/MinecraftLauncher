@@ -20,7 +20,7 @@ import {
   Screencast,
   X,
 } from "@phosphor-icons/react";
-import { Button, cn, useMotionPrefs } from "@pl/ui";
+import { Button, cn, toast, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -32,8 +32,10 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useFace, useVoiceUi } from "@/features/voice/store";
+import { isTauri } from "@/lib/platform";
 import { shareApi } from "@/share/api";
 import { mockEnded } from "@/share/mock-view";
+import { param } from "@/share/param";
 import {
   type ShareViewQuality,
   shareKey,
@@ -42,13 +44,7 @@ import {
   type VoiceWatch,
 } from "@/share/types";
 import { unwatchShare } from "./actions";
-import {
-  type StageMode,
-  useShare,
-  useShareName,
-  useShareStage,
-  useShareUi,
-} from "./store";
+import { type StageMode, useShare, useShareName, useShareStage, useShareUi } from "./store";
 import { keepOnTop, leaveFullscreen } from "./stream-actions";
 import { useStreamEnv } from "./stream-env";
 import {
@@ -165,15 +161,7 @@ function useIdle(active: boolean) {
 }
 
 /** The stage's own controls (top right). */
-function StageControls({
-  popout,
-  full,
-  idle,
-}: {
-  popout: boolean;
-  full: boolean;
-  idle: boolean;
-}) {
+function StageControls({ popout, full, idle }: { popout: boolean; full: boolean; idle: boolean }) {
   const { t } = useTranslation();
   const setSmall = useShareUi((s) => s.setSmall);
   const chat = useRoomChatOffered();
@@ -185,6 +173,7 @@ function StageControls({
   const [focusIn, setFocusIn] = useState(false);
   const shown = !idle || focusIn;
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the focus inside keeps full screen's controls up; nothing is done here
     <div
       className={cn(
         "flex gap-1.5 transition-opacity duration-200 ease-out",
@@ -477,9 +466,7 @@ export function StageBody({
         <StageControls popout={popout} full={full} idle={idle} />
         {popout || (dock && !full) ? null : <RoomChatPeek />}
       </div>
-      <AnimatePresence>
-        {share.stillAsking ? <StillAsk watches={watches} /> : null}
-      </AnimatePresence>
+      <AnimatePresence>{share.stillAsking ? <StillAsk watches={watches} /> : null}</AnimatePresence>
     </div>
   );
 }
@@ -610,6 +597,10 @@ export function ShareStage() {
   useLayoutEffect(() => {
     useShareStage.setState({ mode });
   }, [mode]);
+  // The preview's toast over the stage (`toast=1`): toasts stay above full screen.
+  useEffect(() => {
+    if (!isTauri() && param("toast") === "1") toast(t("share.notice.watchFailed"));
+  }, [t]);
   useEffect(() => () => useShareStage.setState({ mode: null }), []);
 
   // Full screen, the corner and a share brought forward end with the stage (not before it came).

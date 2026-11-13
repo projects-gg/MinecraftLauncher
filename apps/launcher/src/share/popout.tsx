@@ -7,12 +7,7 @@
 // lets go of the picture after a few seconds and asks again when it is back; closed, watching moves
 // back to the launcher's window. WebView2's own right-click menu never opens here (Refresh would
 // reload the page).
-import {
-  guardNativeContextMenu,
-  setAppReducedMotion,
-  Toaster,
-  TooltipProvider,
-} from "@pl/ui";
+import { guardNativeContextMenu, setAppReducedMotion, Toaster, TooltipProvider } from "@pl/ui";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";

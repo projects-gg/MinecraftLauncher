@@ -70,7 +70,9 @@ export function ShareSettingsRows({
         const there = { ...DEFAULT_SHARE_SETTINGS, ...now.settings?.share };
         const was = { ...DEFAULT_SHARE_SETTINGS, ...before.settings?.share };
         const here = latest.current.share;
-        const moved = VIEW_KEYS.filter((key) => there[key] !== was[key] && there[key] !== here[key]);
+        const moved = VIEW_KEYS.filter(
+          (key) => there[key] !== was[key] && there[key] !== here[key],
+        );
         if (!moved.length) return;
         const pick = <K extends (typeof VIEW_KEYS)[number]>(key: K): VoiceShareSettings[K] =>
           moved.includes(key) ? there[key] : here[key];

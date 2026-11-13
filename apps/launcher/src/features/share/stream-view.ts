@@ -59,7 +59,12 @@ export interface WeakHold {
   backAt: number | null;
 }
 
-export const NO_WEAK_HOLD: WeakHold = { held: false, goodSince: null, wait: WEAK_BACK_MS, backAt: null };
+export const NO_WEAK_HOLD: WeakHold = {
+  held: false,
+  goodSince: null,
+  wait: WEAK_BACK_MS,
+  backAt: null,
+};
 
 /** One quality reading into the hold (`now` in milliseconds). */
 export function weakStep(hold: WeakHold, weak: boolean, now: number): WeakHold {
@@ -75,7 +80,8 @@ export function weakStep(hold: WeakHold, weak: boolean, now: number): WeakHold {
   }
   if (!hold.held) return hold;
   const since = hold.goodSince ?? now;
-  if (now - since >= hold.wait) return { held: false, goodSince: null, wait: hold.wait, backAt: now };
+  if (now - since >= hold.wait)
+    return { held: false, goodSince: null, wait: hold.wait, backAt: now };
   return hold.goodSince === null ? { ...hold, goodSince: now } : hold;
 }
 

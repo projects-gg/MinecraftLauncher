@@ -24,10 +24,10 @@ import {
 import { Chip, ContextMenu, cn, lastInputWasPointer, Menu, Tooltip } from "@pl/ui";
 import {
   type ComponentPropsWithoutRef,
-  type FocusEvent as ReactFocusEvent,
   forwardRef,
-  type KeyboardEvent as ReactKeyboardEvent,
   type ReactElement,
+  type FocusEvent as ReactFocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
   useCallback,
   useEffect,
@@ -564,9 +564,9 @@ export function StreamTile({
   const zoomed = percent > 100;
 
   const tile = (
-    // biome-ignore lint/a11y/noNoninteractiveTabindex: the tile takes its keys (F, M, the arrows, zoom) while it has the focus
     <section
       ref={box}
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: the tile takes its keys (F, M, the arrows, zoom) while it has the focus
       tabIndex={0}
       aria-label={t("share.stage.label", { name })}
       aria-keyshortcuts={tileShortcuts(true)}
@@ -577,6 +577,7 @@ export function StreamTile({
       {phase !== "live" || paused ? <StreamBackdrop face={face} /> : null}
       {/* The picture (kept while paused: it comes back without a new connection). */}
       {phase === "held" ? null : (
+        // biome-ignore lint/a11y/noStaticElementInteractions: a drag looks around a zoomed picture (Shift + the arrows do the same), a double click is full screen (F too)
         <div
           className={cn(
             "absolute inset-0 overflow-hidden",
@@ -756,10 +757,15 @@ export function OwnTile({
   const frame = useOwnPreviewFrame(n);
   const items = useOwnShareItems(n);
   const chrome = useChrome(full, idle);
-  const face: BackdropFace = { id: me?.id ?? "", name, avatar: me?.avatar, avatarUrl: me?.avatarUrl };
+  const face: BackdropFace = {
+    id: me?.id ?? "",
+    name,
+    avatar: me?.avatar,
+    avatarUrl: me?.avatarUrl,
+  };
   const tile = (
-    // biome-ignore lint/a11y/noNoninteractiveTabindex: the tile takes its key (F) while it has the focus
     <section
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: the tile takes its key (F) while it has the focus
       tabIndex={0}
       aria-label={t("shareView.own.label")}
       aria-keyshortcuts="F Escape Shift+F10"

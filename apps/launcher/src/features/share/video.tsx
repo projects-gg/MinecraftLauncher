@@ -42,7 +42,6 @@ export function ShareVideo({
     );
   }
   return (
-    // biome-ignore lint/a11y/useMediaCaption: a live screen share has no captions to give
     <video
       ref={video}
       autoPlay

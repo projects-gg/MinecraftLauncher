@@ -133,7 +133,8 @@ export function popoutEnv(audio: PopoutAudio): StreamEnv {
 
 /** The launcher's window follows voice chat's settings and state. Returns a stop function. */
 export function followMainEnv(): () => void {
-  const apply = () => setEnv(mainEnv(useVoicePrefs.getState().settings, useVoiceUi.getState().state));
+  const apply = () =>
+    setEnv(mainEnv(useVoicePrefs.getState().settings, useVoiceUi.getState().state));
   apply();
   const stopPrefs = useVoicePrefs.subscribe(apply);
   const stopState = useVoiceUi.subscribe((now, before) => {
@@ -183,7 +184,10 @@ export function setViewPrefs(change: ShareViewPrefs): void {
   useStreamEnv.setState(change);
   const settings = useVoicePrefs.getState().settings;
   if (settings) {
-    keptVoicePrefs({ ...settings, share: { ...DEFAULT_SHARE_SETTINGS, ...settings.share, ...change } });
+    keptVoicePrefs({
+      ...settings,
+      share: { ...DEFAULT_SHARE_SETTINGS, ...settings.share, ...change },
+    });
   }
   if (isTauri()) {
     void invoke("share_view_prefs", { change }).catch(() => {
@@ -330,7 +334,11 @@ export function startStreamPlayback(surface: ShareSurface): () => void {
         wanted.push({ key: shareKey(watch.person, watch.n), stream, level });
       }
     }
-    audio.sync(wanted, duckGain(env, ui.speaking, ui.meTalking, me), sinkFor(env.device, env.outputs));
+    audio.sync(
+      wanted,
+      duckGain(env, ui.speaking, ui.meTalking, me),
+      sinkFor(env.device, env.outputs),
+    );
   };
 
   const schedule = () => {

@@ -195,7 +195,8 @@ function rig(options: { webAudio?: boolean } = {}) {
       elements.push(element);
       return element as unknown as HTMLAudioElement;
     },
-    createStream: (tracks) => new FakeStream(tracks as unknown as FakeTrack[]) as unknown as MediaStream,
+    createStream: (tracks) =>
+      new FakeStream(tracks as unknown as FakeTrack[]) as unknown as MediaStream,
     setTimeout: (work) => {
       const id = next++;
       timers.set(id, work);
