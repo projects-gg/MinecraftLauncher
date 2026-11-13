@@ -133,31 +133,24 @@ export function receive(data: RoomChatData, msg: RoomChatMsg, arrival: Arrival):
 }
 
 /**
- * The room's last messages (on joining, after a reconnect; SQOL-S's rule): from the first of them
- * on the room's word stands (what the page had that the room no longer holds, taken away meanwhile,
- * goes; what the page had of them stays as it was), older ones the page had stay, and an empty log
- * changes nothing. The player's own on their way stay at the end. History counts nothing unread.
+ * The room's whole log anew (joining, coming back, someone blocked; SQOL-R's `log`): it replaces
+ * what the page shows, an empty one too. What the page had of it stays as it was (its number, a
+ * tombstone); what the room no longer holds goes, with its preview; the player's own on their way
+ * or refused stay at the end. History counts nothing unread.
  */
 export function receiveLog(
   data: RoomChatData,
   msgs: readonly RoomChatMsg[],
   me: string | null | undefined,
 ): RoomChatData {
-  if (!msgs.length) return data.loaded ? data : { ...data, loaded: true };
   const sorted = [...msgs].sort((a, b) => a.at - b.at);
-  const firstAt = sorted[0]?.at ?? Number.NEGATIVE_INFINITY;
   const known = new Map(data.msgs.filter((m) => m.id !== undefined).map((m) => [m.id, m]));
   let seq = data.seq;
-  const fromLog: ShownMsg[] = [];
-  for (const msg of sorted) {
+  const fromLog: ShownMsg[] = sorted.map((msg) => {
     const had = known.get(msg.id);
-    if (had) {
-      fromLog.push(had);
-      known.delete(msg.id);
-      continue;
-    }
+    if (had) return had;
     seq += 1;
-    fromLog.push({
+    return {
       key: `r:${msg.id}`,
       id: msg.id,
       seq,
@@ -167,14 +160,21 @@ export function receiveLog(
       text: msg.text,
       ...(msg.sticker ? { sticker: msg.sticker } : {}),
       state: "sent",
-    });
-  }
-  // What the page had from before the log's first message stays where it was; the player's own on
-  // their way or refused stay last.
-  const older = [...known.values()].filter((m) => m.at < firstAt);
+    };
+  });
   const waiting = data.msgs.filter((m) => m.id === undefined);
-  const merged = [...older, ...fromLog].sort((a, b) => a.at - b.at);
-  return { ...data, seq, loaded: true, msgs: kept([...merged, ...waiting]) };
+  const next = kept([...fromLog, ...waiting]);
+  const keys = new Set(next.map((m) => m.key));
+  return {
+    ...data,
+    seq,
+    loaded: true,
+    msgs: next,
+    // What went cannot wait unread, carry the line or show as a preview.
+    unread: Math.min(data.unread, next.filter((m) => !m.mine && !m.deleted).length),
+    divider: data.divider !== null && keys.has(data.divider) ? data.divider : null,
+    peeks: data.peeks.filter((p) => keys.has(p.key)),
+  };
 }
 
 /** A message taken away: its tombstone (the player's own deletion says so). */
@@ -243,6 +243,8 @@ export function settleSend(data: RoomChatData, nonce: string, result: RoomChatSe
       );
     return { ...data, msgs };
   }
+  // The room's copy came first: the room took it, whatever the answer says (a late timeout).
+  if (own.id !== undefined) return data;
   const { failure, rule } = failureOf(result.refused);
   return {
     ...data,
