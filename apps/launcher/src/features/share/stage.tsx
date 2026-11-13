@@ -46,6 +46,7 @@ import { unwatchShare } from "./actions";
 import { type StageMode, useShare, useShareName, useShareStage, useShareUi } from "./store";
 import { keepOnTop, leaveFullscreen } from "./stream-actions";
 import { useStreamEnv } from "./stream-env";
+import { useShareChangeCalm, useWatchLayer } from "./stream-layer";
 import {
   hideOwnTile,
   openRoomChat,
@@ -339,24 +340,34 @@ type StageTile =
   | { kind: "ended"; key: string; person: string }
   | { kind: "own"; key: string; n: number };
 
-/** Esc in full screen leaves it, unless a menu, a dialog or a field has the key. */
-function useEscLeavesFull(full: boolean) {
+/** Where an Esc belongs to something above full screen: a menu, a dialog, a field. */
+const ESC_TAKERS =
+  '[role="menu"], [role="dialog"], [role="alertdialog"], [data-radix-popper-content-wrapper], input, textarea';
+
+/**
+ * Esc in full screen leaves it, as the last thing it does: only once every other listener had its
+ * turn and none took it (Esc closes the topmost thing only; the room chat's previews, a menu, a
+ * dialog take it with `preventDefault`). The page's listeners run in any order, so the look comes
+ * after the key's whole dispatch.
+ */
+export function useEscLeavesFull(full: boolean) {
   useEffect(() => {
     if (!full) return;
+    let pending: ReturnType<typeof setTimeout> | undefined;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (event.key !== "Escape") return;
       const target = event.target as Element | null;
-      if (
-        target?.closest?.(
-          '[role="menu"], [role="dialog"], [role="alertdialog"], [data-radix-popper-content-wrapper], input, textarea',
-        )
-      ) {
-        return;
-      }
-      leaveFullscreen();
+      if (target?.closest?.(ESC_TAKERS)) return;
+      clearTimeout(pending);
+      pending = setTimeout(() => {
+        if (!event.defaultPrevented) leaveFullscreen();
+      }, 0);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      clearTimeout(pending);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [full]);
 }
 
@@ -498,16 +509,15 @@ function useCornerLayer(watch: VoiceWatch) {
     zoomed: false,
     hasSmall: true,
   });
-  useEffect(() => {
-    if (watch.phase === "held" || watch.layer === layer) return;
-    void shareApi.layer(watch.person, watch.n, layer).catch(() => {});
-  }, [watch.person, watch.n, watch.layer, watch.phase, layer]);
+  // What was last asked for decides, as on the page (the launcher's report can lag behind).
+  useWatchLayer(watch, layer, true);
 }
 
 /** The corner picture while the stage is small: its sound, back to big, or stop. */
 function CornerStage({ watch, live }: { watch: VoiceWatch; live: VoiceLiveShare | undefined }) {
   const { t } = useTranslation();
   useCornerLayer(watch);
+  useShareChangeCalm(watch.person, watch.n, live);
   const name = useShareName(watch.person);
   const face = useFace(watch.person);
   const setSmall = useShareUi((s) => s.setSmall);
@@ -586,6 +596,26 @@ function CornerStage({ watch, live }: { watch: VoiceWatch; live: VoiceLiveShare 
   );
 }
 
+/**
+ * Where the stage shows and what its corner holds. Small, it stays in the corner while a watched
+ * share is there; the last one ending there leaves its "Yayın bitti." card in the corner too (not
+ * over the page for two seconds).
+ */
+export function stagePlace(input: {
+  watches: number;
+  ended: boolean;
+  own: boolean;
+  small: boolean;
+  full: boolean;
+}): { mode: StageMode; corner: "watch" | "ended" | null } {
+  const shown = input.watches > 0 || input.ended || input.own;
+  if (!shown) return { mode: null, corner: null };
+  if (input.full) return { mode: "full", corner: null };
+  if (input.small && input.watches > 0) return { mode: "corner", corner: "watch" };
+  if (input.small && input.ended && !input.own) return { mode: "corner", corner: "ended" };
+  return { mode: "page", corner: null };
+}
+
 /** The stage in the launcher's window (nothing while nothing is watched or shown here). */
 export function ShareStage() {
   const { t } = useTranslation();
@@ -603,9 +633,16 @@ export function ShareStage() {
   const ownShown = own !== null && share.mine.some((m) => m.n === own) ? own : null;
   const shown = watches.length > 0 || ended.length > 0 || ownShown !== null;
   const first = watches[0];
-  const corner = shown && small && !full && first !== undefined;
-  const mode: StageMode = !shown ? null : full ? "full" : corner ? "corner" : "page";
-  const cornerName = useShareName(first?.person ?? "");
+  const gone = ended[0];
+  const place = stagePlace({
+    watches: watches.length,
+    ended: gone !== undefined,
+    own: ownShown !== null,
+    small,
+    full,
+  });
+  const mode = place.mode;
+  const cornerName = useShareName(first?.person ?? gone?.person ?? "");
 
   // SQOL-U3 docks the room panel beside the page stage.
   useLayoutEffect(() => {
@@ -630,7 +667,7 @@ export function ShareStage() {
 
   return (
     <AnimatePresence>
-      {corner && first ? (
+      {place.corner ? (
         <motion.section
           key="corner"
           aria-label={t("share.stage.label", { name: cornerName })}
@@ -643,10 +680,14 @@ export function ShareStage() {
           }}
           exit={{ opacity: 0, scale: reduce ? 1 : 0.97, transition: { duration: 0.14 } }}
         >
-          <CornerStage
-            watch={first}
-            live={share.live.find((l) => l.person === first.person && l.n === first.n)}
-          />
+          {place.corner === "watch" && first ? (
+            <CornerStage
+              watch={first}
+              live={share.live.find((l) => l.person === first.person && l.n === first.n)}
+            />
+          ) : gone ? (
+            <EndedTile person={gone.person} className="size-full ring-white/12" />
+          ) : null}
         </motion.section>
       ) : shown ? (
         <motion.section

@@ -18,6 +18,7 @@ import {
   ZOOM_MAX,
   zoomAt,
   zoomPercent,
+  zoomTransform,
 } from "./stream-view";
 
 const auto = {
@@ -143,6 +144,13 @@ describe("zoom and pan", () => {
     expect(wheelFactor(-3, 1)).toBeCloseTo(wheelFactor(-48));
     expect(wheelFactor(-10, 2)).toBe(1.5);
     expect(zoomPercent(zoomAt(NO_ZOOM, 2.5, 0, 0, w, h))).toBe(250);
+  });
+
+  it("gives the picture the zoom the chip says (none at %100)", () => {
+    expect(zoomTransform(NO_ZOOM)).toBe("");
+    const zoom = zoomAt(NO_ZOOM, 2, w, h, w, h);
+    expect(zoomTransform(zoom)).toBe(`translate3d(${-w}px, ${-h}px, 0) scale(2)`);
+    expect(zoomPercent(zoom)).toBe(200);
   });
 });
 

@@ -102,6 +102,7 @@ export const trShare = {
     computerCap: "Bu bilgisayarda en çok {{quality}}.",
     fpsNeedsHigh: "60 fps yalnız Yüksek kalitede.",
     changeOff: "Bu ayar şu an değiştirilemiyor.",
+    modMuted: "Bir moderatör seni susturduğu için şu an değiştiremezsin.",
     changeFailed: "Bu ayar değiştirilemedi.",
     pauseFailed: "Paylaşım duraklatılamadı.",
     resumeFailed: "Paylaşım sürdürülemedi.",

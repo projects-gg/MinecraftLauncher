@@ -106,6 +106,18 @@ describe("screen sharing on the panel", () => {
     expect(hold).toHaveBeenCalledWith(1, false);
   });
 
+  it("lets a double click's second press on Sürdür not press the Ekranı Değiştir in its place", () => {
+    const hold = vi.spyOn(shareApi, "hold").mockResolvedValue(null);
+    show(scenario("sharePaused"), <ShareFooterRow />);
+    fireEvent.click(screen.getByRole("button", { name: "Sürdür" }), { detail: 1 });
+    expect(hold).toHaveBeenCalledWith(1, false);
+    // Live again at once: the same place says "Ekranı Değiştir", and the double click's second
+    // press lands on it.
+    fireEvent.click(screen.getByRole("button", { name: "Ekranı Değiştir" }), { detail: 2 });
+    expect(useOwnUi.getState().switching).toBeNull();
+    expect(useShareUi.getState().picker).toBe(false);
+  });
+
   it("says a minimised window, and asks for another screen when the window closed", () => {
     show(scenario("shareMin"), <ShareFooterRow />);
     expect(screen.getByText("Pencere küçültüldü.")).toBeTruthy();

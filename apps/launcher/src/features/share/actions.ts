@@ -21,11 +21,13 @@ import {
   type SharePreset,
   type ShareRefusal,
   type ShareSource,
+  type VoiceMyShare,
   type VoiceShareSettings,
 } from "@/share/types";
 import { sayShare } from "./own-say";
 import {
   applyPatch,
+  asksRoom,
   clearLost,
   dropPatch,
   isLost,
@@ -36,6 +38,7 @@ import {
   openSwitch,
   ownStatus,
   settlePatch,
+  takeRefused,
   useOwnUi,
 } from "./own-store";
 
@@ -297,7 +300,11 @@ export function changeSaid(change: ShareChange): string | null {
   return null;
 }
 
-/** A refused change, in one sentence. */
+/**
+ * A refused change, in one sentence, from its cause: the month's limit on a quality; a
+ * moderator's mute ("Bir moderatör seni susturduğu için şu an değiştiremezsin."); the room's
+ * "Kim Paylaşabilir" when it leaves the player out; else that it cannot change now.
+ */
 export function changeRefusedText(
   refusal: ShareRefusal,
   change: Pick<ShareChange, "preset" | "fps">,
@@ -306,31 +313,60 @@ export function changeRefusedText(
   if (refusal === "budget" && (change.preset !== undefined || change.fps !== undefined)) {
     return t("share.quality.capped");
   }
+  if (refusal === "notAllowed") {
+    const { room, share } = useVoiceUi.getState().state;
+    if (room?.me.mutedByModerator) return t("share.own.modMuted");
+    if (share?.on && !share.allowed) return t("share.notice.notAllowed");
+  }
   return t("share.own.changeOff");
+}
+
+/** `change` as the room took it: its quality, frame rate and sound as the state has them now. */
+function takenOf(change: ShareChange, now: VoiceMyShare): ShareChange {
+  const taken: ShareChange = { ...change };
+  if (change.preset !== undefined) taken.preset = now.preset;
+  if (change.fps !== undefined) taken.fps = now.fps;
+  if (change.audio !== undefined) taken.audio = now.audio;
+  return taken;
+}
+
+function sayChange(change: ShareChange) {
+  const said = changeSaid(change);
+  if (said) sayShare(said);
 }
 
 /**
  * A live share's quality, frame rate, picture, cursor, sound or small picture: shown at once,
- * back as it was if the launcher refuses (one toast says why); true when taken. The room may
- * allow less: the state then says what it took.
+ * back as it was if the launcher or the room refuses (one toast says why); true when taken. The
+ * room may allow less: the state then says what it took, and what the room decides is said only
+ * then. The room's refusal can come before the launcher's own answer: said once, never as done.
  */
 export async function changeShare(n: number, change: ShareChange): Promise<boolean> {
   const patch: OwnPatch = { ...change };
   const pending = applyPatch(n, patch);
   try {
     const refused = await shareApi.update(n, change);
+    const early = takeRefused(pending);
     if (refused) {
       dropPatch(pending);
-      toast(changeRefusedText(refused, change));
+      if (!early) toast(changeRefusedText(refused, change));
       return false;
     }
-    settlePatch(pending);
-    const said = changeSaid(change);
-    if (said) sayShare(said);
+    if (early) {
+      // The room's notice said no first (and why): what is left of the change is local.
+      settlePatch(pending);
+      return false;
+    }
+    if (asksRoom(patch)) settlePatch(pending, (now) => sayChange(takenOf(change, now)));
+    else {
+      settlePatch(pending);
+      sayChange(change);
+    }
     return true;
   } catch {
+    const early = takeRefused(pending);
     dropPatch(pending);
-    toast(i18n.t("share.own.changeFailed"));
+    if (!early) toast(i18n.t("share.own.changeFailed"));
     return false;
   }
 }

@@ -122,6 +122,8 @@ class FakeContext {
   destination = new FakeNode();
   gains: FakeGain[] = [];
   sinks: string[] = [];
+  /** Every output asked for, refused ones too. */
+  tried: string[] = [];
   /** The browser lets it start (false: a page that never heard the player). */
   allowed = true;
   createGain() {
@@ -145,6 +147,7 @@ class FakeContext {
     this.state = "closed";
   }
   async setSinkId(id: string) {
+    this.tried.push(id);
     if (id === "gone") throw new Error("NotFoundError");
     this.sinks.push(id);
   }
@@ -289,6 +292,35 @@ describe("the stream sound engine", () => {
     audio.sync([{ key: "301:1", stream: one, level: 1 }], 1, "gone");
     await settle();
     expect(contexts[0]?.sinks).toEqual(["out-1", ""]);
+  });
+
+  it("asks an output that refused once, again only when the choice or the outputs change", async () => {
+    const { audio, contexts, settle, stream } = rig();
+    audio.prepare();
+    const one = stream();
+    audio.sync([{ key: "301:1", stream: one, level: 1 }], 1, "gone");
+    await settle();
+    const ctx = contexts[0];
+    expect(ctx?.tried).toEqual(["gone", ""]);
+    // Updates come up to ten times a second while people talk: the refusal is remembered.
+    audio.sync([{ key: "301:1", stream: one, level: 0.9 }], 1, "gone");
+    audio.sync([{ key: "301:1", stream: one, level: 0.8 }], 0.5, "gone");
+    await settle();
+    expect(ctx?.tried).toEqual(["gone", ""]);
+    // The system's outputs changed: asked once more.
+    audio.devicesChanged();
+    await settle();
+    expect(ctx?.tried).toEqual(["gone", "", "gone", ""]);
+    audio.devicesChanged();
+    await settle();
+    expect(ctx?.tried).toHaveLength(6);
+    // Another choice, then the refused one again: each asked.
+    audio.sync([{ key: "301:1", stream: one, level: 0.8 }], 1, "out-1");
+    await settle();
+    audio.sync([{ key: "301:1", stream: one, level: 0.8 }], 1, "gone");
+    await settle();
+    expect(ctx?.tried.slice(6)).toEqual(["out-1", "gone", ""]);
+    expect(ctx?.sinks.at(-1)).toBe("");
   });
 
   it("lets go of a stream no longer watched, then rests, and closes with the room", async () => {

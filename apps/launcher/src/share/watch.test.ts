@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { WatchReport } from "./types";
-import { createWatchEngine, DROP_WAIT_MS, ICE_WAIT_MS, ufragOf, type WatchHost } from "./watch";
+import {
+  CHANGE_CALM_MS,
+  createWatchEngine,
+  DROP_WAIT_MS,
+  ICE_WAIT_MS,
+  STATS_MS,
+  ufragOf,
+  type WatchHost,
+} from "./watch";
 
 class FakeTrack {
   constructor(readonly kind: string) {}
@@ -79,6 +87,7 @@ function rig() {
     },
     clearInterval: (id) => void intervals.delete(id),
     createStream: () => new FakeStream() as unknown as MediaStream,
+    now: () => now,
   };
   const reports: WatchReport[] = [];
   const engine = createWatchEngine((r) => reports.push(r), host);
@@ -247,6 +256,69 @@ describe("the watch engine", () => {
     expect(changes).toBe(1);
     release();
     expect(engine.info("301", 1)).toBeNull();
+  });
+
+  /** A watched share showing on the page; `quality` takes the next look (2 s later) with `patch`. */
+  async function showing() {
+    const { engine, peers, settle, look, advance } = rig();
+    engine.handle({ t: "offer", sdp: offer("abc"), mids, fresh: false });
+    await settle();
+    peers[0]?.track("0", "video");
+    engine.setShowing(true);
+    const peer = peers[0];
+    if (!peer) throw new Error("no peer");
+    const video: Record<string, unknown> = {
+      type: "inbound-rtp",
+      kind: "video",
+      mid: "0",
+      frameWidth: 1226,
+      frameHeight: 720,
+      packetsLost: 0,
+      packetsReceived: 100,
+      freezeCount: 0,
+      keyFramesDecoded: 1,
+    };
+    const quality = async (patch: Record<string, unknown> = {}) => {
+      Object.assign(video, patch);
+      peer.stats = new Map([["v", { ...video }]]);
+      advance(STATS_MS);
+      look();
+      await settle();
+      return engine.quality("301", 1);
+    };
+    expect(await quality()).toBe("good");
+    return { engine, quality, advance };
+  }
+
+  it("reads a freeze as weak, unless the picture just changed on purpose (key frame, size)", async () => {
+    const { quality, advance } = await showing();
+    expect(await quality({ freezeCount: 1 })).toBe("weak");
+    expect(await quality()).toBe("good");
+    // The sharer switched to another window: a key frame, another size, the switch's freeze.
+    expect(await quality({ freezeCount: 2, keyFramesDecoded: 2, frameWidth: 920 })).toBe("good");
+    expect(await quality({ freezeCount: 3 })).toBe("good");
+    // A layer change: the same size, a key frame.
+    advance(CHANGE_CALM_MS);
+    expect(await quality({ freezeCount: 4, keyFramesDecoded: 3 })).toBe("good");
+    advance(CHANGE_CALM_MS);
+    expect(await quality({ freezeCount: 5 })).toBe("weak");
+  });
+
+  it("reads no freeze as weak just after calm(), lost packets still", async () => {
+    const { engine, quality } = await showing();
+    engine.calm("301", 1);
+    expect(await quality({ freezeCount: 1 })).toBe("good");
+    expect(await quality({ packetsLost: 20, packetsReceived: 200 })).toBe("weak");
+  });
+
+  it("compares with nothing older once its looks start again (a hidden window, a held watch)", async () => {
+    const { engine, quality } = await showing();
+    engine.setShowing(false);
+    // It froze while nobody looked.
+    expect(await quality({ freezeCount: 3 })).toBe("good");
+    engine.setShowing(true);
+    expect(await quality()).toBe("good");
+    expect(await quality({ freezeCount: 4 })).toBe("weak");
   });
 
   it("closes everything on reset, and a closed connection's late events change nothing", async () => {
