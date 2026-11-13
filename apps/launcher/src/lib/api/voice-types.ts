@@ -113,6 +113,13 @@ export interface VoiceRoomView {
    * their push-to-talk key, whatever "Mikrofon ne zaman açık" says.
    */
   ptt?: boolean;
+  /**
+   * SQOL: the room has its chat ("Oda Sohbeti": the service's switch and chat are on). Absent: an
+   * older launcher, no chat.
+   */
+  chat?: boolean;
+  /** SQOL: more than two people were ever in it (friend rooms; the room keeps it). */
+  grew?: boolean;
 }
 
 /** The call the player started, ringing at the friend while the player waits in the room. */
@@ -437,6 +444,8 @@ export interface VoiceSettings {
   outputVolume: number;
   /** SHARE: "Ekran paylaşımı" (absent: the defaults). */
   share?: VoiceShareSettings;
+  /** SQOL: "Mesaj Önizlemelerini Göster": the room chat's previews over the stage (absent: on). */
+  peek?: boolean;
 }
 
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {

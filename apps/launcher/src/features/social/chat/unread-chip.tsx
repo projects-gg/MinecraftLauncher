@@ -4,9 +4,19 @@
 // leaves faster; screen readers hear the count in the row's own name, not here.
 import { At } from "@phosphor-icons/react";
 import { AnimatePresence, motion } from "motion/react";
+import type { ReactNode } from "react";
 import { enter, leave } from "../motion";
 
-export function UnreadChip({ count, mentioned }: { count: number; mentioned: boolean }) {
+export function UnreadChip({
+  count,
+  mentioned,
+  icon,
+}: {
+  count: number;
+  mentioned: boolean;
+  /** SQOL-U3: what the count is of, where nothing beside it says (the room pill: messages). */
+  icon?: ReactNode;
+}) {
   return (
     <AnimatePresence initial={false}>
       {count > 0 ? (
@@ -18,7 +28,7 @@ export function UnreadChip({ count, mentioned }: { count: number; mentioned: boo
           animate={{ opacity: 1, transform: "scale(1)", transition: enter(0.2) }}
           exit={{ opacity: 0, transform: "scale(0.8)", transition: leave(0.14) }}
         >
-          {mentioned ? <At size={11} weight="bold" aria-hidden /> : null}
+          {mentioned ? <At size={11} weight="bold" aria-hidden /> : (icon ?? null)}
           {count > 99 ? "99+" : count}
         </motion.span>
       ) : null}

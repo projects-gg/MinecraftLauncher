@@ -74,6 +74,8 @@ public final class VoiceList extends PanelWidget {
         int bars;
         /** SHARE-LIVE: they share their screen: "YAYINDA" after the name. */
         boolean live;
+        /** SQOL-O: how their stream shows when it is not live ("Duraklatıldı"), said after "Yayında"; else null. */
+        String stream;
         float nameWidth;
         Component narration;
         float y;
@@ -160,7 +162,13 @@ public final class VoiceList extends PanelWidget {
             Row row = old.getOrDefault(p.id(), new Row(p.id()));
             row.live = voice != null && voice.sharing(p.id());
             String name = VoiceState.shown(p.name(), words);
-            fill(row, name, p.id(), roleOr(p.role(), null), strong, small, textW);
+            // SQOL-O: their stream paused or its window minimized, beside their role ("Moderatör · Duraklatıldı").
+            String theirRole = roleOr(p.role(), null);
+            String stream = streamState(voice, p.id());
+            row.stream = stream;
+            fill(row, name, p.id(),
+                stream == null ? theirRole : theirRole == null ? stream : theirRole + " · " + stream, strong, small,
+                textW);
             row.marks.clear();
             row.markInks.clear();
             voiceMarks(row, p.mute(), p.deaf(), p.mutedByModerator());
@@ -242,6 +250,15 @@ public final class VoiceList extends PanelWidget {
         row.markInks.add(ink);
     }
 
+    /** SQOL-O: how someone's stream shows now when it is not live ("Duraklatıldı", "Pencere küçültüldü"), else null. */
+    private static String streamState(VoiceState voice, String id) {
+        VoiceState.LiveShare share = voice == null || !voice.sharing(id) ? null : voice.liveShare(id);
+        if (share == null) {
+            return null;
+        }
+        return share.held() ? Texts.str("share.st.hold") : share.minimized() ? Texts.str("share.st.min") : null;
+    }
+
     /**
      * What is off, in one sign each (VOICE-KEYS, the launcher's room list; nothing while the microphone and the sound
      * are on): a moderator's mute in flare (it holds whatever they do), then deafened alone (the microphone is off
@@ -278,6 +295,10 @@ public final class VoiceList extends PanelWidget {
         List<String> parts = new ArrayList<>(4);
         if (row.live) {
             parts.add(Texts.str("share.live"));
+            if (row.stream != null) {
+                // SQOL-O: "Yayında, Duraklatıldı".
+                parts.add(row.stream);
+            }
         }
         if (speaking) {
             parts.add(Texts.str("voice.person.speaking"));
@@ -534,16 +555,23 @@ public final class VoiceList extends PanelWidget {
         String meta = "";
         long th = 0L;
         int n = 1;
+        boolean held = false;
         if (share != null) {
             meta = Texts.str("share.kind." + share.kind());
             if (share.watchers() > 0) {
                 meta = meta + ", " + Texts.str("share.watchers", share.watchers());
             }
+            // SQOL-O: a stream that is not live says so in place of what it shows.
+            if (share.held() || share.minimized()) {
+                meta = Texts.str(share.held() ? "share.st.hold" : "share.st.min");
+            }
+            held = share.held();
             th = share.th();
             n = share.n();
         }
-        liveTip.track(voice, row.id, row.face, row.label, meta, room == null ? null : room.id(), n, null, th, x, y + 1,
-            y + ROW_H - 1, now, actions::preview);
+        // SQOL-O: a paused stream shows no picture (its last one stays hidden, as in the launcher): asked for nothing.
+        liveTip.track(voice, row.id, row.face, row.label, meta, room == null || held ? null : room.id(), n,
+            held ? LiveTip.HOLD : null, th, x, y + 1, y + ROW_H - 1, now, actions::preview);
     }
 
     /** SHARE-LIVE: the live card over the page ({@code left..right}, {@code top..bottom}: the room page's box). */

@@ -131,11 +131,16 @@ public final class MessageList extends PanelWidget {
     /** CHAT3: the player's own message can be edited this long after it went, and deleted this long. */
     static final long EDIT_WINDOW_MS = 15L * 60_000L;
     static final long DELETE_WINDOW_MS = 7L * 86_400_000L;
-    /** The strip's cells after the quick reactions (whose kinds are their indexes): "+", "Yanıtla", "Düzenle", "Sil". */
+    /**
+     * The strip's cells after the quick reactions (whose kinds are their indexes): "+", "Yanıtla", "Düzenle", "Sil";
+     * SQOL-O, the voice room's chat: "Kopyala" and "Rapor Et".
+     */
     private static final int CELL_MORE = 100;
     private static final int CELL_REPLY = 101;
     private static final int CELL_EDIT = 102;
     private static final int CELL_DELETE = 103;
+    private static final int CELL_COPY = 104;
+    private static final int CELL_REPORT = 105;
     /** The toolbar's buttons: "Tepki ver", "Yanıtla" and, on the player's own message, "…" (CHAT3). */
     private static final int TOOL_REACT = 0;
     private static final int TOOL_REPLY = 1;
@@ -185,6 +190,14 @@ public final class MessageList extends PanelWidget {
 
         /** CHAT3: "Başka tepki": the emoji picker gives the reaction to this message. */
         default void moreReactions(OverlayState.ChatLine line) {
+        }
+
+        /** SQOL-O, the voice room's chat: "Kopyala" (the message's words to the clipboard). */
+        default void copy(OverlayState.ChatLine line) {
+        }
+
+        /** SQOL-O, the voice room's chat: "Rapor Et" on someone else's message. */
+        default void report(OverlayState.ChatLine line) {
         }
     }
 
@@ -290,6 +303,11 @@ public final class MessageList extends PanelWidget {
     private Function<String, Presence> presenceOf = id -> Presence.OFFLINE;
     private String conversation;
     private boolean crew;
+    /**
+     * SQOL-O: the voice room's own chat ({@code v:<room>}): names over groups as in crew chat; no reactions, replies or
+     * edits; "Kopyala" on any message, "Sil" on the player's own, "Rapor Et" on others'.
+     */
+    private boolean room;
     private int laidOutRevision = -1;
     private int laidOutBadges = -1;
     private int laidOutWidth = -1;
@@ -318,6 +336,8 @@ public final class MessageList extends PanelWidget {
     private long lastFrame;
     private Component lastNarration = Component.empty();
     private String deletedText = "";
+    /** SQOL-O: a room chat message its leader, a moderator or Projects took away. */
+    private String removedText = "";
     private FormattedCharSequence editedWord = FormattedCharSequence.EMPTY;
     private float editedW;
     private FormattedCharSequence seenWord = FormattedCharSequence.EMPTY;
@@ -326,8 +346,9 @@ public final class MessageList extends PanelWidget {
     private float dividerW;
     private FormattedCharSequence newBelowWord = FormattedCharSequence.EMPTY;
     private float newBelowWidth;
-    private FormattedCharSequence emptyWord = FormattedCharSequence.EMPTY;
-    private float emptyW;
+    /** The empty conversation's words, on up to three lines (SQOL-O: the room chat's sentence is long). */
+    private final List<FormattedCharSequence> emptyLines = new ArrayList<>(3);
+    private final List<Float> emptyWidths = new ArrayList<>(3);
     private final FormattedCharSequence[] quickLines = new FormattedCharSequence[QUICK.length];
     // What the player may do now (CHAT2): set on every refresh.
     private boolean canReply;
@@ -340,6 +361,11 @@ public final class MessageList extends PanelWidget {
     private float editW;
     private FormattedCharSequence deleteWord = FormattedCharSequence.EMPTY;
     private float deleteW;
+    /** SQOL-O: "Kopyala" and "Rapor Et" in the room chat's strip. */
+    private FormattedCharSequence copyWord = FormattedCharSequence.EMPTY;
+    private float copyW;
+    private FormattedCharSequence reportWord = FormattedCharSequence.EMPTY;
+    private float reportW;
     private boolean turkish = true;
     // Pointer and keyboard (row indexes; -1 none).
     private int hoverRow = -1;
@@ -377,8 +403,12 @@ public final class MessageList extends PanelWidget {
     }
 
     private void setEmpty(String words, Font small) {
-        emptyWord = Texts.visual(words);
-        emptyW = small.width(words);
+        emptyLines.clear();
+        emptyWidths.clear();
+        for (FormattedCharSequence line : Texts.wrap(small, words, Math.max(60, getWidth() - 16), 3)) {
+            emptyLines.add(line);
+            emptyWidths.add((float) small.width(line));
+        }
     }
 
     public void setReducedMotion(boolean value) {
@@ -492,7 +522,9 @@ public final class MessageList extends PanelWidget {
     /** Shows another conversation (its newest messages). */
     public void open(String conv, boolean crewChat, int unread) {
         conversation = conv;
-        crew = crewChat;
+        // SQOL-O: the voice room's chat names its senders over their groups, as crew chat does.
+        room = Protocol.roomConversation(conv);
+        crew = crewChat || room;
         unreadAtOpen = Math.max(0, unread);
         dividerLine = null;
         laidOutRevision = -1;
@@ -514,20 +546,23 @@ public final class MessageList extends PanelWidget {
         presenceOf = state::presenceOf;
         OverlayState.Conversation conv = state.conversation(conversation);
         boolean writable = conv != null && conv.writable() && state.online() && state.has("chat");
-        canReply = writable && state.has("replies");
-        canReact = writable && state.has("reactions");
+        // SQOL-O: the voice room's chat has no reactions, replies or edits; the player's own message is deleted there
+        // while the room lasts.
+        canReply = !room && writable && state.has("replies");
+        canReact = !room && writable && state.has("reactions");
         // CHAT3: an edit is written in the field (open only while the player may write); a delete needs no field.
-        canEdit = writable && state.chat3();
-        canDelete = conv != null && state.online() && state.chat3();
+        canEdit = !room && writable && state.chat3();
+        canDelete = conv != null && state.online() && (room || state.chat3());
         if (conversation == null) {
             rows.clear();
             contentHeight = 0f;
             boolean tr = Texts.turkish();
-            if (laidOutRevision != -2 || tr != turkish) {
+            if (laidOutRevision != -2 || tr != turkish || getWidth() != laidOutWidth) {
                 // Once, not on every frame: nothing is open, nothing changes.
                 turkish = tr;
                 setEmpty(Texts.str("chat.none"), Fonts.small());
                 laidOutRevision = -2;
+                laidOutWidth = getWidth();
             }
             return;
         }
@@ -624,6 +659,13 @@ public final class MessageList extends PanelWidget {
             quickLines[i] = Texts.visual(QUICK_SHOWN[i]);
         }
         deletedText = Texts.str("chat.deleted");
+        removedText = Texts.str("room.removed");
+        String copyWords = Texts.str("chat.copy");
+        copyWord = Texts.visual(copyWords);
+        copyW = small.width(copyWords) + 8;
+        String reportWords = Texts.str("chat.report");
+        reportWord = Texts.visual(reportWords);
+        reportW = small.width(reportWords) + 8;
         String edited = Texts.str("chat.edited");
         editedWord = Texts.visual(edited);
         editedW = small.width(edited);
@@ -643,7 +685,8 @@ public final class MessageList extends PanelWidget {
         deleteWord = Texts.visual(deleteWords);
         deleteW = small.width(deleteWords) + 8;
         morePicker = EmojiCatalog.available(turkish ? "tr" : "en");
-        setEmpty(Texts.str("chat.empty"), small);
+        // SQOL-O: an empty room chat says who sees it and that it goes with the room.
+        setEmpty(Texts.str(room ? "room.empty" : "chat.empty"), small);
         rows.clear();
         // The frames' clock (`now`) counts from the game's start, messages carry wall times: the day lines and a
         // message's ten seconds to be answered read the wall clock, and the next moment either changes is put on the
@@ -771,8 +814,9 @@ public final class MessageList extends PanelWidget {
             }
             row.bubbleTop = y - row.y;
             if (line.deleted) {
-                row.text = List.of(Texts.visual(deletedText));
-                row.bubbleW = small.width(deletedText) + 2 * BUBBLE_PAD_X;
+                String gone = line.removed ? removedText : deletedText;
+                row.text = List.of(Texts.visual(gone));
+                row.bubbleW = small.width(gone) + 2 * BUBBLE_PAD_X;
                 row.bubbleH = SMALL_H + 2 * BUBBLE_PAD_Y;
             } else if (line.sticker != null) {
                 row.sticker = set.find(line.sticker);
@@ -822,7 +866,9 @@ public final class MessageList extends PanelWidget {
                 row.actionsY = y;
                 y += 12;
             }
-            row.actionable = !line.deleted && line.sid > 0 && row.delivery == OverlayState.Delivery.SENT;
+            // SQOL-O: a room chat message is named by the room's id (no service id).
+            row.actionable = !line.deleted && (room ? line.id != null : line.sid > 0)
+                && row.delivery == OverlayState.Delivery.SENT;
             row.height = y - row.y;
             // The player's own message keeps its first key: it gets the service's id only when the launcher
             // confirms it, and with that id first it rose in (a sticker moved) a second time.
@@ -857,7 +903,8 @@ public final class MessageList extends PanelWidget {
         arrivedBelow = lastArrival > lastKnown;
         rowsEnd = y;
         contentHeight = rows.isEmpty() ? 0f : y + 4f + floatRoom;
-        lastNarration = rows.isEmpty() ? Texts.tr("chat.empty") : narrationOf(rows.get(rows.size() - 1));
+        lastNarration = rows.isEmpty() ? Texts.tr(room ? "room.empty" : "chat.empty")
+            : narrationOf(rows.get(rows.size() - 1));
         tooltipRow = -1;
     }
 
@@ -1115,7 +1162,7 @@ public final class MessageList extends PanelWidget {
             return row.arrivalWords == null ? Component.empty() : row.arrivalWords;
         }
         if (line.deleted) {
-            return Texts.tr("chat.deleted");
+            return Texts.tr(line.removed ? "room.removed" : "chat.deleted");
         }
         // "Mert, Projects yöneticisi: …": a crewmate's badges after their name (BADGES-UI).
         String from = Marks.spoken(line.from, row.marks, Texts.current());
@@ -1353,14 +1400,18 @@ public final class MessageList extends PanelWidget {
             if (row.line == null || cy < row.y || cy > row.y + row.height) {
                 continue;
             }
-            if (row.mine) {
+            if (row.mine || room) {
+                // SQOL-O: in the voice room's chat someone else's bubble has its strip too ("Kopyala", "Rapor Et").
                 float bx = bubbleX(row);
                 float top = row.y + row.bubbleTop;
                 if (actionCells(row) > 0 && mx >= bx && mx < bx + row.bubbleW && cy >= top
                     && cy < top + row.bubbleH) {
                     openStrip(i, topCells(row));
+                    return;
                 }
-                return;
+                if (row.mine) {
+                    return;
+                }
             }
             if (row.name == null) {
                 continue;
@@ -1536,13 +1587,27 @@ public final class MessageList extends PanelWidget {
         return n + (canReply ? 1 : 0);
     }
 
-    /** CHAT3: the strip's second row on the player's own message: "Düzenle" while it may be edited, "Sil". */
+    /**
+     * CHAT3: the strip's second row on the player's own message: "Düzenle" while it may be edited, "Sil". SQOL-O, the
+     * voice room's chat: "Kopyala" on any message with words, then "Sil" on the player's own, "Rapor Et" on others'.
+     */
     private int actionCells(Row row) {
-        if (row.line == null || !row.actionable || !row.mine) {
+        if (row.line == null || !row.actionable) {
+            return 0;
+        }
+        if (room) {
+            return (copyable(row.line) ? 1 : 0) + (row.mine ? (canDelete ? 1 : 0) : 1);
+        }
+        if (!row.mine) {
             return 0;
         }
         long wall = System.currentTimeMillis();
         return (canEdit && editable(row.line, wall) ? 1 : 0) + (canDelete && deletable(row.line, wall) ? 1 : 0);
+    }
+
+    /** SQOL-O: a message whose words "Kopyala" takes (not a sticker, not taken away). */
+    private static boolean copyable(OverlayState.ChatLine line) {
+        return line.sticker == null && !line.deleted && line.text != null && !line.text.isBlank();
     }
 
     private int stripCount(Row row) {
@@ -1572,6 +1637,16 @@ public final class MessageList extends PanelWidget {
                 return CELL_REPLY;
             }
             c--;
+        }
+        if (room && row.line != null && row.actionable) {
+            // SQOL-O: "Kopyala", then "Sil" (the player's own) or "Rapor Et" (someone else's).
+            if (copyable(row.line)) {
+                if (c == 0) {
+                    return CELL_COPY;
+                }
+                c--;
+            }
+            return c != 0 ? -1 : !row.mine ? CELL_REPORT : canDelete ? CELL_DELETE : -1;
         }
         if (row.line == null || !row.actionable || !row.mine) {
             return -1;
@@ -1607,6 +1682,8 @@ public final class MessageList extends PanelWidget {
             case CELL_REPLY -> actions.reply(row.line);
             case CELL_EDIT -> actions.edit(row.line);
             case CELL_DELETE -> actions.delete(row.line);
+            case CELL_COPY -> actions.copy(row.line);
+            case CELL_REPORT -> actions.report(row.line);
             default -> {
             }
         }
@@ -1635,6 +1712,8 @@ public final class MessageList extends PanelWidget {
             case CELL_REPLY -> Texts.tr("chat.reply");
             case CELL_EDIT -> Texts.tr("chat.edit");
             case CELL_DELETE -> Texts.tr("chat.delete");
+            case CELL_COPY -> Texts.tr("chat.copy");
+            case CELL_REPORT -> Texts.tr("chat.report");
             default -> null;
         };
     }
@@ -1813,7 +1892,13 @@ public final class MessageList extends PanelWidget {
     }
 
     private float actionW(int kind) {
-        return kind == CELL_DELETE ? deleteW : kind == CELL_EDIT ? editW : 0f;
+        return switch (kind) {
+            case CELL_DELETE -> deleteW;
+            case CELL_EDIT -> editW;
+            case CELL_COPY -> copyW;
+            case CELL_REPORT -> reportW;
+            default -> 0f;
+        };
     }
 
     /** The middle of strip cell {@code cell} from the strip's left edge (↑ and ↓ between its rows). */
@@ -1910,8 +1995,12 @@ public final class MessageList extends PanelWidget {
         Font ui = Fonts.ui();
         Font small = Fonts.small();
         if (rows.isEmpty()) {
-            Draw.text(g, small, emptyWord, x0 + (w - emptyW) / 2f, Fonts.centeredY(Fonts.Face.SMALL, y0 + h / 2f),
-                Theme.ASH_400);
+            // One quiet sentence in the middle, on up to three lines (SQOL-O: the room chat's is long).
+            float lineTop = y0 + h / 2f - emptyLines.size() * LINE_H / 2f;
+            for (int i = 0; i < emptyLines.size(); i++) {
+                Draw.text(g, small, emptyLines.get(i), x0 + (w - emptyWidths.get(i)) / 2f,
+                    Fonts.centeredY(Fonts.Face.SMALL, lineTop + i * LINE_H + LINE_H / 2f), Theme.ASH_400);
+            }
             bubble.track(null, false, now);
             return;
         }
@@ -2487,8 +2576,14 @@ public final class MessageList extends PanelWidget {
                     Draw.frame(g, Frames.FOCUS_14, ax, ay, aw, ACTION_H);
                 }
                 boolean delete = kind == CELL_DELETE;
-                Draw.text(g, small, delete ? deleteWord : editWord, ax + 4,
-                    Fonts.centeredY(Fonts.Face.SMALL, ay + ACTION_H / 2f),
+                // SQOL-O: "Kopyala" and "Rapor Et" in the voice room's chat, quiet like "Düzenle".
+                FormattedCharSequence word = switch (kind) {
+                    case CELL_DELETE -> deleteWord;
+                    case CELL_COPY -> copyWord;
+                    case CELL_REPORT -> reportWord;
+                    default -> editWord;
+                };
+                Draw.text(g, small, word, ax + 4, Fonts.centeredY(Fonts.Face.SMALL, ay + ACTION_H / 2f),
                     delete ? Theme.FLARE_300 : lit ? Theme.BONE_100 : Theme.ASH_300);
                 ax += aw + ACTION_GAP;
             }

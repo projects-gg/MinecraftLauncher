@@ -32,6 +32,7 @@ pub mod links;
 pub mod mention;
 pub mod policy;
 pub mod protocol;
+pub mod rchat;
 mod route;
 mod server;
 mod session;
@@ -39,6 +40,7 @@ mod session;
 mod tests;
 mod token;
 pub mod tweaks;
+mod typing;
 pub mod voice;
 
 pub use feed::{MAX_CONVS, MAX_FRIENDS};

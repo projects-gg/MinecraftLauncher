@@ -163,7 +163,9 @@ export function ReportDialog() {
     setBusy(true);
     setError(null);
     try {
-      await api.social.report(target, reason, noteOf(note), canBlock(kind) && block);
+      // SQOL-U3: a voice room's chat message goes the room's way (it seals what was said).
+      if (request?.send) await request.send(reason, noteOf(note), canBlock(kind) && block);
+      else await api.social.report(target, reason, noteOf(note), canBlock(kind) && block);
       close();
       toast.success(t("reports.sent"));
     } catch (failure) {

@@ -59,6 +59,7 @@ import { enQaFix } from "./en-qa-fix";
 import { enQol } from "./en-qol";
 import { enReminders } from "./en-reminders";
 import { enReports } from "./en-reports";
+import { enRoomChat } from "./en-room-chat";
 import { enSafety } from "./en-safety";
 import { enSetup } from "./en-setup";
 import { enShare } from "./en-share";
@@ -371,6 +372,7 @@ export const en: DeepPartial<Strings> = {
   stars: enStars,
   voice: enVoice,
   share: enShare,
+  roomChat: enRoomChat,
   shareView: enShareView,
   socNext: enSocNext,
   socNote: enSocNote,

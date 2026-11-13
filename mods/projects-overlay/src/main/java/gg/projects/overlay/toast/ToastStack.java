@@ -190,6 +190,19 @@ public final class ToastStack<T> {
         return push(key, content, height, durationMs, now, true);
     }
 
+    /**
+     * SQOL-O: the toast for {@code key} stands for {@code count} things (a room chat's card counts its unread messages,
+     * not its updates).
+     */
+    public void setCount(String key, int count) {
+        for (Entry<T> e : entries) {
+            if (!e.leaving && e.key.equals(key)) {
+                e.count = Math.max(1, count);
+                return;
+            }
+        }
+    }
+
     /** The toast for {@code key} fades out now, sliding down as a leaving one does. */
     public void dismiss(String key, long now) {
         for (Entry<T> e : entries) {

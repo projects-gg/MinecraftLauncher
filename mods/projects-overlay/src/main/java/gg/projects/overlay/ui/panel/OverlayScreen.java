@@ -369,6 +369,16 @@ public final class OverlayScreen extends Screen {
             }
 
             @Override
+            public void copy(OverlayState.ChatLine line) {
+                overlay.copyMessage(line);
+            }
+
+            @Override
+            public void report(OverlayState.ChatLine line) {
+                openMessageReport(line);
+            }
+
+            @Override
             public void react(OverlayState.ChatLine line, String emoji, String shown, boolean on) {
                 if (conversation != null) {
                     overlay.react(conversation, line, emoji, shown, on);
@@ -385,6 +395,13 @@ public final class OverlayScreen extends Screen {
 
             @Override
             public void person(String id, String name, String badge, PersonMenu.Anchor at, boolean keys) {
+                if (Protocol.roomConversation(conversation)) {
+                    // SQOL-O: a sender in the voice room's chat is someone in the room: the room page's menu.
+                    if (id != null) {
+                        openVoiceMenu(id, name, at, keys);
+                    }
+                    return;
+                }
                 openSenderMenu(id, name, badge, at, keys);
             }
         });
@@ -913,7 +930,7 @@ public final class OverlayScreen extends Screen {
         }
         menuCrew = rows3 == null ? null : crew;
         menuVoice = input.voice();
-        menu.setLeadKeepsModerator(leadKeepsModerator(crew, id));
+        menu.setLeadKeepsModerator(leadKeepsModerator(crew));
         OverlayState.Friend friend = state.friend(id);
         menu.setCallDnd(friend != null && friend.online() && friend.dnd());
         long now = now();
@@ -944,21 +961,15 @@ public final class OverlayScreen extends Screen {
         if (mate == null) {
             return null;
         }
-        return new FriendMenu.Crew(rights.roles(), rights.lead(), mate.moderator(), rights.modsFull(), mate.kick());
+        return new FriendMenu.Crew(rights.roles(), rights.lead(), mate.moderator(), mate.kick());
     }
 
     /**
-     * OVL-UX3: whether handing the lead on to {@code to} leaves the player a moderator (the launcher's
-     * {@code afterHandingOn}: the crew has roles and fewer than 4 others moderate), else a member.
+     * OVL-UX3: whether handing the lead on leaves the player a moderator (the launcher's {@code afterHandingOn}): always
+     * while the crew has roles (CREW-MODS: no cap on moderators), else a member.
      */
-    private static boolean leadKeepsModerator(OverlayState.CrewRights rights, String to) {
-        if (rights == null || !rights.roles()) {
-            return false;
-        }
-        long others = rights.mates().entrySet().stream()
-            .filter(e -> e.getValue().moderator() && !e.getKey().equals(to))
-            .count();
-        return others < 4;
+    private static boolean leadKeepsModerator(OverlayState.CrewRights rights) {
+        return rights != null && rights.roles();
     }
 
     private FriendMenu.Input menuInput(OverlayState.Friend f, String conv, FriendMenu.Crew crew) {
@@ -1250,6 +1261,20 @@ public final class OverlayScreen extends Screen {
             overlay.reportingAbout(friendId, menuName);
             Compat.setScreen(minecraft, new ReportScreen(this, friendId, menuName, menuBadge));
         }
+    }
+
+    /**
+     * SQOL-O: "Rapor Et" on someone else's message in the voice room's chat: the report dialog with a message's reasons
+     * (the launcher's), no "Ayrıca Engelle" (a room's report blocks nobody).
+     */
+    private void openMessageReport(OverlayState.ChatLine line) {
+        String conv = conversation;
+        if (line == null || line.mine || line.deleted || line.id == null || !Protocol.roomConversation(conv)) {
+            return;
+        }
+        String id = line.id;
+        Compat.setScreen(minecraft, ReportScreen.forMessage(this, line.from,
+            (reason, note) -> overlay.reportRoomMessage(conv, id, reason, note)));
     }
 
     /** Closes a friend's menu at once (the page changed, a conversation opened). */
@@ -1951,7 +1976,9 @@ public final class OverlayScreen extends Screen {
      * "Göndermek için 12 saniye bekle" (writing goes on; only sending waits).
      */
     private Component composerHint() {
-        Component plain = Texts.tr(isCrew(conversation) ? "chat.hint.crew" : "chat.hint");
+        // SQOL-O: "Odaya yaz" in the voice room's chat.
+        Component plain = Texts.tr(isCrew(conversation) ? "chat.hint.crew"
+            : Protocol.roomConversation(conversation) ? "room.hint" : "chat.hint");
         OverlayState.Conversation open = state.conversation(conversation);
         if (open == null || open.slow() <= 0) {
             return plain;
@@ -2133,6 +2160,16 @@ public final class OverlayScreen extends Screen {
     /** "Sil" on the player's own message: asked first, the keys on "Vazgeç"; then it goes for everyone. */
     private void askDelete(OverlayState.ChatLine line) {
         String conv = conversation;
+        if (Protocol.roomConversation(conv)) {
+            // SQOL-O: the player's own message in the voice room's chat, named by the room's id; asked first too.
+            if (line == null || !line.mine || line.deleted || line.id == null || !state.online()) {
+                return;
+            }
+            String id = line.id;
+            ask(new ConfirmScreen.Question(Texts.tr("room.delete.ask"), null, null, Texts.tr("chat.delete"), null,
+                true), () -> overlay.deleteRoomMessage(conv, id));
+            return;
+        }
         if (line == null || conv == null || !state.online() || !state.chat3()
             || !MessageList.deletable(line, System.currentTimeMillis())) {
             return;
@@ -2297,8 +2334,9 @@ public final class OverlayScreen extends Screen {
             return;
         }
         lastDraft = value;
-        // An edit (CHAT3) is no new message on its way: no "yazıyor…".
-        if (editing == null && !value.isBlank() && conversation != null && composerOpen() && state.has("typing")) {
+        // An edit (CHAT3) is no new message on its way: no "yazıyor…" (nor in the voice room's chat, SQOL-O: it has none).
+        if (editing == null && !value.isBlank() && conversation != null && composerOpen() && state.has("typing")
+            && !Protocol.roomConversation(conversation)) {
             overlay.typing(conversation);
         }
     }
@@ -2569,10 +2607,11 @@ public final class OverlayScreen extends Screen {
             // written (one would go as a new message; the launcher hides them too), not under the sticker picker, and
             // only while the conversation keeps room for a few messages. CREW-PLUS: a direct conversation has the row
             // for "Konumum" alone, while the game shows coordinates.
+            // SQOL-O: none in the voice room's chat (people the player does not know may be in the room: no "Konumum").
             int qy = above - 6 - QuickReplies.HEIGHT;
             quick.setCrew(isCrew(conversation));
             if (quick.hasChips() && !replying() && editing == null && !pickerOpen()
-                && qy - 6 - y >= MIN_LIST_WITH_QUICK) {
+                && !Protocol.roomConversation(conversation) && qy - 6 - y >= MIN_LIST_WITH_QUICK) {
                 quick.visible = true;
                 PanelWidget.place(quick, x0, qy, cw, QuickReplies.HEIGHT);
                 quick.setHidden(!field.getValue().isEmpty(), now);
@@ -2741,13 +2780,24 @@ public final class OverlayScreen extends Screen {
 
     // ---- Input --------------------------------------------------------------------------------------
 
+    /**
+     * A letter pressed now types text: into the message field, the friend filter, the menu's "Yeni kategori…" name or the
+     * emoji search. The panel's own key types then ({@link #keyPressed}), and the launcher's single-key voice shortcuts
+     * rest (SQOL-O, {@code keys/TextFocus}).
+     */
+    public boolean typesText() {
+        return field.isFocused() && field.visible || menu.naming()
+            || friendFilter.visible && friendFilter.isFocused()
+            || emojiPicker.isFocused() && emojiPicker.isOpen();
+    }
+
     @Override
     public boolean keyPressed(KeyEvent event) {
         // A name typed into the menu's "Yeni kategori…" field types too (OVL-UX3), and the friend filter (OVL-SOC 2).
         boolean filtering = friendFilter.visible && friendFilter.isFocused();
         boolean typing = field.isFocused() && field.visible || menu.naming() || filtering;
         // The emoji search types too (OVL-SOC): the panel's key bound to a letter types there.
-        if (overlay.key().closes(event, typing || emojiPicker.isFocused() && emojiPicker.isOpen())) {
+        if (overlay.key().closes(event, typesText())) {
             // Closes, unless this is the held press that opened the panel repeating (F7-OPEN).
             overlay.keyInPanel(this);
             return true;

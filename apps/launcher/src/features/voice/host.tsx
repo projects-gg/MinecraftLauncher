@@ -3,6 +3,10 @@
 // in the tray or minimized the page takes no speaking frames, so nothing renders), its notices as
 // toasts with voice.md §7.10's words, the ring cards and their tone (the ringback while the player's
 // call rings), and the room panel. Screen readers hear who came into or left the room (§5.1).
+//
+// SQOL-U3: the room's chat (room-chat/host.tsx) and its previews over the stage, and the single-key
+// voice shortcuts resting while a text field has the focus (typing.ts). The room panel comes after
+// the stage in the page, so Tab reaches it after the stage's controls when it is docked beside them.
 import { toast } from "@pl/ui";
 import { useEffect } from "react";
 import { announce } from "@/features/accounts/use-accounts";
@@ -20,9 +24,11 @@ import { loadVoicePrefs } from "./prefs";
 import { heardRings, useIgnoredSync } from "./quiet";
 import { playTone } from "./ring-sound";
 import { dismissRingToast, showRingToast } from "./ring-toast";
+import { RoomChatSync } from "./room-chat";
 import { leftText, peopleChanges, toneNow } from "./rules";
 import { RoomSheet } from "./sheet";
 import { faceNow, useVoiceUi, voiceOn } from "./store";
+import { useVoiceTyping } from "./typing";
 
 /** Toasts with a way out stay a little longer (they ask for an answer). */
 const ACTION_TOAST_MS = 9000;
@@ -250,12 +256,15 @@ export function VoiceHost() {
   useVoicePrefsSync();
   useLevelStream();
   useIgnoredSync();
+  useVoiceTyping();
   return (
     <>
-      <RoomSheet />
       <CallConfirm />
       {/* SHARE: the picker, the stage and the main window's watching. */}
       <ShareHost />
+      {/* After the stage: docked beside it, the panel follows its controls in the Tab order. */}
+      <RoomSheet />
+      <RoomChatSync />
     </>
   );
 }

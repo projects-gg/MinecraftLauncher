@@ -10,6 +10,20 @@
 /** How long a closing menu or layer may still move the focus (ms). */
 export const HOLD_MS = 800;
 
+/**
+ * Whether a conversation's key (Ctrl+F, Ctrl + "+" / "-" / "0") is for the conversation in `box`:
+ * the focus is in the panel that holds it. SQOL-U3: a holder marked `data-chat-host` (the room
+ * panel, which may sit beside the page without taking it over) takes them only from inside it; the
+ * friends panel, a dialog, also from the page's body, as it always did.
+ */
+export function chatKeyHere(box: HTMLElement, target: EventTarget | null): boolean {
+  if (!(target instanceof Node)) return false;
+  const host = box.closest<HTMLElement>("[data-chat-host]");
+  if (host) return host.contains(target);
+  const panel = box.closest<HTMLElement>("[role='dialog']") ?? box;
+  return target === document.body || panel.contains(target);
+}
+
 export interface Hold {
   /** The player pressed or typed since the hold began: their focus is theirs. */
   acted: boolean;

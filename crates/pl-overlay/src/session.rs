@@ -19,6 +19,7 @@ use pl_social::{
     ReportTarget, SendOutcome, SocialError, SocialNotice, SocialService, SocialView,
     TEAM_FEATURE_ROLES, TeamRole,
 };
+use pl_voice::rchat::VoiceChatEvent;
 use pl_voice::share::ShareNotice;
 use pl_voice::view::{VoiceAnswer, VoiceNotice, VoiceRefusal, VoiceSpeaking, VoiceState};
 use serde::Serialize;
@@ -31,12 +32,18 @@ use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
     self, ByeReason, CallAnswer, FEATURE_AVATARS, FEATURE_CONNECT, FEATURE_EMOJI, FEATURE_HOST,
     FEATURE_LANG, FEATURE_LINK, FEATURE_MARKS, FEATURE_PANEL_OFF, FEATURE_PEOPLE, FEATURE_PEOPLE2,
-    FEATURE_PEOPLE3, FEATURE_PEOPLE4, FEATURE_TAGS, FEATURE_VOICE, FEATURE_VOICE_ROOMS, FoundView,
-    FriendAction, FriendRefusal, FromGame, MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure,
-    ToGame, ToastKind, ToastView,
+    FEATURE_PEOPLE3, FEATURE_PEOPLE4, FEATURE_RCHAT, FEATURE_TAGS, FEATURE_TEXT_FOCUS,
+    FEATURE_VOICE, FEATURE_VOICE_ROOMS, FoundView, FriendAction, FriendRefusal, FromGame,
+    MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure, ToGame, ToastKind, ToastView,
 };
+use crate::rchat::{RoomChatAct, RoomChatFuture, RoomChatLink, RoomLog};
 use crate::server::{BridgeEvent, ConnId, Control};
 use crate::voice::{self, VoiceAct, VoiceFuture, VoiceMirror};
+
+/// SQOL-O: the voice room's chat in the game (the "Oda" chip), a child with the session's fields.
+#[path = "session_rchat.rs"]
+mod room;
+use room::RoomWake;
 
 /// OVL-AVATARS: people one `avatar-want` names at most, and the people a connection keeps telling about at most
 /// (past it the one asked about longest ago is let go: a change of theirs no longer comes by itself).
@@ -737,6 +744,8 @@ pub(crate) enum Msg {
     VoiceNotice(VoiceNotice),
     /// OVL-SHARE: a screen sharing moment worth a note.
     ShareNotice(ShareNotice),
+    /// SQOL-O: the voice room chat's news.
+    RoomChat(VoiceChatEvent),
 }
 
 /// The panel sends at most this many messages ...
@@ -867,6 +876,9 @@ pub(crate) type VoiceActFn = Arc<dyn Fn(VoiceAct) -> Option<VoiceFuture> + Send 
 pub(crate) type ThumbFn =
     Arc<dyn Fn(String, String, u8) -> Option<crate::voice::ThumbFuture> + Send + Sync>;
 
+/// SQOL-O: hands a room chat request to the launcher's voice chat (none: the app did not wire it).
+pub(crate) type RoomChatActFn = Arc<dyn Fn(RoomChatAct) -> Option<RoomChatFuture> + Send + Sync>;
+
 /// VOICE-O: a session's ties to the launcher's voice chat.
 pub(crate) struct VoiceHooks {
     /// Voice chat's newest state and whether a ring rings in the game; none while voice chat
@@ -882,6 +894,13 @@ pub(crate) struct VoiceHooks {
     pub(crate) quiet: Arc<AtomicBool>,
     /// SHARE-LIVE: where the game's hover card gets a share's still picture.
     pub(crate) thumb: ThumbFn,
+    /// SQOL-O: the room chat's newest messages (the hub's copy), and where the game's room chat
+    /// requests go.
+    pub(crate) room_log: RoomLog,
+    pub(crate) room_act: RoomChatActFn,
+    /// SQOL-O: tells the hub whether a text field in this session's game has the keyboard now (the
+    /// launcher's single-key voice shortcuts rest meanwhile; `crate::typing`).
+    pub(crate) typing: ConnectedFn,
 }
 
 /// Whom a person menu frame may be about (OVL-UX2): the friend list's people for most rows; crew
@@ -981,6 +1000,10 @@ struct Live {
     voice_rooms: bool,
     /// The mod shows screen sharing in voice rooms (OVL-SHARE: `share` beside `voice`).
     share: bool,
+    /// The mod shows the voice room's own chat (SQOL-O: `rchat` beside `voice`).
+    rchat: bool,
+    /// The mod says when a text field in the game has the keyboard (SQOL-O: `text-focus`).
+    text_focus: bool,
     voice_mirror: VoiceMirror,
     /// The mod draws people's pictures (OVL-AVATARS: `avatars` in its hello).
     avatars: bool,
@@ -1142,6 +1165,17 @@ pub(crate) struct Session<S> {
     found_codes: VecDeque<String>,
     /// When the overlay's notification switches last changed (their own limit).
     recent_switches: VecDeque<Instant>,
+    /// SQOL-O: the voice room chat's newest messages, what the mod was told of them, where the
+    /// game's requests go, the deletions and reports that came lately, and the wake-ups (the
+    /// launcher's answers, a card's gathering time).
+    room_log: RoomLog,
+    room_chat: RoomChatLink,
+    room_act: RoomChatActFn,
+    recent_room: VecDeque<Instant>,
+    room_tx: mpsc::UnboundedSender<RoomWake>,
+    room_rx: Option<mpsc::UnboundedReceiver<RoomWake>>,
+    /// SQOL-O: where the game's "a text field has the keyboard" goes (the hub's guard).
+    typing: ConnectedFn,
 }
 
 /// OVL-SOC2: hears the notice kinds a session's game shows as cards (none: not connected).
@@ -1275,6 +1309,7 @@ impl<S: SocialActions> Session<S> {
         let codeless = social.codeless_offered();
         let scene = scene_of(&view, &config, &worlds, codeless && game.is_some());
         let (permit_tx, permit_rx) = mpsc::unbounded_channel();
+        let (room_tx, room_rx) = mpsc::unbounded_channel();
         Self {
             social,
             launcher,
@@ -1326,6 +1361,13 @@ impl<S: SocialActions> Session<S> {
             recent_finds: VecDeque::new(),
             found_codes: VecDeque::new(),
             recent_switches: VecDeque::new(),
+            room_log: voice.room_log,
+            room_chat: RoomChatLink::default(),
+            room_act: voice.room_act,
+            recent_room: VecDeque::new(),
+            room_tx,
+            room_rx: Some(room_rx),
+            typing: voice.typing,
         }
     }
 
@@ -1358,6 +1400,10 @@ impl<S: SocialActions> Session<S> {
         let Some(mut permits) = self.permit_rx.take() else {
             return;
         };
+        // SQOL-O: the same for the room chat's answers and cards.
+        let Some(mut rooms) = self.room_rx.take() else {
+            return;
+        };
         loop {
             tokio::select! {
                 biased;
@@ -1381,6 +1427,7 @@ impl<S: SocialActions> Session<S> {
                     }
                 },
                 Some(answer) = permits.recv() => self.on_permit(answer),
+                Some(wake) = rooms.recv() => self.on_room_wake(wake),
             }
         }
     }
@@ -1403,6 +1450,10 @@ impl<S: SocialActions> Session<S> {
         // keeps its own notifications for it (CHAT-EMOJI).
         let was = self.live.as_ref().is_some_and(|live| !live.quiet);
         let voice_was = self.live.as_ref().is_some_and(|live| live.voice);
+        // SQOL-O: a connection that goes takes its text field's keyboard with it.
+        if self.live.as_ref().is_some_and(|live| live.text_focus) {
+            (self.typing)(false);
+        }
         self.live = live;
         if self.live.is_none()
             && let Some(pending) = self.pending_connect.take()
@@ -1532,6 +1583,8 @@ impl<S: SocialActions> Session<S> {
                 self.drop_stale_permit();
                 // A name may have changed (a new friend, a renamed crew).
                 self.refresh_voice();
+                // SQOL-O: a friend more or less, chat on or off: which chat the room shows.
+                self.refresh_room_chat();
                 // Someone the mod draws chose another picture.
                 self.retell_avatars();
             }
@@ -1582,6 +1635,8 @@ impl<S: SocialActions> Session<S> {
                 // Its own speaking flags are the newest now.
                 self.voice_speaking = None;
                 self.refresh_voice();
+                // SQOL-O: the room's chat follows the room.
+                self.refresh_room_chat();
                 // A card in the room (a friend's friend) may show another picture.
                 self.retell_avatars();
             }
@@ -1591,6 +1646,7 @@ impl<S: SocialActions> Session<S> {
             }
             Msg::VoiceNotice(notice) => self.on_voice_notice(&notice),
             Msg::ShareNotice(notice) => self.on_share_notice(&notice),
+            Msg::RoomChat(event) => self.on_room_event(&event),
         }
     }
 
@@ -1752,10 +1808,12 @@ impl<S: SocialActions> Session<S> {
         {
             return;
         }
-        // OVL-SHARE: sharing's presses only from a mod that shows it.
+        // OVL-SHARE: sharing's presses only from a mod that shows it (SQOL-O's "Duraklat" too).
         if matches!(
             frame,
-            FromGame::VoiceShareGame {} | FromGame::VoiceShareStop { .. }
+            FromGame::VoiceShareGame {}
+                | FromGame::VoiceShareStop { .. }
+                | FromGame::VoiceShareHold { .. }
         ) && !self.live.as_ref().is_some_and(|live| live.share)
         {
             return;
@@ -1780,7 +1838,8 @@ impl<S: SocialActions> Session<S> {
         };
         let now = Instant::now();
         // A press that only closes (the microphone off, deafened, leaving, a decline) is never held
-        // back: a flood of them can do no harm, and the player must always be able to go quiet.
+        // back: a flood of them can do no harm, and the player must always be able to go quiet
+        // (SQOL-O: "Duraklat" hides the stream at once too).
         let closes = matches!(
             act,
             VoiceAct::Mute(true)
@@ -1788,6 +1847,7 @@ impl<S: SocialActions> Session<S> {
                 | VoiceAct::Leave
                 | VoiceAct::Decline { .. }
                 | VoiceAct::ShareStop { .. }
+                | VoiceAct::ShareHold { on: true, .. }
         );
         let doing = if !closes && full(&mut self.recent_voice, now, VOICE_WINDOW, VOICE_BURST) {
             Err(VoiceRefusal::RateLimited)
@@ -2315,6 +2375,10 @@ impl<S: SocialActions> Session<S> {
                     share: !quiet
                         && features.iter().any(|f| f == FEATURE_VOICE)
                         && features.iter().any(|f| f == protocol::FEATURE_SHARE),
+                    rchat: !quiet
+                        && features.iter().any(|f| f == FEATURE_VOICE)
+                        && features.iter().any(|f| f == FEATURE_RCHAT),
+                    text_focus: !quiet && features.iter().any(|f| f == FEATURE_TEXT_FOCUS),
                     voice_mirror: VoiceMirror::default(),
                     avatars: !quiet && features.iter().any(|f| f == FEATURE_AVATARS),
                     said,
@@ -2328,6 +2392,12 @@ impl<S: SocialActions> Session<S> {
                 self.send(frames);
                 self.send_emojis();
                 self.refresh_voice();
+                // SQOL-O: the room's chip, when the room's chat shows as one.
+                self.greet_room_chat();
+                // SQOL-O: a mod that can say when a text field has the keyboard is asked to.
+                if self.live.as_ref().is_some_and(|live| live.text_focus) {
+                    self.send(vec![ToGame::KeysGuard {}]);
+                }
                 (self.host)(HostSignal::Connected { hosts });
             }
             BridgeEvent::Frame { conn, frame } => {
@@ -2354,6 +2424,40 @@ impl<S: SocialActions> Session<S> {
                     }
                 }
             }
+            // SQOL-O: the voice room's chat is the launcher's voice chat's, never the friends'.
+            FromGame::OpenConv { conv } if crate::rchat::room_of(&conv).is_some() => {
+                self.on_room_open(conv);
+            }
+            FromGame::Send {
+                cid,
+                conv,
+                text,
+                sticker,
+                ..
+            } if crate::rchat::room_of(&conv).is_some() => {
+                self.on_room_send(cid, &conv, &text, sticker.as_deref());
+            }
+            FromGame::React { conv, .. }
+            | FromGame::Typing { conv }
+            | FromGame::Edit { conv, .. }
+            | FromGame::Delete { conv, .. }
+                if crate::rchat::room_of(&conv).is_some() =>
+            {
+                tracing::debug!("the overlay asked for something the room's chat does not have");
+            }
+            FromGame::RoomDelete { conv, id } => self.on_room_delete(&conv, id),
+            // SQOL-O: a text field in the game has the keyboard (only from a mod that said so).
+            FromGame::TextFocus { on } => {
+                if self.live.as_ref().is_some_and(|live| live.text_focus) {
+                    (self.typing)(on);
+                }
+            }
+            FromGame::RoomReport {
+                conv,
+                id,
+                reason,
+                note,
+            } => self.on_room_report(&conv, id, &reason, &note),
             FromGame::OpenConv { conv } => {
                 let page = self.social.chat_page(&conv);
                 self.send(vec![feed::history_frame(
@@ -2514,7 +2618,9 @@ impl<S: SocialActions> Session<S> {
             // OVL-SOC: "Katıl" and "Yeni oda" in crew chat's "Sesli".
             | FromGame::VoiceJoin { .. }
             | FromGame::VoiceShareGame {}
-            | FromGame::VoiceShareStop { .. }) => self.on_voice_press(&frame),
+            | FromGame::VoiceShareStop { .. }
+            // SQOL-O: "Duraklat" / "Sürdür" on the player's share.
+            | FromGame::VoiceShareHold { .. }) => self.on_voice_press(&frame),
             // SHARE-LIVE: a share's still picture for the hover card.
             FromGame::VoiceThumb { room, u, n } => self.on_voice_thumb(room, u, n),
             // OVL-SOC 2: the status switcher and the friend requests.
