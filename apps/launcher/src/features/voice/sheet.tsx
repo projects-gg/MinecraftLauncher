@@ -840,7 +840,16 @@ function CrewRooms({ room }: { room: VoiceRoomView }) {
   );
 }
 
-function RoomHeader({ room, title }: { room: VoiceRoomView; title: string }) {
+function RoomHeader({
+  room,
+  title,
+  counted = false,
+}: {
+  room: VoiceRoomView;
+  title: string;
+  /** SQOL-U3: the people's own line counts them ("Odadakiler · 5"): the header does not again. */
+  counted?: boolean;
+}) {
   const { t } = useTranslation();
   const goTo = useVoiceUi((s) => s.goTo);
   const close = useVoiceUi((s) => s.closePanel);
@@ -852,18 +861,23 @@ function RoomHeader({ room, title }: { room: VoiceRoomView; title: string }) {
   const count = room.people.length + 1;
   // VOICE-CALL: the call's stage says what it is ("1 kişi" read wrong above two faces while ringing).
   const stage = useVoiceUi((s) => isOneToOne(s.state));
+  // SQOL-U3: over a chat the people's line counts them; the header then says only a full room.
+  const second =
+    room.kind === "crew" && crew
+      ? t("voice.room.crewOf", { crew: crew.name })
+      : stage
+        ? t("voice.call.kind")
+        : counted
+          ? full
+            ? t("voice.refused.roomFull")
+            : null
+          : t("voice.room.count", { count });
   return (
     <header className="shrink-0 border-b border-white/8 pt-4 pr-3 pb-3 pl-5">
       <div className="flex items-start gap-1.5">
         <div className="min-w-0 flex-1 pt-0.5">
           <RoomName room={room} title={title} editing={editing} setEditing={setEditing} />
-          <p className="mt-0.5 truncate text-[12.5px] text-ash-400">
-            {room.kind === "crew" && crew
-              ? t("voice.room.crewOf", { crew: crew.name })
-              : stage
-                ? t("voice.call.kind")
-                : t("voice.room.count", { count })}
-          </p>
+          {second ? <p className="mt-0.5 truncate text-[12.5px] text-ash-400">{second}</p> : null}
         </div>
         {editing ? null : (
           <>
@@ -1066,7 +1080,7 @@ function RoomPage({ room }: { room: VoiceRoomView }) {
   const chat = usePanelChat(room);
   return (
     <>
-      <RoomHeader room={room} title={title} />
+      <RoomHeader room={room} title={title} counted={chat.kind !== "none"} />
       <AnimatePresence initial={false} mode="wait">
         {chat.kind === "none" ? (
           <motion.div
