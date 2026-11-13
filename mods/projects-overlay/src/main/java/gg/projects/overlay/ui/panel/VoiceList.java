@@ -163,11 +163,12 @@ public final class VoiceList extends PanelWidget {
             row.live = voice != null && voice.sharing(p.id());
             String name = VoiceState.shown(p.name(), words);
             // SQOL-O: their stream paused or its window minimized, beside their role ("Moderatör · Duraklatıldı").
-            String role = roleOr(p.role(), null);
+            String theirRole = roleOr(p.role(), null);
             String stream = streamState(voice, p.id());
             row.stream = stream;
-            fill(row, name, p.id(), stream == null ? role : role == null ? stream : role + " · " + stream, strong,
-                small, textW);
+            fill(row, name, p.id(),
+                stream == null ? theirRole : theirRole == null ? stream : theirRole + " · " + stream, strong, small,
+                textW);
             row.marks.clear();
             row.markInks.clear();
             voiceMarks(row, p.mute(), p.deaf(), p.mutedByModerator());
