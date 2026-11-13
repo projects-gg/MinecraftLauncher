@@ -27,6 +27,12 @@ export const trRoomChat = {
   },
   /** In a person's name for screen readers, while they speak. */
   speaking: "konuşuyor",
+  /** A connection's bars, in words (their tooltip, screen readers); bars show only when not good. */
+  connection: {
+    good: "Bağlantı: İyi",
+    weak: "Bağlantı: Orta",
+    bad: "Bağlantı: Zayıf",
+  },
   announce: {
     one: "Oda sohbeti, {{name}}: {{text}}",
     many_one: "Oda sohbetinde {{count}} yeni mesaj",

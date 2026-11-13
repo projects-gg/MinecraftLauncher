@@ -81,7 +81,7 @@ import { enter, glide, leave, pageVariants, rise } from "@/features/social/motio
 import { usePersonItems } from "@/features/social/person-menu";
 import { SocialFace } from "@/features/social/social-face";
 import { useSocialUi } from "@/features/social/store";
-import type { VoicePerson, VoiceRoomView } from "@/lib/api/voice-types";
+import type { VoicePerson, VoiceQuality, VoiceRoomView } from "@/lib/api/voice-types";
 import { formatPercent } from "@/lib/format";
 import {
   cancelInvite,
@@ -95,16 +95,18 @@ import {
   toggleDeaf,
   toggleMute,
 } from "./actions";
+import { ConnectionMark } from "./connection";
 import { roomMenuItems } from "./crew-room-menu";
 import { useCrewRoomsUi, withPendingOrder } from "./crew-rooms-store";
 import { useDockWidth, useToastsBeside, useWindowTaller } from "./dock";
-import { QualityBars, SpeakingFace } from "./faces";
+import { SpeakingFace } from "./faces";
 import { FittedNames } from "./fitted-names";
 import { HeadphonesSlash } from "./icons";
 import { VoiceMeter } from "./meter";
 import { PanelChromeProvider, PanelClose, PanelTitle, usePanelChrome } from "./panel-chrome";
 import {
   closeInMenu,
+  connectionWords,
   headerLine,
   panelTitle,
   renameBesideTitle,
@@ -145,7 +147,7 @@ interface Mark {
 const markIcon = "size-[15px]";
 
 function marksOf(
-  p: Pick<VoicePerson, "mute" | "deaf" | "mutedByModerator" | "quality"> & { mutedForMe?: boolean },
+  p: Pick<VoicePerson, "mute" | "deaf" | "mutedByModerator"> & { mutedForMe?: boolean },
   t: (key: string) => string,
 ): Mark[] {
   const marks: Mark[] = [];
@@ -180,17 +182,14 @@ function marksOf(
       look: <SpeakerSimpleSlash weight="bold" className={cn(markIcon, "text-ash-400")} />,
     });
   }
-  if (p.quality !== "good") {
-    marks.push({
-      key: "q",
-      label: t("voice.person.weak"),
-      look: <QualityBars quality={p.quality} />,
-    });
-  }
   return marks;
 }
 
-function Marks({ marks }: { marks: Mark[] }) {
+/**
+ * The marks, and last (SQOL-U3) a connection that is not good, as a keyboard stop of its own
+ * (`ConnectionMark`): never inside a row's button, which draws it beside itself.
+ */
+function Marks({ marks, connection }: { marks: Mark[]; connection?: VoiceQuality }) {
   return (
     <span className="flex shrink-0 items-center gap-1.5">
       {marks.map(({ key, label, look }) => (
@@ -200,6 +199,7 @@ function Marks({ marks }: { marks: Mark[] }) {
           </span>
         </Tooltip>
       ))}
+      {connection ? <ConnectionMark quality={connection} /> : null}
     </span>
   );
 }
@@ -286,7 +286,7 @@ function MeRow({ room, compact }: { room: VoiceRoomView; compact: boolean }) {
           </LiveAppear>
         }
       />
-      <Marks marks={marks} />
+      <Marks marks={marks} connection={room.me.quality} />
       {/* At the row's end, as the crew's member list marks the player. */}
       <span className="shrink-0 text-[12.5px] text-ash-400">{t("voice.room.you")}</span>
     </div>
@@ -321,6 +321,7 @@ function PersonRow({ person, compact }: { person: VoicePerson; compact: boolean 
     kind ? t("share.row.mark", { kind: t(`share.kind.${kind}`) }) : null,
     role,
     ...marks.map((m) => m.label),
+    person.quality === "good" ? null : connectionWords(person.quality, t),
   ]
     .filter(Boolean)
     .join(", ");
@@ -374,6 +375,8 @@ function PersonRow({ person, compact }: { person: VoicePerson; compact: boolean 
           </button>
         }
       />
+      {/* SQOL-U3: beside the row's button, a stop of its own (its words by keyboard too). */}
+      <ConnectionMark quality={person.quality} className="mr-1" />
       <WatchButton person={person.id} name={face.name} className="shrink-0" />
       {preview.card}
     </div>
@@ -421,7 +424,10 @@ function People({ room }: { room: VoiceRoomView }) {
         exit={{ opacity: 0, transition: leave(0.14) }}
       >
         {stage ? (
-          <CallStage room={room} marksOf={(person) => <Marks marks={marksOf(person, t)} />} />
+          <CallStage
+            room={room}
+            marksOf={(person) => <Marks marks={marksOf(person, t)} connection={person.quality} />}
+          />
         ) : (
           <PeopleList room={room} compact={false} />
         )}
@@ -491,7 +497,11 @@ function PeopleSection({ room }: { room: VoiceRoomView }) {
   if (isOneToOne({ room, calling })) {
     return (
       <div className="shrink-0 border-b border-white/8">
-        <CallStage room={room} compact marksOf={(person) => <Marks marks={marksOf(person, t)} />} />
+        <CallStage
+          room={room}
+          compact
+          marksOf={(person) => <Marks marks={marksOf(person, t)} connection={person.quality} />}
+        />
       </div>
     );
   }

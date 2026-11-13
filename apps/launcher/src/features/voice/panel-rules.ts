@@ -2,7 +2,7 @@
 // when its line is short, a crew room's title and the line under it, and where renaming and
 // closing the room live.
 import type { TFunction } from "i18next";
-import type { VoiceRoomView } from "@/lib/api/voice-types";
+import type { VoiceQuality, VoiceRoomView } from "@/lib/api/voice-types";
 import { namesLine, roomTitle } from "./rules";
 
 /**
@@ -91,6 +91,11 @@ export function renameBesideTitle(
 /** "Adı Değiştir" in the header's menu: a crew's own rooms ("Genel" is never renamed). */
 export function renameInMenu(room: Pick<VoiceRoomView, "canRename" | "kind" | "general">): boolean {
   return room.canRename && room.kind === "crew" && !room.general;
+}
+
+/** A connection's words, for its bars' tooltip and screen readers ("Bağlantı: Zayıf"). */
+export function connectionWords(quality: VoiceQuality, t: TFunction): string {
+  return t(`roomChat.connection.${quality}`);
 }
 
 /**

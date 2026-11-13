@@ -24,6 +24,11 @@ export const enRoomChat: typeof trRoomChat = {
     mod: "This message was removed",
   },
   speaking: "speaking",
+  connection: {
+    good: "Connection: Good",
+    weak: "Connection: Fair",
+    bad: "Connection: Poor",
+  },
   announce: {
     one: "Room chat, {{name}}: {{text}}",
     many_one: "{{count}} new message in room chat",

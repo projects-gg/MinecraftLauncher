@@ -5,6 +5,7 @@ import type { VoicePerson } from "@/lib/api/voice-types";
 import i18n from "@/lib/i18n";
 import {
   closeInMenu,
+  connectionWords,
   fitNames,
   headerLine,
   namesLines,
@@ -98,6 +99,14 @@ describe("a crew room's header", () => {
     const two = [{ id: "a" }] as VoicePerson[];
     expect(renameBesideTitle({ canRename: true, kind: "friend", people: two })).toBe(false);
     expect(renameBesideTitle({ canRename: true, kind: "friend", people: [] })).toBe(false);
+  });
+});
+
+describe("a connection's bars", () => {
+  it("say what they show in words", () => {
+    expect(connectionWords("good", t)).toBe("Bağlantı: İyi");
+    expect(connectionWords("weak", t)).toBe("Bağlantı: Orta");
+    expect(connectionWords("bad", t)).toBe("Bağlantı: Zayıf");
   });
 });
 

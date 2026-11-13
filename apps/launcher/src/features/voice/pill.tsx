@@ -33,11 +33,12 @@ import { UnreadChip } from "@/features/social/chat/unread-chip";
 import { enter, leave, swap } from "@/features/social/motion";
 import { callFriend, leaveRoom, retryRoom, toggleDeaf, toggleMute } from "./actions";
 import { CallTime, callStart } from "./call-time";
-import { QualityBars, SpeakingFace } from "./faces";
+import { ConnectionMark } from "./connection";
+import { SpeakingFace } from "./faces";
 import { FittedNames } from "./fitted-names";
 import { HeadphonesSlash } from "./icons";
 import { VoiceMeter } from "./meter";
-import { titleNames } from "./panel-rules";
+import { connectionWords, titleNames } from "./panel-rules";
 import { meterThreshold, useVoicePrefs } from "./prefs";
 import { useRoomOwnUnread } from "./room-chat/unread";
 import { faceMark, micClosedLabel, pillPeople, roomTitle } from "./rules";
@@ -202,7 +203,7 @@ function Pill() {
   const unread = panelOpen || !room ? 0 : roomUnread;
   const label = [
     t("voice.pill.label", { room: fitted ? fitted.join(", ") : words }),
-    weak ? t("voice.room.weak") : null,
+    weak ? connectionWords(quality, t) : null,
     unread > 0 ? t("chat.list.unread", { count: unread }) : null,
   ]
     .filter(Boolean)
@@ -305,14 +306,15 @@ function Pill() {
             icon={<ChatCircleDots size={11} weight="fill" aria-hidden />}
           />
         </span>
-        {weak ? (
-          <Tooltip content={t("voice.room.weak")}>
-            <span className="flex shrink-0">
-              <QualityBars quality={quality} />
-            </span>
-          </Tooltip>
-        ) : null}
       </motion.button>
+
+      {/* SQOL-U3: a weak connection's bars beside the name, a stop of their own ("Bağlantı:
+          Zayıf" by keyboard too), outside the button that opens the panel. */}
+      {weak ? (
+        <motion.span layout={layout ? "position" : false} className="-ml-1 flex pr-1">
+          <ConnectionMark quality={quality} />
+        </motion.span>
+      ) : null}
 
       <motion.span layout={layout ? "position" : false} className="flex items-center gap-0.5">
         {mode === "calling" ? (
