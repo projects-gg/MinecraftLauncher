@@ -2,11 +2,17 @@
 // The stage (SQOL-U1). "Yayın bitti.": a watched share whose sharer stopped keeps its place for two
 // seconds (in the corner when it was there); "İzlemeyi Bırak", watching moving to the other window
 // and leaving the room show nothing. Esc in full screen leaves it only when nothing above took it.
-import { act, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// "Hâlâ izliyor musun?" centres on the stage the docked room panel leaves visible.
+import { setAppReducedMotion, TooltipProvider } from "@pl/ui";
+import { act, cleanup, render, renderHook, screen } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import "@/lib/i18n";
+import { useVoiceUi } from "@/features/voice/store";
+import { createVoiceMock } from "@/lib/api/voice-mock";
+import { HIDDEN_VOICE_STATE } from "@/lib/api/voice-types";
 import { shareApi } from "@/share/api";
 import type { VoiceLiveShare, VoiceWatch } from "@/share/types";
-import { ENDED_MS, stagePlace, useEndedShares, useEscLeavesFull } from "./stage";
+import { ENDED_MS, StageBody, stagePlace, useEndedShares, useEscLeavesFull } from "./stage";
 import { useShareUi } from "./store";
 
 const live = (person: string): VoiceLiveShare => ({
@@ -124,7 +130,7 @@ describe("Esc in full screen", () => {
     expect(useShareUi.getState().full).toBe(true);
   });
 
-  it("stays when the key belongs to a field", () => {
+  it("stays when the key belongs to a field (a menu's, the room chat's)", () => {
     const hook = renderHook(() => useEscLeavesFull(true));
     const field = document.body.appendChild(document.createElement("input"));
     esc(field);
@@ -132,5 +138,57 @@ describe("Esc in full screen", () => {
     field.remove();
     hook.unmount();
     expect(useShareUi.getState().full).toBe(true);
+  });
+});
+
+describe("Hâlâ izliyor musun? with the room panel docked", () => {
+  // The card fades. happy-dom leaves a cancelled animation's `finished` rejection unhandled (a
+  // browser marks it handled): here it is handled (live-card.test.tsx).
+  const animate = Element.prototype.animate;
+  beforeAll(() => {
+    setAppReducedMotion(true);
+    Element.prototype.animate = function handledAnimate(
+      this: Element,
+      keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
+      options?: number | KeyframeAnimationOptions,
+    ) {
+      const animation = animate.call(this, keyframes, options);
+      const cancel = animation.cancel;
+      animation.cancel = function handledCancel(this: Animation) {
+        this.finished.catch(() => undefined);
+        cancel.call(this);
+      };
+      return animation;
+    };
+  });
+  afterAll(() => {
+    setAppReducedMotion(false);
+    Element.prototype.animate = animate;
+  });
+  afterEach(() => {
+    cleanup();
+    act(() => useVoiceUi.getState().setState(HIDDEN_VOICE_STATE));
+  });
+
+  /** The page stage asking whether the player still watches, the room panel `dock` px wide. */
+  function asking(dock: number) {
+    const state = createVoiceMock({ scenario: "shareLive", timers: false }).current();
+    const share = state.share;
+    if (!share) throw new Error("no share");
+    act(() => useVoiceUi.getState().setState({ ...state, share: { ...share, stillAsking: true } }));
+    render(
+      <TooltipProvider>
+        <StageBody watches={[]} popout={false} dock={dock} />
+      </TooltipProvider>,
+    );
+    return screen.getByRole("alertdialog");
+  }
+
+  it("covers and centres on the stage the panel leaves visible", () => {
+    expect(asking(320).style.right).toBe("320px");
+  });
+
+  it("covers the whole stage without the panel", () => {
+    expect(asking(0).style.right).toBe("");
   });
 });
