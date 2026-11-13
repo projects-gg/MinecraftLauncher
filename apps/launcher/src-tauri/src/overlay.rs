@@ -84,6 +84,8 @@ static HUB: OnceLock<Overlay> = OnceLock::new();
 /// SQOL-O: a text field in a running game has the keyboard now, as its overlay says (the game's
 /// side of `voice_typing`): the voice shortcuts' watch leaves single keys without Ctrl, Alt or Shift
 /// alone meanwhile. A word that is not said again stops counting by itself (`pl_overlay`'s hold).
+/// Windows only: the voice input's raw key watch reads it there (`voice::input`).
+#[cfg(windows)]
 pub fn game_typing() -> bool {
     HUB.get().is_some_and(Overlay::game_typing)
 }
