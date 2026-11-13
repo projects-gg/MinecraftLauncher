@@ -40,6 +40,9 @@ use crate::wire::{FromRoom, ModAct, ToRoom};
 
 /// SQOL: a live change the room has not answered by then is given up (nothing changes).
 const EDIT_WAIT_MS: u64 = 10_000;
+/// MOB-WATCH: TURN the watching page has serves a new connection only while it has this long
+/// left (the room's credentials last `ttl`; a connection set up on them must still come up).
+const TURN_SPARE_MS: u64 = 60_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MinePhase {
@@ -201,6 +204,9 @@ pub(super) struct Shares {
     pending_offer: Option<WatchCmd>,
     /// The watch connection works.
     connected: bool,
+    /// MOB-WATCH: until when the TURN the watching page was given serves a new connection (none:
+    /// no end known, or none given).
+    turn_until: Option<u64>,
     losses: u32,
     /// The last touch watching knows of (a watch, an answer, the window coming back).
     touched: u64,
@@ -233,6 +239,7 @@ impl Default for Shares {
             held: false,
             pending_offer: None,
             connected: false,
+            turn_until: None,
             losses: 0,
             touched: 0,
             asking_since: None,
@@ -780,16 +787,23 @@ impl Machine {
                     // SQOL: the room's applied values of a live change.
                     Some(Pending::ShareSet(n)) => self.edited(n, rid, preset, fps, audio, out),
                     Some(Pending::WatchTurn) => match ice {
-                        Some(ice) if !ice.urls.is_empty() => self.deliver(
-                            WatchCmd::Ice {
-                                ice: crate::engine::EngineIce {
-                                    urls: ice.urls,
-                                    username: ice.username,
-                                    credential: ice.credential,
+                        Some(ice) if !ice.urls.is_empty() => {
+                            // MOB-WATCH: it serves the session's new connections until shortly
+                            // before it runs out.
+                            self.share.turn_until = (ice.ttl > 0).then(|| {
+                                now + ice.ttl.saturating_mul(1_000).saturating_sub(TURN_SPARE_MS)
+                            });
+                            self.deliver(
+                                WatchCmd::Ice {
+                                    ice: crate::engine::EngineIce {
+                                        urls: ice.urls,
+                                        username: ice.username,
+                                        credential: ice.credential,
+                                    },
                                 },
-                            },
-                            out,
-                        ),
+                                out,
+                            );
+                        }
                         _ => self.watch_lost(now, out),
                     },
                     // A watch's offer follows its `ack` (if the room sends one at all).
@@ -869,7 +883,7 @@ impl Machine {
                     self.resume_sharing(&mine_listed, now, out);
                     // SHARE-LIVE: catching up with the room says nothing (no sounds).
                     self.prune_watches(false, now, out);
-                    self.resume_watching(watch.unwrap_or_default(), out);
+                    self.resume_watching(watch.unwrap_or_default(), now, out);
                 }
                 self.mine_pictures(&mine_listed);
                 out.push(Effect::Changed);
@@ -1032,19 +1046,40 @@ impl Machine {
     }
 
     /// Back on a new socket: the room's watch session still carries `kept` (its `hello.me.watch`).
-    /// Those go on as they are; the rest are asked for again; with nothing kept the session is new
-    /// (the page's connection too). What the room carries that the player no longer watches (an
-    /// `unwatch` lost meanwhile, or all of it while held) is let go there.
-    fn resume_watching(&mut self, kept: Vec<WatchWire>, out: &mut Vec<Effect>) {
+    /// Those whose offer came go on as they are; the rest are asked for again; with none of them
+    /// carried the session is new (the page's connection too). What the room carries that the
+    /// player no longer watches (an `unwatch` lost meanwhile, or all of it while held), or not as
+    /// the player left it (a `watch` whose offer went to the old socket, MOB-WATCH), is let go
+    /// there. A connection that waited for TURN has no answer to come (only the socket that asked
+    /// gets it): the session is new.
+    fn resume_watching(&mut self, kept: Vec<WatchWire>, now: u64, out: &mut Vec<Effect>) {
         let held = self.share.held;
+        let turn_lost = self
+            .pending
+            .values()
+            .any(|pending| *pending == Pending::WatchTurn);
+        let carried: Vec<bool> = self
+            .share
+            .watching
+            .iter()
+            .map(|watch| {
+                !held
+                    && !turn_lost
+                    && watch.sent
+                    && watch.rid.is_none()
+                    && kept.iter().any(|k| k.u == watch.u && k.n == watch.n)
+            })
+            .collect();
         if let Some(generation) = self.open_generation() {
-            for stray in kept.iter().filter(|k| {
-                held || !self
+            for stray in &kept {
+                let at = self
                     .share
                     .watching
                     .iter()
-                    .any(|watch| watch.u == k.u && watch.n == k.n)
-            }) {
+                    .position(|watch| watch.u == stray.u && watch.n == stray.n);
+                if at.is_some_and(|at| carried[at]) {
+                    continue;
+                }
                 out.push(Effect::Send {
                     generation,
                     frame: ToRoom::Unwatch {
@@ -1052,23 +1087,22 @@ impl Machine {
                         n: stray.n,
                     },
                 });
+                if let Some(at) = at {
+                    self.share.watching[at].sent = false;
+                }
             }
         }
         if self.share.watching.is_empty() || held {
             return;
         }
-        let carried = |watch: &Watching| kept.iter().any(|k| k.u == watch.u && k.n == watch.n);
-        if !self.share.watching.iter().any(carried) {
-            self.restart_watching(out);
+        if !carried.contains(&true) {
+            self.restart_watching(now, out);
             return;
         }
         self.pending
             .retain(|_, pending| !matches!(pending, Pending::Watch(..) | Pending::WatchTurn));
-        for at in 0..self.share.watching.len() {
-            if carried(&self.share.watching[at]) {
-                self.share.watching[at].rid = None;
-                self.share.watching[at].asked_at = None;
-            } else {
+        for (at, carried) in carried.into_iter().enumerate() {
+            if !carried {
                 self.share.watching[at].sent = false;
                 self.send_watch(at, out);
             }
@@ -1121,7 +1155,7 @@ impl Machine {
         {
             out.push(Effect::Watch {
                 surface: self.share.surface,
-                cmd: WatchCmd::Reset,
+                cmd: WatchCmd::Reset { keep_turn: false },
             });
         }
         if self.share.popout {
@@ -1291,7 +1325,7 @@ impl Machine {
         self.pending
             .retain(|_, pending| *pending != Pending::Watch(watch.u.clone(), n));
         if self.share.watching.is_empty() {
-            self.reset_page(out);
+            self.reset_page(false, out);
             self.share.asking_since = None;
             self.share.hidden_since = None;
             self.share.held = false;
@@ -1306,7 +1340,7 @@ impl Machine {
         }
         self.unwatch_room(out);
         self.share.watching.clear();
-        self.reset_page(out);
+        self.reset_page(false, out);
         self.share.asking_since = None;
         self.share.hidden_since = None;
         self.share.held = false;
@@ -1378,22 +1412,26 @@ impl Machine {
         }
     }
 
-    /// The session anew: the room lets the old go, the page closes its connection, the list is
-    /// asked for again.
-    fn restart_watching(&mut self, out: &mut Vec<Effect>) {
+    /// The session anew: the room lets the old go, the page closes its connection (keeping TURN
+    /// it was given while that still serves, MOB-WATCH), the list is asked for again.
+    fn restart_watching(&mut self, now: u64, out: &mut Vec<Effect>) {
         self.unwatch_room(out);
-        self.reset_page(out);
+        let keep_turn = self.share.turn_until.is_none_or(|until| now < until);
+        self.reset_page(keep_turn, out);
         self.rewatch(out);
     }
 
-    /// The watching page closes its connection.
-    fn reset_page(&mut self, out: &mut Vec<Effect>) {
+    /// The watching page closes its connection (`keep_turn`: TURN it has stays for the next one).
+    fn reset_page(&mut self, keep_turn: bool, out: &mut Vec<Effect>) {
         self.share.pending_offer = None;
         self.share.connected = false;
+        if !keep_turn {
+            self.share.turn_until = None;
+        }
         if self.share.attached[slot(self.share.surface)] {
             out.push(Effect::Watch {
                 surface: self.share.surface,
-                cmd: WatchCmd::Reset,
+                cmd: WatchCmd::Reset { keep_turn },
             });
         }
     }
@@ -1424,7 +1462,7 @@ impl Machine {
             return out;
         }
         if !self.share.watching.is_empty() && !self.share.held {
-            self.restart_watching(&mut out);
+            self.restart_watching(now, &mut out);
             out.push(Effect::Changed);
         }
         out
@@ -1476,7 +1514,7 @@ impl Machine {
 
     fn move_watching(&mut self, to: ShareSurface, now: u64, out: &mut Vec<Effect>) {
         self.unwatch_room(out);
-        self.reset_page(out);
+        self.reset_page(false, out);
         self.share.surface = to;
         self.share.hidden_since = None;
         self.share.touched = now;
@@ -1541,10 +1579,11 @@ impl Machine {
                 }
             }
             WatchReport::NeedTurn => {
-                if let Ok((_, effects)) =
-                    self.request(Pending::WatchTurn, |rid| ToRoom::Turn { rid })
-                {
-                    out.extend(effects);
+                match self.request(Pending::WatchTurn, |rid| ToRoom::Turn { rid }) {
+                    Ok((_, effects)) => out.extend(effects),
+                    // No socket to ask on: as lost (the page waits for nothing else; the
+                    // socket's return asks anew).
+                    Err(_) => self.watch_lost(now, &mut out),
                 }
             }
             WatchReport::Connected => {
@@ -1560,7 +1599,7 @@ impl Machine {
     }
 
     /// The watch connection is gone: asked for anew, a few times in a row at most.
-    fn watch_lost(&mut self, _now: u64, out: &mut Vec<Effect>) {
+    fn watch_lost(&mut self, now: u64, out: &mut Vec<Effect>) {
         if self.share.watching.is_empty() {
             return;
         }
@@ -1569,7 +1608,7 @@ impl Machine {
         if self.share.losses >= WATCH_LOSSES_MAX {
             self.stop_watching(Some(ShareNotice::WatchFailed), out);
         } else {
-            self.restart_watching(out);
+            self.restart_watching(now, out);
             out.push(Effect::Changed);
         }
     }
@@ -2077,7 +2116,7 @@ impl Machine {
                 self.share.held = true;
                 self.share.asking_since = None;
                 self.unwatch_room(out);
-                self.reset_page(out);
+                self.reset_page(false, out);
                 out.push(Effect::Changed);
             }
         }

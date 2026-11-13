@@ -749,7 +749,7 @@ fn watching_asks_the_room_and_hands_the_offer_to_the_page() {
     assert!(sent(&effects).is_empty());
     assert!(matches!(
         to_page(&effects)[..],
-        [(ShareSurface::Main, WatchCmd::Reset)]
+        [(ShareSurface::Main, WatchCmd::Reset { keep_turn: false })]
     ));
     assert!(machine.view(3_000, UNIX).share.watching.is_empty());
     assert_eq!(machine.share_watch("a", 1, 3_000), Err(ShareRefusal::Gone));
@@ -826,7 +826,7 @@ fn watching_lets_go_out_of_sight_and_comes_back() {
     );
     assert!(matches!(
         to_page(&effects)[..],
-        [(ShareSurface::Main, WatchCmd::Reset)]
+        [(ShareSurface::Main, WatchCmd::Reset { keep_turn: false })]
     ));
     assert_eq!(
         machine.view(9_000, UNIX).share.watching[0].phase,
@@ -854,7 +854,7 @@ fn the_popout_window_takes_watching_and_gives_it_back() {
     );
     assert!(matches!(
         to_page(&effects)[..],
-        [(ShareSurface::Main, WatchCmd::Reset)]
+        [(ShareSurface::Main, WatchCmd::Reset { keep_turn: false })]
     ));
     assert_eq!(
         machine.view(3_000, UNIX).share.surface,
@@ -1037,16 +1037,57 @@ fn come_back(machine: &mut Machine, generation: u64, at: u64) -> u64 {
     generation
 }
 
+/// The room's `woffer` for a watch session carrying `shares` (their video m-lines).
+fn woffer(shares: &[(&str, u8)], fresh: bool) -> FromRoom {
+    FromRoom::Woffer {
+        sdp: Sdp::new("v=0 sfu offer"),
+        fresh,
+        mids: shares
+            .iter()
+            .enumerate()
+            .map(|(at, (u, n))| {
+                (
+                    at.to_string(),
+                    WatchMidWire {
+                        u: (*u).into(),
+                        n: *n,
+                        k: "v".into(),
+                    },
+                )
+            })
+            .collect(),
+    }
+}
+
+/// The `turn` request among `effects`.
+fn turn_rid(effects: &[Effect]) -> u32 {
+    sent(effects)
+        .into_iter()
+        .find_map(|frame| match frame {
+            ToRoom::Turn { rid } => Some(*rid),
+            _ => None,
+        })
+        .expect("a turn")
+}
+
+/// The room's TURN for the watch connection, good for two hours (the room's `ttl`).
+fn turn_ack(rid: u32) -> FromRoom {
+    FromRoom::parse(&format!(
+        r#"{{"t":"ack","rid":{rid},"ice":{{"urls":["turn:turn.example:3478"],"username":"u","credential":"c","ttl":7200}}}}"#
+    ))
+}
+
 #[test]
 fn a_socket_that_comes_back_keeps_what_the_room_still_carries() {
     let mut machine = ready();
     let generation = live(&mut machine, vec![shared(1), shared(2)], share_on());
     machine.share_attach(ShareSurface::Main, 2_000);
     machine.share_watch("a", 1, 2_000).unwrap();
-    machine.share_watch("a", 2, 2_000).unwrap();
+    machine.socket_message(generation, woffer(&[("a", 1)], true), 2_100, UNIX);
+    machine.share_watch("a", 2, 2_200).unwrap();
     let generation = come_back(&mut machine, generation, 3_000);
-    // The room still carries share 1: only share 2 is asked for again, the page keeps its
-    // connection.
+    // The room still carries share 1 (its offer came): only share 2 is asked for again, the
+    // page keeps its connection.
     let effects = machine.socket_message(
         generation,
         hello_watching(
@@ -1080,7 +1121,7 @@ fn a_socket_that_comes_back_keeps_what_the_room_still_carries() {
     );
     assert!(matches!(
         to_page(&effects)[..],
-        [(ShareSurface::Main, WatchCmd::Reset)]
+        [(ShareSurface::Main, WatchCmd::Reset { keep_turn: true })]
     ));
     assert_eq!(
         sent(&effects)
@@ -1089,6 +1130,175 @@ fn a_socket_that_comes_back_keeps_what_the_room_still_carries() {
             .count(),
         2
     );
+}
+
+/// MOB-WATCH: a `watch` whose offer went to the old socket is carried by the room but will not
+/// be offered again: the room lets it go and it is asked for anew (it was waited for forever).
+#[test]
+fn a_watch_whose_offer_went_to_the_old_socket_is_asked_for_anew() {
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1), shared(2)], share_on());
+    machine.share_attach(ShareSurface::Main, 2_000);
+    machine.share_watch("a", 1, 2_000).unwrap();
+    let generation = come_back(&mut machine, generation, 3_000);
+    let people = || {
+        vec![
+            person("me", Vec::new()),
+            person("a", vec![shared(1), shared(2)]),
+        ]
+    };
+    // The only watch: the session is new (the page's connection closes, TURN it has stays).
+    let effects = machine.socket_message(
+        generation,
+        hello_watching(people(), &[("a", 1)]),
+        4_200,
+        UNIX,
+    );
+    assert!(matches!(
+        sent(&effects)[..],
+        [
+            ToRoom::Set { .. },
+            ToRoom::Unwatch { n: 1, .. },
+            ToRoom::Watch { n: 1, .. }
+        ]
+    ));
+    assert!(matches!(
+        to_page(&effects)[..],
+        [(ShareSurface::Main, WatchCmd::Reset { keep_turn: true })]
+    ));
+    // It is waited for again: no offer in time is a lost connection, asked anew.
+    let effects = machine.tick(
+        4_200 + crate::share::WATCH_OFFER_WAIT_MS,
+        UNIX,
+        4_200 + crate::share::WATCH_OFFER_WAIT_MS,
+    );
+    assert!(
+        sent(&effects)
+            .iter()
+            .any(|frame| matches!(frame, ToRoom::Watch { n: 1, .. }))
+    );
+    // Share 1 came; share 2's offer goes to the old socket: share 1 goes on, share 2 is let go
+    // there and asked for anew.
+    let now = 4_200 + crate::share::WATCH_OFFER_WAIT_MS;
+    machine.socket_message(generation, woffer(&[("a", 1)], true), now + 100, UNIX);
+    machine.share_watch("a", 2, now + 200).unwrap();
+    let generation = come_back(&mut machine, generation, now + 1_000);
+    let effects = machine.socket_message(
+        generation,
+        hello_watching(people(), &[("a", 1), ("a", 2)]),
+        now + 2_200,
+        UNIX,
+    );
+    assert!(matches!(
+        sent(&effects)[..],
+        [
+            ToRoom::Set { .. },
+            ToRoom::Unwatch { n: 2, .. },
+            ToRoom::Watch { n: 2, .. }
+        ]
+    ));
+    assert!(to_page(&effects).is_empty());
+}
+
+/// MOB-WATCH: TURN asked for after ICE failed serves the connection asked for anew after it (the
+/// page's TURN was dropped right after it came), until it runs out; it goes when watching ends.
+#[test]
+fn turn_for_the_watch_connection_stays_for_the_session_asked_anew() {
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1)], share_on());
+    machine.share_attach(ShareSurface::Main, 2_000);
+    machine.share_watch("a", 1, 2_000).unwrap();
+    machine.socket_message(generation, woffer(&[("a", 1)], true), 2_100, UNIX);
+    // No connection in 5 s: the page asks for TURN; it comes and goes to the page.
+    let effects = machine.share_watch_report(ShareSurface::Main, WatchReport::NeedTurn, 7_100);
+    let rid = turn_rid(&effects);
+    let effects = machine.socket_message(generation, turn_ack(rid), 7_200, UNIX);
+    assert!(matches!(
+        to_page(&effects)[..],
+        [(ShareSurface::Main, WatchCmd::Ice { .. })]
+    ));
+    // The page ends that connection: the session is asked anew, TURN stays for it.
+    let effects = machine.share_watch_report(ShareSurface::Main, WatchReport::Lost, 7_300);
+    assert!(matches!(
+        sent(&effects)[..],
+        [ToRoom::Unwatch { n: 1, .. }, ToRoom::Watch { n: 1, .. }]
+    ));
+    assert!(matches!(
+        to_page(&effects)[..],
+        [(ShareSurface::Main, WatchCmd::Reset { keep_turn: true })]
+    ));
+    // Through TURN it works; dropped later, still within its two hours: TURN stays.
+    machine.socket_message(generation, woffer(&[("a", 1)], true), 7_400, UNIX);
+    machine.share_watch_report(ShareSurface::Main, WatchReport::Connected, 8_000);
+    let effects = machine.share_watch_report(ShareSurface::Main, WatchReport::Lost, 60 * MIN);
+    assert!(matches!(
+        to_page(&effects)[..],
+        [(ShareSurface::Main, WatchCmd::Reset { keep_turn: true })]
+    ));
+    // Past its two hours (less a minute to set up on it): it goes, the next connection asks anew.
+    machine.socket_message(generation, woffer(&[("a", 1)], true), 60 * MIN + 100, UNIX);
+    machine.share_watch_report(ShareSurface::Main, WatchReport::Connected, 60 * MIN + 200);
+    let late = 7_200 + 120 * MIN - 60_000;
+    let effects = machine.share_watch_report(ShareSurface::Main, WatchReport::Lost, late);
+    assert!(matches!(
+        to_page(&effects)[..],
+        [(ShareSurface::Main, WatchCmd::Reset { keep_turn: false })]
+    ));
+    // TURN anew, then watching ends: it goes.
+    machine.socket_message(generation, woffer(&[("a", 1)], true), late + 100, UNIX);
+    let effects = machine.share_watch_report(ShareSurface::Main, WatchReport::NeedTurn, late + 200);
+    let rid = turn_rid(&effects);
+    machine.socket_message(generation, turn_ack(rid), late + 300, UNIX);
+    let effects = machine.share_unwatch("a", 1, late + 400);
+    assert!(matches!(
+        to_page(&effects)[..],
+        [(ShareSurface::Main, WatchCmd::Reset { keep_turn: false })]
+    ));
+}
+
+/// MOB-WATCH: a TURN answer comes only on the socket that asked; asked with none, or lost with
+/// the old one, the connection is asked anew instead of waiting for it.
+#[test]
+fn a_turn_answer_lost_with_the_socket_is_not_waited_for() {
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1)], share_on());
+    machine.share_attach(ShareSurface::Main, 2_000);
+    machine.share_watch("a", 1, 2_000).unwrap();
+    machine.socket_message(generation, woffer(&[("a", 1)], true), 2_100, UNIX);
+    let effects = machine.share_watch_report(ShareSurface::Main, WatchReport::NeedTurn, 7_100);
+    turn_rid(&effects);
+    // The socket drops before the answer; the room still carries the watch.
+    let generation = come_back(&mut machine, generation, 8_000);
+    let effects = machine.socket_message(
+        generation,
+        hello_watching(
+            vec![person("me", Vec::new()), person("a", vec![shared(1)])],
+            &[("a", 1)],
+        ),
+        9_200,
+        UNIX,
+    );
+    assert!(matches!(
+        sent(&effects)[..],
+        [
+            ToRoom::Set { .. },
+            ToRoom::Unwatch { n: 1, .. },
+            ToRoom::Watch { n: 1, .. }
+        ]
+    ));
+    assert!(matches!(
+        to_page(&effects)[..],
+        [(ShareSurface::Main, WatchCmd::Reset { keep_turn: true })]
+    ));
+    // No socket to ask on: as a lost connection (the socket's return asks anew).
+    machine.socket_message(generation, woffer(&[("a", 1)], true), 9_300, UNIX);
+    machine.socket_closed(generation, None, 10_000);
+    let effects = machine.share_watch_report(ShareSurface::Main, WatchReport::NeedTurn, 14_300);
+    assert!(sent(&effects).is_empty());
+    assert!(matches!(
+        to_page(&effects)[..],
+        [(ShareSurface::Main, WatchCmd::Reset { keep_turn: true })]
+    ));
 }
 
 #[test]

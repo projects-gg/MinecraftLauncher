@@ -543,8 +543,11 @@ pub enum WatchCmd {
     },
     /// TURN for the next peer connection (only after ICE failed).
     Ice { ice: EngineIce },
-    /// Close the peer connection: nothing is watched on this page now.
-    Reset,
+    /// Close the peer connection. `keep_turn`: the session is asked for anew (after a loss, which
+    /// is what TURN was asked for): TURN the page has stays for the next connection (MOB-WATCH).
+    /// Otherwise nothing is watched on this page now, or TURN ran out: it goes.
+    #[serde(rename_all = "camelCase")]
+    Reset { keep_turn: bool },
 }
 
 impl std::fmt::Debug for WatchCmd {
@@ -552,7 +555,7 @@ impl std::fmt::Debug for WatchCmd {
         match self {
             Self::Offer { mids, .. } => write!(f, "Offer(<sdp>, {} mids)", mids.len()),
             Self::Ice { .. } => f.write_str("Ice(<ice>)"),
-            Self::Reset => f.write_str("Reset"),
+            Self::Reset { keep_turn } => write!(f, "Reset(keep_turn: {keep_turn})"),
         }
     }
 }
@@ -1262,8 +1265,8 @@ mod tests {
             json!({"kind":"window","id":"0x1f"})
         );
         assert_eq!(
-            serde_json::to_value(WatchCmd::Reset).unwrap(),
-            json!({"t":"reset"})
+            serde_json::to_value(WatchCmd::Reset { keep_turn: true }).unwrap(),
+            json!({"t":"reset","keepTurn":true})
         );
         let report: WatchReport =
             serde_json::from_value(json!({"t":"answer","sdp":"v=0"})).unwrap();
