@@ -6,11 +6,14 @@ import { mockShare } from "./mock";
 import { tauriShare } from "./tauri";
 import type {
   ShareBy,
+  ShareChange,
   ShareLayer,
   ShareNotice,
+  SharePreviewFrame,
   ShareRefusal,
   ShareSource,
   ShareSources,
+  ShareStats,
   ShareThumb,
   VoiceShareView,
   WatchCmd,
@@ -50,6 +53,18 @@ export interface ShareApi {
    */
   thumb(room: string, user: string, n: number | null): Promise<ShareThumb>;
   onNotice(listener: (notice: ShareNotice) => void): () => void;
+  // SQOL (sqol.md §3): one of the player's shares changes while it goes on.
+  /** "Ekranı Değiştir": the share goes on with another source; null when it switched. */
+  switchSource(n: number, source: ShareSource, label: string): Promise<ShareRefusal | null>;
+  /** Quality, frame rate, picture, cursor, sound, small picture; null when taken. */
+  update(n: number, change: ShareChange): Promise<ShareRefusal | null>;
+  /** "Duraklat" (an empty frame for the watchers) or "Sürdür"; null when done. */
+  hold(n: number, on: boolean): Promise<ShareRefusal | null>;
+  /** The share's small live picture while a card shows it (`share-preview`). */
+  preview(n: number, on: boolean): Promise<void>;
+  onPreview(listener: (frame: SharePreviewFrame) => void): () => void;
+  /** What the shares really send, every few seconds (`share-stats`). */
+  onStats(listener: (stats: ShareStats) => void): () => void;
 }
 
 export const shareApi: ShareApi = isTauri() ? tauriShare : mockShare;
