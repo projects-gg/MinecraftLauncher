@@ -21,6 +21,8 @@ import gg.projects.overlay.host.HostGate;
 import gg.projects.overlay.keys.KeyHint;
 import gg.projects.overlay.keys.Laptop;
 import gg.projects.overlay.keys.PressLatch;
+import gg.projects.overlay.keys.TextFocus;
+import gg.projects.overlay.keys.TextFocusGuard;
 import gg.projects.overlay.lang.Language;
 import gg.projects.overlay.lang.LanguageChoice;
 import gg.projects.overlay.link.CodelessLink;
@@ -252,6 +254,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             }
             // The chat's emoji button and its picker (CHAT-EMOJI).
             ChatEmojiBar.attach(this, screen);
+            // SQOL-O: a chat (or any text box) that opens with the keyboard says so at once, before the first letters.
+            lookTextFocus();
         });
         game = new MinecraftGame(this);
         connector = new Connector(game, frame -> bridge.send(frame));
@@ -682,6 +686,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
         if (keyLatch.held() && !key.heldNow()) {
             keyLatch.released();
         }
+        // SQOL-O: a text field's keyboard, as it moves (and said again while it lasts).
+        lookTextFocus();
         while (key.consumeClick()) {
             keyInGame();
         }
@@ -1316,6 +1322,12 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             }
             return;
         }
+        // SQOL-O: the launcher keeps its single-key voice shortcuts quiet while a text field here has the keyboard.
+        if ("keys-guard".equals(Protocol.type(frame))) {
+            textFocus.ask();
+            lookTextFocus();
+            return;
+        }
         // Voice chat (VOICE-O): its state, who speaks, a notice, how a press went.
         if (voice.apply(frame)) {
             onVoice();
@@ -1527,6 +1539,8 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
             link.onClear();
             // Every face asks for its picture again once the launcher is back.
             Avatars.offline();
+            // SQOL-O: the launcher forgets a text field's keyboard with the connection; a new one asks again.
+            textFocus.reset();
         }
         refreshScreen();
     }
@@ -1684,6 +1698,17 @@ public final class OverlayClient implements ClientModInitializer, ChatEmojiBar.H
 
     /** SQOL-O: the last "Duraklat" ({@code true}) or "Sürdür" pressed, for the words of a refusal. */
     private boolean holdAsked;
+
+    /** SQOL-O: what the launcher was told about a text field here having the keyboard. */
+    private final TextFocusGuard textFocus = new TextFocusGuard();
+
+    /** SQOL-O: tells the launcher when a text field here gains or loses the keyboard (once it asked). */
+    private void lookTextFocus() {
+        Boolean word = textFocus.look(TextFocus.now(Minecraft.getInstance()), monotonicMs());
+        if (word != null && bridge != null) {
+            bridge.send(Protocol.textFocus(word));
+        }
+    }
 
     /**
      * SHARE-LIVE: the live card on {@code u}'s "YAYINDA" opened: the launcher answers {@code voice-thumb}. Quiet when the

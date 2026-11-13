@@ -3576,3 +3576,45 @@ async fn the_rooms_own_chat_reaches_a_mod_that_shows_it_and_its_requests_reach_t
     );
     overlay.stop(ByeReason::LauncherExit).await;
 }
+
+/// SQOL-O: a text field in the game keeps the launcher's single-key voice shortcuts quiet while it
+/// has the keyboard, as the launcher's own fields do (`voice_typing`).
+#[tokio::test]
+async fn a_text_field_in_the_game_keeps_single_key_voice_shortcuts_quiet() {
+    use serde_json::json;
+
+    let social = FakeSocial::new(view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let endpoint = overlay.start(social, "t").await.unwrap();
+
+    // An older mod is never asked, and its word goes nowhere.
+    let mut old = MockMod::connect_with(&endpoint, &["people"]).await;
+    old.send(json!({"t":"text-focus","on":true})).await;
+    old.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    loop {
+        let frame = old.next().await.expect("the bridge closed");
+        assert_ne!(frame["t"], "keys-guard", "an older mod was asked");
+        if frame["t"] == "history" {
+            break;
+        }
+    }
+    assert!(!overlay.game_typing());
+    drop(old);
+
+    let mut game = MockMod::connect_with(&endpoint, &["people", "text-focus"]).await;
+    assert_eq!(
+        game.next_of("keys-guard").await,
+        serde_json::json!({"t":"keys-guard"})
+    );
+    game.send(json!({"t":"text-focus","on":true})).await;
+    eventually("the chat's field has the keyboard", || overlay.game_typing()).await;
+    game.send(json!({"t":"text-focus","on":false})).await;
+    eventually("it let go", || !overlay.game_typing()).await;
+    game.send(json!({"t":"text-focus","on":true})).await;
+    eventually("it has it again", || overlay.game_typing()).await;
+    // The game going away takes it with it (a lost "off" never leaves the shortcuts dead).
+    drop(game);
+    eventually("the connection's end ends it", || !overlay.game_typing()).await;
+    overlay.stop(ByeReason::LauncherExit).await;
+}

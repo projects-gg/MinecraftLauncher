@@ -489,6 +489,15 @@ pub enum FromGame {
         #[serde(default)]
         on: bool,
     },
+    /// `text-focus` (after the launcher's `keys-guard`): a text field in the game has the keyboard
+    /// while the game's window is active (`on`: the chat, a sign, a book, an anvil, the overlay's
+    /// own fields), or not any more. Said on change (an "off" after a short wait, so a flicker says
+    /// nothing) and again every 20 s while it lasts; the launcher's single-key voice shortcuts rest
+    /// meanwhile (`crate::typing`).
+    TextFocus {
+        #[serde(default)]
+        on: bool,
+    },
     /// Anything newer than this launcher.
     #[serde(other)]
     Unknown,
@@ -619,6 +628,9 @@ pub const FEATURE_SHARE: &str = "share";
 /// and `room-report`). A mod without it hears nothing of the room's chat, and its frames about one
 /// are dropped.
 pub const FEATURE_RCHAT: &str = "rchat";
+/// SQOL-O: the `hello` feature of a mod that says when a text field in the game has the keyboard
+/// (`text-focus`, once the launcher's `keys-guard` asked for it).
+pub const FEATURE_TEXT_FOCUS: &str = "text-focus";
 
 /// The card kinds the player may turn off in game (`cards`), and the toast kinds each covers.
 pub const CARD_GROUPS: [(&str, &[ToastKind]); 7] = [
@@ -989,6 +1001,10 @@ pub enum ToGame {
     /// messages travel as `msg` and `history` of its conversation. Only to a mod that said `voice`
     /// and `rchat`.
     RoomChat(RoomChatShown),
+    /// SQOL-O: this launcher keeps its single-key voice shortcuts quiet while a text field in the
+    /// game has the keyboard: say when (`text-focus`). Once, after the greeting, only to a mod that
+    /// said `text-focus`.
+    KeysGuard {},
     /// SHARE-LIVE: the answer to `voice-thumb`, by the share it named: `kind` `image` with `png`
     /// (the picture, at most 320 px on its long side, base64), `locked` (the player may not join
     /// that room: a blurred lock, no picture) or `none` (no picture yet, or nothing to show).

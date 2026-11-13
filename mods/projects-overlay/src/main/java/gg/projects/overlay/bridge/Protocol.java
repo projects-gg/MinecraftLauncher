@@ -102,6 +102,7 @@ public final class Protocol {
             features.add(MATES);
             features.add(SHARE);
             features.add(RCHAT);
+            features.add(TEXT_FOCUS);
         }
         features.add(LANG);
         features.add(EMOJI);
@@ -551,6 +552,21 @@ public final class Protocol {
     public static JsonObject voiceShareHold(int n, boolean on) {
         JsonObject o = message("voice-share-hold");
         o.addProperty("n", n);
+        o.addProperty("on", on);
+        return o;
+    }
+
+    // ---- A text field in the game has the keyboard (SQOL-O, rows SQ13-SQ14) -------------------------------------
+
+    /**
+     * SQOL-O: the hello feature of a mod that says when a text field in the game has the keyboard ({@link #textFocus}),
+     * once the launcher asked for it ({@code keys-guard}): its single-key voice shortcuts rest meanwhile.
+     */
+    public static final String TEXT_FOCUS = "text-focus";
+
+    /** A text field in the game has the keyboard while its window is active ({@code on}), or not any more. */
+    public static JsonObject textFocus(boolean on) {
+        JsonObject o = message("text-focus");
         o.addProperty("on", on);
         return o;
     }

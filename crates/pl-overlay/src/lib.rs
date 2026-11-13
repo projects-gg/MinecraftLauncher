@@ -39,6 +39,7 @@ mod session;
 mod tests;
 mod token;
 pub mod tweaks;
+mod typing;
 pub mod voice;
 
 pub use feed::{MAX_CONVS, MAX_FRIENDS};

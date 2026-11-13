@@ -32,6 +32,7 @@ use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::policy::NotifyPrefs;
 use crate::protocol::{ByeReason, ToGame};
 use crate::rchat::{RoomChatAct, RoomChatFuture, RoomLog};
+use crate::typing::GameTyping;
 use crate::server::{Bridge, Endpoint};
 use crate::session::{
     CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, EmojiFn, KindsFn, LangFn, Msg,
@@ -285,6 +286,9 @@ struct Shared {
     thumb: Mutex<Option<ThumbSink>>,
     /// SQOL-O: the launcher's voice chat, for the game's room chat requests.
     room_chat: Mutex<Option<RoomChatSink>>,
+    /// SQOL-O: which games say a text field of theirs has the keyboard (the launcher's single-key
+    /// voice shortcuts rest meanwhile; read on every key the voice shortcuts watch).
+    typing: Mutex<GameTyping>,
     /// A game's mod shows voice chat now (VOICE-O).
     voice_shown: AtomicBool,
     /// OVL-SHARE: the player shares and hides notifications while sharing ("Paylaşırken
@@ -338,6 +342,7 @@ impl Overlay {
                 voice: Mutex::new(None),
                 thumb: Mutex::new(None),
                 room_chat: Mutex::new(None),
+                typing: Mutex::new(GameTyping::default()),
                 voice_shown: AtomicBool::new(false),
                 share_quiet: Arc::new(AtomicBool::new(false)),
                 missed_shown: AtomicBool::new(false),
@@ -657,6 +662,8 @@ impl Overlay {
         let kinds: KindsFn = Arc::new(move |kinds| hub.kinds_report(id, kinds));
         let hub = self.clone();
         let room_act: RoomChatActFn = Arc::new(move |act| hub.room_act(act));
+        let hub = self.clone();
+        let typing: ConnectedFn = Arc::new(move |on| hub.typing_report(id, on));
         let session = Session::new(
             social,
             launcher,
@@ -679,6 +686,7 @@ impl Overlay {
                 thumb,
                 room_log,
                 room_act,
+                typing,
             },
             Arc::clone(&self.shared.pictures),
         )
@@ -1080,6 +1088,26 @@ impl Overlay {
             .room_chat
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
+    }
+
+    /// SQOL-O: a text field in a running game has the keyboard now (its overlay said so within
+    /// `crate::typing::HOLD`): the launcher's single-key voice shortcuts rest, as they do while one of
+    /// its own text fields has it. Cheap: read on every key the voice shortcuts watch.
+    pub fn game_typing(&self) -> bool {
+        self.shared
+            .typing
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .typing_at(std::time::Instant::now())
+    }
+
+    /// A session says whether a text field in its game has the keyboard.
+    fn typing_report(&self, session: u64, on: bool) {
+        self.shared
+            .typing
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .set(session, on, std::time::Instant::now());
     }
 
     /// Hands a room chat request to the launcher's voice chat; none while the app did not wire it.

@@ -32,9 +32,9 @@ use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
     self, ByeReason, CallAnswer, FEATURE_AVATARS, FEATURE_CONNECT, FEATURE_EMOJI, FEATURE_HOST,
     FEATURE_LANG, FEATURE_LINK, FEATURE_MARKS, FEATURE_PANEL_OFF, FEATURE_PEOPLE, FEATURE_PEOPLE2,
-    FEATURE_PEOPLE3, FEATURE_PEOPLE4, FEATURE_RCHAT, FEATURE_TAGS, FEATURE_VOICE,
-    FEATURE_VOICE_ROOMS, FoundView, FriendAction, FriendRefusal, FromGame, MAX_MESSAGE_CHARS,
-    ReactFailure, Secret, SendFailure, ToGame, ToastKind, ToastView,
+    FEATURE_PEOPLE3, FEATURE_PEOPLE4, FEATURE_RCHAT, FEATURE_TAGS, FEATURE_TEXT_FOCUS,
+    FEATURE_VOICE, FEATURE_VOICE_ROOMS, FoundView, FriendAction, FriendRefusal, FromGame,
+    MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure, ToGame, ToastKind, ToastView,
 };
 use crate::rchat::{RoomChatAct, RoomChatFuture, RoomChatLink, RoomLog};
 use crate::server::{BridgeEvent, ConnId, Control};
@@ -899,6 +899,9 @@ pub(crate) struct VoiceHooks {
     /// requests go.
     pub(crate) room_log: RoomLog,
     pub(crate) room_act: RoomChatActFn,
+    /// SQOL-O: tells the hub whether a text field in this session's game has the keyboard now (the
+    /// launcher's single-key voice shortcuts rest meanwhile; `crate::typing`).
+    pub(crate) typing: ConnectedFn,
 }
 
 /// Whom a person menu frame may be about (OVL-UX2): the friend list's people for most rows; crew
@@ -1000,6 +1003,8 @@ struct Live {
     share: bool,
     /// The mod shows the voice room's own chat (SQOL-O: `rchat` beside `voice`).
     rchat: bool,
+    /// The mod says when a text field in the game has the keyboard (SQOL-O: `text-focus`).
+    text_focus: bool,
     voice_mirror: VoiceMirror,
     /// The mod draws people's pictures (OVL-AVATARS: `avatars` in its hello).
     avatars: bool,
@@ -1170,6 +1175,8 @@ pub(crate) struct Session<S> {
     recent_room: VecDeque<Instant>,
     room_tx: mpsc::UnboundedSender<RoomWake>,
     room_rx: Option<mpsc::UnboundedReceiver<RoomWake>>,
+    /// SQOL-O: where the game's "a text field has the keyboard" goes (the hub's guard).
+    typing: ConnectedFn,
 }
 
 /// OVL-SOC2: hears the notice kinds a session's game shows as cards (none: not connected).
@@ -1361,6 +1368,7 @@ impl<S: SocialActions> Session<S> {
             recent_room: VecDeque::new(),
             room_tx,
             room_rx: Some(room_rx),
+            typing: voice.typing,
         }
     }
 
@@ -1443,6 +1451,10 @@ impl<S: SocialActions> Session<S> {
         // keeps its own notifications for it (CHAT-EMOJI).
         let was = self.live.as_ref().is_some_and(|live| !live.quiet);
         let voice_was = self.live.as_ref().is_some_and(|live| live.voice);
+        // SQOL-O: a connection that goes takes its text field's keyboard with it.
+        if self.live.as_ref().is_some_and(|live| live.text_focus) {
+            (self.typing)(false);
+        }
         self.live = live;
         if self.live.is_none()
             && let Some(pending) = self.pending_connect.take()
@@ -2367,6 +2379,7 @@ impl<S: SocialActions> Session<S> {
                     rchat: !quiet
                         && features.iter().any(|f| f == FEATURE_VOICE)
                         && features.iter().any(|f| f == FEATURE_RCHAT),
+                    text_focus: !quiet && features.iter().any(|f| f == FEATURE_TEXT_FOCUS),
                     voice_mirror: VoiceMirror::default(),
                     avatars: !quiet && features.iter().any(|f| f == FEATURE_AVATARS),
                     said,
@@ -2382,6 +2395,10 @@ impl<S: SocialActions> Session<S> {
                 self.refresh_voice();
                 // SQOL-O: the room's chip, when the room's chat shows as one.
                 self.greet_room_chat();
+                // SQOL-O: a mod that can say when a text field has the keyboard is asked to.
+                if self.live.as_ref().is_some_and(|live| live.text_focus) {
+                    self.send(vec![ToGame::KeysGuard {}]);
+                }
                 (self.host)(HostSignal::Connected { hosts });
             }
             BridgeEvent::Frame { conn, frame } => {
@@ -2430,6 +2447,12 @@ impl<S: SocialActions> Session<S> {
                 tracing::debug!("the overlay asked for something the room's chat does not have");
             }
             FromGame::RoomDelete { conv, id } => self.on_room_delete(&conv, id),
+            // SQOL-O: a text field in the game has the keyboard (only from a mod that said so).
+            FromGame::TextFocus { on } => {
+                if self.live.as_ref().is_some_and(|live| live.text_focus) {
+                    (self.typing)(on);
+                }
+            }
             FromGame::RoomReport {
                 conv,
                 id,

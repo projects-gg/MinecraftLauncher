@@ -74,6 +74,16 @@ static BUNDLE: OnceLock<Option<Bundle>> = OnceLock::new();
 /// its `features.overlayJars` is on (else none): they cover the versions the shipped ones leave out.
 static CONTENT_JARS: Mutex<Vec<ContentJar>> = Mutex::new(Vec::new());
 
+/// SQOL-O: the hub, for the voice shortcuts' watch (its own thread, no app state there).
+static HUB: OnceLock<Overlay> = OnceLock::new();
+
+/// SQOL-O: a text field in a running game has the keyboard now, as its overlay says (the game's
+/// side of `voice_typing`): the voice shortcuts' watch leaves single keys without Ctrl, Alt or Shift
+/// alone meanwhile. A word that is not said again stops counting by itself (`pl_overlay`'s hold).
+pub fn game_typing() -> bool {
+    HUB.get().is_some_and(Overlay::game_typing)
+}
+
 fn bundle() -> Option<&'static Bundle> {
     BUNDLE.get().and_then(Option::as_ref)
 }
@@ -96,6 +106,7 @@ pub fn create(app: &AppHandle, root: &Path) -> Overlay {
         .unwrap_or_default();
     ENABLED.store(config.wants_mod(), Ordering::Relaxed);
     let overlay = Overlay::new(config);
+    let _ = HUB.set(overlay.clone());
     // The overlay's language (OVL-LANG): the one the player picked in its settings, kept here in
     // the data folder for every install and game, else the launcher's own (it follows changes).
     overlay.set_launcher_language(pl_lang::Lang::current());
