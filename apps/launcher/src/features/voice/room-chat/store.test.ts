@@ -147,6 +147,16 @@ describe("the player's own messages", () => {
     expect(data.msgs.map((m) => m.key)).toEqual(["n:n1"]);
   });
 
+  it("stay sent once the room's copy came, whatever a late answer says", () => {
+    let data = startSend(start(), "n1", { text: "selam" }, ME, NOW);
+    data = receive(data, msg("x1", ME, "selam", NOW + 3), arrival());
+    // The answer timed out after the room took it.
+    data = settleSend(data, "n1", { refused: { code: "failed" } });
+    expect(data.msgs).toHaveLength(1);
+    expect(data.msgs[0]).toMatchObject({ id: "x1", state: "sent" });
+    expect(data.msgs[0]?.failure).toBeUndefined();
+  });
+
   it("stay with the room's refusal in chat's words, and go again on a retry", () => {
     let data = startSend(start(), "n1", { text: "https://bit.ly/x" }, ME, NOW);
     data = settleSend(data, "n1", {
@@ -163,7 +173,7 @@ describe("the player's own messages", () => {
 });
 
 describe("the room's last messages", () => {
-  it("join in their order, keep what the page had and the player's own on their way", () => {
+  it("replace what the page shows, in their order, the player's own on their way last", () => {
     let data = receive(start(), msg("old", "301", "old", NOW), arrival());
     data = receive(data, msg("b", "301", "b", NOW + 20), arrival());
     data = startSend(data, "n1", { text: "yolda" }, ME, NOW + 30);
@@ -176,18 +186,28 @@ describe("the room's last messages", () => {
       ],
       ME,
     );
-    expect(data.msgs.map((m) => m.key)).toEqual(["r:old", "r:a", "r:b", "r:c", "n:n1"]);
+    // SQOL-R's log is the whole log: what the room no longer holds goes, older ones too.
+    expect(data.msgs.map((m) => m.key)).toEqual(["r:a", "r:b", "r:c", "n:n1"]);
     // The message the page had keeps its number.
-    expect(data.msgs[2]?.seq).toBe(2);
+    expect(data.msgs[1]?.seq).toBe(2);
   });
 
-  it("let go what the room no longer holds from its first message on", () => {
+  it("empty the list when the log is empty, keeping only the player's own on their way", () => {
     let data = receive(start(), msg("a", "301", "a", NOW + 10), arrival());
-    data = receive(data, msg("gone", "303", "gone", NOW + 15), arrival());
-    data = receiveLog(data, [msg("a", "301", "a", NOW + 10), msg("c", "303", "c", NOW + 25)], ME);
-    expect(data.msgs.map((m) => m.key)).toEqual(["r:a", "r:c"]);
-    // An empty log changes nothing.
-    expect(receiveLog(data, [], ME)).toBe(data);
+    data = startSend(data, "n1", { text: "yolda" }, ME, NOW + 30);
+    data = receiveLog(data, [], ME);
+    expect(data.msgs.map((m) => m.key)).toEqual(["n:n1"]);
+    expect(data.loaded).toBe(true);
+  });
+
+  it("take away the unread count, the line and the previews of what went (someone blocked)", () => {
+    let data = start({ shown: false });
+    data = receive(data, msg("a", "301", "a", NOW + 10), arrival(true));
+    data = receive(data, msg("b", "302", "b", NOW + 20), arrival(true));
+    expect(data.unread).toBe(2);
+    data = receiveLog(data, [msg("a", "301", "a", NOW + 10)], ME);
+    expect(data.unread).toBe(1);
+    expect(data.peeks.map((p) => p.key)).toEqual(["r:a"]);
   });
 
   it("keep at most KEPT_MAX messages", () => {

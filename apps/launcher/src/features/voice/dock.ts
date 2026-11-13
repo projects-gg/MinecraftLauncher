@@ -11,6 +11,41 @@ export function dockWidthFor(windowWidth: number): number {
 }
 
 /**
+ * How the room panel arrives: sliding in (opened), or in place (its shell changed while it showed,
+ * or it is back from behind the full-screen stage), with the focus where it was in it: the chat's
+ * field, the panel, or not in it at all.
+ */
+export interface Arrival {
+  moved: boolean;
+  focus: "field" | "panel" | null;
+  /** Back beside the stage from behind its full screen: in place, the focus left where it is. */
+  back?: boolean;
+}
+
+export const FRESH: Arrival = { moved: false, focus: null };
+const BACK: Arrival = { moved: true, focus: null, back: true };
+
+/**
+ * The panel's arrival now, from where it was a moment ago (`placed`; `behind`: open but under the
+ * full-screen stage) and where it is (`now`), or null when nothing arrives. Its shell changing in
+ * place keeps the focus where it was in it (`focusIn`, read only then). Back beside the stage from
+ * behind its full screen, it shows in place and leaves the focus where leaving full screen put it
+ * (the player asked for the stage, not the panel; "Sohbet" asks for the chat's field itself); a
+ * sheet over the page is a dialog and takes the focus as on opening.
+ */
+export function arrivalOf(
+  placed: { docked: boolean; open: boolean; behind: boolean },
+  now: { docked: boolean; open: boolean },
+  focusIn: () => Arrival["focus"],
+): Arrival | null {
+  if (now.open && placed.open && placed.docked !== now.docked) {
+    return { moved: true, focus: focusIn() };
+  }
+  if (now.open && !placed.open) return placed.behind && now.docked ? BACK : FRESH;
+  return null;
+}
+
+/**
  * While the panel is docked (`px` > 0), toasts rest left of it, not over its chat and buttons: one
  * rule for the toast stack's right edge (Sonner's `--offset-right`), only while it is needed. A
  * stylesheet of its own rather than a variable on the page's root: changing an inherited variable

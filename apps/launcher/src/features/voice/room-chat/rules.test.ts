@@ -6,10 +6,12 @@ import {
   asChatMessage,
   type ChatChoiceInput,
   chatChoice,
+  chatInSight,
   deleteFailureOf,
   failureOf,
   heldPeeks,
   livePeeks,
+  mayDeleteMsg,
   nextPeekEnd,
   PEEK_MAX,
   PEEK_MS,
@@ -131,6 +133,43 @@ describe("failureOf", () => {
     expect(words(failureOf({ code: "rejected", reason: "words" }).failure)).toBe(
       "Bu mesaj gönderilemez.",
     );
+  });
+});
+
+describe("mayDeleteMsg", () => {
+  const room = (role: "leader" | "moderator" | "member", can = { kick: false, mute: false }) => ({
+    me: { role },
+    people: [{ id: "301", can: { ...can, moveTo: false, moderator: false } }],
+  });
+
+  it("lets the player take away their own, and those the room lets them act on", () => {
+    expect(mayDeleteMsg({ mine: true, from: ME }, room("member"))).toBe(true);
+    expect(mayDeleteMsg({ mine: false, from: "301" }, room("member"))).toBe(false);
+    expect(
+      mayDeleteMsg({ mine: false, from: "301" }, room("moderator", { kick: true, mute: true })),
+    ).toBe(true);
+    // A moderator on the room's leader: the room's own powers say no.
+    expect(mayDeleteMsg({ mine: false, from: "301" }, room("moderator"))).toBe(false);
+  });
+
+  it("lets a leader or a moderator take away the messages of someone who left", () => {
+    expect(mayDeleteMsg({ mine: false, from: "999" }, room("leader"))).toBe(true);
+    expect(mayDeleteMsg({ mine: false, from: "999" }, room("moderator"))).toBe(true);
+    expect(mayDeleteMsg({ mine: false, from: "999" }, room("member"))).toBe(false);
+  });
+});
+
+describe("chatInSight", () => {
+  const sight = { panelOnRoom: true, stageFull: false, friendsOpen: false, away: false };
+
+  it("is the panel open on its room, uncovered, the window on screen", () => {
+    expect(chatInSight(sight)).toBe(true);
+    expect(chatInSight({ ...sight, panelOnRoom: false })).toBe(false);
+    expect(chatInSight({ ...sight, stageFull: true })).toBe(false);
+    // The friends panel over the docked room panel: a friend's conversation marks nothing read.
+    expect(chatInSight({ ...sight, friendsOpen: true })).toBe(false);
+    // Minimised: what comes counts unread.
+    expect(chatInSight({ ...sight, away: true })).toBe(false);
   });
 });
 

@@ -24,7 +24,7 @@ import { loadVoicePrefs } from "./prefs";
 import { heardRings, useIgnoredSync } from "./quiet";
 import { playTone } from "./ring-sound";
 import { dismissRingToast, showRingToast } from "./ring-toast";
-import { PeekFallback, RoomChatSync } from "./room-chat";
+import { RoomChatSync } from "./room-chat";
 import { leftText, peopleChanges, toneNow } from "./rules";
 import { RoomSheet } from "./sheet";
 import { faceNow, useVoiceUi, voiceOn } from "./store";
@@ -265,7 +265,6 @@ export function VoiceHost() {
       {/* After the stage: docked beside it, the panel follows its controls in the Tab order. */}
       <RoomSheet />
       <RoomChatSync />
-      <PeekFallback />
     </>
   );
 }
