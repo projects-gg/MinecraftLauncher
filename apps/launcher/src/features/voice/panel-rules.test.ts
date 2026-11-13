@@ -81,7 +81,7 @@ describe("a crew room's header", () => {
     expect(headerLine({ kind: "friend", people }, quiet, t)).toBe("2 kişi");
     expect(headerLine({ kind: "friend", people }, { ...quiet, counted: true }, t)).toBeNull();
     expect(headerLine({ kind: "friend", people }, { ...quiet, stage: true }, t)).toBe(
-      t("voice.call.kind"),
+      "Sesli Arama",
     );
   });
 

@@ -63,11 +63,14 @@ import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { Dialog } from "radix-ui";
 import {
+  Fragment,
   type KeyboardEvent,
+  memo,
   type ReactNode,
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -95,6 +98,7 @@ import {
   toggleDeaf,
   toggleMute,
 } from "./actions";
+import { CallTime, callStart } from "./call-time";
 import { ConnectionMark } from "./connection";
 import { roomMenuItems } from "./crew-room-menu";
 import { useCrewRoomsUi, withPendingOrder } from "./crew-rooms-store";
@@ -102,15 +106,22 @@ import {
   type Arrival,
   arrivalOf,
   FRESH,
-  useDockWidth,
   useToastsBeside,
   useWindowTaller,
+  useWindowWidth,
 } from "./dock";
 import { SpeakingFace } from "./faces";
 import { FittedNames } from "./fitted-names";
 import { HeadphonesSlash } from "./icons";
 import { VoiceMeter } from "./meter";
-import { PanelChromeProvider, PanelClose, PanelTitle, usePanelChrome } from "./panel-chrome";
+import {
+  type PanelChrome,
+  PanelChromeProvider,
+  PanelClose,
+  PanelTitle,
+  usePanelChrome,
+} from "./panel-chrome";
+import { PanelResizer } from "./panel-resize";
 import {
   closeInMenu,
   connectionWords,
@@ -121,6 +132,14 @@ import {
   renameInMenu,
   titleNames,
 } from "./panel-rules";
+import {
+  clampWidth,
+  layoutFor,
+  type PanelPlace,
+  usePanelSize,
+  type WidthLimits,
+  widthLimits,
+} from "./panel-size";
 import { meterThreshold, setOutputVolume, useVoicePrefs } from "./prefs";
 import { PanelChatSection, usePanelChat } from "./room-chat";
 import {
@@ -295,8 +314,8 @@ function MeRow({ room, compact }: { room: VoiceRoomView; compact: boolean }) {
         }
       />
       <Marks marks={marks} connection={room.me.quality} />
-      {/* At the row's end, as the crew's member list marks the player. */}
-      <span className="shrink-0 text-[12.5px] text-ash-400">{t("voice.room.you")}</span>
+      {/* SQOL-U3 (the owner: everyone knows who they are): "Sen" only to screen readers. */}
+      <span className="sr-only">{t("voice.room.you")}</span>
     </div>
   );
 }
@@ -551,6 +570,55 @@ function PeopleSection({ room }: { room: VoiceRoomView }) {
         </div>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * SQOL-U3: the people beside the chat in a wide panel: a column of their own, the whole list (no
+ * fold), the rows' full faces with their speaking rings and live marks; a call with one friend, its
+ * two faces one over the other in the column's middle.
+ */
+function PeopleColumn({ room, wider }: { room: VoiceRoomView; wider: boolean }) {
+  const { t } = useTranslation();
+  const calling = useVoiceUi((s) => s.state.calling);
+  const titleId = useId();
+  const count = room.people.length + 1;
+  return (
+    <div
+      className={cn(
+        "flex min-h-0 shrink-0 flex-col border-r border-white/8",
+        wider ? "w-[300px]" : "w-[260px]",
+      )}
+    >
+      <div className="shrink-0 px-3 pt-3 empty:hidden">
+        <Notices room={room} />
+      </div>
+      {isOneToOne({ room, calling }) ? (
+        <CallStage
+          room={room}
+          stacked
+          marksOf={(person) => <Marks marks={marksOf(person, t)} connection={person.quality} />}
+        />
+      ) : (
+        <section aria-labelledby={titleId} className="flex min-h-0 flex-1 flex-col">
+          <h3
+            id={titleId}
+            aria-label={t("roomChat.people.label", { count })}
+            className="flex h-9 shrink-0 items-center gap-1.5 pr-4 pl-5 text-[12.5px] font-semibold text-ash-300"
+          >
+            <span>{t("roomChat.people.title")}</span>
+            <span aria-hidden className="text-ash-500">
+              ·
+            </span>
+            <span className="tabular-nums">{count}</span>
+          </h3>
+          {/* A soft bottom edge: a row cut there reads as "more below". */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3 [mask-image:linear-gradient(to_top,transparent,black_14px)]">
+            <PeopleList room={room} compact={false} />
+          </div>
+        </section>
+      )}
+    </div>
   );
 }
 
@@ -912,6 +980,9 @@ function RoomHeader({
   // SQOL-U3: a crew's chips and a chat's people line count the people; the header then says only
   // a full room.
   const second = headerLine(room, { stage, counted, full }, t);
+  // SQOL-U3: a call's time after "Sesli Arama" (the page's one clock; a timer to screen readers,
+  // read when they reach it, never announced on its own).
+  const since = useVoiceUi((s) => callStart(s.state));
   return (
     <header className="shrink-0 border-b border-white/8 pt-4 pr-3 pb-3 pl-5">
       <div className="flex items-start gap-1.5">
@@ -923,7 +994,17 @@ function RoomHeader({
             editing={editing}
             setEditing={setEditing}
           />
-          {second ? <p className="mt-0.5 truncate text-[12.5px] text-ash-400">{second}</p> : null}
+          {second ? (
+            <p className="mt-0.5 truncate text-[12.5px] text-ash-400">
+              {second}
+              {stage && since !== null ? (
+                <>
+                  {" ("}
+                  <CallTime since={since} />)
+                </>
+              ) : null}
+            </p>
+          ) : null}
         </div>
         {editing ? null : (
           <>
@@ -1087,66 +1168,70 @@ function RoomFooter({ room }: { room: VoiceRoomView }) {
   // VOICE-CALL: on the call's stage the footer is its only way out ("İptal" while it rings).
   const stage = useVoiceUi((s) => isOneToOne(s.state));
   const ringing = useVoiceUi((s) => Boolean(s.state.calling)) && stage;
+  // SQOL-U3: a wide panel keeps its buttons together in the middle (not 300 px tiles).
+  const { layout } = usePanelChrome();
   return (
     <footer className="shrink-0 border-t border-white/8 px-4 pt-3 pb-3.5">
-      {/* SHARE: the player's shares and "Ekranını paylaş". */}
-      <ShareFooterRow />
-      <div className="grid grid-cols-3 gap-2">
-        {/* Closed by a moderator or a missing push-to-talk key: why, in its tooltip and name. */}
-        <Tooltip content={closed} disabled={closed === null}>
-          <Button
-            size="lg"
-            variant="secondary"
-            aria-label={closed === null ? undefined : `${micAction}. ${closed}`}
-            aria-disabled={closed !== null || undefined}
-            className={cn(footerTile, closed !== null && "opacity-60")}
-            icon={
-              // What the microphone hears, beside its glyph (VOICE-CALL); still while it is off.
-              <span className="flex items-center gap-1">
-                {micOff ? (
-                  <MicrophoneSlash size={17} weight="bold" className="text-flare-400" />
+      <div className={cn(layout !== "stacked" && "mx-auto w-full max-w-[600px]")}>
+        {/* SHARE: the player's shares and "Ekranını paylaş". */}
+        <ShareFooterRow />
+        <div className="grid grid-cols-3 gap-2">
+          {/* Closed by a moderator or a missing push-to-talk key: why, in its tooltip and name. */}
+          <Tooltip content={closed} disabled={closed === null}>
+            <Button
+              size="lg"
+              variant="secondary"
+              aria-label={closed === null ? undefined : `${micAction}. ${closed}`}
+              aria-disabled={closed !== null || undefined}
+              className={cn(footerTile, closed !== null && "opacity-60")}
+              icon={
+                // What the microphone hears, beside its glyph (VOICE-CALL); still while it is off.
+                <span className="flex items-center gap-1">
+                  {micOff ? (
+                    <MicrophoneSlash size={17} weight="bold" className="text-flare-400" />
+                  ) : (
+                    <Microphone size={17} weight="bold" />
+                  )}
+                  <VoiceMeter threshold={threshold} className={cn(micOff && "opacity-60")} />
+                </span>
+              }
+              onClick={closed !== null ? undefined : () => void toggleMute()}
+            >
+              <span className={footerWords}>{micAction}</span>
+            </Button>
+          </Tooltip>
+          <ContextMenu items={volume} disabled={!volume.length}>
+            <Button
+              size="lg"
+              variant="secondary"
+              className={footerTile}
+              icon={
+                me.deaf ? (
+                  <HeadphonesSlash size={17} className="text-flare-400" />
                 ) : (
-                  <Microphone size={17} weight="bold" />
-                )}
-                <VoiceMeter threshold={threshold} className={cn(micOff && "opacity-60")} />
-              </span>
-            }
-            onClick={closed !== null ? undefined : () => void toggleMute()}
-          >
-            <span className={footerWords}>{micAction}</span>
-          </Button>
-        </Tooltip>
-        <ContextMenu items={volume} disabled={!volume.length}>
+                  <Headphones size={17} weight="bold" />
+                )
+              }
+              onClick={() => void toggleDeaf()}
+            >
+              <span className={footerWords}>{deafAction}</span>
+            </Button>
+          </ContextMenu>
           <Button
             size="lg"
             variant="secondary"
             className={footerTile}
-            icon={
-              me.deaf ? (
-                <HeadphonesSlash size={17} className="text-flare-400" />
-              ) : (
-                <Headphones size={17} weight="bold" />
-              )
-            }
-            onClick={() => void toggleDeaf()}
+            // Leaving ends nothing for the others: a plate with a red glyph, the footer's only red
+            // action ("Odayı Kapat" is the header menu's last row).
+            icon={<PhoneDisconnect size={17} weight="bold" className="text-flare-400" />}
+            aria-label={ringing ? t("voice.call.cancelLabel") : undefined}
+            onClick={() => void leaveRoom()}
           >
-            <span className={footerWords}>{deafAction}</span>
+            <span className={footerWords}>
+              {ringing ? t("voice.room.cancelRing") : t("voice.room.leave")}
+            </span>
           </Button>
-        </ContextMenu>
-        <Button
-          size="lg"
-          variant="secondary"
-          className={footerTile}
-          // Leaving ends nothing for the others: a plate with a red glyph, the footer's only red
-          // action ("Odayı Kapat" is the header menu's last row).
-          icon={<PhoneDisconnect size={17} weight="bold" className="text-flare-400" />}
-          aria-label={ringing ? t("voice.call.cancelLabel") : undefined}
-          onClick={() => void leaveRoom()}
-        >
-          <span className={footerWords}>
-            {ringing ? t("voice.room.cancelRing") : t("voice.room.leave")}
-          </span>
-        </Button>
+        </div>
       </div>
     </footer>
   );
@@ -1164,6 +1249,10 @@ function RoomPage({ room }: { room: VoiceRoomView }) {
   const title = panelTitle(room, crewName, nameOf, t, calling?.friend);
   // SQOL-U3: a chat under the people when the room has one (or the call's friend's messages).
   const chat = usePanelChat(room);
+  // SQOL-U3: a wide panel (600 px and more) puts the people beside the chat; crossing the width
+  // only reflows: the chat stays as it was (its scroll, its field), nothing animates.
+  const { layout } = usePanelChrome();
+  const columns = layout !== "stacked";
   return (
     <>
       <RoomHeader
@@ -1187,16 +1276,24 @@ function RoomPage({ room }: { room: VoiceRoomView }) {
         ) : (
           <motion.div
             key="chat"
-            className="flex min-h-0 flex-1 flex-col"
+            className={cn("flex min-h-0 flex-1", columns ? "flex-row" : "flex-col")}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1, transition: enter(0.2) }}
             exit={{ opacity: 0, transition: leave(0.12) }}
           >
-            <div className="shrink-0 px-3 pt-3 empty:hidden">
-              <Notices room={room} />
+            {columns ? (
+              <PeopleColumn key="people-column" room={room} wider={layout === "wider"} />
+            ) : (
+              <Fragment key="people-stack">
+                <div className="shrink-0 px-3 pt-3 empty:hidden">
+                  <Notices room={room} />
+                </div>
+                <PeopleSection room={room} />
+              </Fragment>
+            )}
+            <div key="chat-column" className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <PanelChatSection room={room} chat={chat} centered={layout === "wider"} />
             </div>
-            <PeopleSection room={room} />
-            <PanelChatSection room={room} chat={chat} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -1309,21 +1406,42 @@ function PanelPages({ room }: { room: VoiceRoomView }) {
 
 // --- the panel's two shells ---------------------------------------------------------------------
 
+/** The room and "Davet et": the same while only the panel's width changes (a drag's frames). */
+const PanelPagesKept = memo(PanelPages);
+
+/** How wide the panel is now, and how wide it may be (panel-size.ts). */
+interface Sizing {
+  place: PanelPlace;
+  width: number;
+  limits: WidthLimits;
+  windowWidth: number;
+}
+
+/** The panel's chrome for its pages: a new value only when one of them changes. */
+function useChrome(docked: boolean, shown: boolean, width: number): PanelChrome {
+  const close = useVoiceUi((s) => s.closePanel);
+  const layout = layoutFor(width);
+  return useMemo(() => ({ docked, shown, close, layout }), [docked, shown, close, layout]);
+}
+
 /** The panel as a sheet over the page (no stage on the page): a modal dialog, as before. */
 function SheetShell({
   room,
   open,
   arrival,
+  sizing,
 }: {
   room: VoiceRoomView | null;
   open: boolean;
   arrival: Arrival;
+  sizing: Sizing;
 }) {
   const close = useVoiceUi((s) => s.closePanel);
   const returnFocus = useVoiceUi((s) => s.returnFocus);
   const cueChatFocus = useVoiceUi((s) => s.cueChatFocus);
   const animate = useInteractionMotion();
   const motionOf = sheetMotion(!animate);
+  const chrome = useChrome(false, open, sizing.width);
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && close()}>
       <AnimatePresence>
@@ -1371,13 +1489,15 @@ function SheetShell({
                   tabIndex={-1}
                   data-chat-host=""
                   data-room-panel=""
-                  className="glass-strong fixed top-0 right-0 bottom-0 z-40 flex w-[min(440px,94vw)] flex-col overflow-hidden shadow-[-30px_0_80px_rgb(34_6_6/0.5)] outline-none"
+                  style={{ width: sizing.width }}
+                  className="glass-strong fixed top-0 right-0 bottom-0 z-40 flex max-w-[94vw] flex-col overflow-hidden shadow-[-30px_0_80px_rgb(34_6_6/0.5)] outline-none"
                   {...motionOf}
                   // Its shell changed in place: it is already there, nothing slides in.
                   {...(arrival.moved ? { initial: false } : {})}
                 >
-                  <PanelChromeProvider value={{ docked: false, shown: open, close }}>
-                    <PanelPages room={room} />
+                  <PanelResizer {...sizing} />
+                  <PanelChromeProvider value={chrome}>
+                    <PanelPagesKept room={room} />
                   </PanelChromeProvider>
                 </GatedMotion.aside>
               </Dialog.Content>
@@ -1398,12 +1518,12 @@ function DockShell({
   room,
   open,
   arrival,
-  width,
+  sizing,
 }: {
   room: VoiceRoomView | null;
   open: boolean;
   arrival: Arrival;
-  width: number;
+  sizing: Sizing;
 }) {
   const { t } = useTranslation();
   const close = useVoiceUi((s) => s.closePanel);
@@ -1412,6 +1532,7 @@ function DockShell({
   const animate = useInteractionMotion();
   const panel = useRef<HTMLElement>(null);
   const motionOf = sheetMotion(!animate);
+  const chrome = useChrome(true, open, sizing.width);
 
   // Opened: the focus goes in (the panel, or the chat's field when it was asked for or had it).
   // biome-ignore lint/correctness/useExhaustiveDependencies: on opening only
@@ -1463,13 +1584,14 @@ function DockShell({
               data-chat-host=""
               data-room-panel=""
               onKeyDown={onKeyDown}
-              style={{ width }}
+              style={{ width: sizing.width }}
               className="glass-strong fixed top-titlebar right-0 bottom-0 z-[25] flex flex-col overflow-hidden border-l border-white/8 shadow-[-24px_0_60px_rgb(34_6_6/0.38)] outline-none"
               {...motionOf}
               {...(arrival.moved ? { initial: false } : {})}
             >
-              <PanelChromeProvider value={{ docked: true, shown: open, close }}>
-                <PanelPages room={room} />
+              <PanelResizer {...sizing} />
+              <PanelChromeProvider value={chrome}>
+                <PanelPagesKept room={room} />
               </PanelChromeProvider>
             </GatedMotion.aside>
           </EntranceGate>
@@ -1492,14 +1614,24 @@ export function RoomSheet() {
   const last = useRef<VoiceRoomView | null>(null);
   if (room) last.current = room;
   const shown = room ?? last.current;
-  const width = useDockWidth(docked && open);
+
+  // SQOL-U3: the width the player chose for this place (or today's), within what the window
+  // leaves it; while the separator is dragged, the drag's.
+  const place: PanelPlace = docked ? "docked" : "modal";
+  const windowWidth = useWindowWidth();
+  const limits = widthLimits(place, windowWidth);
+  const chosen = usePanelSize((s) => s.chosen[place]);
+  const dragging = usePanelSize((s) => s.dragging);
+  const width = clampWidth(dragging ?? chosen, limits);
+  const sizing: Sizing = { place, width, limits, windowWidth };
 
   // The stage leaves the docked panel's width free: from the start of its slide in, until the
-  // start of its slide out. Toasts keep clear of it too.
+  // start of its slide out, following a drag frame by frame. Toasts keep clear of the width the
+  // player settled on.
   const dock = docked && open ? width : 0;
   useEffect(() => setDock(dock), [setDock, dock]);
   useEffect(() => () => useVoiceUi.getState().setDock(0), []);
-  useToastsBeside(dock);
+  useToastsBeside(docked && open ? clampWidth(chosen, limits) : 0);
 
   // The stage came or went while the panel showed: its shell changes in place. Where the focus was
   // in it is read now, before the old shell goes.
@@ -1516,8 +1648,8 @@ export function RoomSheet() {
   });
 
   return docked ? (
-    <DockShell room={shown} open={open} arrival={arrival.current} width={width} />
+    <DockShell room={shown} open={open} arrival={arrival.current} sizing={sizing} />
   ) : (
-    <SheetShell room={shown} open={open} arrival={arrival.current} />
+    <SheetShell room={shown} open={open} arrival={arrival.current} sizing={sizing} />
   );
 }

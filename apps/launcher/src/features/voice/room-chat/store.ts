@@ -135,8 +135,10 @@ export function receive(data: RoomChatData, msg: RoomChatMsg, arrival: Arrival):
 /**
  * The room's whole log anew (joining, coming back, someone blocked; SQOL-R's `log`): it replaces
  * what the page shows, an empty one too. What the page had of it stays as it was (its number, a
- * tombstone); what the room no longer holds goes, with its preview; the player's own on their way
- * or refused stay at the end. History counts nothing unread.
+ * tombstone); what the room no longer holds goes, with its preview. The player's own on their way
+ * or refused that the log holds after all (a lost connection fails a send at once, though the room
+ * took it) settle with the log's copy, matched by their words as `receive` does: no twin beside
+ * it, nothing to try again. The rest stay at the end. History counts nothing unread.
  */
 export function receiveLog(
   data: RoomChatData,
@@ -145,10 +147,27 @@ export function receiveLog(
 ): RoomChatData {
   const sorted = [...msgs].sort((a, b) => a.at - b.at);
   const known = new Map(data.msgs.filter((m) => m.id !== undefined).map((m) => [m.id, m]));
+  // The player's own the room has not named yet, oldest first: each settles once.
+  const waiting = data.msgs.filter((m) => m.id === undefined);
   let seq = data.seq;
   const fromLog: ShownMsg[] = sorted.map((msg) => {
     const had = known.get(msg.id);
     if (had) return had;
+    const ownCopy =
+      me && msg.from === me ? waiting.findIndex((m) => m.mine && sameBody(m, msg)) : -1;
+    if (ownCopy >= 0) {
+      const [own] = waiting.splice(ownCopy, 1);
+      if (own) {
+        return {
+          ...own,
+          id: msg.id,
+          at: msg.at,
+          state: "sent" as const,
+          failure: undefined,
+          failureRule: undefined,
+        };
+      }
+    }
     seq += 1;
     return {
       key: `r:${msg.id}`,
@@ -162,7 +181,6 @@ export function receiveLog(
       state: "sent",
     };
   });
-  const waiting = data.msgs.filter((m) => m.id === undefined);
   const next = kept([...fromLog, ...waiting]);
   const keys = new Set(next.map((m) => m.key));
   return {

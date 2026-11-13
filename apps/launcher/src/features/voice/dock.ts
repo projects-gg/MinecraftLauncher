@@ -1,7 +1,7 @@
 // How wide the room panel is while it is docked beside the stream's stage (SQOL-U3): about a third
-// of the window, 360 to 440 px. At the window's smallest (1024) a chat stays readable beside the
-// stage, and wider windows give the stage the rest.
-import { useEffect, useState, useSyncExternalStore } from "react";
+// of the window, 360 to 440 px, until the player widens it (panel-size.ts). At the window's smallest
+// (1024) a chat stays readable beside the stage, and wider windows give the stage the rest.
+import { useEffect, useSyncExternalStore } from "react";
 
 export const DOCK_MIN = 360;
 export const DOCK_MAX = 440;
@@ -76,17 +76,11 @@ export function useWindowTaller(min: number): boolean {
   );
 }
 
-/** The docked width for the window now, followed while `active` (a resize settles it again). */
-export function useDockWidth(active: boolean): number {
-  const [width, setWidth] = useState(() =>
-    dockWidthFor(typeof window === "undefined" ? 1280 : window.innerWidth),
+/** The window's width, followed as it changes (the room panel's limits; panel-size.ts). */
+export function useWindowWidth(): number {
+  return useSyncExternalStore(
+    onResize,
+    () => window.innerWidth,
+    () => 1280,
   );
-  useEffect(() => {
-    if (!active) return;
-    const measure = () => setWidth(dockWidthFor(window.innerWidth));
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [active]);
-  return width;
 }
