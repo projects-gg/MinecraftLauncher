@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::error::{AuthError, Result};
 use crate::model::{Account, AccountKind};
+use crate::offline::offline_uuid;
 
 const FILE_VERSION: u32 = 1;
 
@@ -274,6 +275,57 @@ impl AccountStore {
                 file.active_account_id = Some(restored.id);
             }
             Ok((restored, inserted))
+        })
+    }
+
+    /// SRV-ACC "Hepsini Ekle": an offline account for each of `names` (valid offline names, in
+    /// order) that no saved account has in any letter case (a Microsoft account's name too: one
+    /// player, one account), nor an earlier name of the batch, in one write. The active account
+    /// stays; with none, the first added becomes active. Returns the accounts added.
+    pub fn add_offline_batch(&self, names: &[String]) -> Result<Vec<Account>> {
+        self.mutate(|file| {
+            let mut added: Vec<Account> = Vec::new();
+            for name in names {
+                let taken = file
+                    .accounts
+                    .iter()
+                    .any(|saved| saved.username.eq_ignore_ascii_case(name));
+                if taken {
+                    continue;
+                }
+                let account = Account::new(AccountKind::Offline, name.clone(), offline_uuid(name));
+                file.accounts.push(account.clone());
+                added.push(account);
+            }
+            if file.active_account_id.is_none()
+                && let Some(first) = added.first()
+            {
+                file.active_account_id = Some(first.id);
+            }
+            Ok(added)
+        })
+    }
+
+    /// Its "Geri Al": takes the offline accounts with these ids out in one write (others, and ids
+    /// no longer saved, are left alone). When the active account goes, the most recently played
+    /// remaining one (or else the most recently added) becomes active. Returns the ids removed.
+    pub fn remove_offline_batch(&self, ids: &[Uuid]) -> Result<Vec<Uuid>> {
+        self.mutate(|file| {
+            let mut removed = Vec::new();
+            file.accounts.retain(|saved| {
+                let goes = saved.kind == AccountKind::Offline && ids.contains(&saved.id);
+                if goes {
+                    removed.push(saved.id);
+                }
+                !goes
+            });
+            if file
+                .active_account_id
+                .is_some_and(|active| removed.contains(&active))
+            {
+                file.active_account_id = most_recently_used(&file.accounts);
+            }
+            Ok(removed)
         })
     }
 
@@ -719,5 +771,59 @@ mod tests {
             })
             .unwrap();
         assert!(store.find_offline_name("ddd").is_none());
+    }
+
+    fn names(list: &[&str]) -> Vec<String> {
+        list.iter().map(|name| (*name).to_owned()).collect()
+    }
+
+    #[test]
+    fn a_batch_adds_new_names_and_keeps_the_active_account() {
+        let (_dir, store) = temp_store();
+        let a = add(&store, "KorAtesi", 30, None);
+        store.set_active(Some(a.id)).unwrap();
+        let added = store
+            .add_offline_batch(&names(&["x7Ender", "koratesi", "Gece_Kusu", "X7ENDER"]))
+            .unwrap();
+        let added_names: Vec<_> = added.iter().map(|a| a.username.as_str()).collect();
+        assert_eq!(added_names, ["x7Ender", "Gece_Kusu"]);
+        assert_eq!(added[0].uuid, offline_uuid("x7Ender"));
+        assert_eq!(store.active_id(), Some(a.id));
+        assert_eq!(store.list().len(), 3);
+
+        // "Geri Al" takes just those out; the active account stays.
+        let back: Vec<Uuid> = added.iter().map(|a| a.id).collect();
+        assert_eq!(store.remove_offline_batch(&back).unwrap(), back);
+        assert_eq!(ids(&store), vec![a.id]);
+        assert_eq!(store.active_id(), Some(a.id));
+    }
+
+    #[test]
+    fn a_batch_into_an_empty_list_selects_the_first() {
+        let (_dir, store) = temp_store();
+        let added = store
+            .add_offline_batch(&names(&["Atlas", "Gece_Kusu"]))
+            .unwrap();
+        assert_eq!(store.active_id(), Some(added[0].id));
+        let microsoft = store
+            .upsert(AccountKind::Microsoft, Uuid::new_v4(), |account| {
+                account.username = "Atlas".into();
+            })
+            .unwrap()
+            .0;
+        // A Microsoft account is never taken by the undo; the active one falls back.
+        let removed = store
+            .remove_offline_batch(&[added[0].id, added[1].id, microsoft.id])
+            .unwrap();
+        assert_eq!(removed, vec![added[0].id, added[1].id]);
+        assert_eq!(ids(&store), vec![microsoft.id]);
+        assert_eq!(store.active_id(), Some(microsoft.id));
+        // The Microsoft account's name is taken too.
+        assert!(
+            store
+                .add_offline_batch(&names(&["ATLAS"]))
+                .unwrap()
+                .is_empty()
+        );
     }
 }

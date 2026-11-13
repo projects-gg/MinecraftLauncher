@@ -279,6 +279,8 @@ impl AppState {
         let overlay = crate::overlay::create(app, &root);
         // "Hızlı kaynak paketi yükleme": the kept choice, before any pack sync can run.
         crate::fastpack::load(&root);
+        // "Hesapları Oyun İçi Hesap Değiştiriciye Ekle" (SRV-ACC): likewise, before any launch.
+        crate::ias::load(&root);
         let social = crate::commands::social::create(
             app,
             &http,

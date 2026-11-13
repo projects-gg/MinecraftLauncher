@@ -494,7 +494,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
 
 /// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
 /// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk`, `voice`, `socNext`,
-/// `telemetry`, `packEdit` and `aotCache`, which stay off until Studio turns them on.
+/// `telemetry`, `packEdit`, `aotCache`, `serverAccounts` and `iasSync`, which stay off until
+/// Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -577,6 +578,18 @@ pub struct Features {
     /// nothing new is recorded or used; caches already made stay until the cleanup.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub aot_cache: bool,
+    /// "Sunucu Hesapları" (SRV-ACC): the account center offers the player's accounts on the
+    /// Projects server's site as username accounts, in one press (inside the friends feature: the
+    /// friends service asks the site for the signed-in player). Off by default until the site's
+    /// side is live; written only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub server_accounts: bool,
+    /// "Oyun İçi Hesap Eşitleme" (SRV-ACC): before a game starts, the launcher's username
+    /// accounts join the In-Game Account Switcher's list of an install that has the mod
+    /// (`pl_mc::instance::ias`; players turn it off in Settings → Genel). Off by default;
+    /// written only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub ias_sync: bool,
 }
 
 impl Default for Features {
@@ -600,6 +613,8 @@ impl Default for Features {
             telemetry: false,
             pack_edit: false,
             aot_cache: false,
+            server_accounts: false,
+            ias_sync: false,
         }
     }
 }
@@ -887,6 +902,23 @@ mod tests {
         let older: LauncherConfig =
             serde_json::from_str(r#"{"features": {"afk": true, "socNext": true}}"#).unwrap();
         assert!(!older.features.telemetry);
+    }
+
+    #[test]
+    fn server_accounts_and_ias_sync_are_off_until_turned_on() {
+        let config: LauncherConfig = serde_json::from_str("{}").unwrap();
+        assert!(!config.features.server_accounts && !config.features.ias_sync);
+        let written = serde_json::to_value(&config).unwrap();
+        assert!(written["features"].get("serverAccounts").is_none());
+        assert!(written["features"].get("iasSync").is_none());
+
+        let on: LauncherConfig =
+            serde_json::from_str(r#"{"features": {"serverAccounts": true, "iasSync": true}}"#)
+                .unwrap();
+        assert!(on.features.server_accounts && on.features.ias_sync);
+        let written = serde_json::to_value(&on).unwrap();
+        assert_eq!(written["features"]["serverAccounts"], true);
+        assert_eq!(written["features"]["iasSync"], true);
     }
 
     #[test]

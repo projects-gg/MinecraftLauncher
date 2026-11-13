@@ -81,6 +81,18 @@ export interface LauncherApi {
   accounts(): Promise<AccountSummary[]>;
   addOfflineAccount(name: string): Promise<AccountSummary>;
   /**
+   * SRV-ACC "Hepsini Ekle": a username account for each of `names` not saved in any letter case, in
+   * one write. The active account stays (with none, the first added becomes active).
+   */
+  addOfflineAccounts(names: string[]): Promise<AccountSummary[]>;
+  /** Its "Geri Al": the username accounts it added go again; the others stay. */
+  removeAddedAccounts(ids: string[]): Promise<{ activeId: string | null }>;
+  /**
+   * SRV-ACC: the player names of the signed-in player's accounts on the Projects server's site,
+   * the primary first. Empty while nobody is signed in or the service cannot answer.
+   */
+  serverAccounts(): Promise<string[]>;
+  /**
    * Browser sign-in. Without `relogin` the account is added (or renewed) and becomes active;
    * with `relogin` (an account id) it renews that account's session and keeps the selection.
    */

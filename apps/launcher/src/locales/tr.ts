@@ -37,6 +37,7 @@ import { trGraphics } from "./tr-graphics";
 import { trHelp } from "./tr-help";
 import { trHomeLinks } from "./tr-home-links";
 import { trHost } from "./tr-host";
+import { trIasSync } from "./tr-ias-sync";
 import { trIdentity } from "./tr-identity";
 import { trImport } from "./tr-import";
 import { trKeyClash } from "./tr-key-clash";
@@ -63,6 +64,7 @@ import { trReminders } from "./tr-reminders";
 import { trReports } from "./tr-reports";
 import { trRoomChat } from "./tr-room-chat";
 import { trSafety } from "./tr-safety";
+import { trServerAccounts } from "./tr-server-accounts";
 import { trSetup } from "./tr-setup";
 import { trShare } from "./tr-share";
 import { trShareView } from "./tr-share-view";
@@ -174,6 +176,8 @@ export const tr = {
   telemFix: trTelemFix,
   crewUi: trCrewUi,
   tweaks: trTweaks,
+  serverAccounts: trServerAccounts,
+  iasSync: trIasSync,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",

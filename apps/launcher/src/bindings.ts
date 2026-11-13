@@ -29,6 +29,14 @@ export const commands = {
 	accountsList: () => __TAURI_INVOKE<AccountView[]>("accounts_list"),
 	accountAddOffline: (name: string) => typedError<AccountView, CmdError>(__TAURI_INVOKE("account_add_offline", { name })),
 	/**
+	 *  SRV-ACC "Hepsini Ekle": a username account for each of `names` that is a player name and not
+	 *  saved in any letter case, in one write. The active account stays (with none, the first added
+	 *  becomes active). The accounts added come back, for "Geri Al".
+	 */
+	accountsAddOfflineMany: (names: string[]) => typedError<AccountView[], CmdError>(__TAURI_INVOKE("accounts_add_offline_many", { names })),
+	/**  Its "Geri Al": the username accounts it added (`ids`) go again, in one write; the others stay. */
+	accountsRemoveAdded: (ids: string[]) => typedError<AccountRemoval, CmdError>(__TAURI_INVOKE("accounts_remove_added", { ids })),
+	/**
 	 *  Browser sign-in. Progress steps stream over `on_step`. Without `relogin` the account is added
 	 *  (or renewed) and becomes active; with `relogin` (an account id) the sign-in renews that
 	 *  account's session and keeps the current selection.
@@ -100,6 +108,16 @@ export const commands = {
 	socNext: boolean,
 	/**  "Sürümü Değiştir" for the official pack's mods (PACK-EDIT): `features.packEdit`. */
 	packEdit: boolean,
+	/**
+	 *  "Sunucu Hesapları" in the account center (SRV-ACC): `features.serverAccounts` with
+	 *  `features.friends`.
+	 */
+	serverAccounts: boolean,
+	/**
+	 *  Settings → Genel "Hesapları Oyun İçi Hesap Değiştiriciye Ekle" shows (SRV-ACC):
+	 *  `features.iasSync`.
+	 */
+	iasSync: boolean,
 	offline: boolean,
 	fromCache: boolean,
 } | null, CmdError>(__TAURI_INVOKE("content_home")),
@@ -289,6 +307,8 @@ export const commands = {
 	 */
 	fastPacksConfigure: (enabled: boolean) => __TAURI_INVOKE<void>("fast_packs_configure", { enabled }),
 	fastPacksState: (instanceId: string | null) => typedError<FastPacksView, CmdError>(__TAURI_INVOKE("fast_packs_state", { instanceId })),
+	/**  The page's choice: called at its start and on every change; the next launch follows it. */
+	iasSyncConfigure: (enabled: boolean) => __TAURI_INVOKE<void>("ias_sync_configure", { enabled }),
 	telemetryState: () => __TAURI_INVOKE<TelemetryView>("telemetry_state"),
 	/**  The player's switch. Off forgets what was not sent yet. */
 	telemetryConfigure: (enabled: boolean) => __TAURI_INVOKE<TelemetryView>("telemetry_configure", { enabled }),
@@ -1752,6 +1772,13 @@ export const commands = {
 	 */
 	socialOpenInDiscord: (id: string) => __TAURI_INVOKE<boolean>("social_open_in_discord", { id }),
 	socialSessions: () => typedError<SessionInfo_Serialize[], CmdError>(__TAURI_INVOKE("social_sessions")),
+	/**
+	 *  SRV-ACC "Sunucu Hesapların": the player names of the signed-in player's accounts on the Projects
+	 *  server's site, the primary first (the account center asks when it opens, at most every five
+	 *  minutes). None while the flag is off or nobody is signed in, and none when the service cannot
+	 *  answer: the row then does not show. Never an error (a `Result` only for Tauri's async rule).
+	 */
+	socialServerAccounts: () => typedError<string[], CmdError>(__TAURI_INVOKE("social_server_accounts")),
 	socialRevokeSession: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_revoke_session", { id })),
 	socialRevokeOtherSessions: () => typedError<number, CmdError>(__TAURI_INVOKE("social_revoke_other_sessions")),
 	/**  "Verilerimi sil". */
@@ -5696,6 +5723,16 @@ export type HomeView = {
 	socNext: boolean,
 	/**  "Sürümü Değiştir" for the official pack's mods (PACK-EDIT): `features.packEdit`. */
 	packEdit: boolean,
+	/**
+	 *  "Sunucu Hesapları" in the account center (SRV-ACC): `features.serverAccounts` with
+	 *  `features.friends`.
+	 */
+	serverAccounts: boolean,
+	/**
+	 *  Settings → Genel "Hesapları Oyun İçi Hesap Değiştiriciye Ekle" shows (SRV-ACC):
+	 *  `features.iasSync`.
+	 */
+	iasSync: boolean,
 	offline: boolean,
 	fromCache: boolean,
 };

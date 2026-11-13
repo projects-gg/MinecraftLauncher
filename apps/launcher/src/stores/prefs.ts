@@ -74,6 +74,12 @@ interface PrefsState {
    * fastpack.rs).
    */
   fastPacks: boolean;
+  /**
+   * Settings → Genel "Hesapları Oyun İçi Hesap Değiştiriciye Ekle" (SRV-ACC): before a game starts,
+   * the username accounts join the In-Game Account Switcher's list while Studio's
+   * `features.iasSync` is on too (features/ias-sync, src-tauri ias.rs).
+   */
+  iasSync: boolean;
   updateChannel: UpdateChannel;
   autoDownloadUpdates: boolean;
   discordEnabled: boolean;
@@ -151,6 +157,7 @@ export const usePrefs = create<PrefsState>()(
       chatEmoji: true,
       dialogFocus: true,
       fastPacks: true,
+      iasSync: true,
       updateChannel: "stable",
       autoDownloadUpdates: true,
       discordEnabled: true,

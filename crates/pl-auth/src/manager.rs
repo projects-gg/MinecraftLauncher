@@ -290,6 +290,37 @@ impl AuthManager {
         Ok(account)
     }
 
+    /// SRV-ACC "Hepsini Ekle": an offline account for each of `names` that is a valid offline name
+    /// (surrounding whitespace ignored) and not saved in any letter case, in one write. The active
+    /// account stays (with none, the first added becomes active). Returns the accounts added.
+    pub async fn add_offline_names(&self, names: &[String]) -> Result<Vec<Account>> {
+        let _membership = self.membership.lock().await;
+        let valid: Vec<String> = names
+            .iter()
+            .map(|name| name.trim())
+            .filter(|name| validate_offline_name(name).is_ok())
+            .map(str::to_owned)
+            .collect();
+        if valid.is_empty() {
+            return Ok(Vec::new());
+        }
+        let added = self.accounts.add_offline_batch(&valid)?;
+        tracing::info!(added = added.len(), "offline accounts added together");
+        Ok(added)
+    }
+
+    /// Its "Geri Al": the offline accounts with these ids go again, in one write (Microsoft
+    /// accounts and ids no longer saved are left alone). Returns the active account's id now.
+    pub async fn remove_offline_names(&self, ids: &[Uuid]) -> Result<Option<Uuid>> {
+        let _membership = self.membership.lock().await;
+        let removed = self.accounts.remove_offline_batch(ids)?;
+        tracing::info!(
+            removed = removed.len(),
+            "offline accounts taken back together"
+        );
+        Ok(self.accounts.active_id())
+    }
+
     /// Renames an offline account. Its UUID follows the name (offline servers derive it from
     /// the name), so worlds and servers see a new player; the local id, position, selection and
     /// play history stay.

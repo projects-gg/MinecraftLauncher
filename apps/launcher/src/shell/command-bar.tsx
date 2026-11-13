@@ -36,6 +36,7 @@ import { launchErrorAction, WORLD_OPEN } from "@/features/disk/launch-error";
 import { useFastPackSync } from "@/features/fastpack/use-fast-pack-sync";
 import { helpsWithLaunchError, helpToastLine } from "@/features/help/launch";
 import { openHelp, useHelp } from "@/features/help/store";
+import { useIasSyncPush } from "@/features/ias-sync/settings-row";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
 import { useOfficialOffer } from "@/features/library/official";
 import { usePrepareSync } from "@/features/prepare/use-prepare-sync";
@@ -732,6 +733,8 @@ export function CommandBar() {
   // "Hızlı kaynak paketi yükleme" reaches the pack syncs that run while the page rests, and its
   // row's view for this instance is ready before Settings → Genel opens.
   useFastPackSync(selected?.id ?? null, !instancesLoading);
+  // "Hesapları Oyun İçi Hesap Değiştiriciye Ekle" (SRV-ACC) reaches the launches likewise.
+  useIasSyncPush();
   const prepareHint = usePrepare((s) => s.hint);
   const hint = !busy && prepareHint?.instanceId === selected?.id ? prepareHint : null;
 

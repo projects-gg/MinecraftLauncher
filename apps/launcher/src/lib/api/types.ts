@@ -199,6 +199,10 @@ export interface HomeContent {
   socNext?: boolean;
   /** "Sürümü Değiştir" for the official pack's mods (`features.packEdit`, PACK-EDIT). */
   packEdit?: boolean;
+  /** "Sunucu Hesapları" in the account center (`features.serverAccounts` with `friends`, SRV-ACC). */
+  serverAccounts?: boolean;
+  /** Settings → Genel shows "Hesapları Oyun İçi Hesap Değiştiriciye Ekle" (`features.iasSync`). */
+  iasSync?: boolean;
   /** True when the content came from the local cache because the network failed. */
   offline: boolean;
 }

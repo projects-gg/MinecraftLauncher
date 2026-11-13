@@ -551,6 +551,25 @@ news feed, the launcher's built-in recommended Minecraft version.
   pack item's mod id stands in for the item, and a mod installed twice keeps one copy before a
   launch. Writers omit it while it is `false`; launchers that do not know the field ignore it.
   Publishing it needs a Studio that knows the field (PACK-EDIT).
+- `features.serverAccounts`: "Sunucu Hesapları" (SRV-ACC): while the player is signed in to the
+  friends feature, the account center asks the friends service for the player names of the
+  player's accounts on the Projects server's site (`GET /v1/me/server-accounts`: the site accounts
+  linked to the Projects account and every account of their proven email addresses) when it opens,
+  at most every five minutes, and offers the ones the launcher does not have in one calm row
+  ("Hepsini Ekle" adds them as username accounts, "Şimdi Değil" keeps quiet until the list
+  changes). Only shown while `features.friends` is on too. Off by default: while it is `false` (or
+  missing) launchers never ask and show nothing of it. Turn it on only after the site's side
+  (mc.projects.gg, `?islem=sunucu-hesaplari`) is live. Writers omit it while it is `false`;
+  launchers that do not know the field ignore it. Publishing it needs a Studio that knows the
+  field (SRV-ACC).
+- `features.iasSync`: "Oyun İçi Hesap Eşitleme" (SRV-ACC): right before a game starts, desktop
+  launchers add their username accounts to the In-Game Account Switcher's list (mod id `ias`) of an
+  install that has the mod enabled, once per name and install, only adding (Microsoft accounts
+  never go; a list the launcher cannot read in full is left as it is), unless the player turned
+  "Hesapları Oyun İçi Hesap Değiştiriciye Ekle" off in Settings → Genel. Off by default, outside
+  the friends feature: while it is `false` (or missing) nothing is added and the switch does not
+  show. Writers omit it while it is `false`; launchers that do not know the field ignore it.
+  Publishing it needs a Studio that knows the field (SRV-ACC).
 - `newsFeed`: the Discord bot's feed ([News feed (Discord bot)](#news-feed-discord-bot)).
   `mirrors`: 1–4 distinct `https://` bases with a host, ending in `/`, without credentials, query
   or fragment. `keys`: 1–4 distinct `{ keyId, publicKey }`, `publicKey` the base64 of a 32-byte

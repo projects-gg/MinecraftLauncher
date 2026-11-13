@@ -2,6 +2,7 @@
 //! memory and launch settings.
 
 pub mod defaults;
+pub mod ias;
 pub mod keys;
 pub mod memory;
 pub mod mod_configs;

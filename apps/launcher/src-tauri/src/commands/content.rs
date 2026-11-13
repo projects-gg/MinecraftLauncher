@@ -252,6 +252,12 @@ pub struct HomeView {
     pub soc_next: bool,
     /// "Sürümü Değiştir" for the official pack's mods (PACK-EDIT): `features.packEdit`.
     pub pack_edit: bool,
+    /// "Sunucu Hesapları" in the account center (SRV-ACC): `features.serverAccounts` with
+    /// `features.friends`.
+    pub server_accounts: bool,
+    /// Settings → Genel "Hesapları Oyun İçi Hesap Değiştiriciye Ekle" shows (SRV-ACC):
+    /// `features.iasSync`.
+    pub ias_sync: bool,
     pub offline: bool,
     pub from_cache: bool,
 }
@@ -294,6 +300,13 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
     crate::commands::packedit::apply_flag(snapshot.config.features.pack_edit);
     // "Hızlı oyun açılışı" (AOT-CACHE): the next launches follow it.
     crate::aot::apply_flag(snapshot.config.features.aot_cache);
+    // SRV-ACC: the friends service is asked for server accounts only while "Sunucu Hesapları" is
+    // on, and the next launches add to the In-Game Account Switcher's list only while "Oyun İçi
+    // Hesap Eşitleme" is.
+    crate::commands::social::apply_server_accounts_flag(
+        snapshot.config.features.friends && snapshot.config.features.server_accounts,
+    );
+    crate::ias::apply_flag(&state.root, snapshot.config.features.ias_sync);
     state
         .afk
         .set_client_release(afk_client_release(state, snapshot));
@@ -537,6 +550,9 @@ async fn home_view(state: &AppState, snapshot: &ContentSnapshot) -> HomeView {
         links: LinksView::from_config(&snapshot.config.links),
         soc_next: snapshot.config.features.friends && snapshot.config.features.soc_next,
         pack_edit: snapshot.config.features.pack_edit,
+        server_accounts: snapshot.config.features.friends
+            && snapshot.config.features.server_accounts,
+        ias_sync: snapshot.config.features.ias_sync,
         offline: snapshot.offline,
         from_cache: snapshot.from_cache,
     }

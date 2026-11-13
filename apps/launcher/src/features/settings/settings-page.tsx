@@ -48,6 +48,7 @@ import { FastPackRow } from "@/features/fastpack/settings-row";
 import { HelpSection } from "@/features/help/help-panel";
 import { platformName } from "@/features/home/community-links";
 import { SOURCE_URL } from "@/features/home/stars";
+import { IasSyncRow } from "@/features/ias-sync/settings-row";
 import { DialogFocusRow, EmojiRow, OverlayRow } from "@/features/overlay/settings-row";
 import { FriendsSettingsSection } from "@/features/social/settings-section";
 import { useSocialUi } from "@/features/social/store";
@@ -224,6 +225,9 @@ function General() {
       <DialogFocusRow />
       {/* The official pack's other launcher-owned mods (FASTPACK; only while Studio's flag is on). */}
       <FastPackRow />
+      {/* The launcher's username accounts in the official pack's account switcher mod (SRV-ACC; only
+          while Studio's flag is on). */}
+      <IasSyncRow />
       <Row title={t("shotCopy.setting")} help={t("shotCopy.settingHelp")}>
         <Switch
           checked={p.copyScreenshots}

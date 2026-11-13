@@ -506,6 +506,34 @@ pub async fn social_sessions(state: State<'_, AppState>) -> CmdResult<Vec<Sessio
     Ok(state.social.sessions().await?)
 }
 
+/// The signed config's "Sunucu Hesapları" with the friends feature (SRV-ACC).
+static SERVER_ACCOUNTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The applied content snapshot's `features.serverAccounts` (with `features.friends`).
+pub(crate) fn apply_server_accounts_flag(on: bool) {
+    SERVER_ACCOUNTS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// SRV-ACC "Sunucu Hesapların": the player names of the signed-in player's accounts on the Projects
+/// server's site, the primary first (the account center asks when it opens, at most every five
+/// minutes). None while the flag is off or nobody is signed in, and none when the service cannot
+/// answer: the row then does not show. Never an error (a `Result` only for Tauri's async rule).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_server_accounts(state: State<'_, AppState>) -> CmdResult<Vec<String>> {
+    if !SERVER_ACCOUNTS.load(std::sync::atomic::Ordering::Relaxed) {
+        return Ok(Vec::new());
+    }
+    Ok(match state.social.server_accounts().await {
+        Ok(names) => names,
+        Err(SocialError::Unauthorized) => Vec::new(),
+        Err(error) => {
+            tracing::info!(%error, "server accounts could not be asked");
+            Vec::new()
+        }
+    })
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn social_revoke_session(state: State<'_, AppState>, id: String) -> CmdResult<()> {
