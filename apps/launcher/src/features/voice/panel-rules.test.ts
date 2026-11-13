@@ -88,8 +88,16 @@ describe("a crew room's header", () => {
     expect(renameInMenu({ canRename: true, kind: "crew", general: true })).toBe(false);
     expect(renameInMenu({ canRename: false, kind: "crew", general: false })).toBe(false);
     expect(renameInMenu({ canRename: true, kind: "friend", general: false })).toBe(false);
-    expect(renameBesideTitle({ canRename: true, kind: "crew" })).toBe(false);
-    expect(renameBesideTitle({ canRename: true, kind: "friend" })).toBe(true);
+    const three = [{ id: "a" }, { id: "b" }] as VoicePerson[];
+    expect(renameBesideTitle({ canRename: true, kind: "crew", people: three })).toBe(false);
+    expect(renameBesideTitle({ canRename: true, kind: "friend", people: three })).toBe(true);
+    expect(renameBesideTitle({ canRename: false, kind: "friend", people: three })).toBe(false);
+  });
+
+  it("shows no pencil in a call of two: a name means something from three people on", () => {
+    const two = [{ id: "a" }] as VoicePerson[];
+    expect(renameBesideTitle({ canRename: true, kind: "friend", people: two })).toBe(false);
+    expect(renameBesideTitle({ canRename: true, kind: "friend", people: [] })).toBe(false);
   });
 });
 

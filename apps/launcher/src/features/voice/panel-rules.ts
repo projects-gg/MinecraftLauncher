@@ -77,9 +77,15 @@ export function headerLine(
   return t("voice.room.count", { count: room.people.length + 1 });
 }
 
-/** The pencil beside the title: a crew's title is the crew's name, its rooms renamed from the menu. */
-export function renameBesideTitle(room: Pick<VoiceRoomView, "canRename" | "kind">): boolean {
-  return room.canRename && room.kind !== "crew";
+/**
+ * The pencil beside the title: a friend room's name means something once three are in it (two are
+ * a call, named by who is in it), as roles do; a crew's title is the crew's name, its rooms renamed
+ * from the menu.
+ */
+export function renameBesideTitle(
+  room: Pick<VoiceRoomView, "canRename" | "kind" | "people">,
+): boolean {
+  return room.canRename && room.kind !== "crew" && room.people.length >= 2;
 }
 
 /** "Adı Değiştir" in the header's menu: a crew's own rooms ("Genel" is never renamed). */
