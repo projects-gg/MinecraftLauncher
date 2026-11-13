@@ -1500,6 +1500,47 @@ mod tests {
         ));
     }
 
+    /// TELEM-FIX: the launch checks the session before anything is downloaded
+    /// (`ensure_fresh`). A revoked refresh token is a new sign-in to ask for (never a generic
+    /// error), and the new sign-in keeps the account as it was: its id, place, pin and selection.
+    #[tokio::test]
+    async fn a_revoked_session_asks_for_a_sign_in_that_keeps_the_account() {
+        let server = MockServer::start(|request: &Recorded| {
+            if request.path == "/consumers/oauth2/v2.0/token" {
+                MockReply::json(400, json!({"error": "invalid_grant"}))
+            } else {
+                testutil::happy_chain(request)
+            }
+        })
+        .await;
+        let f = fixture(server.base());
+        let cancel = CancellationToken::new();
+        let steve = f.manager.add_offline("x7Ender").await.unwrap();
+        let account = seed(&f.manager, in_minutes(1)).await;
+        f.manager.set_pinned(account.id, true).unwrap();
+        let error = f
+            .manager
+            .ensure_fresh(account.id, &cancel)
+            .await
+            .unwrap_err();
+        assert_eq!(error.class(), FailureClass::NeedsRelogin);
+        assert_eq!(error.code(), "MSA-invalid_grant");
+        assert!(!error.user_message_tr().contains("MSA"));
+        assert!(f.manager.account(account.id).unwrap().needs_relogin);
+        // The new sign-in (same profile) renews this account instead of adding one.
+        let again = seed(&f.manager, in_minutes(60)).await;
+        assert_eq!(again.id, account.id);
+        let renewed = f.manager.account(account.id).unwrap();
+        assert!(!renewed.needs_relogin);
+        assert!(renewed.pinned);
+        assert_eq!(f.manager.accounts().len(), 2);
+        assert_eq!(f.manager.active_account().unwrap().id, account.id);
+        assert!(f.manager.account(steve.id).is_some());
+        // A fresh token needs no request: the launch's later step finds it ready.
+        let fresh = f.manager.ensure_fresh(account.id, &cancel).await.unwrap();
+        assert_eq!(fresh.access_token, "old-access");
+    }
+
     #[tokio::test]
     async fn unreachable_services_leave_the_session_unknown() {
         let closed = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();

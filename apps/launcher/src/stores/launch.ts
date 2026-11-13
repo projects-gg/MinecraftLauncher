@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { create } from "zustand";
 import { commands } from "@/bindings";
 import { confirmAfkBeforePlay } from "@/features/accounts/afk-guard";
+import { type HeldPlay, waitsForAccount } from "@/features/accounts/play-hold";
 import { launchErrorCode } from "@/features/disk/launch-error";
 import { askGameSwitch } from "@/features/game-switch/store";
 import { useJavaPrompt } from "@/features/java/prompt-store";
@@ -189,6 +190,22 @@ async function applyGameStartBehavior(run: number) {
 
 /** The page's numbers for launches (and for games an earlier start left running). */
 let runs = 0;
+
+/**
+ * The newest launch OYNA started (TELEM-FIX): a launch that stopped for its account ("Yeniden
+ * Giriş Yap", "Hesap Ekle") starts again once the account is there (features/accounts/play-hold).
+ */
+let lastStarted: HeldPlay | null = null;
+
+/** The newest launch OYNA started, for one that waits for its account. */
+export function lastPlay(): HeldPlay | null {
+  return lastStarted;
+}
+
+/** Starts a launch that waited for its account, by the same rules as OYNA. */
+export function resumePlay(play: HeldPlay) {
+  void useLaunch.getState().play(play.instanceId, play.options);
+}
 
 /** Follows `game`, or with none the store goes idle (its last launch's instance stays). */
 function follow(game: RunningGame | undefined) {
@@ -430,11 +447,15 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
     try {
       // A game "İptal" closed a moment ago is still exiting: this one starts after it.
       if (closing) await closing.done;
+      // No account to play with: the center asks for one, and the game starts once it is there
+      // (TELEM-FIX), instead of an error after the files are ready.
+      if (await waitsForAccount({ instanceId, options }, resumePlay)) return;
       go = await confirmAfkBeforePlay(useLaunch);
     } finally {
       starting = false;
     }
     if (!go) return;
+    lastStarted = { instanceId, options };
     playSound("play");
     runs += 1;
     leftForGame = false;

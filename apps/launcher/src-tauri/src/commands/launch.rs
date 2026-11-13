@@ -1095,6 +1095,64 @@ async fn world_entry(game_dir: &Path, overlay_opens: bool) -> WorldEntry {
     pl_mc::launch::world_entry(false, &mods)
 }
 
+/// The account a launch plays with: the one it names (a game "Bağlan" starts again keeps its
+/// account), else the selected one.
+fn launch_account(state: &AppState, settings: &LaunchSettings) -> Option<pl_auth::Account> {
+    settings
+        .account
+        .as_deref()
+        .and_then(|id| uuid::Uuid::parse_str(id).ok())
+        .and_then(|id| state.auth.account(id))
+        .or_else(|| state.auth.active_account())
+}
+
+/// No account to play with. The page asks for one before OYNA starts anything
+/// (`features/accounts/play-hold.ts`); a launch from elsewhere still ends here.
+fn no_account() -> CmdError {
+    CmdError::new(
+        "HESAP-YOK",
+        pick(
+            "Oynamak için önce bir hesap ekle (Ayarlar > Hesaplar).",
+            "Add an account first to play (Settings > Accounts).",
+        ),
+        "no active account",
+    )
+}
+
+/// What the account check before the downloads found about the Microsoft session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EarlySession {
+    /// Fresh, or not a Microsoft account.
+    Ready,
+    /// This account's session could not be refreshed for want of a network: the launch plays
+    /// with the saved one, as it would have at step 3, without waiting for the network again.
+    Offline(uuid::Uuid),
+}
+
+/// The launch has an account, and a Microsoft account a session that works (or only lacks the
+/// network): said before anything is downloaded (TELEM-FIX). A session only a new sign-in fixes
+/// (`MSA-invalid_grant`) stops the launch at once; the page offers "Yeniden Giriş Yap" and starts
+/// the game again after it. A fresh token costs no request (`ensure_fresh` asks Microsoft only
+/// when it is about to expire), so step 3 then finds it ready.
+async fn account_ready(
+    state: &AppState,
+    settings: &LaunchSettings,
+    cancel: &CancellationToken,
+) -> CmdResult<EarlySession> {
+    let account = launch_account(state, settings).ok_or_else(no_account)?;
+    if !account.is_microsoft() {
+        return Ok(EarlySession::Ready);
+    }
+    match state.auth.ensure_fresh(account.id, cancel).await {
+        Ok(_) => Ok(EarlySession::Ready),
+        Err(_) if cancel.is_cancelled() => Err(cancelled()),
+        Err(error) if error.class() == FailureClass::Offline => {
+            Ok(EarlySession::Offline(account.id))
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn prepare_and_spawn(
     app: &AppHandle,
@@ -1137,6 +1195,11 @@ async fn prepare_and_spawn(
             "the world's session.lock is held by another game",
         ));
     }
+    // An account to play with, and its Microsoft session, before anything is downloaded either
+    // (TELEM-FIX): a launch without one, or with a session only a new sign-in fixes, used to say
+    // so only once the files were ready.
+    let session = account_ready(state, &settings, cancel).await?;
+    clock.lap("session");
 
     // Mod center changes, add-on installs and version switches of this instance wait until the
     // game files are prepared (and the other way round).
@@ -1291,32 +1354,25 @@ async fn prepare_and_spawn(
     // 3. Account: the one the launch names (a game "Bağlan" starts again keeps its account), else
     //    the selected one. Refresh the Microsoft session; offline play keeps working with the
     //    cached one.
-    let named = settings
-        .account
-        .as_deref()
-        .and_then(|id| uuid::Uuid::parse_str(id).ok())
-        .and_then(|id| state.auth.account(id));
-    let account = named
-        .or_else(|| state.auth.active_account())
-        .ok_or_else(|| {
-            CmdError::new(
-                "HESAP-YOK",
-                pick(
-                    "Oynamak için önce bir hesap ekle (Ayarlar > Hesaplar).",
-                    "Add an account first to play (Settings > Accounts).",
-                ),
-                "no active account",
-            )
-        })?;
-    let identity = match state.auth.prepare_launch(account.id, cancel).await {
-        Ok(identity) => identity,
-        Err(_) if cancel.is_cancelled() => return Err(cancelled()),
-        Err(e) if e.class() == FailureClass::Offline => state
+    let account = launch_account(state, &settings).ok_or_else(no_account)?;
+    let identity = if session == EarlySession::Offline(account.id) {
+        // The check before the downloads found no network: no second wait for it.
+        state
             .auth
             .prepare_offline_launch(account.id)
             .await
-            .map_err(CmdError::from)?,
-        Err(e) => return Err(e.into()),
+            .map_err(CmdError::from)?
+    } else {
+        match state.auth.prepare_launch(account.id, cancel).await {
+            Ok(identity) => identity,
+            Err(_) if cancel.is_cancelled() => return Err(cancelled()),
+            Err(e) if e.class() == FailureClass::Offline => state
+                .auth
+                .prepare_offline_launch(account.id)
+                .await
+                .map_err(CmdError::from)?,
+            Err(e) => return Err(e.into()),
+        }
     };
     clock.lap("account");
     checkpoint(cancel)?;
