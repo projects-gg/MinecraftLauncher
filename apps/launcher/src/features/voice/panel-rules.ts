@@ -64,7 +64,8 @@ export function panelTitle(
 }
 
 /**
- * The quiet line under the title: a call says it is one; a crew's chips and a chat's people line
+ * The quiet line under the title: a call says it is one ("Sesli Arama", its time after it in the
+ * header); a crew's chips and a chat's people line
  * count the people, so the header then says only a full room; else how many are in the room.
  */
 export function headerLine(
@@ -72,7 +73,7 @@ export function headerLine(
   where: { stage: boolean; counted: boolean; full: boolean },
   t: TFunction,
 ): string | null {
-  if (where.stage) return t("voice.call.kind");
+  if (where.stage) return t("roomChat.call.title");
   if (room.kind === "crew" || where.counted) return where.full ? t("voice.refused.roomFull") : null;
   return t("voice.room.count", { count: room.people.length + 1 });
 }

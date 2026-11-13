@@ -8,6 +8,20 @@ export const trRoomChat = {
     /** The header's menu: the voice settings, the room's own actions. */
     menu: "Oda Seçenekleri",
   },
+  /** A call with one friend, under its title ("Sesli Arama (12:34)": its time after it). */
+  call: {
+    title: "Sesli Arama",
+  },
+  /** The separator on the panel's left edge that widens it. */
+  resize: {
+    label: "Panel Genişliği",
+    tooltip: "Sürükleyerek Genişlet",
+    /** Its value for screen readers: how much of the window, and the layout that gives. */
+    value: {
+      one: "{{percent}}, tek sütun",
+      two: "{{percent}}, iki sütun",
+    },
+  },
   people: {
     title: "Odadakiler",
     label_one: "Odadakiler, {{count}} kişi",

@@ -192,6 +192,27 @@ describe("the room's last messages", () => {
     expect(data.msgs[1]?.seq).toBe(2);
   });
 
+  it("settle the player's own copy the room took though its send failed: no twin, no retry", () => {
+    // A lost connection fails a send at once; the room took it all the same.
+    let data = startSend(start(), "n1", { text: "selam" }, ME, NOW);
+    data = settleSend(data, "n1", { refused: { code: "failed" } });
+    expect(data.msgs[0]).toMatchObject({ state: "failed", failure: "connection" });
+    data = receiveLog(data, [msg("a", "301", "a", NOW + 1), msg("x1", ME, "selam", NOW + 2)], ME);
+    expect(data.msgs.map((m) => m.key)).toEqual(["r:a", "n:n1"]);
+    expect(data.msgs[1]).toMatchObject({ id: "x1", at: NOW + 2, state: "sent" });
+    expect(data.msgs[1]?.failure).toBeUndefined();
+  });
+
+  it("settle each of the player's own copies once, the oldest first", () => {
+    let data = startSend(start(), "n1", { text: "hadi" }, ME, NOW);
+    data = startSend(data, "n2", { text: "hadi" }, ME, NOW + 1);
+    data = receiveLog(data, [msg("x1", ME, "hadi", NOW + 2)], ME);
+    expect(data.msgs.map((m) => [m.key, m.id ?? null])).toEqual([
+      ["n:n1", "x1"],
+      ["n:n2", null],
+    ]);
+  });
+
   it("empty the list when the log is empty, keeping only the player's own on their way", () => {
     let data = receive(start(), msg("a", "301", "a", NOW + 10), arrival());
     data = startSend(data, "n1", { text: "yolda" }, ME, NOW + 30);
