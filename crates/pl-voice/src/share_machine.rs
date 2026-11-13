@@ -840,9 +840,10 @@ impl Machine {
                         self.close_mine(n, None, false, now, out);
                         out.push(Effect::ShareNotice(ShareNotice::refused(refusal)));
                     }
-                    // SQOL: a live change the room refused: nothing changes. The budget and the
-                    // room's rule are told (SQOL-R3: with the share and what it asked, so the page
-                    // rolls back exactly that); a room that does not take changes yet stays quiet.
+                    // SQOL: a live change the room refused: nothing changes. SQOL-R3: every refusal
+                    // of a change the player made is told, with the share and what it asked (the
+                    // page rolls back exactly that, never silently); the launcher's own report of a
+                    // switch's kind (nothing asked) is told only for the budget and the room's rule.
                     Some(Pending::ShareSet(n, asked)) => {
                         if let Some(mine) = self.share.mine.iter_mut().find(|mine| mine.n == n)
                             && mine.editing.is_some_and(|(asked, _)| asked == rid)
@@ -850,7 +851,9 @@ impl Machine {
                             mine.editing = None;
                             mine.asked = Asked::default();
                         }
-                        if matches!(refusal, ShareRefusal::Budget | ShareRefusal::NotAllowed) {
+                        if asked != Asked::default()
+                            || matches!(refusal, ShareRefusal::Budget | ShareRefusal::NotAllowed)
+                        {
                             out.push(Effect::ShareNotice(ShareNotice::Refused {
                                 refusal,
                                 n: Some(n),
@@ -2171,7 +2174,8 @@ impl Machine {
         for n in gone {
             self.close_mine(n, Some(ShareClosedWhy::SourceGone), true, now, out);
         }
-        // SQOL: a live change the room never answered changes nothing.
+        // SQOL: a live change the room never answered changes nothing (SQOL-R3: and is told, as
+        // a failed one, with what it asked: the page never rolls back silently).
         let pending = &mut self.pending;
         for mine in &mut self.share.mine {
             if let Some((rid, asked)) = mine.editing
@@ -2179,7 +2183,13 @@ impl Machine {
             {
                 mine.editing = None;
                 mine.asked = Asked::default();
-                pending.remove(&rid);
+                if let Some(Pending::ShareSet(n, change)) = pending.remove(&rid) {
+                    out.push(Effect::ShareNotice(ShareNotice::Refused {
+                        refusal: ShareRefusal::Failed,
+                        n: Some(n),
+                        change: Some(change),
+                    }));
+                }
                 out.push(Effect::Changed);
             }
         }
