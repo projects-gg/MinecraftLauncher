@@ -69,15 +69,29 @@ describe("the own share's menu", () => {
     expect(labels(quality)).toEqual(["Düşük · 480p", "Normal · 720p", "Yüksek · 1080p"]);
     expect(quality.map((item) => item?.checked)).toEqual([false, true, false]);
     expect(quality.every((item) => item?.radio)).toBe(true);
+    // Two levels at most: named groups of choices, then the switches (no submenu inside).
     const advanced = sub(items, "Gelişmiş");
     expect(labels(advanced)).toEqual([
       "Kare Hızı",
+      "15 fps",
+      "30 fps",
+      "60 fps",
+      "—",
       "Görüntü",
+      "Otomatik",
+      "Netlik",
+      "Akıcılık",
+      "—",
       "İmleci Göster",
       "Önizleme Resmini Paylaş",
     ]);
-    expect(labels(sub(advanced, "Kare Hızı"))).toEqual(["15 fps", "30 fps", "60 fps"]);
-    expect(labels(sub(advanced, "Görüntü"))).toEqual(["Otomatik", "Netlik", "Akıcılık"]);
+    expect(advanced.filter((item) => item?.heading).map((item) => item?.label)).toEqual([
+      "Kare Hızı",
+      "Görüntü",
+    ]);
+    expect(advanced.some((item) => item?.items)).toBe(false);
+    expect(row(advanced, "30 fps")).toMatchObject({ radio: true, checked: true });
+    expect(row(advanced, "Otomatik")).toMatchObject({ radio: true, checked: true });
     expect(row(items, "Sesi de Paylaş").checked).toBe(true);
   });
 
@@ -114,15 +128,12 @@ describe("the own share's menu", () => {
       checked: false,
       hint: "Bu bilgisayarda ses paylaşılamıyor.",
     });
-    const normal = sub(sub(ownShareItems(input(), t, actions()), "Gelişmiş"), "Kare Hızı");
+    const normal = sub(ownShareItems(input(), t, actions()), "Gelişmiş");
     expect(row(normal, "60 fps")).toMatchObject({
       disabled: true,
       hint: "60 fps yalnız Yüksek kalitede.",
     });
-    const high = sub(
-      sub(ownShareItems(input({}, { preset: "high" }), t, actions()), "Gelişmiş"),
-      "Kare Hızı",
-    );
+    const high = sub(ownShareItems(input({}, { preset: "high" }), t, actions()), "Gelişmiş");
     expect(row(high, "60 fps").disabled).toBe(false);
   });
 
@@ -137,9 +148,9 @@ describe("the own share's menu", () => {
     row(items, "Sesi de Paylaş").onSelect();
     expect(act.change).toHaveBeenLastCalledWith(1, { audio: false });
     const advanced = sub(items, "Gelişmiş");
-    row(sub(advanced, "Görüntü"), "Netlik").onSelect();
+    row(advanced, "Netlik").onSelect();
     expect(act.change).toHaveBeenLastCalledWith(1, { motion: "clarity" });
-    row(sub(advanced, "Kare Hızı"), "15 fps").onSelect();
+    row(advanced, "15 fps").onSelect();
     expect(act.change).toHaveBeenLastCalledWith(1, { fps: 15 });
     row(advanced, "İmleci Göster").onSelect();
     expect(act.change).toHaveBeenLastCalledWith(1, { cursor: false });
