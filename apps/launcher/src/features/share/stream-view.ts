@@ -40,8 +40,12 @@ export function layerFor(input: LayerInput): ShareLayer {
 
 /** A weak connection under "Otomatik": the small layer, and the full one back after this long good. */
 export const WEAK_BACK_MS = 30_000;
-/** Weak again within this long after the full layer came back: the next wait doubles… */
-export const WEAK_AGAIN_MS = 60_000;
+/**
+ * Weak again within this long after the full layer came back (it was too much for the link): the
+ * next wait doubles… A weak spell later than that is another matter and starts from the first wait
+ * (E2E: one 24 s after made a source switch wait a minute).
+ */
+export const WEAK_AGAIN_MS = 20_000;
 /** …up to this. */
 export const WEAK_BACK_MAX_MS = 120_000;
 

@@ -60,15 +60,16 @@ export function useWatchLayer(
 }
 
 /**
- * A share its sharer paused, minimized, brought back or turned to another kind of source: the
- * quality look takes the moment its picture stops for no weak connection.
+ * A share its sharer paused, minimized, brought back, turned to another kind of source or gave
+ * another quality or frame rate: the quality look takes the moment its picture stops for no weak
+ * connection (E2E: a step to 15 fps read as weak).
  */
 export function useShareChangeCalm(
   person: string,
   n: number,
-  live: Pick<VoiceLiveShare, "st" | "kind"> | undefined,
+  live: Pick<VoiceLiveShare, "st" | "kind" | "fps" | "preset"> | undefined,
 ): void {
-  const change = `${live?.st ?? "live"}:${live?.kind ?? ""}`;
+  const change = `${live?.st ?? "live"}:${live?.kind ?? ""}:${live?.fps ?? ""}:${live?.preset ?? ""}`;
   const last = useRef(change);
   useEffect(() => {
     if (last.current === change) return;
