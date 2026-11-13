@@ -23,6 +23,7 @@
 
 mod afk;
 pub mod avatar;
+pub mod fabric_wait;
 mod feed;
 mod host;
 mod hub;

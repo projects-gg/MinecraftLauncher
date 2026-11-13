@@ -4,11 +4,33 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@/lib/api/listen";
 import type { ShareApi } from "./api";
-import type { ShareNotice, ShareRefusal, ShareSources, ShareThumb, WatchCmd } from "./types";
+import type {
+  ShareNotice,
+  SharePreviewFrame,
+  ShareRefusal,
+  ShareSources,
+  ShareStats,
+  ShareThumb,
+  WatchCmd,
+} from "./types";
 
 const quiet = () => {
   // The launcher closed meanwhile, or the page is going away.
 };
+
+/** One of the launcher's events for as long as the returned stop is not called. */
+function subscribe<T>(event: string, listener: (payload: T) => void): () => void {
+  let stop: (() => void) | null = null;
+  let gone = false;
+  void listen<T>(event, (e) => listener(e.payload)).then((unlisten) => {
+    if (gone) unlisten();
+    else stop = unlisten;
+  });
+  return () => {
+    gone = true;
+    stop?.();
+  };
+}
 
 export const tauriShare: ShareApi = {
   sources: () => invoke<ShareSources>("share_sources"),
@@ -44,18 +66,15 @@ export const tauriShare: ShareApi = {
     invoke<ShareThumb>("share_thumb", { room, user, n: n ?? 1 }).catch(
       (): ShareThumb => ({ kind: "none" }),
     ),
-  onNotice: (listener) => {
-    let stop: (() => void) | null = null;
-    let gone = false;
-    void listen<ShareNotice>("share-notice", (event) => listener(event.payload)).then(
-      (unlisten) => {
-        if (gone) unlisten();
-        else stop = unlisten;
-      },
-    );
-    return () => {
-      gone = true;
-      stop?.();
-    };
-  },
+  onNotice: (listener) => subscribe<ShareNotice>("share-notice", listener),
+  // SQOL (sqol.md §3). A command that answers nothing (`()`) resolves null: done.
+  switchSource: (n, source, label) =>
+    invoke<ShareRefusal | null>("share_switch", { n, source, label }).then((r) => r ?? null),
+  update: (n, change) =>
+    invoke<ShareRefusal | null>("share_update", { n, change }).then((r) => r ?? null),
+  hold: (n, on) => invoke<ShareRefusal | null>("share_hold", { n, on }).then((r) => r ?? null),
+  // Only a picture: a launcher that cannot make one leaves the card on the room's last one.
+  preview: (n, on) => invoke<null>("share_preview", { n, on }).then(quiet, quiet),
+  onPreview: (listener) => subscribe<SharePreviewFrame>("share-preview", listener),
+  onStats: (listener) => subscribe<ShareStats>("share-stats", listener),
 };

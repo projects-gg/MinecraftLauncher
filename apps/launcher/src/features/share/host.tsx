@@ -3,28 +3,17 @@
 // for its watch connection and tells the launcher whether it is on screen (hidden in the tray or
 // minimized, it lets go of the picture after a few seconds and asks again when it is back). No
 // room that shares: no engine, no channel, nothing runs.
-import { toast } from "@pl/ui";
 import { useEffect, useRef } from "react";
 import { isTauri } from "@/lib/platform";
 import { isWindowAway, onWindowAwayChange } from "@/lib/window-away";
 import { shareApi } from "@/share/api";
 import { shareKey } from "@/share/types";
 import { createWatchEngine } from "@/share/watch";
-import { noticeText } from "./actions";
+// SQOL: the notices' toasts and the player's own shares' questions (own-notices.ts).
+import { useShareNotices } from "./own-notices";
 import { SharePicker } from "./picker";
 import { ShareStage } from "./stage";
 import { pageEngine, setPageEngine, useShare, useShareUi } from "./store";
-
-function useShareNotices() {
-  useEffect(
-    () =>
-      shareApi.onNotice((notice) => {
-        const text = noticeText(notice);
-        if (text) toast(text);
-      }),
-    [],
-  );
-}
 
 /** The launcher window's watch engine, while the room shares. */
 function useMainWatching() {
