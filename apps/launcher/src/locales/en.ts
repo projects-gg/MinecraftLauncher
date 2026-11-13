@@ -74,6 +74,7 @@ import { enSocNote } from "./en-soc-note";
 import { enStars } from "./en-stars";
 import { enTeam6 } from "./en-team6";
 import { enTeams } from "./en-teams";
+import { enTelemFix } from "./en-telem-fix";
 import { enTelemetry } from "./en-telemetry";
 import { enTray } from "./en-tray";
 import { enTuning } from "./en-tuning";
@@ -377,6 +378,7 @@ export const en: DeepPartial<Strings> = {
   socNext: enSocNext,
   socNote: enSocNote,
   telemetry: enTelemetry,
+  telemFix: enTelemFix,
   crewUi: enCrewUi,
   tweaks: enTweaks,
   nav: {

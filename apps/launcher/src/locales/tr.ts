@@ -77,6 +77,7 @@ import { trSocial } from "./tr-social";
 import { trStars } from "./tr-stars";
 import { trTeam6 } from "./tr-team6";
 import { trTeams } from "./tr-teams";
+import { trTelemFix } from "./tr-telem-fix";
 import { trTelemetry } from "./tr-telemetry";
 import { trTray } from "./tr-tray";
 import { trTuning } from "./tr-tuning";
@@ -170,6 +171,7 @@ export const tr = {
   socNext: trSocNext,
   socNote: trSocNote,
   telemetry: trTelemetry,
+  telemFix: trTelemFix,
   crewUi: trCrewUi,
   tweaks: trTweaks,
   nav: {
