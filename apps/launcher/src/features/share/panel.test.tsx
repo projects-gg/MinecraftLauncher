@@ -4,7 +4,15 @@
 // "Ekranı Değiştir", "⋯" and "Durdur"; its states on the same line) while they share; a person who
 // shares has "İzle"; nothing of it in a room that does not share or on a computer that cannot.
 import { setAppReducedMotion, TooltipProvider } from "@pl/ui";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import "@/lib/i18n";
@@ -13,7 +21,7 @@ import { createVoiceMock } from "@/lib/api/voice-mock";
 import { HIDDEN_VOICE_STATE, type VoiceState } from "@/lib/api/voice-types";
 import { shareApi } from "@/share/api";
 import { resetOwnUi, useOwnUi } from "./own-store";
-import { ShareFooterRow, WatchButton } from "./panel";
+import { ShareFooterRow, useShareRuleItems, WatchButton } from "./panel";
 import { SharePillPart } from "./pill-part";
 import { useShareUi } from "./store";
 
@@ -117,6 +125,25 @@ describe("screen sharing on the panel", () => {
     expect(screen.queryByRole("button", { name: "Ekranı Değiştir" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Paylaşım Seçenekleri" })).toBeNull();
     expect(screen.getByRole("button", { name: "Paylaşımı Durdur" })).toBeTruthy();
+  });
+
+  it("gives a friend room's leader the share rule for the header menu, not the footer", () => {
+    const sharers = vi.spyOn(shareApi, "setSharers").mockResolvedValue(true);
+    show(scenario("shareOffer"), <ShareFooterRow />);
+    expect(screen.queryByText("Kim Paylaşabilir")).toBeNull();
+    const { result } = renderHook(() => useShareRuleItems());
+    const [rule] = result.current;
+    expect(rule?.label).toBe("Kim Paylaşabilir");
+    expect(rule?.items?.map((item) => [item?.label, item?.radio, item?.checked])).toEqual([
+      ["Herkes", true, true],
+      ["Lider ve Moderatörler", true, false],
+    ]);
+    rule?.items?.[1]?.onSelect();
+    expect(sharers).toHaveBeenCalledWith("mods");
+    cleanup();
+    // Someone who may not set it: nothing to place.
+    act(() => useVoiceUi.getState().setState(scenario("shareNotAllowed")));
+    expect(renderHook(() => useShareRuleItems()).result.current).toEqual([]);
   });
 
   it("asks for nothing while the room keeps sharing to its leaders", () => {

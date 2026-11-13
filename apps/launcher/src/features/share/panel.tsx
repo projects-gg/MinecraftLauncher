@@ -1,10 +1,11 @@
 // Screen sharing on the room panel (SHARE; share.md §3): above the panel's three buttons,
 // "Ekranını paylaş" while the player shares nothing; while they share, each share's card (SQOL:
 // own-card.tsx: its live picture, what it shows, its quality, who watches, "Ekranı Değiştir", "⋯"
-// and "Durdur"), calm (no red, no light). Beside each person who shares, "İzle" (their "YAYINDA" is
-// live-card.tsx's).
-import { CaretDown, Check, Monitor } from "@phosphor-icons/react";
-import { Button, cn, Menu, type MenuItem, toast, useMotionPrefs } from "@pl/ui";
+// and "Durdur"), calm (no red, no light). A friend room's leader picks "Kim paylaşabilir" in the
+// panel's header menu (`useShareRuleItems`; the footer keeps only the player's own sharing).
+// Beside each person who shares, "İzle" (their "YAYINDA" is live-card.tsx's).
+import { Monitor } from "@phosphor-icons/react";
+import { Button, cn, type MenuItem, toast, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { shareApi } from "@/share/api";
@@ -30,6 +31,7 @@ export function ShareFooterRow() {
     : !share.open
       ? t("share.notice.off")
       : null;
+  if (!share.mine.length && !more) return null;
   return (
     <div className="mb-2 flex flex-col gap-1.5">
       <AnimatePresence initial={false}>
@@ -64,7 +66,6 @@ export function ShareFooterRow() {
           {why ? <p className="px-1 text-center text-[12px] text-ash-400">{why}</p> : null}
         </>
       ) : null}
-      {share.canSetShareBy ? <WhoCanShare /> : null}
     </div>
   );
 }
@@ -72,10 +73,14 @@ export function ShareFooterRow() {
 /** The same row under the name the SQOL notes give it (the room panel's footer, SQOL-U3). */
 export const SharePanel = ShareFooterRow;
 
-/** "Kim paylaşabilir" for a friend room's leader: one quiet line, its choice in a menu. */
-function WhoCanShare() {
+/**
+ * "Kim Paylaşabilir" › "Herkes" / "Lider ve Moderatörler" for the room panel's header menu
+ * (SQOL-U3 places it): a friend room's leader only; nothing elsewhere. The room checks the role.
+ */
+export function useShareRuleItems(): MenuItem[] {
   const { t } = useTranslation();
   const share = useShare();
+  if (!share.on || !share.canSetShareBy) return [];
   const set = (who: ShareBy) => {
     if (who === share.shareBy) return;
     void shareApi
@@ -85,31 +90,19 @@ function WhoCanShare() {
       })
       .catch(() => toast(t("share.notice.failed")));
   };
-  const items: MenuItem[] = (["all", "mods"] as const).map((who) => ({
-    label: t(`share.who.${who}`),
-    icon:
-      who === share.shareBy ? <Check size={15} weight="bold" /> : <span className="size-[15px]" />,
-    onSelect: () => set(who),
-  }));
-  return (
-    <div className="flex items-center justify-center gap-1.5 text-[12.5px] text-ash-400">
-      <span>{t("share.who.label")}</span>
-      <Menu
-        items={items}
-        align="center"
-        trigger={
-          <button
-            type="button"
-            aria-label={`${t("share.who.label")}: ${t(`share.who.${share.shareBy}`)}`}
-            className="flex h-7 cursor-pointer items-center gap-1 rounded-[6px] px-1.5 font-medium text-bone-100 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
-          >
-            {t(`share.who.${share.shareBy}`)}
-            <CaretDown size={12} weight="bold" aria-hidden />
-          </button>
-        }
-      />
-    </div>
-  );
+  return [
+    {
+      label: t("share.who.label"),
+      icon: <Monitor size={16} />,
+      onSelect: () => {},
+      items: (["all", "mods"] as const).map((who) => ({
+        label: t(`share.who.${who}`),
+        radio: true,
+        checked: share.shareBy === who,
+        onSelect: () => set(who),
+      })),
+    },
+  ];
 }
 
 /** A person's first share the player does not watch yet. */
