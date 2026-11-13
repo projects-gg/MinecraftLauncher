@@ -88,10 +88,16 @@ fn hook(from: u32, to: u32, pid: u32) -> Option<HWINEVENTHOOK> {
 }
 
 impl MinimizeWatch {
-    /// Watches window `hwnd` of process `pid`; `on_change` hears its state once at the start when
-    /// it is minimized already, then every change; `on_closed` hears its end (at once when it is
-    /// gone already). None when Windows refused the hooks.
-    pub fn start(hwnd: u32, pid: u32, on_change: OnChange, on_closed: OnClosed) -> Option<Self> {
+    /// Watches window `hwnd` of process `pid`, with whether it is minimized now (the caller tells
+    /// that in its own order: after a switch's news, SQOL-R3); `on_change` hears every change from
+    /// then, `on_closed` its end (at once when it is gone already). None when Windows refused the
+    /// hooks.
+    pub fn start(
+        hwnd: u32,
+        pid: u32,
+        on_change: OnChange,
+        on_closed: OnClosed,
+    ) -> Option<(Self, bool)> {
         let (tx, rx) = sync_channel(1);
         let spawned = std::thread::Builder::new()
             .name("pl-share-min".into())
@@ -121,17 +127,15 @@ impl MinimizeWatch {
                             closed: false,
                         });
                     });
-                    let _ = tx.send(Some(GetCurrentThreadId()));
-                    WATCHED.with(|watched| {
-                        if let Some(watched) = watched.borrow_mut().as_mut() {
-                            if gone {
+                    let _ = tx.send(Some((GetCurrentThreadId(), minimized && !gone)));
+                    if gone {
+                        WATCHED.with(|watched| {
+                            if let Some(watched) = watched.borrow_mut().as_mut() {
                                 watched.closed = true;
                                 (watched.on_closed)();
-                            } else if minimized {
-                                (watched.on_change)(true);
                             }
-                        }
-                    });
+                        });
+                    }
                     while GetMessageW(&mut msg, None, 0, 0).as_bool() {
                         let _ = TranslateMessage(&msg);
                         DispatchMessageW(&msg);
@@ -146,7 +150,10 @@ impl MinimizeWatch {
         if spawned.is_err() {
             return None;
         }
-        rx.recv().ok().flatten().map(|thread| Self { thread })
+        rx.recv()
+            .ok()
+            .flatten()
+            .map(|(thread, minimized)| (Self { thread }, minimized))
     }
 }
 

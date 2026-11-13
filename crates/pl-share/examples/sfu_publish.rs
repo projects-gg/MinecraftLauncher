@@ -11,6 +11,8 @@
 //! `[--hold-at 30] [--unhold-at 36]` (a blank picture, then a fresh frame) `[--update-at 40]`
 //! (`--update-preset` / `--update-fps`, default low / 15) `[--close-at 45]` (the shown window closes:
 //! a blank picture and `sourceGone`, the share goes on) `[--preview]` (the sharer's own preview).
+//! SQOL-R3: `[--still]`: the second window is painted once (a still source sends one frame: the
+//! switch must not lose it; its still picture follows within seconds).
 
 #[cfg(windows)]
 #[path = "common/mod.rs"]
@@ -118,7 +120,14 @@ async fn main() {
 
     let hwnd = common::test_window(1280, 720);
     // SQOL: the second window to switch to (4:3: another picture size).
-    let second = (!plan.is_empty()).then(|| common::test_window(1024, 768));
+    let still = args.iter().any(|a| a == "--still");
+    let second = (!plan.is_empty()).then(|| {
+        if still {
+            common::still_window(1024, 768)
+        } else {
+            common::test_window(1024, 768)
+        }
+    });
     std::thread::sleep(Duration::from_millis(300));
     let window = |hwnd: isize| SourceId::Window {
         hwnd: hwnd as u32,

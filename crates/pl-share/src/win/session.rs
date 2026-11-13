@@ -451,6 +451,8 @@ pub struct Session {
     preview: bool,
     /// SQOL: new encoders came while encoding rested: the share's return captures anew.
     fresh_on_resume: bool,
+    /// SQOL-R3: the source's window was minimized when its watch began.
+    start_minimized: bool,
     rebuilds: u32,
 }
 
@@ -578,6 +580,7 @@ impl Session {
                 waiting: None,
                 preview: false,
                 fresh_on_resume: false,
+                start_minimized: false,
                 rebuilds: 0,
             },
             sdp,
@@ -627,8 +630,8 @@ impl Session {
         let item = self.item.take();
         let capture = match &item {
             // A source that went before the answer (a switch to a game still starting): blank
-            // until it comes.
-            Some(item) if !self.gone => {
+            // until it comes. SQOL-R3: a held share captures nothing until its return.
+            Some(item) if !self.gone && !self.held => {
                 let next = self.next_capture();
                 Some(self.start_capture(next, &item.0, thumbs.clone())?)
             }
@@ -639,7 +642,8 @@ impl Session {
         negotiated
             .start(inbox, full, small, self.opts.tuning, ctl)
             .map_err(|_| Fail::Lost(LostWhy::Internal))?;
-        let minimize = self.watch_minimize();
+        let (minimize, minimized) = self.watch_minimize();
+        self.start_minimized = minimized;
         self.stage = Stage::Live(Live {
             transport: handle,
             capture,
@@ -653,6 +657,7 @@ impl Session {
             thumbs,
             _thumb_handle: thumb_handle,
         });
+        self.tell_minimized();
         if self.held || self.gone {
             self.sync_held();
             self.blank();
@@ -806,6 +811,13 @@ impl Session {
             move |texture: &windows::Win32::Graphics::Direct3D11::ID3D11Texture2D,
                   content: (u32, u32),
                   now: Instant| {
+                // SQOL-R3: all of it under the sink's lock. A switch, a hold or a closed source
+                // changes the share's state before `blank` takes the lock, so a frame of the old
+                // source (or from before a hold) never lands after the black stand-in, where the
+                // encoders' keep-alive would repeat it.
+                let Ok(mut sink) = shared.sink.lock() else {
+                    return;
+                };
                 if shared.stopped.load(Ordering::Relaxed)
                     || shared.capture.load(Ordering::Relaxed) != number
                 {
@@ -820,9 +832,6 @@ impl Session {
                 if held || shared.paused.load(Ordering::Relaxed) {
                     return;
                 }
-                let Ok(mut sink) = shared.sink.lock() else {
-                    return;
-                };
                 let Some(sink) = sink.as_mut() else {
                     return;
                 };
@@ -881,12 +890,14 @@ impl Session {
     /// SQOL: the shared window's minimize events (a game or a window), told while it is the
     /// share's source; and its end, as its capture's own `Closed` would say it (that did not come
     /// for a closed window, SQOL-R2).
-    fn watch_minimize(&self) -> Option<MinimizeWatch> {
-        let (hwnd, pid) = (self.hwnd?, self.target_pid?);
+    fn watch_minimize(&self) -> (Option<MinimizeWatch>, bool) {
+        let (Some(hwnd), Some(pid)) = (self.hwnd, self.target_pid) else {
+            return (None, false);
+        };
         let shared = self.shared.clone();
         let closed = self.shared.clone();
         let epoch = shared.source_epoch.load(Ordering::SeqCst);
-        MinimizeWatch::start(
+        let started = MinimizeWatch::start(
             hwnd,
             pid,
             Box::new(move |on| {
@@ -905,7 +916,11 @@ impl Session {
                     });
                 }
             }),
-        )
+        );
+        match started {
+            Some((watch, minimized)) => (Some(watch), minimized),
+            None => (None, false),
+        }
     }
 
     fn start_audio(
@@ -1014,8 +1029,9 @@ impl Session {
                 });
             }
         }
-        // SQOL: encoders made while resting have no picture yet: a fresh capture gives them one.
-        if !paused && std::mem::take(&mut self.fresh_on_resume) {
+        // SQOL: encoders made while resting have no picture yet: a fresh capture gives them one
+        // (SQOL-R3: a held share's comes with its return).
+        if !paused && !self.held && std::mem::take(&mut self.fresh_on_resume) {
             self.recapture();
         }
     }
@@ -1164,6 +1180,7 @@ impl Session {
         };
         let thumbs = live.thumbs.clone();
         let number = self.next_capture();
+        self.open_gates();
         match self.start_capture(number, &item, thumbs) {
             Ok(capture) => {
                 if let Stage::Live(live) = &mut self.stage {
@@ -1177,6 +1194,12 @@ impl Session {
     /// SQOL: black on both layers now: the encoders' last picture (which their keep-alive repeats)
     /// and the still picture's source are no longer the source's.
     fn blank(&self) {
+        // SQOL-R3: the still picture follows (black soon, not the old source's for up to a minute).
+        if let Stage::Live(live) = &self.stage
+            && let Some(thumbs) = &live.thumbs
+        {
+            thumbs.renew();
+        }
         let now = Instant::now();
         let Ok(mut sink) = self.shared.sink.lock() else {
             return;
@@ -1185,6 +1208,9 @@ impl Session {
             return;
         };
         for layer in Layer::ALL {
+            // SQOL-R3: whatever is captured next (a new source's first frame, a hold's end) comes
+            // through at once: a still source sends no second one.
+            sink.gates[layer.index()].reset();
             match sink.scalers[layer.index()].blank() {
                 Ok((out, picture)) => {
                     if layer == Layer::Full {
@@ -1213,6 +1239,39 @@ impl Session {
         self.shared
             .held
             .store(self.held || self.gone, Ordering::SeqCst);
+    }
+
+    /// SQOL-R3: the next captured frame reaches the encoders at once (a capture started anew:
+    /// its first frame may be the only one a still source sends).
+    fn open_gates(&self) {
+        if let Ok(mut sink) = self.shared.sink.lock()
+            && let Some(sink) = sink.as_mut()
+        {
+            for gate in &mut sink.gates {
+                gate.reset();
+            }
+        }
+    }
+
+    /// SQOL-R3: the capture stops while the share holds (no copies of a picture nobody sees, no
+    /// capture border on the window); its item stays for the return.
+    fn stop_capture(&mut self) {
+        self.next_capture();
+        if let Stage::Live(live) = &mut self.stage {
+            live.capture = None;
+        }
+    }
+
+    /// SQOL-R3: the new source's window was minimized when its watch began: told after the
+    /// switch's news (the switch's news clears what an older window said).
+    fn tell_minimized(&self) {
+        if self.start_minimized {
+            self.shared.minimized.store(true, Ordering::SeqCst);
+            self.shared.emit(ShareEvent::Minimized {
+                n: self.shared.n,
+                on: true,
+            });
+        }
     }
 
     /// SQOL: share `source` instead (the player's "Ekranı Değiştir", or the launcher's switch to a
@@ -1245,6 +1304,7 @@ impl Session {
             w,
             h,
         });
+        self.tell_minimized();
     }
 
     /// SQOL: captures `source` in place of what the share shows now. The old capture's frames stop
@@ -1289,20 +1349,26 @@ impl Session {
             Stage::Live(live) => live.thumbs.clone(),
             _ => None,
         };
-        let capture = match self.start_capture(number, &item, thumbs) {
-            Ok(capture) => capture,
-            Err(why) => {
-                // The old source goes on: captured anew, so even a still one shows again.
-                let (source, src_size, target_pid, hwnd) = before;
-                self.adopt(source, src_size, target_pid, hwnd);
-                if !self.gone {
-                    self.fresh();
+        // SQOL-R3: a held share captures nothing until its return (the new source waits as its
+        // item).
+        let capture = if self.held {
+            None
+        } else {
+            match self.start_capture(number, &item, thumbs) {
+                Ok(capture) => Some(capture),
+                Err(why) => {
+                    // The old source goes on: captured anew, so even a still one shows again.
+                    let (source, src_size, target_pid, hwnd) = before;
+                    self.adopt(source, src_size, target_pid, hwnd);
+                    if !self.gone {
+                        self.fresh();
+                    }
+                    return Err(why);
                 }
-                return Err(why);
             }
         };
         if let Stage::Live(live) = &mut self.stage {
-            live.capture = Some(capture);
+            live.capture = capture;
             live.item = Some(SendCom(item));
             live.minimize = None;
         }
@@ -1315,7 +1381,8 @@ impl Session {
         self.shared.source_epoch.fetch_add(1, Ordering::SeqCst);
         self.shared.minimized.store(false, Ordering::SeqCst);
         self.sync_held();
-        let minimize = self.watch_minimize();
+        let (minimize, minimized) = self.watch_minimize();
+        self.start_minimized = minimized;
         if let Stage::Live(live) = &mut self.stage {
             live.minimize = minimize;
         }
@@ -1345,11 +1412,22 @@ impl Session {
         self.sync_held();
         if matches!(self.stage, Stage::Live(_)) {
             if on {
+                self.stop_capture();
                 self.blank();
                 self.shared.key_both();
             } else if !self.gone {
-                self.fresh();
+                // Captured again now, resting or not (its frames feed the still picture); encoders
+                // that rest take a fresh frame when they go on.
+                self.recapture();
+                if self.shared.paused.load(Ordering::SeqCst) {
+                    self.fresh_on_resume = true;
+                }
                 self.shared.key_both();
+                if let Stage::Live(live) = &self.stage
+                    && let Some(thumbs) = &live.thumbs
+                {
+                    thumbs.renew();
+                }
             }
         }
         self.retarget_sound();
@@ -1442,13 +1520,22 @@ impl Session {
     /// scalers, encoders and the capture. The SFU session and the sound go on; watchers get a
     /// keyframe of the source again.
     fn rebuild(&mut self, gpu: Arc<Gpu>) -> Result<(), Fail> {
+        let rebuilt = self.rebuild_on(gpu);
+        // SQOL-R3: only now: the old device's encoders and frames fail as they stop, and a loss
+        // told meanwhile would hide the next real one (the flag would stay up).
+        if rebuilt.is_ok() {
+            self.shared.device_lost.store(false, Ordering::SeqCst);
+        }
+        rebuilt
+    }
+
+    fn rebuild_on(&mut self, gpu: Arc<Gpu>) -> Result<(), Fail> {
         self.rebuilds += 1;
         if self.rebuilds > REBUILDS_MAX {
             return Err(Fail::Lost(LostWhy::Device));
         }
         info!("share {}: rebuilt on a new graphics device", self.shared.n);
         self.gpu = gpu;
-        self.shared.device_lost.store(false, Ordering::SeqCst);
         if !matches!(self.stage, Stage::Live(_)) {
             // Before the answer nothing lives on the device yet.
             return Ok(());
@@ -1485,7 +1572,17 @@ impl Session {
         }
         let source = self.source.clone();
         match self.capture_source(source, false) {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                // The same source: whether its window is minimized now (no switch's news clears
+                // what was said before).
+                let on = self.start_minimized;
+                self.shared.minimized.store(on, Ordering::SeqCst);
+                self.shared.emit(ShareEvent::Minimized {
+                    n: self.shared.n,
+                    on,
+                });
+                Ok(())
+            }
             Err(Fail::Gone) => {
                 // The source went meanwhile: as when it closes.
                 self.gone = true;

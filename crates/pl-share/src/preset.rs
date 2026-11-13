@@ -183,6 +183,12 @@ impl FrameGate {
         self.interval
     }
 
+    /// SQOL: the next frame comes through at once (a new source's first frame, the first after a
+    /// black stand-in): a still source sends no second one.
+    pub fn reset(&mut self) {
+        self.next = None;
+    }
+
     pub fn admit(&mut self, t: Instant) -> bool {
         let slack = self.interval / 4;
         match self.next {
@@ -299,6 +305,21 @@ mod tests {
         assert!(gate.admit(t1));
         assert!(!gate.admit(t1 + Duration::from_millis(17)));
         assert!(gate.admit(t1 + Duration::from_millis(67)));
+    }
+
+    /// SQOL (P2-4): a switch to a still window sends one frame; the old source's cadence must not
+    /// drop it (the share showed black).
+    #[test]
+    fn a_reset_gate_lets_the_next_frame_through() {
+        let mut gate = FrameGate::new(30);
+        let t0 = Instant::now();
+        assert!(gate.admit(t0));
+        assert!(!gate.admit(t0 + Duration::from_millis(5)));
+        gate.reset();
+        assert!(gate.admit(t0 + Duration::from_millis(6)));
+        // The cadence goes on from there.
+        assert!(!gate.admit(t0 + Duration::from_millis(10)));
+        assert!(gate.admit(t0 + Duration::from_millis(40)));
     }
 
     #[test]
