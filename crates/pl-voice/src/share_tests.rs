@@ -1333,6 +1333,74 @@ fn a_watch_whose_answer_went_with_the_old_socket_is_asked_for_anew() {
     ));
 }
 
+/// The room's `error` answer to request `rid`.
+fn refused(rid: u32, code: &str) -> FromRoom {
+    FromRoom::parse(&format!(r#"{{"t":"error","rid":{rid},"code":"{code}"}}"#))
+}
+
+/// SQOL-R5: a watch the SFU failed this time is asked again after 1.5 s, then 4 s; the third
+/// failure drops it with the room's refusal.
+#[test]
+fn a_watch_the_sfu_failed_is_asked_again_twice() {
+    use crate::share::WATCH_RETRY_MS;
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1)], share_on());
+    machine.share_attach(ShareSurface::Main, 2_000);
+    let mut rid = watch_rid(&machine.share_watch("a", 1, 2_000).unwrap());
+    let mut now = 2_100;
+    for wait in WATCH_RETRY_MS {
+        let effects = machine.socket_message(generation, refused(rid, "sfu_failed"), now, UNIX);
+        assert!(notices(&effects).is_empty(), "no word yet");
+        assert_eq!(machine.view(now, UNIX).share.watching.len(), 1);
+        assert_eq!(machine.next_deadline(now), Some(now + wait));
+        assert!(sent(&machine.tick(now + wait - 1, UNIX, now)).is_empty());
+        let effects = machine.tick(now + wait, UNIX, now);
+        assert!(matches!(sent(&effects)[..], [ToRoom::Watch { n: 1, .. }]));
+        rid = watch_rid(&effects);
+        now += wait + 100;
+    }
+    // Out of tries: dropped with the room's word.
+    let effects = machine.socket_message(generation, refused(rid, "sfu_failed"), now, UNIX);
+    assert!(matches!(
+        notices(&effects)[..],
+        [ShareNotice::Refused { n: None, .. }]
+    ));
+    assert!(machine.view(now, UNIX).share.watching.is_empty());
+}
+
+/// SQOL-R5: an answer that will not change is not asked again; an offer starts the count anew.
+#[test]
+fn only_a_passing_sfu_failure_is_asked_again() {
+    for code in ["not_found", "watch_full", "budget"] {
+        let mut machine = ready();
+        let generation = live(&mut machine, vec![shared(1)], share_on());
+        machine.share_attach(ShareSurface::Main, 2_000);
+        let rid = watch_rid(&machine.share_watch("a", 1, 2_000).unwrap());
+        let effects = machine.socket_message(generation, refused(rid, code), 2_100, UNIX);
+        assert_eq!(notices(&effects).len(), 1, "{code}");
+        assert!(
+            machine.view(2_100, UNIX).share.watching.is_empty(),
+            "{code}"
+        );
+    }
+    let mut machine = ready();
+    let generation = live(&mut machine, vec![shared(1)], share_on());
+    machine.share_attach(ShareSurface::Main, 2_000);
+    let rid = watch_rid(&machine.share_watch("a", 1, 2_000).unwrap());
+    machine.socket_message(generation, refused(rid, "sfu_failed"), 2_100, UNIX);
+    let effects = machine.tick(3_600, UNIX, 3_600);
+    assert!(matches!(sent(&effects)[..], [ToRoom::Watch { n: 1, .. }]));
+    machine.socket_message(generation, woffer(&[("a", 1)], true), 3_700, UNIX);
+    // The connection is lost later: the session asked anew fails once more, the first wait again.
+    let effects = machine.share_watch_report(ShareSurface::Main, WatchReport::Lost, 5_000);
+    let rid = watch_rid(&effects);
+    machine.socket_message(generation, refused(rid, "sfu_failed"), 5_100, UNIX);
+    assert_eq!(
+        machine.next_deadline(5_100),
+        Some(5_100 + crate::share::WATCH_RETRY_MS[0])
+    );
+}
+
 /// SQOL-R4 (E2E's one 21 s watch): a direct connection asks for nothing more: no TURN, no new
 /// session, and once its offer came no wait of watching's runs (the offer's own 20 s wait is the
 /// only clock before it; TURN is asked only by a page whose ICE did not connect in 5 s).

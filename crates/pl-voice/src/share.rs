@@ -54,6 +54,10 @@ pub const ALONE_STOP_MS: u64 = 15 * 60_000;
 pub const HIDDEN_GRACE_MS: u64 = 3_000;
 /// A `watch` the room has not answered with an offer by then is lost (asked again, a few times).
 pub const WATCH_OFFER_WAIT_MS: u64 = 20_000;
+/// SQOL-R5: a `watch` the room could not set up on the SFU this time (`sfu_failed`, a passing
+/// fault) is asked again after these waits; then it goes with the room's refusal. Never for an
+/// answer that will not change (`not_found`, `watch_full`, the budget).
+pub const WATCH_RETRY_MS: [u64; 2] = [1_500, 4_000];
 /// Nobody touched the computer this long while watching: "Hâlâ izliyor musun?".
 pub const STILL_ASK_MS: u64 = 30 * 60_000;
 /// No answer to "Hâlâ izliyor musun?" this long: watching stops.

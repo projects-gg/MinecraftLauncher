@@ -32,8 +32,8 @@ use crate::share::{
     ShareEvent, ShareHoldWhy, ShareKind, ShareLayer, ShareLostWhy, ShareMinePhase, ShareMotion,
     ShareNotice, ShareOpts, SharePreset, ShareRefusal, ShareSource, ShareSt, ShareSurface,
     ShareWatchPhase, ShareWire, THUMB_MAX_BYTES, VoiceLiveShare, VoiceMyShare, VoiceShareView,
-    VoiceStreamVolume, VoiceWatch, WATCH_LOSSES_MAX, WATCH_MAX, WATCH_OFFER_WAIT_MS, WatchCmd,
-    WatchMid, WatchReport, WatchWire, normal_fps,
+    VoiceStreamVolume, VoiceWatch, WATCH_LOSSES_MAX, WATCH_MAX, WATCH_OFFER_WAIT_MS,
+    WATCH_RETRY_MS, WatchCmd, WatchMid, WatchReport, WatchWire, normal_fps,
 };
 use crate::view::{VoiceAnswer, VoiceRefusal};
 use crate::wire::{FromRoom, ModAct, ToRoom};
@@ -158,6 +158,11 @@ struct Watching {
     rid: Option<u32>,
     /// When that `watch` went out (it is lost without an offer by `WATCH_OFFER_WAIT_MS`).
     asked_at: Option<u64>,
+    /// SQOL-R5: `sfu_failed` answers so far (asked again after [`WATCH_RETRY_MS`]); an offer
+    /// starts the count anew.
+    retries: u8,
+    /// SQOL-R5: when it is asked again.
+    retry_at: Option<u64>,
 }
 
 /// What the room said about shares in a message the machine handles for voice too.
@@ -762,6 +767,7 @@ impl Machine {
                     {
                         watch.rid = None;
                         watch.asked_at = None;
+                        watch.retries = 0;
                     }
                 }
                 self.deliver(
@@ -880,8 +886,31 @@ impl Machine {
                         out.push(Effect::Changed);
                     }
                     Some(Pending::Watch(u, n)) => {
-                        self.drop_watch(&u, n, false, out);
-                        out.push(Effect::ShareNotice(ShareNotice::refused(refusal)));
+                        // SQOL-R5: the SFU failed this time: asked again a little later (twice at
+                        // most); any other answer is the room's word on it.
+                        let retry = (code == "sfu_failed")
+                            .then(|| {
+                                self.share
+                                    .watching
+                                    .iter_mut()
+                                    .find(|watch| watch.u == u && watch.n == n)
+                            })
+                            .flatten()
+                            .and_then(|watch| {
+                                let wait = WATCH_RETRY_MS.get(usize::from(watch.retries))?;
+                                watch.retries += 1;
+                                watch.sent = false;
+                                watch.rid = None;
+                                watch.asked_at = None;
+                                watch.retry_at = Some(now + wait);
+                                Some(())
+                            });
+                        if retry.is_some() {
+                            out.push(Effect::Changed);
+                        } else {
+                            self.drop_watch(&u, n, false, out);
+                            out.push(Effect::ShareNotice(ShareNotice::refused(refusal)));
+                        }
                     }
                     Some(Pending::WatchTurn) => self.watch_lost(now, out),
                     _ => {}
@@ -1277,6 +1306,8 @@ impl Machine {
             sent: false,
             rid: None,
             asked_at: None,
+            retries: 0,
+            retry_at: None,
         });
         if self.share.watching.len() == 1 {
             self.share.losses = 0;
@@ -1417,6 +1448,7 @@ impl Machine {
         watch.sent = true;
         watch.rid = Some(rid);
         watch.asked_at = Some(self.share.clock);
+        watch.retry_at = None;
         out.push(Effect::Send {
             generation,
             frame: ToRoom::Watch {
@@ -2129,6 +2161,16 @@ impl Machine {
         {
             at(asked + WATCH_OFFER_WAIT_MS);
         }
+        // SQOL-R5: a `watch` asked again after the SFU failed it.
+        if let Some(retry) = self
+            .share
+            .watching
+            .iter()
+            .filter_map(|watch| watch.retry_at)
+            .min()
+        {
+            at(retry);
+        }
         if !self.share.watching.is_empty() && !self.share.held {
             match self.share.asking_since {
                 Some(asked) => at(asked + STILL_ANSWER_MS),
@@ -2139,6 +2181,20 @@ impl Machine {
 
     pub(super) fn share_tick(&mut self, now: u64, last_input: u64, out: &mut Vec<Effect>) {
         self.share.clock = now;
+        // SQOL-R5: a `watch` the SFU failed is asked again (while the page may ask: one held or
+        // out of sight is asked with the rest when it is back).
+        let may_ask = self.watch_may_ask();
+        for at in 0..self.share.watching.len() {
+            if self.share.watching[at]
+                .retry_at
+                .is_some_and(|retry| now >= retry)
+            {
+                self.share.watching[at].retry_at = None;
+                if may_ask && !self.share.watching[at].sent {
+                    self.send_watch(at, out);
+                }
+            }
+        }
         // A `watch` with no offer in time: as a lost connection (asked again, a few times).
         if self.share.watching.iter().any(|watch| {
             watch
