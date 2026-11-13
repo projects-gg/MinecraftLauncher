@@ -11,7 +11,7 @@
 
 use std::mem::ManuallyDrop;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel, sync_channel};
-use std::sync::{Arc, Mutex, Once};
+use std::sync::{Arc, Condvar, Mutex, Once};
 use std::time::{Duration, Instant};
 
 use tracing::{debug, info, warn};
@@ -36,6 +36,11 @@ use crate::transport::H264Profile;
 /// SFU drops a track after 30 s without packets, and a watcher joining a still screen gets a
 /// picture at once.
 pub const KEEPALIVE: Duration = Duration::from_secs(1);
+
+/// SQOL-R3: how long a stopping encoder waits for its last event request to come back after the
+/// shutdown (its callback is done then). An MFT whose queue answers only when it is released lets
+/// the callback come later: it holds itself, touches nothing of the encoder's, and ends there.
+const EVENT_BACK_WAIT: Duration = Duration::from_millis(300);
 
 pub struct EncoderConfig {
     pub layer: Layer,
@@ -275,9 +280,14 @@ pub fn hardware_name(luid: LUID) -> Option<String> {
 
 #[implement(IMFAsyncCallback)]
 struct EventSink {
+    /// The MFT's event queue (the transform itself); none once the encoder stops.
     generator: Mutex<Option<SendCom<IMFMediaEventGenerator>>>,
     me: Mutex<Option<SendCom<IMFAsyncCallback>>>,
     tx: Mutex<Sender<EncIn>>,
+    /// SQOL-R3: a `BeginGetEvent` is out and its `Invoke` has not finished: the encoder's teardown
+    /// waits for that before it lets the MFT go (no callback may run into a released encoder).
+    out: Mutex<bool>,
+    idle: Condvar,
 }
 
 impl EventSink {
@@ -293,10 +303,23 @@ impl EventSink {
             .ok()
             .and_then(|m| m.as_ref().map(|m| m.0.clone()));
         if let (Some(generator), Some(me)) = (generator, me) {
+            self.set_out(true);
             // SAFETY: live generator; the callback object outlives the request (cleared on stop).
-            unsafe { generator.BeginGetEvent(&me, None)? };
+            if let Err(e) = unsafe { generator.BeginGetEvent(&me, None) } {
+                self.set_out(false);
+                return Err(e);
+            }
         }
         Ok(())
+    }
+
+    fn set_out(&self, out: bool) {
+        if let Ok(mut flag) = self.out.lock() {
+            *flag = out;
+            if !out {
+                self.idle.notify_all();
+            }
+        }
     }
 
     fn clear(&self) {
@@ -307,6 +330,48 @@ impl EventSink {
             *m = None;
         }
     }
+
+    /// SQOL-R3: until no request is out (the MFT's shutdown completes the last one), at most
+    /// `limit`; whether it came.
+    fn wait_idle(&self, limit: Duration) -> bool {
+        let Ok(flag) = self.out.lock() else {
+            return false;
+        };
+        self.idle
+            .wait_timeout_while(flag, limit, |out| *out)
+            .map(|(flag, _)| !*flag)
+            .unwrap_or(false)
+    }
+
+    /// One completed `BeginGetEvent`; whether another was asked.
+    fn take_event(&self, result: Ref<IMFAsyncResult>) -> Result<bool> {
+        let generator = self
+            .generator
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().map(|g| g.0.clone()));
+        let Some(generator) = generator else {
+            return Ok(false);
+        };
+        // SAFETY: the result belongs to our BeginGetEvent.
+        let event = unsafe { generator.EndGetEvent(result.ok()?) };
+        let (kind, status) = match event {
+            // SAFETY: a live event.
+            Ok(event) => unsafe { (event.GetType()? as i32, event.GetStatus()?) },
+            Err(e) if e.code() == MF_E_SHUTDOWN => return Ok(false),
+            Err(e) => (MEError.0, e.code()),
+        };
+        if let Ok(tx) = self.tx.lock()
+            && tx.send(EncIn::Event { kind, status }).is_err()
+        {
+            return Ok(false);
+        }
+        if kind == MEError.0 {
+            return Ok(false);
+        }
+        self.arm()?;
+        Ok(true)
+    }
 }
 
 impl IMFAsyncCallback_Impl for EventSink_Impl {
@@ -315,36 +380,20 @@ impl IMFAsyncCallback_Impl for EventSink_Impl {
     }
 
     fn Invoke(&self, result: Ref<IMFAsyncResult>) -> Result<()> {
-        let generator = self
-            .generator
-            .lock()
-            .ok()
-            .and_then(|g| g.as_ref().map(|g| g.0.clone()));
-        let Some(generator) = generator else {
-            return Ok(());
-        };
-        // SAFETY: the result belongs to our BeginGetEvent.
-        let event = unsafe { generator.EndGetEvent(result.ok()?) };
-        let (kind, status) = match event {
-            // SAFETY: a live event.
-            Ok(event) => unsafe { (event.GetType()? as i32, event.GetStatus()?) },
-            Err(e) if e.code() == MF_E_SHUTDOWN => return Ok(()),
-            Err(e) => (MEError.0, e.code()),
-        };
-        if let Ok(tx) = self.tx.lock()
-            && tx.send(EncIn::Event { kind, status }).is_err()
-        {
-            return Ok(());
+        let taken = self.take_event(result);
+        // No request out any more: the teardown may go on.
+        if !matches!(taken, Ok(true)) {
+            self.set_out(false);
         }
-        if kind != MEError.0 {
-            self.arm()?;
-        }
-        Ok(())
+        taken.map(|_| ())
     }
 }
 
 struct Mft {
     transform: IMFTransform,
+    /// SQOL-R3: the activation object a hardware MFT came from: it is shut down through it (the
+    /// documented way), after the MFT's own shutdown and the last event request.
+    activate: Option<IMFActivate>,
     codec: Option<ICodecAPI>,
     sink: Option<IMFAsyncCallback>,
     is_async: bool,
@@ -506,6 +555,8 @@ fn configure(
                 generator: Mutex::new(Some(SendCom(generator))),
                 me: Mutex::new(None),
                 tx: Mutex::new(tx.clone()),
+                out: Mutex::new(false),
+                idle: Condvar::new(),
             };
             let callback: IMFAsyncCallback = object.into();
             let inner = callback.cast_object_ref::<EventSink>()?;
@@ -528,6 +579,7 @@ fn configure(
         }
         Ok(Mft {
             transform,
+            activate: None,
             codec,
             sink,
             is_async,
@@ -555,7 +607,10 @@ fn open(gpu: &Gpu, cfg: &EncoderConfig, tx: &Sender<EncIn>) -> Result<Mft> {
                 }
             };
             match configure(gpu, transform, cfg, name.clone(), true, tx) {
-                Ok(mft) => return Ok(mft),
+                Ok(mut mft) => {
+                    mft.activate = Some(activate);
+                    return Ok(mft);
+                }
                 Err(e) => {
                     warn!("{name}: {e}");
                     // SAFETY: releases the encoder this activation made.
@@ -643,6 +698,9 @@ struct Worker {
     sets: Option<Vec<u8>>,
     staging: Option<ID3D11Texture2D>,
     failures: u32,
+    /// SQOL-R3: the last sample time given (100 ns units): times only grow (a keep-alive taken
+    /// "now" may precede a frame captured a moment earlier).
+    last_time: i64,
 }
 
 impl Worker {
@@ -659,6 +717,7 @@ impl Worker {
             sets: None,
             staging: None,
             failures: 0,
+            last_time: -1,
         }
     }
 
@@ -776,7 +835,8 @@ impl Worker {
 
     fn submit(&mut self, texture: &ID3D11Texture2D, at: Instant) -> Result<()> {
         let since = at.saturating_duration_since(self.cfg.epoch);
-        let time = (since.as_nanos() / 100) as i64;
+        let time = ((since.as_nanos() / 100) as i64).max(self.last_time + 1);
+        self.last_time = time;
         // SAFETY: MF calls on live objects; buffers are sized for the copies.
         unsafe {
             let buffer = if self.mft.d3d {
@@ -964,27 +1024,41 @@ impl Worker {
         }
     }
 
+    /// SQOL-R3: the teardown in order, on the thread that made the encoder: nothing more goes in
+    /// (queued input is dropped with its textures), streaming ends, the event requests stop, the
+    /// MFT shuts down, the request still out comes back (its callback is done), and only then
+    /// does the activation object shut it down and the last references go.
     fn shutdown(&mut self) {
+        self.pending = None;
+        let sink = self.mft.sink.take();
         // SAFETY: shutting down a live transform once.
         unsafe {
-            let _ = self
-                .mft
-                .transform
-                .ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0);
-            let _ = self
-                .mft
-                .transform
-                .ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, 0);
-            if let Some(sink) = self.mft.sink.take()
-                && let Ok(inner) = sink.cast_object_ref::<EventSink>()
+            let transform = &self.mft.transform;
+            let _ = transform.ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, 0);
+            let _ = transform.ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0);
+            let _ = transform.ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, 0);
+            if let Some(inner) = sink
+                .as_ref()
+                .and_then(|sink| sink.cast_object_ref::<EventSink>().ok())
             {
                 inner.clear();
             }
-            if let Ok(shutdown) = self.mft.transform.cast::<IMFShutdown>() {
+            if let Ok(shutdown) = transform.cast::<IMFShutdown>() {
                 let _ = shutdown.Shutdown();
             }
+            // MFTs made by an activation object are shut down through it (the documented way).
+            if let Some(activate) = self.mft.activate.take() {
+                let _ = activate.ShutdownObject();
+            }
+            let back = sink
+                .as_ref()
+                .and_then(|sink| sink.cast_object_ref::<EventSink>().ok())
+                .is_none_or(|inner| inner.wait_idle(EVENT_BACK_WAIT));
+            debug!(
+                "share encoder {}: shut down (last event back: {back})",
+                self.mft.name
+            );
         }
-        self.pending = None;
         self.last = None;
     }
 }
