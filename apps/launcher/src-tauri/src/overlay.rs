@@ -24,6 +24,7 @@ use pl_mc::instance::Instance;
 use pl_mc::loaders::LoaderKind;
 use pl_mc::modrinth::ModrinthResolveTarget;
 use pl_net::CancellationToken;
+use pl_overlay::fabric_wait::Watched;
 use pl_overlay::install::{BUNDLE_DIR, Bundle, ContentJar, Jars, Outcome, Pick, Request};
 use pl_overlay::protocol::{ByeReason, PROTO};
 use pl_overlay::{ClientTweaks, ConnectOutcome, Endpoint, Overlay, OverlayConfig};
@@ -48,9 +49,12 @@ pub const EMOJI_EVENT: &str = "overlay-emoji";
 pub const TWEAKS_EVENT: &str = "overlay-tweaks";
 /// The choices, in the data folder.
 const CONFIG_FILE: &str = "overlay.json";
-/// How long a start waits for the Fabric API the overlay's jar needs: past it, the game starts
-/// without the overlay this time.
-const FABRIC_API_WAIT: Duration = Duration::from_secs(30);
+/// FABRIC-PART: the wait for the Fabric API the overlay's jar needs follows its progress: a
+/// download with no new byte for this long is stuck, and the game starts without the overlay this
+/// time.
+const FABRIC_API_STALL: Duration = Duration::from_secs(15);
+/// The most a start waits for Fabric API however steadily it moves (a slow line still gets it).
+const FABRIC_API_TOTAL: Duration = Duration::from_secs(150);
 /// How long a start waits for the chat emoji list of a newer content index (CHAT-EMOJI): past it,
 /// the game starts with the list the launcher has, and the newer one follows into the game.
 const EMOJI_WAIT: Duration = Duration::from_secs(3);
@@ -424,6 +428,10 @@ pub async fn prepare_mod(
     let env = crate::commands::modhealth::environment(instance, Some(java_major));
     // The jar is there for the panel, the chat's emoji picker or both (CHAT-EMOJI).
     let enabled = state.overlay.wants_mod();
+    if enabled && instance.loader.kind == LoaderKind::Fabric {
+        // FABRIC-PART: a Fabric API part an older launcher left goes at the next start.
+        pl_overlay::fabric_wait::sweep_parts(&game_dir.join("mods"));
+    }
     let content = content_jars();
     let jars = Jars {
         bundle: bundle(),
@@ -536,11 +544,29 @@ async fn install_fabric_api(
     )
     .with_icon_dir(crate::commands::modrinth::icon_dir(state));
     let target = ModrinthResolveTarget::for_loader(LoaderKind::Fabric, instance.mc_version.clone());
-    let job = async {
+    let mods = game_dir.join("mods");
+    // Parts an older launcher left (it dropped the download at 30 s): never junk in the player's
+    // folder.
+    pl_overlay::fabric_wait::sweep_parts(&mods);
+    let limits = pl_overlay::fabric_wait::Limits {
+        stall: FABRIC_API_STALL,
+        total: FABRIC_API_TOTAL,
+        poll: Duration::from_millis(500),
+    };
+    let watched = pl_overlay::fabric_wait::watch(cancel, limits, |stop, seen| async move {
         let version = client
             .best_version(pl_content::FABRIC_API_PROJECT, &target)
             .await?
             .ok_or_else(|| pl_mc::Error::NotFound("Fabric API for this version".to_owned()))?;
+        seen.store(1, std::sync::atomic::Ordering::Relaxed);
+        let progress: pl_mc::addons::AddonProgressFn = std::sync::Arc::new(move |event| {
+            let mark = match event {
+                pl_mc::addons::AddonProgress::Downloading { done_bytes, .. } => done_bytes + 2,
+                pl_mc::addons::AddonProgress::Finishing => u64::MAX,
+                _ => 1,
+            };
+            seen.store(mark, std::sync::atomic::Ordering::Relaxed);
+        });
         addons
             .install(
                 &client,
@@ -551,22 +577,30 @@ async fn install_fabric_api(
                 AddonInstallOptions {
                     with_dependencies: true,
                     concurrency: 4,
-                    cancel: cancel.clone(),
-                    progress: None,
+                    cancel: stop,
+                    progress: Some(progress),
                 },
             )
             .await
-    };
-    match tokio::time::timeout(FABRIC_API_WAIT, job).await {
-        Ok(Ok(report)) => tracing::info!(
+    })
+    .await;
+    match watched {
+        Watched::Done(Ok(report)) => tracing::info!(
             installed = ?report.installed.iter().map(|i| &i.file_name).collect::<Vec<_>>(),
             "Fabric API installed for the in-game overlay"
         ),
-        Ok(Err(error)) => {
+        Watched::Done(Err(error)) => {
             tracing::info!(%error, "Fabric API not installed; the game starts without the overlay");
         }
-        Err(_) => tracing::info!("Fabric API took too long; the game starts without the overlay"),
+        Watched::Stalled => {
+            tracing::info!("Fabric API stalled; the game starts without the overlay");
+        }
+        Watched::TooLong => {
+            tracing::info!("Fabric API took too long; the game starts without the overlay");
+        }
     }
+    // Cancelled, stalled or failed: whatever part is left goes.
+    pl_overlay::fabric_wait::sweep_parts(&mods);
 }
 
 /// `PROJECTS_OVERLAY_ALWAYS=1` (debug builds only): every launch gets a bridge, for a local test
