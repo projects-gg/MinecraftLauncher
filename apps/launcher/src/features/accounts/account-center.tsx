@@ -49,6 +49,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { ProjectsLinkRow } from "@/features/projects-skin/link-row";
 import { useProjectsSkinOverview } from "@/features/projects-skin/queries";
+import { ServerAccountsRow } from "@/features/server-accounts/server-accounts-row";
 import { SocialAccountRow } from "@/features/social/account-row";
 import { type AccountSummary, api } from "@/lib/api";
 import { AccountCard } from "./account-card";
@@ -548,7 +549,7 @@ export function AccountCenter({
   return (
     <ReducedMotionConfig>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: Ctrl+Z from anywhere in the center */}
-      <div onKeyDown={onKeyDown} className={cn(variant === "embedded" && "pt-2")}>
+      <div onKeyDown={onKeyDown} className={cn("relative", variant === "embedded" && "pt-2")}>
         <LayoutGroup id={`account-center-${variant}`}>
           {isPending ? (
             <ListSkeleton />
@@ -557,6 +558,9 @@ export function AccountCenter({
               {empty ? <EmptyAccounts /> : null}
             </AnimatePresence>
           )}
+          {/* SRV-ACC: the server accounts above the list (under the empty state's title), in one
+              place, so "Eklendi" stays where it was pressed while the new accounts come in below. */}
+          {isPending ? null : <ServerAccountsRow accounts={accounts} />}
           <h3 id={listId} className="sr-only">
             {t("accounts.center.listLabel")}
           </h3>

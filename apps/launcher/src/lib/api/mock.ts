@@ -560,6 +560,10 @@ function mockHome(): HomeContent {
     socNext: mockFlag("socNext") !== "off",
     // PACK-EDIT's "Sürümü Değiştir" shows in previews unless `?packEdit=off`.
     packEdit: mockFlag("packEdit") !== "off",
+    // SRV-ACC: "Sunucu Hesapları" and the in-game account switcher's switch show in previews
+    // unless `?serverAccounts=off` / `?iasSync=off`.
+    serverAccounts: mockFlag("serverAccounts") !== "off",
+    iasSync: mockFlag("iasSync") !== "off",
     banners:
       banners === "none"
         ? []

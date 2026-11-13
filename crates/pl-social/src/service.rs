@@ -1404,6 +1404,15 @@ impl SocialService {
         access
     }
 
+    /// SRV-ACC: the player names of the signed-in player's accounts on the Projects server's site
+    /// ([`Session::server_accounts`]). Nobody signed in is [`SocialError::Unauthorized`].
+    pub async fn server_accounts(&self) -> Result<Vec<String>> {
+        let (names, _) = self
+            .call(|session| async move { session.server_accounts().await })
+            .await?;
+        Ok(names)
+    }
+
     fn signed_in(&self) -> Result<(Session, u64)> {
         let core = self.lock();
         match (&core.session, core.auth) {

@@ -126,6 +126,44 @@ pub async fn account_add_offline(
     Ok(view_of(&state, &account))
 }
 
+/// The most names one "Hepsini Ekle" takes (the server accounts' list holds at most 50).
+const ADD_MANY_MAX: usize = 50;
+
+/// SRV-ACC "Hepsini Ekle": a username account for each of `names` that is a player name and not
+/// saved in any letter case, in one write. The active account stays (with none, the first added
+/// becomes active). The accounts added come back, for "Geri Al".
+#[tauri::command]
+#[specta::specta]
+pub async fn accounts_add_offline_many(
+    state: State<'_, AppState>,
+    names: Vec<String>,
+) -> CmdResult<Vec<AccountView>> {
+    let names: Vec<String> = names.into_iter().take(ADD_MANY_MAX).collect();
+    let added = state.auth.add_offline_names(&names).await?;
+    Ok(added
+        .iter()
+        .map(|account| view_of(&state, account))
+        .collect())
+}
+
+/// Its "Geri Al": the username accounts it added (`ids`) go again, in one write; the others stay.
+#[tauri::command]
+#[specta::specta]
+pub async fn accounts_remove_added(
+    state: State<'_, AppState>,
+    ids: Vec<String>,
+) -> CmdResult<AccountRemoval> {
+    let ids = ids
+        .iter()
+        .take(ADD_MANY_MAX)
+        .map(|id| parse_id(id))
+        .collect::<CmdResult<Vec<_>>>()?;
+    let active = state.auth.remove_offline_names(&ids).await?;
+    Ok(AccountRemoval {
+        active_id: active.map(|id| id.to_string()),
+    })
+}
+
 /// What a Microsoft sign-in did, so the UI can say it plainly.
 #[derive(Debug, Clone, Copy, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]

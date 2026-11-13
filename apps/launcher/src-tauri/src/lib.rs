@@ -5,6 +5,7 @@ mod commands;
 mod error;
 mod fastpack;
 mod host;
+mod ias;
 mod identity;
 mod notify;
 mod overlay;
@@ -294,6 +295,9 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::app::app_tray_in_game,
             commands::accounts::accounts_list,
             commands::accounts::account_add_offline,
+            // SRV-ACC "Hepsini Ekle" and its "Geri Al"
+            commands::accounts::accounts_add_offline_many,
+            commands::accounts::accounts_remove_added,
             commands::accounts::account_login_microsoft,
             commands::accounts::account_cancel_login,
             commands::accounts::account_set_active,
@@ -351,6 +355,9 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             // config's features.fastPacks is on)
             fastpack::fast_packs_configure,
             fastpack::fast_packs_state,
+            // Settings → Genel "Hesapları Oyun İçi Hesap Değiştiriciye Ekle" (SRV-ACC; shown
+            // only while the signed config's features.iasSync is on)
+            ias::ias_sync_configure,
             // Settings → Veri "Kullanım verisi gönder" (TELEMETRY; shown only while the signed
             // config's features.telemetry is on), the start's time and the page's errors
             telemetry::telemetry_state,
@@ -707,6 +714,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_dismiss_invite,
             commands::social::social_open_in_discord,
             commands::social::social_sessions,
+            // SRV-ACC "Sunucu Hesapların"
+            commands::social::social_server_accounts,
             commands::social::social_revoke_session,
             commands::social::social_revoke_other_sessions,
             commands::social::social_delete_account,

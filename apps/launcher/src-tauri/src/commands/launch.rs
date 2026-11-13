@@ -1347,6 +1347,12 @@ async fn prepare_and_spawn(
         }
         modhealth::Prelaunch::Clear => {}
     }
+    // "Hesapları Oyun İçi Hesap Değiştiriciye Ekle" (SRV-ACC): the install's In-Game Account
+    // Switcher gets the launcher's username accounts it has not had yet. Not beside a running game
+    // of this folder (its mod would save its own list over it); never stops the launch.
+    if !beside {
+        crate::ias::before_launch(state, &game_dir).await;
+    }
     // The instance lock (`preparing`) is held until the game counts as running: a version switch
     // or a mod change asked for meanwhile waits for it and is then refused, instead of moving
     // `mods/` and `config/` under a game about to start with the old version.

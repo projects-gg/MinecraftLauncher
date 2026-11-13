@@ -19,3 +19,4 @@
 *.otf binary
 *.zip binary
 *.jar binary
+*.bin binary

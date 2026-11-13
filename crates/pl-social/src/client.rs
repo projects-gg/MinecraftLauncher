@@ -574,6 +574,35 @@ impl Session {
         self.get("v1/me").await
     }
 
+    /// SRV-ACC (`GET /v1/me/server-accounts`): the player names of the player's accounts on the
+    /// Projects server's site, the primary first (`crate::server_accounts`). A service from before
+    /// it answers `404`: none.
+    pub async fn server_accounts(&self) -> Result<Vec<String>> {
+        #[derive(Deserialize)]
+        struct Names {
+            #[serde(default)]
+            names: Vec<serde_json::Value>,
+        }
+        let reply = self
+            .client
+            .send(
+                Method::GET,
+                "v1/me/server-accounts",
+                Some(&self.token),
+                None,
+                &[],
+            )
+            .await?;
+        if reply.status == 404 {
+            return Ok(Vec::new());
+        }
+        if !reply.is_success() {
+            return Err(reply.error());
+        }
+        let names: Names = reply.json()?;
+        Ok(crate::server_accounts::player_names(&names.names))
+    }
+
     /// Profile picture, status mode (online / dnd / invisible) and privacy switches.
     pub async fn update_profile(&self, update: &ProfileUpdate) -> Result<Me> {
         let body = serde_json::to_value(update)
@@ -1652,6 +1681,48 @@ mod tests {
             Err(SocialError::InvalidInput(_))
         ));
         assert_eq!(server.requests().len(), before);
+    }
+
+    /// SRV-ACC: the server accounts' names with the session; a service without the route has none.
+    #[tokio::test]
+    async fn lists_the_server_accounts_names() {
+        let server = MockServer::start(|req| match req.header("authorization") {
+            Some(bearer) if bearer.ends_with(&"A".repeat(43)) => MockReply::json(
+                200,
+                r#"{"names":["KorAtesi","koratesi","bad name",7,"x7Ender"]}"#,
+            ),
+            _ => MockReply::json(401, r#"{"error":{"code":"unauthorized","message":"x"}}"#),
+        })
+        .await;
+        let social = client(&server);
+        assert_eq!(
+            social.session(token()).server_accounts().await.unwrap(),
+            ["KorAtesi", "x7Ender"]
+        );
+        let ended = SessionToken::new(format!("pls_{}", "B".repeat(43)));
+        assert!(matches!(
+            social.session(ended).server_accounts().await,
+            Err(SocialError::Unauthorized)
+        ));
+        assert!(
+            server
+                .requests()
+                .iter()
+                .all(|r| r.method == "GET" && r.path == "/v1/me/server-accounts")
+        );
+
+        let old = MockServer::start(|_| {
+            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+        })
+        .await;
+        assert!(
+            client(&old)
+                .session(token())
+                .server_accounts()
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[tokio::test]

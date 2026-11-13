@@ -284,6 +284,8 @@ function home(v: HomeView): HomeContent {
     },
     socNext: v.socNext,
     packEdit: v.packEdit,
+    serverAccounts: v.serverAccounts,
+    iasSync: v.iasSync,
     offline: v.offline,
   };
 }
@@ -695,6 +697,16 @@ export const tauriApi: LauncherApi = {
   },
   async addOfflineAccount(name) {
     return account(await ok(commands.accountAddOffline(name)));
+  },
+  async addOfflineAccounts(names) {
+    return (await ok(commands.accountsAddOfflineMany(names))).map(account);
+  },
+  async removeAddedAccounts(ids) {
+    const removal = await ok(commands.accountsRemoveAdded(ids));
+    return { activeId: removal.activeId ?? null };
+  },
+  async serverAccounts() {
+    return ok(commands.socialServerAccounts());
   },
   async loginMicrosoft(onStep, options) {
     const channel = new Channel<BindingLoginStep>();

@@ -236,6 +236,49 @@ export const mockAccounts = {
     select(account.id);
     return summary(account);
   },
+  async addOfflineAccounts(names: string[]) {
+    await delay(240);
+    const added: MockAccount[] = [];
+    for (const name of names) {
+      const taken = accounts.some(
+        (a) => a.kind === "offline" && a.username.toLowerCase() === name.toLowerCase(),
+      );
+      if (taken) continue;
+      const account: MockAccount = {
+        id: `off-${nextId++}`,
+        kind: "offline",
+        username: name,
+        active: false,
+        addedAt: new Date().toISOString(),
+      };
+      accounts.push(account);
+      added.push(account);
+    }
+    if (!accounts.some((a) => a.active) && added[0]) select(added[0].id);
+    return added.map(summary);
+  },
+  async removeAddedAccounts(ids: string[]) {
+    await delay(140);
+    const leaving = accounts.filter((a) => a.kind === "offline" && ids.includes(a.id));
+    const wasActive = leaving.some((a) => a.active);
+    for (const account of leaving) accounts.splice(accounts.indexOf(account), 1);
+    if (wasActive) select(mostRecentlyUsed()?.id ?? null);
+    return { activeId: accounts.find((a) => a.active)?.id ?? null };
+  },
+  /**
+   * SRV-ACC previews: `?serverNames=one` (one name), `none` (an empty list); otherwise six names,
+   * one of them already here.
+   */
+  async serverAccounts() {
+    await delay(260);
+    const mode =
+      typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("serverNames");
+    if (mode === "none") return [];
+    if (mode === "one") return ["Gece_Kusu"];
+    return ["EjderAvcisi", "x7Ender", "Gece_Kusu", "Tilki_42", "MaviKedi", "KarBaykusu"];
+  },
   async loginMicrosoft(
     onStep: (step: LoginStep) => void,
     options?: { relogin?: string },
