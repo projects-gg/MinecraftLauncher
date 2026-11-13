@@ -31,6 +31,10 @@ use crate::wire::{self, ClosedWhy, FromRoom, ModAct, Role, RoomKind, Sdp, Ticket
 #[path = "share_machine.rs"]
 mod share_machine;
 
+/// SQOL: the room's text chat (its own file; a child, so it shares the stay and the requests).
+#[path = "rchat_machine.rs"]
+mod rchat_machine;
+
 /// An invite's ticket holds this long after its ring began (`TICKET_TTL.invite`).
 pub const INVITE_TICKET_SECONDS: i64 = 600;
 /// The connection may be away this long before the stay ends ("Bağlanamadı.").
@@ -223,6 +227,14 @@ pub enum Effect {
     },
     /// Open (or bring to the front) or close the "Yayın" window.
     SharePopout(bool),
+    // SQOL ---------------------------------------------------------------------------------------
+    /// The room chat's news for the page (`voice-chat`).
+    Chat(crate::rchat::VoiceChatEvent),
+    /// The answer for a room chat request the caller waits on (`rid`).
+    ChatAnswer {
+        rid: u32,
+        answer: crate::rchat::RoomChatSend,
+    },
 }
 
 /// The first answer a join's caller waits for.
@@ -251,6 +263,10 @@ enum Pending {
     Watch(String, u8),
     WatchTurn,
     Unshare,
+    // SQOL: a live change of share `n` (`share_set` with `rid`), a room chat message, a deletion.
+    ShareSet(u8),
+    Rchat,
+    RchatDel,
 }
 
 #[derive(Debug)]
@@ -356,6 +372,8 @@ pub struct Machine {
     ignored: Vec<String>,
     /// SHARE: screen sharing in the room.
     share: share_machine::Shares,
+    /// SQOL: the room's text chat.
+    chat: rchat_machine::RoomChat,
 }
 
 impl std::fmt::Debug for Machine {
@@ -401,6 +419,7 @@ impl Machine {
             meters_sent: (false, false),
             ignored: Vec::new(),
             share: share_machine::Shares::default(),
+            chat: rchat_machine::RoomChat::default(),
         }
     }
 
@@ -1005,6 +1024,8 @@ impl Machine {
         if alone_with {
             self.end_stay(now, None, &mut out);
         }
+        // SQOL: their room chat messages leave the page.
+        self.chat_blocked(user, &mut out);
         self.rings.retain(|(ring, _)| ring.from != user);
         self.missed.retain(|missed| missed.from != user);
         self.sync_ring(&mut out);
@@ -1038,6 +1059,8 @@ impl Machine {
         };
         // SHARE: every share stops, nothing is watched (the room's `leave` ends them there).
         self.share_end(out);
+        // SQOL: the room's chat goes with the stay.
+        self.chat_end();
         if stay.link == Link::Open {
             out.push(Effect::Send {
                 generation: stay.generation,
@@ -1063,7 +1086,15 @@ impl Machine {
                 answer,
             });
         }
-        for (rid, _) in std::mem::take(&mut self.pending) {
+        for (rid, pending) in std::mem::take(&mut self.pending) {
+            if matches!(pending, Pending::Rchat | Pending::RchatDel) {
+                // SQOL: a room chat request's caller waits on its own answer.
+                out.push(Effect::ChatAnswer {
+                    rid,
+                    answer: crate::rchat::RoomChatSend::refused(crate::rchat::RoomChatError::Gone),
+                });
+                continue;
+            }
             out.push(Effect::Answer {
                 rid,
                 answer: VoiceAnswer::refused(VoiceRefusal::Nothing),
@@ -1298,11 +1329,17 @@ impl Machine {
             dedup_changed(&mut out);
             return out;
         };
+        // SQOL: room chat frames are the chat part's.
+        let Some(message) = self.chat_message(message, &mut out) else {
+            dedup_changed(&mut out);
+            return out;
+        };
         let seen = share_machine::Seen::of(&message);
         let again = self.stay.as_ref().is_some_and(|stay| stay.welcomed);
         self.voice_message(generation, message, now, unix, &mut out);
         if self.current(generation).is_some() {
             self.share_seen(seen, again, now, &mut out);
+            self.chat_seen(&mut out);
         }
         out
     }
@@ -2454,7 +2491,7 @@ impl Machine {
             backup_rev: self.store.revision(),
             ask_before_call: settings.ask_before_call,
             together_since: self.stay.as_ref().and_then(|stay| stay.together_since),
-            share: self.share_view(),
+            share: self.share_view(now, unix),
         }
     }
 
@@ -2500,6 +2537,8 @@ impl Machine {
                 can_rename: false,
                 can_close: false,
                 ptt: false,
+                chat: false,
+                grew: self.chat_grew(),
             });
         };
         let my_role = role_view(room.my_role);
@@ -2579,6 +2618,10 @@ impl Machine {
                 },
             can_close: !general && room.my_role == Role::Leader,
             ptt: self.room_ptt(),
+            // SQOL: the room's chat (only an `rchat1` room says so) and whether it ever held more
+            // than two.
+            chat: room.chat,
+            grew: self.chat_grew(),
         })
     }
 }

@@ -9,6 +9,7 @@
 
 use pl_voice::discord::VoiceDiscordOffer;
 use pl_voice::engine::{EngineCommand, PageReport};
+use pl_voice::rchat::{RoomChatError, RoomChatMsg, RoomChatSend};
 use pl_voice::settings::{VoiceBackup, VoiceSettings};
 use pl_voice::view::{
     VoiceAnswer, VoiceCrewOp, VoiceKeyAsk, VoiceKeyCheck, VoiceModAction, VoiceState,
@@ -282,6 +283,88 @@ pub fn voice_restore(state: State<'_, AppState>, backup: VoiceBackup) -> CmdResu
         .set_voice_switch(state.voice.settings().enabled);
     Ok(())
 }
+
+/// SQOL: a launcher text field has the keyboard (`on`) or no longer: single keys without Ctrl,
+/// Alt or Shift (push-to-talk "V", mute "M") do nothing meanwhile, so typing never opens the
+/// microphone. Only while the launcher's window is the one in front.
+#[tauri::command]
+#[specta::specta]
+pub fn voice_typing(on: bool) -> CmdResult<()> {
+    crate::voice::input::set_typing(on);
+    Ok(())
+}
+
+/// SQOL: "Gönder" in the voice room's chat (a text, or a sticker); waits for the room's answer.
+#[tauri::command]
+#[specta::specta]
+pub async fn voice_chat_send(
+    state: State<'_, AppState>,
+    room: String,
+    text: Option<String>,
+    sticker: Option<String>,
+) -> CmdResult<RoomChatSend> {
+    Ok(state.voice.chat_send(room, text, sticker).await)
+}
+
+/// SQOL: "Sil" on a room chat message (the player's own; a leader's or moderator's anyone's):
+/// null when it went.
+#[tauri::command]
+#[specta::specta]
+pub async fn voice_chat_delete(
+    state: State<'_, AppState>,
+    room: String,
+    id: String,
+) -> CmdResult<Option<RoomChatError>> {
+    Ok(state.voice.chat_delete(room, id).await)
+}
+
+/// SQOL: "Rapor Et" on a room chat message: the message as the room sealed it and the ones before
+/// it go to Projects' moderators (the friends service's report path). Null when it went.
+#[tauri::command]
+#[specta::specta]
+pub async fn voice_chat_report(
+    state: State<'_, AppState>,
+    room: String,
+    id: String,
+    reason: pl_social::ReportReason,
+    note: Option<String>,
+) -> CmdResult<Option<RoomChatError>> {
+    let Some((message, before)) = state.voice.chat_evidence(&room, &id) else {
+        return Ok(Some(RoomChatError::Gone));
+    };
+    let note = note
+        .map(|note| {
+            note.trim()
+                .chars()
+                .take(REPORT_NOTE_MAX)
+                .collect::<String>()
+        })
+        .filter(|note| !note.is_empty());
+    let sent = state
+        .social
+        .report_room_chat(&room, message, before, reason, note)
+        .await;
+    Ok(sent.err().map(|error| {
+        use pl_social::SocialError;
+        match error {
+            SocialError::RateLimited { .. } => RoomChatError::RateLimited,
+            SocialError::Unauthorized | SocialError::Restricted { .. } => RoomChatError::Off,
+            SocialError::InvalidInput(_) => RoomChatError::Gone,
+            _ => RoomChatError::Failed,
+        }
+    }))
+}
+
+/// SQOL: the room chat's messages this launcher holds (the page's start; `voice-chat` brings the
+/// rest).
+#[tauri::command]
+#[specta::specta]
+pub fn voice_chat_log(state: State<'_, AppState>, room: String) -> CmdResult<Vec<RoomChatMsg>> {
+    Ok(state.voice.chat_log(&room))
+}
+
+/// A report's own words at most (as the friends' reports).
+const REPORT_NOTE_MAX: usize = 500;
 
 /// The voice page (the hidden `voice` window only): hands over its channel for the launcher's
 /// commands; the launcher configures it and, in a room, starts the call.

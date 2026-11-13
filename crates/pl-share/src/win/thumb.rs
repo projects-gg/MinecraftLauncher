@@ -5,6 +5,11 @@
 //! kilobytes to a staging texture, and WIC writes the JPEG. The worker sleeps on its channel
 //! between pictures (one wake a minute): nothing polls, and a still source costs no GPU work at all
 //! (its last picture goes again).
+//!
+//! SQOL: the same worker makes the sharer's own preview while it is on: at most twice a second the
+//! next captured frame (resting or not, never while the share holds a blank picture) becomes a
+//! larger JPEG through a converter of its own. A still source makes none (nothing new to show), and
+//! the worker's timer stops until a frame comes.
 
 use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -47,6 +52,8 @@ pub struct Host {
     pub latest: Box<dyn Fn() -> Option<Latest> + Send>,
     /// A finished picture for the launcher (`ShareEvent::Thumb`).
     pub emit: Box<dyn Fn(Vec<u8>) + Send>,
+    /// SQOL: a finished preview for the sharer (`ShareEvent::PreviewFrame`).
+    pub preview: Box<dyn Fn(Vec<u8>) + Send>,
 }
 
 enum Msg {
@@ -59,6 +66,12 @@ enum Msg {
     },
     /// It could not.
     Missed,
+    /// SQOL: the sharer's preview on or off.
+    Preview(bool),
+    /// SQOL: the capture callback left a fresh frame's preview in its staging texture (or could
+    /// not).
+    PreviewReady,
+    PreviewMissed,
     Stop,
 }
 
@@ -70,6 +83,9 @@ pub struct Thumbs {
     /// Frames the capture delivered so far, resting or not: the same count, the same picture.
     captured: AtomicU64,
     converter: Mutex<Option<Converter>>,
+    /// SQOL: the next captured frame becomes the sharer's preview.
+    preview_wanted: AtomicBool,
+    preview_converter: Mutex<Option<Converter>>,
     tx: Sender<Msg>,
 }
 
@@ -91,6 +107,8 @@ impl Thumbs {
             wanted: AtomicBool::new(false),
             captured: AtomicU64::new(0),
             converter: Mutex::new(None),
+            preview_wanted: AtomicBool::new(false),
+            preview_converter: Mutex::new(None),
             tx,
         });
         let mut worker = Worker {
@@ -101,6 +119,8 @@ impl Thumbs {
             extended: false,
             started: false,
             last: None,
+            preview_on: false,
+            preview_next: None,
         };
         std::thread::Builder::new()
             .name(format!("pl-share-thumb-{n}"))
@@ -116,11 +136,17 @@ impl Thumbs {
         let _ = self.tx.send(Msg::Start);
     }
 
+    /// SQOL: the sharer's own preview on or off.
+    pub fn preview(&self, on: bool) {
+        let _ = self.tx.send(Msg::Preview(on));
+    }
+
     /// Every captured frame, resting or not, on the capture thread: counted, and turned into the
-    /// picture when the worker waits for one.
-    pub fn frame(&self, texture: &ID3D11Texture2D, content: (u32, u32), at: Instant) {
+    /// picture when the worker waits for one (SQOL: and into the preview when that waits). `held`:
+    /// the share shows a blank picture now, so this frame shows nothing to anyone.
+    pub fn frame(&self, texture: &ID3D11Texture2D, content: (u32, u32), at: Instant, held: bool) {
         let frames = self.captured.fetch_add(1, Ordering::Relaxed) + 1;
-        if !self.wanted.swap(false, Ordering::SeqCst) {
+        if held {
             return;
         }
         let rect = RECT {
@@ -129,6 +155,19 @@ impl Thumbs {
             right: content.0.min(i32::MAX as u32) as i32,
             bottom: content.1.min(i32::MAX as u32) as i32,
         };
+        if self.preview_wanted.swap(false, Ordering::SeqCst) {
+            let msg = match blit_with(&self.gpu, &self.preview_converter, PREVIEW, texture, rect) {
+                Ok(()) => Msg::PreviewReady,
+                Err(e) => {
+                    debug!("share preview capture: {e}");
+                    Msg::PreviewMissed
+                }
+            };
+            let _ = self.tx.send(msg);
+        }
+        if !self.wanted.swap(false, Ordering::SeqCst) {
+            return;
+        }
         let msg = match self.blit(texture, rect, false) {
             Ok(()) => Msg::Ready { at, frames },
             Err(e) => {
@@ -145,7 +184,7 @@ impl Thumbs {
             .lock()
             .map_err(|_| windows::core::Error::empty())?;
         if slot.is_none() {
-            *slot = Some(Converter::new(&self.gpu)?);
+            *slot = Some(Converter::new(&self.gpu, thumb::SIDE)?);
         }
         match slot.as_mut() {
             Some(converter) => converter.blit(&self.gpu, src, rect, nv12),
@@ -155,14 +194,41 @@ impl Thumbs {
 
     /// The staged picture as 24-bit BGR rows: (pixels, width, height, stride).
     fn read(&self) -> Result<(Vec<u8>, u32, u32, u32)> {
-        let slot = self
-            .converter
-            .lock()
-            .map_err(|_| windows::core::Error::empty())?;
-        match slot.as_ref() {
-            Some(converter) => converter.read(&self.gpu),
-            None => Err(windows::core::Error::empty()),
-        }
+        read_with(&self.gpu, &self.converter)
+    }
+
+    /// SQOL: the staged preview, as [`Self::read`].
+    fn read_preview(&self) -> Result<(Vec<u8>, u32, u32, u32)> {
+        read_with(&self.gpu, &self.preview_converter)
+    }
+}
+
+/// SQOL: the preview's long side (its converter's).
+const PREVIEW: u32 = thumb::PREVIEW_SIDE;
+
+/// A captured frame into `slot`'s converter (made the first time, `side` px on the long side).
+fn blit_with(
+    gpu: &Gpu,
+    slot: &Mutex<Option<Converter>>,
+    side: u32,
+    src: &ID3D11Texture2D,
+    rect: RECT,
+) -> Result<()> {
+    let mut slot = slot.lock().map_err(|_| windows::core::Error::empty())?;
+    if slot.is_none() {
+        *slot = Some(Converter::new(gpu, side)?);
+    }
+    match slot.as_mut() {
+        Some(converter) => converter.blit(gpu, src, rect, false),
+        None => Err(windows::core::Error::empty()),
+    }
+}
+
+fn read_with(gpu: &Gpu, slot: &Mutex<Option<Converter>>) -> Result<(Vec<u8>, u32, u32, u32)> {
+    let slot = slot.lock().map_err(|_| windows::core::Error::empty())?;
+    match slot.as_ref() {
+        Some(converter) => converter.read(gpu),
+        None => Err(windows::core::Error::empty()),
     }
 }
 
@@ -184,16 +250,46 @@ struct Worker {
     extended: bool,
     started: bool,
     last: Option<Last>,
+    /// SQOL: the sharer's preview is on, and when to ask the capture for the next one (none while
+    /// one is asked for and no frame came: a still source wakes nobody).
+    preview_on: bool,
+    preview_next: Option<Instant>,
 }
 
 impl Worker {
     fn run(&mut self, rx: &Receiver<Msg>) {
         loop {
-            let msg = match self.waiting.or(self.next) {
+            let at = [self.waiting.or(self.next), self.preview_next]
+                .into_iter()
+                .flatten()
+                .min();
+            let msg = match at {
                 Some(at) => rx.recv_timeout(at.saturating_duration_since(Instant::now())),
                 None => rx.recv().map_err(|_| RecvTimeoutError::Disconnected),
             };
             match msg {
+                Ok(Msg::Preview(on)) => {
+                    self.preview_on = on;
+                    if on {
+                        self.preview_next.get_or_insert_with(Instant::now);
+                    } else {
+                        self.preview_next = None;
+                        self.thumbs.preview_wanted.store(false, Ordering::SeqCst);
+                    }
+                }
+                Ok(Msg::PreviewReady) => {
+                    if self.preview_on {
+                        if let Some(jpg) = self.encode_preview() {
+                            (self.host.preview)(jpg);
+                        }
+                        self.preview_next = Some(Instant::now() + thumb::PREVIEW_EVERY);
+                    }
+                }
+                Ok(Msg::PreviewMissed) => {
+                    if self.preview_on {
+                        self.preview_next = Some(Instant::now() + thumb::PREVIEW_EVERY);
+                    }
+                }
                 Ok(Msg::Start) => {
                     if !self.started {
                         self.started = true;
@@ -219,6 +315,11 @@ impl Worker {
 
     fn tick(&mut self) {
         let now = Instant::now();
+        // SQOL: the next captured frame becomes the preview; the timer waits for it.
+        if self.preview_on && self.preview_next.is_some_and(|at| now >= at) {
+            self.preview_next = None;
+            self.thumbs.preview_wanted.store(true, Ordering::SeqCst);
+        }
         if let Some(until) = self.waiting {
             if now < until {
                 return;
@@ -319,6 +420,16 @@ impl Worker {
         }
         jpg
     }
+
+    /// SQOL: the staged preview as its JPEG.
+    fn encode_preview(&self) -> Option<Vec<u8>> {
+        let (bgr, w, h, stride) = self
+            .thumbs
+            .read_preview()
+            .map_err(|e| debug!("share preview read: {e}"))
+            .ok()?;
+        thumb::fit_preview(|quality| super::sources::encode_jpeg(&bgr, w, h, stride, Some(quality)))
+    }
 }
 
 /// The picture's video processor, its BGRA target and the staging copy, rebuilt when a size
@@ -326,6 +437,8 @@ impl Worker {
 struct Converter {
     video_device: ID3D11VideoDevice,
     video_context: ID3D11VideoContext,
+    /// The picture's long side at most (SQOL: the still picture's or the preview's).
+    side: u32,
     processor: Option<Processor>,
     target: Option<Target>,
 }
@@ -349,10 +462,11 @@ struct Target {
 }
 
 impl Converter {
-    fn new(gpu: &Gpu) -> Result<Self> {
+    fn new(gpu: &Gpu, side: u32) -> Result<Self> {
         Ok(Self {
             video_device: gpu.device.cast()?,
             video_context: gpu.context.cast()?,
+            side,
             processor: None,
             target: None,
         })
@@ -374,9 +488,10 @@ impl Converter {
             right: rect.right.clamp(left + 2, w.max(left + 2)),
             bottom: rect.bottom.clamp(top + 2, h.max(top + 2)),
         };
-        let output = thumb::size(
+        let output = thumb::size_within(
             (rect.right - rect.left) as u32,
             (rect.bottom - rect.top) as u32,
+            self.side,
         );
         if self.target.as_ref().map(|t| t.size) != Some(output) {
             self.target = Some(Target::new(gpu, output)?);
@@ -648,6 +763,7 @@ mod tests {
                 paused: Box::new(|| true),
                 latest: Box::new(|| None),
                 emit: Box::new(move |jpg| sink.lock().unwrap().push(jpg)),
+                preview: Box::new(|_| {}),
             },
         )
         .unwrap();
@@ -698,13 +814,26 @@ mod tests {
                 &bgr[at..at + 3]
             );
         }
-        // The capture path: a frame the worker waits for is taken once.
+        // The capture path: a frame the worker waits for is taken once; a frame while the share
+        // holds a blank picture is nobody's.
         thumbs.wanted.store(true, Ordering::SeqCst);
-        thumbs.frame(&capture, (1920, 1080), Instant::now());
+        thumbs.frame(&capture, (1920, 1080), Instant::now(), true);
+        assert!(thumbs.wanted.load(Ordering::SeqCst));
+        thumbs.frame(&capture, (1920, 1080), Instant::now(), false);
         assert!(!thumbs.wanted.load(Ordering::SeqCst));
-        assert_eq!(thumbs.captured.load(Ordering::SeqCst), 1);
-        // The worker of a live share: its first picture comes about 3 s after the start.
+        assert_eq!(thumbs.captured.load(Ordering::SeqCst), 2);
+        // SQOL: the preview's frame, larger, in its own converter.
+        thumbs.preview_wanted.store(true, Ordering::SeqCst);
+        thumbs.frame(&capture, (1920, 1080), Instant::now(), false);
+        assert!(!thumbs.preview_wanted.load(Ordering::SeqCst));
+        let (bgr, w, h, stride) = thumbs.read_preview().unwrap();
+        assert_eq!((w, h), thumb::size_within(1920, 1080, thumb::PREVIEW_SIDE));
+        let middle = (h as usize / 2) * stride as usize + (w as usize / 2) * 3;
+        assert!(near(&bgr[middle..middle + 3], [40, 120, 200]));
+        // The worker of a live share: its first picture comes about 3 s after the start; the
+        // preview, once asked for, with the next captured frame.
         let (tx, rx) = std::sync::mpsc::channel();
+        let (preview_tx, preview_rx) = std::sync::mpsc::channel();
         let input = SendCom(nv12.clone());
         let (live, handle) = Thumbs::start(
             gpu.clone(),
@@ -717,9 +846,19 @@ mod tests {
                 emit: Box::new(move |jpg| {
                     let _ = tx.send(jpg);
                 }),
+                preview: Box::new(move |jpg| {
+                    let _ = preview_tx.send(jpg);
+                }),
             },
         )
         .unwrap();
+        live.preview(true);
+        std::thread::sleep(Duration::from_millis(100));
+        live.frame(&capture, (1920, 1080), Instant::now(), false);
+        let preview = preview_rx
+            .recv_timeout(Duration::from_secs(3))
+            .expect("a preview");
+        assert!(thumb::is_jpeg(&preview) && preview.len() <= thumb::PREVIEW_MAX_BYTES);
         let started = Instant::now();
         live.started();
         let jpg = rx

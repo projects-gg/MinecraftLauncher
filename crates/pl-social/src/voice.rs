@@ -88,6 +88,9 @@ pub struct VoiceShareStatus {
     pub max_preset: SharePreset,
     pub open: bool,
     pub watch: bool,
+    /// SQOL: a live share may change (source, quality, sound, "Duraklat"; Studio's "Canlı Yayın
+    /// Ayarları"). Absent (an older service, or switched off): no.
+    pub edit: bool,
 }
 
 impl Default for VoiceShareStatus {
@@ -100,6 +103,7 @@ impl Default for VoiceShareStatus {
             max_preset: SharePreset::Normal,
             open: true,
             watch: true,
+            edit: false,
         }
     }
 }
@@ -490,6 +494,10 @@ mod tests {
         assert!(share.on && share.open && !share.watch);
         assert_eq!((share.per_user, share.per_room, share.viewers), (2, 3, 5));
         assert_eq!(share.max_preset, SharePreset::Normal);
+        // SQOL: live changes only when the service says so.
+        assert!(!share.edit);
+        let edit: VoiceShareStatus = serde_json::from_str(r#"{"on":true,"edit":true}"#).unwrap();
+        assert!(edit.edit);
         assert_eq!(
             serde_json::from_str::<VoiceStatus>(r#"{"on":true}"#)
                 .unwrap()
