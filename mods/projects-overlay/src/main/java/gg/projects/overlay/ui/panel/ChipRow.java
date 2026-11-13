@@ -47,8 +47,12 @@ public final class ChipRow extends PanelWidget {
     private static final int GAP = 4;
     private static final int PAD = 6;
 
-    private record Chip(String id, String title, int titleWidth, boolean crew, boolean muted, String unread,
-        int unreadWidth, int width, Presence presence, String heard) {
+    /**
+     * One chip: {@code sign} the crew's or (SQOL-O) the voice room's mark before the name, else none; {@code menu}: a
+     * friend's, whose person menu it opens.
+     */
+    private record Chip(String id, String title, int titleWidth, Icon sign, boolean menu, boolean muted,
+        String unread, int unreadWidth, int width, Presence presence, String heard) {
     }
 
     /** The dot before an online friend's name, and the gap after it. */
@@ -120,16 +124,20 @@ public final class ChipRow extends PanelWidget {
         float x = 0f;
         for (String id : order) {
             OverlayState.Conversation c = state.conversation(id);
-            String title = Texts.fit(strong, c.title().isEmpty() ? Texts.str("toast.someone") : c.title(), 96);
+            // SQOL-O: the voice room's own chat is the "Oda" chip, with the headset's mark.
+            String named = c.room() ? Texts.str("room.chip")
+                : c.title().isEmpty() ? Texts.str("toast.someone") : c.title();
+            String title = Texts.fit(strong, named, 96);
             int tw = strong.width(title);
             boolean showUnread = c.unread() > 0 && !id.equals(select);
             String unread = showUnread ? (c.unread() > 99 ? "99+" : Integer.toString(c.unread())) : null;
             int uw = unread == null ? 0 : small.width(unread) + 7;
-            OverlayState.Friend friend = c.crew() ? null : friendOf(state, id);
+            Icon sign = c.crew() ? Icon.CREW : c.room() ? Icon.HEADSET : null;
+            OverlayState.Friend friend = sign != null ? null : friendOf(state, id);
             Presence presence = friend == null ? Presence.OFFLINE : friend.presence();
-            int w = PAD * 2 + tw + (c.crew() ? 11 : 0) + (presence.online() ? DOT_ROOM : 0)
+            int w = PAD * 2 + tw + (sign != null ? 11 : 0) + (presence.online() ? DOT_ROOM : 0)
                 + (unread == null ? 0 : uw + 4);
-            chips.add(new Chip(id, title, tw, c.crew(), c.muted(), unread, uw, w, presence,
+            chips.add(new Chip(id, title, tw, sign, sign == null, c.muted(), unread, uw, w, presence,
                 PresenceDot.heard(friend)));
             x += w + GAP;
         }
@@ -204,7 +212,7 @@ public final class ChipRow extends PanelWidget {
         for (Chip c : chips) {
             if (local >= x && local < x + c.width) {
                 if (event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
-                    if (!c.crew) {
+                    if (c.menu) {
                         onMenu.open(c.id, PersonMenu.Anchor.at(event.x(), event.y()), false);
                     }
                 } else {
@@ -234,7 +242,7 @@ public final class ChipRow extends PanelWidget {
     @Override
     public boolean keyPressed(KeyEvent event) {
         int i = indexOf(selected);
-        if (i >= 0 && !chips.get(i).crew && (event.key() == Compat.KEY_MENU
+        if (i >= 0 && chips.get(i).menu && (event.key() == Compat.KEY_MENU
             || (event.key() == InputConstants.KEY_F10 && event.hasShiftDown()))) {
             // Shift+F10 or the menu key: the chosen friend's menu under their chip (OVL-UX2).
             PanelInput.usedKeyboard();
@@ -278,8 +286,8 @@ public final class ChipRow extends PanelWidget {
                 }
                 float cx = x + PAD;
                 int ink = isSelected ? Theme.BONE_50 : c.muted ? Theme.ASH_400 : lit ? Theme.BONE_100 : Theme.ASH_300;
-                if (c.crew) {
-                    Draw.icon(g, Icon.CREW, 8, cx, y0 + (HEIGHT - 8) / 2f, ink);
+                if (c.sign != null) {
+                    Draw.icon(g, c.sign, 8, cx, y0 + (HEIGHT - 8) / 2f, ink);
                     cx += 11;
                 } else if (c.presence.online()) {
                     PresenceDot.dot(g, c.presence, cx + PresenceDot.DOT / 2f, y0 + HEIGHT / 2f);
@@ -311,8 +319,10 @@ public final class ChipRow extends PanelWidget {
         int i = indexOf(selected);
         if (i >= 0) {
             Chip c = chips.get(i);
-            // "PixelAvci sohbeti, 1 / 3, Projects'te": the dot's meaning is said too (never colour alone).
-            Component said = Texts.tr("narration.chat", Component.literal(c.title), i + 1, chips.size());
+            // "PixelAvci sohbeti, 1 / 3, Projects'te": the dot's meaning is said too (never colour alone). SQOL-O: "Oda
+            // sohbeti, 1 / 3".
+            Component said = c.sign == Icon.HEADSET ? Texts.tr("narration.room_chat", i + 1, chips.size())
+                : Texts.tr("narration.chat", Component.literal(c.title), i + 1, chips.size());
             output.add(NarratedElementType.TITLE, c.heard == null ? said
                 : Component.empty().append(said).append(", " + c.heard));
         } else {

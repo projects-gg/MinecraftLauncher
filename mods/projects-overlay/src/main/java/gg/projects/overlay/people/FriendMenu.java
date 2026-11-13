@@ -153,13 +153,13 @@ public final class FriendMenu {
      * The crew whose chat the menu opened from, and what the player may do about them there (OVL-UX3; the launcher's
      * {@code PersonCrew}, from {@code lists.roles}). Only while the launcher takes the crew rows.
      *
-     * @param roles          the player names moderators there (leads it, and the service offers roles)
-     * @param leader         the player leads the crew: "Liderliği devret"
-     * @param moderator      they are a moderator: "Moderatörlükten al" instead of "Moderatör yap"
-     * @param moderatorsFull the crew has its 4 moderators: "Moderatör yap" soft
-     * @param removable      the player may remove them: "Ekipten çıkar"
+     * @param roles     the player names moderators there (leads it, and the service offers roles); a crew has as many
+     *                  moderators as its leader names (CREW-MODS)
+     * @param leader    the player leads the crew: "Liderliği devret"
+     * @param moderator they are a moderator: "Moderatörlükten al" instead of "Moderatör yap"
+     * @param removable the player may remove them: "Ekipten çıkar"
      */
-    public record Crew(boolean roles, boolean leader, boolean moderator, boolean moderatorsFull, boolean removable) {
+    public record Crew(boolean roles, boolean leader, boolean moderator, boolean removable) {
     }
 
     /**
@@ -335,8 +335,7 @@ public final class FriendMenu {
         Crew crew = in.crew();
         if (crew != null && launcher) {
             if (crew.leader() && crew.roles()) {
-                out.add(crew.moderator() ? new Row(Action.UNMAKE_MODERATOR, !live, false)
-                    : new Row(Action.MAKE_MODERATOR, !live || crew.moderatorsFull(), false));
+                out.add(new Row(crew.moderator() ? Action.UNMAKE_MODERATOR : Action.MAKE_MODERATOR, !live, false));
             }
             if (crew.leader()) {
                 out.add(new Row(Action.MAKE_FOUNDER, !live, false));

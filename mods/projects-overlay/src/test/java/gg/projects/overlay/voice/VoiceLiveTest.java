@@ -33,10 +33,10 @@ class VoiceLiveTest {
         apply("""
             {"t":"voice-share","live":[{"person":"u-kaan","n":2,"kind":"game","watchers":2,"th":1730800060},
              {"person":"u-kaan","n":3,"kind":"screen","watchers":5},{"person":"u-ece","kind":"window"}]}""");
-        assertEquals(new VoiceState.LiveShare("u-kaan", 2, "game", 2, 1730800060L), state.liveShare("u-kaan"),
+        assertEquals(new VoiceState.LiveShare("u-kaan", 2, "game", 2, 1730800060L, ""), state.liveShare("u-kaan"),
             "a person's first share");
         // Nobody watching and no picture yet are left out of the frame.
-        assertEquals(new VoiceState.LiveShare("u-ece", 1, "window", 0, 0L), state.liveShare("u-ece"));
+        assertEquals(new VoiceState.LiveShare("u-ece", 1, "window", 0, 0L, ""), state.liveShare("u-ece"));
         assertNull(state.liveShare("u-x"));
         state.clear();
         assertNull(state.liveShare("u-kaan"));

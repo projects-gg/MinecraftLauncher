@@ -19,7 +19,8 @@ use std::future::Future;
 use std::pin::Pin;
 
 use pl_voice::share::{
-    ShareClosedWhy, ShareKind, ShareMinePhase, ShareNotice, ShareRefusal, VoiceShareView,
+    ShareClosedWhy, ShareHoldWhy, ShareKind, ShareMinePhase, ShareNotice, ShareRefusal, ShareSt,
+    VoiceShareView,
 };
 use pl_voice::view::{
     VoiceAnswer, VoiceLeftReason, VoiceMic, VoiceModAction, VoiceNotice, VoiceRefusal,
@@ -79,6 +80,9 @@ pub enum VoiceAct {
     ShareGame,
     /// OVL-SHARE: "Paylaşımı durdur" on the player's share `n`.
     ShareStop { n: u8 },
+    /// SQOL-O: "Duraklat" (`on`: a blank picture, no sound) or "Sürdür" on the player's share `n`
+    /// (only while `voice-share` says `edit`). The launcher's answer is [`hold_answer`]'s.
+    ShareHold { n: u8, on: bool },
 }
 
 impl VoiceAct {
@@ -90,6 +94,8 @@ impl VoiceAct {
             Self::Call { .. } => Some("call"),
             // OVL-SHARE: the mod's "Oyunu paylaş" waits for an answer (a refusal comes as a note).
             Self::ShareGame => Some("share"),
+            // SQOL-O: "Duraklat" and "Sürdür" too (the button waits; the state shows how it went).
+            Self::ShareHold { .. } => Some("share-hold"),
             Self::Invite { .. } => Some("invite"),
             Self::Moderate(action) => moderation_name(action),
             _ => None,
@@ -244,8 +250,31 @@ pub fn check(
             }
             _ => Err(Refused::quiet()),
         },
+        // SQOL-O: "Duraklat" / "Sürdür" only on one of the player's shares while live changes may
+        // go (`edit`); the launcher's voice chat checks the rest (a share still starting, a closed
+        // source's "Sürdür").
+        FromGame::VoiceShareHold { n, on } => match state {
+            Some(state)
+                if state.share.edit && state.share.mine.iter().any(|share| share.n == *n) =>
+            {
+                Ok(VoiceAct::ShareHold { n: *n, on: *on })
+            }
+            _ => Err(Refused::of("share-hold", "", VoiceRefusal::Nothing)),
+        },
         _ => return None,
     })
+}
+
+/// SQOL-O: how "Duraklat" or "Sürdür" went, as `voice-result` says it: sharing that may not change
+/// now is `off`, a share that is not there (or a closed source's "Sürdür") `not-found`, anything
+/// else `failed`.
+pub fn hold_answer(result: Result<(), ShareRefusal>) -> VoiceAnswer {
+    match result {
+        Ok(()) => VoiceAnswer::OK,
+        Err(ShareRefusal::Off) => VoiceAnswer::refused(VoiceRefusal::Off),
+        Err(ShareRefusal::Gone) => VoiceAnswer::refused(VoiceRefusal::NotFound),
+        Err(_) => VoiceAnswer::refused(VoiceRefusal::Failed),
+    }
 }
 
 /// "Katıl" on a crew room or "Yeni oda" (V22): only in one of the player's crews while voice chat
@@ -593,6 +622,8 @@ pub fn share_of(state: &VoiceState) -> VoiceShareShown {
             live: mine.phase != ShareMinePhase::Starting,
             watchers: u16::try_from(mine.watchers.len()).unwrap_or(u16::MAX),
             th: mine.th,
+            st: st_name(mine.st),
+            hold: mine.hold.map(hold_name),
         })
         .collect();
     let game_shared = share.mine.iter().any(|mine| mine.kind == ShareKind::Game);
@@ -623,8 +654,28 @@ pub fn share_of(state: &VoiceState) -> VoiceShareShown {
                 n: live.n,
                 watchers: live.watchers,
                 th: live.th,
+                st: st_name(live.st),
             })
             .collect(),
+        edit: share.edit,
+    }
+}
+
+/// SQOL-O: what a share's watchers see, on the wire (live: nothing).
+fn st_name(st: ShareSt) -> Option<&'static str> {
+    match st {
+        ShareSt::Live => None,
+        ShareSt::Hold => Some("hold"),
+        ShareSt::Min => Some("min"),
+    }
+}
+
+/// SQOL-O: why the player's share holds a blank picture, on the wire.
+fn hold_name(why: ShareHoldWhy) -> &'static str {
+    match why {
+        ShareHoldWhy::Paused => "paused",
+        ShareHoldWhy::Closed => "closed",
+        ShareHoldWhy::GameClosed => "game-closed",
     }
 }
 
@@ -884,7 +935,7 @@ impl VoiceMirror {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use pl_voice::view::{
         VoiceCalling, VoiceMe, VoiceOutRing, VoicePerson, VoicePhase, VoicePowers, VoiceQuality,
         VoiceRing, VoiceRole, VoiceRoomKind, VoiceRoomView,
@@ -1937,6 +1988,77 @@ mod tests {
                 refusal: ShareRefusal::WatchFull
             }),
             None
+        );
+    }
+
+    /// SQOL-O: the player's share says how its watchers see it, others' shares when they are paused
+    /// or minimized; "Duraklat" goes only for the player's own share while live changes may.
+    #[test]
+    fn a_paused_or_minimized_share_says_so_and_pausing_goes_only_while_it_may() {
+        use pl_voice::share::{ShareHoldWhy, ShareSt};
+        let mut state = sharing_state();
+        let mut mine = my_share(1, ShareKind::Game, ShareMinePhase::Live, 2);
+        mine.st = ShareSt::Hold;
+        mine.hold = Some(ShareHoldWhy::Paused);
+        state.share.mine = vec![mine];
+        state.share.live[0].st = ShareSt::Min;
+        let shown = serde_json::to_value(share_of(&state)).unwrap();
+        assert_eq!(shown["mine"][0]["st"], "hold");
+        assert_eq!(shown["mine"][0]["hold"], "paused");
+        assert_eq!(shown["live"][0]["st"], "min");
+        assert!(shown.get("edit").is_none());
+        // Without the service's live changes the press is refused here, said as `share-hold`.
+        let press = FromGame::VoiceShareHold { n: 1, on: false };
+        let refused = check(&press, Some(&state), |_| true, |_| true)
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(
+            refused_result(&refused),
+            Some(ToGame::VoiceResult {
+                act: "share-hold",
+                ok: false,
+                reason: Some("nothing"),
+                who: String::new(),
+            })
+        );
+        state.share.edit = true;
+        assert_eq!(
+            serde_json::to_value(share_of(&state)).unwrap()["edit"],
+            true
+        );
+        assert_eq!(
+            check(&press, Some(&state), |_| true, |_| true),
+            Some(Ok(VoiceAct::ShareHold { n: 1, on: false }))
+        );
+        // Only the player's own shares.
+        let other = FromGame::VoiceShareHold { n: 3, on: true };
+        assert!(
+            check(&other, Some(&state), |_| true, |_| true)
+                .unwrap()
+                .is_err()
+        );
+        // The launcher's answer as the mod hears it.
+        let act = VoiceAct::ShareHold { n: 1, on: true };
+        assert_eq!(
+            result_of(&act, &hold_answer(Ok(()))),
+            Some(ToGame::VoiceResult {
+                act: "share-hold",
+                ok: true,
+                reason: None,
+                who: String::new(),
+            })
+        );
+        assert_eq!(
+            hold_answer(Err(ShareRefusal::Gone)).refused,
+            Some(VoiceRefusal::NotFound)
+        );
+        assert_eq!(
+            hold_answer(Err(ShareRefusal::Off)).refused,
+            Some(VoiceRefusal::Off)
+        );
+        assert_eq!(
+            hold_answer(Err(ShareRefusal::Budget)).refused,
+            Some(VoiceRefusal::Failed)
         );
     }
 }

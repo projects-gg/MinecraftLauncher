@@ -53,7 +53,7 @@ class FriendMenu3Test {
 
     @Test
     void theLeadersRowsSitWhereTheLaunchersDo() {
-        List<Row> plan = FriendMenu.plan(friend(new Crew(true, true, false, false, true)));
+        List<Row> plan = FriendMenu.plan(friend(new Crew(true, true, false, true)));
         List<Action> expected = new ArrayList<>(List.of(Action.JOIN, Action.INVITE, Action.MESSAGE, Action.DISCORD));
         expected.add(null);
         expected.addAll(List.of(Action.FAVORITE, Action.ALERT, Action.MOVE));
@@ -65,35 +65,36 @@ class FriendMenu3Test {
     }
 
     @Test
-    void aModeratorIsTakenBackAndTheFourthMakesTheRowSoft() {
-        List<Row> mod = FriendMenu.plan(crewmate(new Crew(true, true, true, false, true), true));
+    void aModeratorIsTakenBackAndMoreAreNeverHeldBack() {
+        List<Row> mod = FriendMenu.plan(crewmate(new Crew(true, true, true, true), true));
         assertNull(row(mod, Action.MAKE_MODERATOR));
         assertFalse(row(mod, Action.UNMAKE_MODERATOR).disabled());
-        List<Row> full = FriendMenu.plan(crewmate(new Crew(true, true, false, true, true), true));
-        assertTrue(row(full, Action.MAKE_MODERATOR).disabled());
-        assertFalse(row(full, Action.MAKE_FOUNDER).disabled());
+        // CREW-MODS: a crew has as many moderators as its leader names; the row is never soft for that.
+        List<Row> more = FriendMenu.plan(crewmate(new Crew(true, true, false, true), true));
+        assertFalse(row(more, Action.MAKE_MODERATOR).disabled());
+        assertFalse(row(more, Action.MAKE_FOUNDER).disabled());
     }
 
     @Test
     void withoutRolesOrTheLeadOnlyTheirRightsShow() {
         // A leader whose service has no moderators: the hand-over and the removal.
-        List<Row> plain = FriendMenu.plan(crewmate(new Crew(false, true, false, false, true), true));
+        List<Row> plain = FriendMenu.plan(crewmate(new Crew(false, true, false, true), true));
         assertNull(row(plain, Action.MAKE_MODERATOR));
         assertNull(row(plain, Action.UNMAKE_MODERATOR));
         assertTrue(row(plain, Action.MAKE_FOUNDER) != null && row(plain, Action.REMOVE_MEMBER) != null);
         // A moderator who may remove plain members: only that.
-        List<Row> moderator = FriendMenu.plan(crewmate(new Crew(false, false, false, false, true), true));
+        List<Row> moderator = FriendMenu.plan(crewmate(new Crew(false, false, false, true), true));
         assertNull(row(moderator, Action.MAKE_FOUNDER));
         assertTrue(row(moderator, Action.REMOVE_MEMBER) != null);
         // Nothing allowed about them, or no crew: no crew group at all.
-        assertFalse(actions(FriendMenu.plan(crewmate(new Crew(false, false, false, false, false), true)))
+        assertFalse(actions(FriendMenu.plan(crewmate(new Crew(false, false, false, false), true)))
             .contains(Action.REMOVE_MEMBER));
         assertFalse(actions(FriendMenu.plan(crewmate(null, true))).contains(Action.MAKE_FOUNDER));
     }
 
     @Test
     void theRowsAreSoftWhileTheLauncherIsAway() {
-        List<Row> away = FriendMenu.plan(crewmate(new Crew(true, true, false, false, true), false));
+        List<Row> away = FriendMenu.plan(crewmate(new Crew(true, true, false, true), false));
         for (Action action : List.of(Action.MAKE_MODERATOR, Action.MAKE_FOUNDER, Action.REMOVE_MEMBER)) {
             assertTrue(row(away, action).disabled(), action.name());
         }
