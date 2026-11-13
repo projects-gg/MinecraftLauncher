@@ -10,7 +10,8 @@
 //
 // SQOL-U3: with a chat under it the stage is compact (faces at 48 px, a band at the panel's top),
 // and the friend's face says "konuşuyor" to screen readers while they speak. In a wide panel's
-// people column the two faces stand one over the other.
+// people column the two faces stand one over the other. The player's own seat no longer says "Sen"
+// on screen (the owner: everyone knows who they are), only to screen readers.
 import { cn, Menu, useMotionPrefs } from "@pl/ui";
 import { motion } from "motion/react";
 import { type ReactNode, type RefObject, useRef, useState } from "react";
@@ -42,6 +43,7 @@ export function isOneToOne(state: Pick<VoiceState, "room" | "calling">): boolean
 function Seat({
   face,
   line,
+  quietLine,
   marks,
   dim = false,
   live,
@@ -49,8 +51,10 @@ function Seat({
   children,
 }: {
   face: VoiceFace;
-  /** Under the name: "Sen", "Aranıyor…", a role. */
+  /** Under the name: "Aranıyor…", a role. */
   line?: string | null;
+  /** For screen readers only, after the name ("Sen" on the player's own seat). */
+  quietLine?: string;
   marks?: ReactNode;
   dim?: boolean;
   /** SHARE-LIVE: "YAYINDA" under the name (the seat is too narrow beside it). */
@@ -89,6 +93,7 @@ function Seat({
           {marks}
         </span>
         {line ? <span className="text-[12px] leading-[1.35] text-ash-400">{line}</span> : null}
+        {quietLine ? <span className="sr-only">{quietLine}</span> : null}
         {live}
       </div>
     </div>
@@ -242,7 +247,7 @@ export function CallStage({
         <Seat
           face={meFace}
           compact={compact}
-          line={t("voice.room.you")}
+          quietLine={t("voice.room.you")}
           marks={marksOf(room.me)}
           live={
             <LiveAppear show={own.length > 0}>

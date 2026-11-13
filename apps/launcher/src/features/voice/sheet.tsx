@@ -313,8 +313,8 @@ function MeRow({ room, compact }: { room: VoiceRoomView; compact: boolean }) {
         }
       />
       <Marks marks={marks} connection={room.me.quality} />
-      {/* At the row's end, as the crew's member list marks the player. */}
-      <span className="shrink-0 text-[12.5px] text-ash-400">{t("voice.room.you")}</span>
+      {/* SQOL-U3 (the owner: everyone knows who they are): "Sen" only to screen readers. */}
+      <span className="sr-only">{t("voice.room.you")}</span>
     </div>
   );
 }
