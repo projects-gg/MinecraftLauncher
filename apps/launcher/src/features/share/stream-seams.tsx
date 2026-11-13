@@ -59,7 +59,7 @@ export function useOwnShareInfo(n: number): string | null {
 
 // The room has a chat area ("Oda Sohbeti" or the call's friend's messages); what the player has not
 // seen in it while the panel was closed; up to three short previews of new messages, top right of
-// the stage (the panel's own stand-in steps back while the stage shows them).
+// the stage (only the stage shows them).
 export { RoomChatPeek, useRoomChatOffered, useRoomChatUnread } from "@/features/voice/room-chat";
 
 /** How wide the docked room panel is (px; 0 while it is closed, hidden or not docked). */

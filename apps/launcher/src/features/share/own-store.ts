@@ -110,11 +110,19 @@ export function useOwnTile(): number | null {
 
 let seq = 0;
 const settleTimers = new Map<number, ReturnType<typeof setTimeout>>();
+/** What runs once the state shows the room took a settled change (it says so; never on a refusal). */
+const whenTaken = new Map<number, (now: VoiceMyShare) => void>();
 
 function forgetTimer(which: number) {
   const timer = settleTimers.get(which);
   if (timer !== undefined) clearTimeout(timer);
   settleTimers.delete(which);
+}
+
+/** A change left the page: its timer goes, and what it would have said with it. */
+function forget(which: number) {
+  forgetTimer(which);
+  whenTaken.delete(which);
 }
 
 /** The state's values of `patch`'s fields on share `n` now. */
@@ -149,29 +157,83 @@ export function applyPatch(n: number, patch: OwnPatch): number {
   return mine;
 }
 
+/** What the room decides on a live change (`share_update` asks it first); the rest is local. */
+const ROOM_FIELDS: ReadonlyArray<keyof OwnPatch> = ["preset", "fps", "audio"];
+
+/** The change asks the room (its quality, frame rate or sound). */
+export function asksRoom(patch: OwnPatch): boolean {
+  return ROOM_FIELDS.some((key) => patch[key] !== undefined);
+}
+
+/** Changes the room refused before the launcher's own answer came (their `seq`). */
+const refusedEarly = new Set<number>();
+
 /**
- * The room refused what the launcher took (a late `refused` notice): every taken change goes
- * back; returns the latest of them (for the sentence that says why), null when none waited.
+ * Whether the room refused change `which` before the launcher answered (`share_update` resolves
+ * after it asked the room, and the room's notice can come first): it must neither settle nor be
+ * said as done. Asked once.
  */
-export function dropSettled(): OwnPatch | null {
+export function takeRefused(which: number): boolean {
+  return refusedEarly.delete(which);
+}
+
+/**
+ * The room refused a live change (a `refused` notice, which names no share): the latest change
+ * the room decides on goes back at once, whether the launcher answered yet or not, its room
+ * fields only (its picture, cursor or small picture stay, as do every other change and share).
+ * Returns what went back (for the sentence that says why), null when nothing waited for the room.
+ */
+export function dropRefused(): OwnPatch | null {
   const { pending } = useOwnUi.getState();
-  const settled = pending.filter((p) => p.settled);
-  if (!settled.length) return null;
-  for (const entry of settled) forgetTimer(entry.seq);
-  useOwnUi.setState({ pending: pending.filter((p) => !p.settled) });
-  return settled[settled.length - 1]?.patch ?? null;
+  const entry = [...pending].reverse().find((p) => asksRoom(p.patch));
+  if (!entry) return null;
+  if (!entry.settled) refusedEarly.add(entry.seq);
+  // Refused: never said as done, whatever stays of it.
+  whenTaken.delete(entry.seq);
+  const pick = (patch: OwnPatch, room: boolean) =>
+    Object.fromEntries(
+      Object.entries(patch).filter(([key]) => ROOM_FIELDS.includes(key as keyof OwnPatch) === room),
+    ) as OwnPatch;
+  const refused = pick(entry.patch, true);
+  const kept = pick(entry.patch, false);
+  if (Object.keys(kept).length === 0) {
+    forget(entry.seq);
+    useOwnUi.setState({ pending: pending.filter((p) => p.seq !== entry.seq) });
+  } else {
+    useOwnUi.setState({
+      pending: pending.map((p) =>
+        p.seq === entry.seq ? { ...p, patch: kept, base: pick(p.base, false) } : p,
+      ),
+    });
+  }
+  return refused;
 }
 
 /** The launcher refused (or failed): the share shows what it really has again. */
 export function dropPatch(which: number) {
-  forgetTimer(which);
+  forget(which);
   if (!useOwnUi.getState().pending.some((p) => p.seq === which)) return;
   useOwnUi.setState((s) => ({ pending: s.pending.filter((p) => p.seq !== which) }));
 }
 
-/** The launcher took it: the next state says the truth (what the room allowed). */
-export function settlePatch(which: number) {
-  if (!useOwnUi.getState().pending.some((p) => p.seq === which)) return;
+/**
+ * The launcher took it: the next state says the truth (what the room allowed). `taken` runs once
+ * the state shows the room took it (with the share as it is then); never when the room refuses
+ * or never moves.
+ */
+export function settlePatch(which: number, taken?: (now: VoiceMyShare) => void) {
+  const entry = useOwnUi.getState().pending.find((p) => p.seq === which);
+  if (!entry) return;
+  if (taken) {
+    const now = useVoiceUi.getState().state.share?.mine.find((m) => m.n === entry.n);
+    if (now && answered(entry, now)) {
+      // The room's answer came before the launcher's: said now, with what it took.
+      dropPatch(which);
+      taken(now);
+      return;
+    }
+    whenTaken.set(which, taken);
+  }
   useOwnUi.setState((s) => ({
     pending: s.pending.map((p) => (p.seq === which ? { ...p, settled: true } : p)),
   }));
@@ -237,11 +299,17 @@ export function lostUntil(mine: VoiceMyShare, lost?: LostMark | null): number | 
  */
 export function followShares(mine: readonly VoiceMyShare[]) {
   const { pending, lost, switching, tile } = useOwnUi.getState();
+  const said: Array<() => void> = [];
   const keep = pending.filter((p) => {
     const it = mine.find((m) => m.n === p.n);
-    return it !== undefined && !(p.settled && answered(p, it));
+    if (it === undefined) return false;
+    if (!(p.settled && answered(p, it))) return true;
+    // The room took it: said now, with what it took.
+    const taken = whenTaken.get(p.seq);
+    if (taken) said.push(() => taken(it));
+    return false;
   });
-  for (const gone of pending) if (!keep.includes(gone)) forgetTimer(gone.seq);
+  for (const gone of pending) if (!keep.includes(gone)) forget(gone.seq);
   let marks = lost;
   for (const key of Object.keys(lost)) {
     const n = Number(key);
@@ -261,6 +329,7 @@ export function followShares(mine: readonly VoiceMyShare[]) {
   if (switching !== null && !mine.some((m) => m.n === switching)) patch.switching = null;
   if (tile !== null && !mine.some((m) => m.n === tile)) patch.tile = null;
   if (Object.keys(patch).length) useOwnUi.setState(patch);
+  for (const say of said) say();
 }
 
 useVoiceUi.subscribe((now, before) => {
@@ -293,5 +362,7 @@ export function useOwnStatus(mine: VoiceMyShare): { status: OwnStatus; until: nu
 /** Tests start from nothing. */
 export function resetOwnUi() {
   for (const which of [...settleTimers.keys()]) forgetTimer(which);
+  whenTaken.clear();
+  refusedEarly.clear();
   useOwnUi.setState({ switching: null, tile: null, pending: [], lost: {} });
 }

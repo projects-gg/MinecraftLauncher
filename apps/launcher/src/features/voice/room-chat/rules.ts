@@ -3,7 +3,7 @@
 // chat message (message-row.tsx draws it), what its tombstone says, and the previews' timing.
 import { directConversation } from "@/features/social/chat/conversations";
 import type { ChatMessage, SendFailure } from "@/lib/api/social-types";
-import type { VoiceRoomView } from "@/lib/api/voice-types";
+import type { VoiceMe, VoicePerson, VoiceRoomView } from "@/lib/api/voice-types";
 import type { RoomChatCode, RoomChatDeletedBy, RoomChatRefusal } from "./types";
 
 /** The chat under the room's people: a friend's direct messages, the room's own chat, or none. */
@@ -148,6 +148,35 @@ export function asChatMessage(message: ShownMsg, mayDelete: boolean): ChatMessag
       : {}),
     ...(message.deleted ? { deleted: { by: message.deleted.by } } : {}),
   };
+}
+
+/**
+ * "Sil" on a room message: the player's own; someone's in the room as the room lets the player act
+ * on them (their menu's powers); someone's who has left, for the room's leader or a moderator (the
+ * room still decides: a refusal says "Bu mesajı silemezsin.").
+ */
+export function mayDeleteMsg(
+  msg: Pick<ShownMsg, "mine" | "from">,
+  room: { people: ReadonlyArray<Pick<VoicePerson, "id" | "can">>; me: Pick<VoiceMe, "role"> },
+): boolean {
+  if (msg.mine) return true;
+  const person = room.people.find((p) => p.id === msg.from);
+  if (person) return person.can.kick || person.can.mute;
+  return room.me.role === "leader" || room.me.role === "moderator";
+}
+
+/**
+ * The room panel's chat is in the player's sight: the panel open on its room page, neither hidden
+ * by a full-screen stage nor covered by the friends panel, the window on screen. Out of sight,
+ * messages count unread (and a friend's conversation marks nothing read).
+ */
+export function chatInSight(input: {
+  panelOnRoom: boolean;
+  stageFull: boolean;
+  friendsOpen: boolean;
+  away: boolean;
+}): boolean {
+  return input.panelOnRoom && !input.stageFull && !input.friendsOpen && !input.away;
 }
 
 /** Which tombstone words a message taken away takes. */

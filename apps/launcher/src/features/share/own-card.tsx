@@ -19,7 +19,16 @@ import {
   Swap,
   Warning,
 } from "@phosphor-icons/react";
-import { Button, cn, IconButton, Menu, Tooltip, usePerf, useReduceMotion } from "@pl/ui";
+import {
+  Button,
+  cn,
+  IconButton,
+  Menu,
+  Tooltip,
+  usePerf,
+  usePressGuard,
+  useReduceMotion,
+} from "@pl/ui";
 import type { TFunction } from "i18next";
 import {
   type KeyboardEvent,
@@ -265,34 +274,42 @@ export function OwnShareCard({ mine: given }: { mine: VoiceMyShare }) {
     }
   };
 
-  const primary = !edit ? null : lost ? (
-    <Button
-      size="sm"
-      variant="bone"
-      icon={<Swap size={15} weight="bold" />}
-      onClick={() => openSwitch(mine.n)}
-    >
-      {t("share.own.pickOther")}
-    </Button>
-  ) : status === "paused" ? (
-    <Button
-      size="sm"
-      variant="secondary"
-      icon={<Play size={15} weight="fill" />}
-      onClick={() => void holdShare(mine.n, false)}
-    >
-      {t("share.own.resume")}
-    </Button>
-  ) : status === "live" || status === "minimized" ? (
-    <Button
-      size="sm"
-      variant="secondary"
-      icon={<Swap size={15} weight="bold" />}
-      onClick={() => openSwitch(mine.n)}
-    >
-      {t("share.own.switch")}
-    </Button>
-  ) : null;
+  // The first button's role: "Sürdür" becomes "Ekranı Değiştir" in its place the moment it is
+  // pressed, so a new role never takes the second press of a double click (design.md §6; the
+  // pause's double click opened the picker).
+  const role = !edit
+    ? null
+    : lost
+      ? "pickOther"
+      : status === "paused"
+        ? "resume"
+        : status === "live" || status === "minimized"
+          ? "switch"
+          : null;
+  const guard = usePressGuard(role ?? "none");
+  const primary =
+    role === null ? null : (
+      <Button
+        size="sm"
+        variant={role === "pickOther" ? "bone" : "secondary"}
+        icon={
+          role === "resume" ? <Play size={15} weight="fill" /> : <Swap size={15} weight="bold" />
+        }
+        aria-disabled={!guard.armed || undefined}
+        {...guard.handlers}
+        onClick={(event) => {
+          if (!guard.take(event)) return;
+          if (role === "resume") void holdShare(mine.n, false);
+          else openSwitch(mine.n);
+        }}
+      >
+        {role === "pickOther"
+          ? t("share.own.pickOther")
+          : role === "resume"
+            ? t("share.own.resume")
+            : t("share.own.switch")}
+      </Button>
+    );
 
   const picture = <Picture mine={mine} status={status} until={until} src={frame ?? still} />;
 

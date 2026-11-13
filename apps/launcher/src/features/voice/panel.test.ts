@@ -3,7 +3,7 @@
 // and where the single-key voice shortcuts rest.
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DOCK_MAX, DOCK_MIN, dockWidthFor, useToastsBeside } from "./dock";
+import { arrivalOf, DOCK_MAX, DOCK_MIN, dockWidthFor, useToastsBeside } from "./dock";
 import { SAY_QUIET_AFTER_MS, SAY_SPEAKING_AFTER_MS, useSpeakingWord } from "./speaking-word";
 import { useVoiceUi } from "./store";
 import { writesText } from "./typing";
@@ -78,6 +78,41 @@ describe("the docked width", () => {
     useVoiceUi.getState().setDock(0);
     stop();
     expect(seen).toEqual([384, 0]);
+  });
+});
+
+describe("the panel's arrival", () => {
+  const away = () => null;
+  const shut = { docked: true, open: false, behind: false };
+
+  it("slides in when opened, and changes its shell in place keeping the focus where it was", () => {
+    expect(arrivalOf(shut, { docked: true, open: true }, away)).toEqual({
+      moved: false,
+      focus: null,
+    });
+    expect(
+      arrivalOf(
+        { docked: false, open: true, behind: false },
+        { docked: true, open: true },
+        () => "field",
+      ),
+    ).toEqual({ moved: true, focus: "field" });
+    expect(arrivalOf({ ...shut, open: true }, { docked: true, open: true }, away)).toBeNull();
+  });
+
+  it("comes back from behind the full-screen stage in place, the focus left where it is", () => {
+    const behind = { docked: false, open: false, behind: true };
+    // Leaving full screen does not pull the focus into the docked panel.
+    expect(arrivalOf(behind, { docked: true, open: true }, () => "panel")).toMatchObject({
+      moved: true,
+      focus: null,
+      back: true,
+    });
+    // A sheet over the page is a dialog: it takes the focus as on opening.
+    expect(arrivalOf(behind, { docked: false, open: true }, away)).toEqual({
+      moved: false,
+      focus: null,
+    });
   });
 });
 
