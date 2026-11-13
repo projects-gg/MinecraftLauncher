@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 // Screen sharing on the room panel and the pill (SHARE): "Ekranını Paylaş" where the room shares;
-// "Yayında" with who watches and "Durdur" while the player shares; a person who shares has the mark
-// and "İzle"; nothing of it in a room that does not share or on a computer that cannot.
+// the player's own share as a card (SQOL: its name with "YAYINDA", its quality, who watches,
+// "Ekranı Değiştir", "⋯" and "Durdur"; its states on the same line) while they share; a person who
+// shares has "İzle"; nothing of it in a room that does not share or on a computer that cannot.
 import { setAppReducedMotion, TooltipProvider } from "@pl/ui";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import "@/lib/i18n";
@@ -11,6 +12,7 @@ import { useVoiceUi } from "@/features/voice/store";
 import { createVoiceMock } from "@/lib/api/voice-mock";
 import { HIDDEN_VOICE_STATE, type VoiceState } from "@/lib/api/voice-types";
 import { shareApi } from "@/share/api";
+import { resetOwnUi, useOwnUi } from "./own-store";
 import { ShareFooterRow, WatchButton } from "./panel";
 import { SharePillPart } from "./pill-part";
 import { useShareUi } from "./store";
@@ -22,6 +24,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   useVoiceUi.setState({ state: HIDDEN_VOICE_STATE });
   useShareUi.setState({ picker: false });
+  resetOwnUi();
 });
 
 const scenario = (name: string): VoiceState =>
@@ -49,14 +52,71 @@ describe("screen sharing on the panel", () => {
     expect(screen.queryByText("Ekranını Paylaş")).toBeNull();
   });
 
-  it("says who watches the player's share and stops it", () => {
+  it("shows the player's share with its quality and who watches, and stops it", () => {
     const stop = vi.spyOn(shareApi, "stop").mockResolvedValue();
     show(scenario("shareLive"), <ShareFooterRow />);
-    expect(screen.getByText("Yayında")).toBeTruthy();
-    expect(screen.getByText("Oyun")).toBeTruthy();
-    expect(screen.getByText("2 kişi izliyor")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Paylaşımı durdur" }));
+    const card = screen.getByRole("group", { name: "Paylaşımın: Oyun" });
+    expect(within(card).getByText("Oyun")).toBeTruthy();
+    expect(within(card).getByText("YAYINDA")).toBeTruthy();
+    expect(within(card).getByText("Normal · 720p")).toBeTruthy();
+    expect(within(card).getByText("2 kişi izliyor")).toBeTruthy();
+    fireEvent.click(within(card).getByRole("button", { name: "Paylaşımı Durdur" }));
     expect(stop).toHaveBeenCalledWith(1);
+  });
+
+  it("switches the source, and opens the card's menu from the keyboard", () => {
+    const hold = vi.spyOn(shareApi, "hold").mockResolvedValue(null);
+    show(scenario("shareLive"), <ShareFooterRow />);
+    fireEvent.click(screen.getByRole("button", { name: "Ekranı Değiştir" }));
+    expect(useOwnUi.getState().switching).toBe(1);
+    expect(useShareUi.getState().picker).toBe(true);
+    // Shift+F10 anywhere in the card opens its "⋯" menu, named after what it shows.
+    fireEvent.keyDown(screen.getByRole("button", { name: "Paylaşımı Durdur" }), {
+      key: "F10",
+      shiftKey: true,
+    });
+    const menu = screen.getByRole("menu", { name: "Oyun" });
+    expect(within(menu).getByRole("menuitem", { name: "Ekranı Değiştir…" })).toBeTruthy();
+    expect(within(menu).getByRole("menuitem", { name: "Kalite" })).toBeTruthy();
+    expect(
+      within(menu)
+        .getByRole("menuitemcheckbox", { name: "Sesi de Paylaş" })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(within(menu).getByRole("menuitem", { name: "Gelişmiş" })).toBeTruthy();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Duraklat" }));
+    expect(hold).toHaveBeenCalledWith(1, true);
+  });
+
+  it("says a paused share and resumes it", () => {
+    const hold = vi.spyOn(shareApi, "hold").mockResolvedValue(null);
+    show(scenario("sharePaused"), <ShareFooterRow />);
+    expect(screen.getByText("Duraklatıldı")).toBeTruthy();
+    // Not live meanwhile: no "YAYINDA".
+    expect(screen.queryByText("YAYINDA")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Sürdür" }));
+    expect(hold).toHaveBeenCalledWith(1, false);
+  });
+
+  it("says a minimised window, and asks for another screen when the window closed", () => {
+    show(scenario("shareMin"), <ShareFooterRow />);
+    expect(screen.getByText("Pencere küçültüldü.")).toBeTruthy();
+    cleanup();
+    show(scenario("shareLost"), <ShareFooterRow />);
+    expect(screen.getByText("Paylaştığın pencere kapandı.")).toBeTruthy();
+    expect(screen.getByText("Paylaşımı Durdur")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Başka Ekran Seç" }));
+    expect(useOwnUi.getState().switching).toBe(1);
+    cleanup();
+    show(scenario("shareLostGame"), <ShareFooterRow />);
+    expect(screen.getByText("Oyun kapandı.")).toBeTruthy();
+  });
+
+  it("keeps only stopping where the service does not let a live share change", () => {
+    show(scenario("shareNoEdit"), <ShareFooterRow />);
+    expect(screen.queryByRole("button", { name: "Ekranı Değiştir" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Paylaşım Seçenekleri" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Paylaşımı Durdur" })).toBeTruthy();
   });
 
   it("asks for nothing while the room keeps sharing to its leaders", () => {
@@ -78,9 +138,12 @@ describe("screen sharing on the panel", () => {
     expect(screen.queryByText("İzle")).toBeNull();
   });
 
-  it("puts a calm mark and the count in the pill while sharing", () => {
+  it("puts a calm mark and the count in the pill, its right click the share's menu", () => {
     show(scenario("shareLive"), <SharePillPart />);
-    expect(screen.getByRole("button", { name: "Yayındasın, 2 kişi izliyor" })).toBeTruthy();
+    const pill = screen.getByRole("button", { name: "Yayındasın, 2 kişi izliyor" });
+    fireEvent.contextMenu(pill);
+    const menu = screen.getByRole("menu", { name: "Oyun" });
+    expect(within(menu).getByRole("menuitem", { name: "Paylaşımı Durdur" })).toBeTruthy();
     cleanup();
     show(scenario("shareOffer"), <SharePillPart />);
     expect(screen.getByRole("button", { name: "Ekranını Paylaş" })).toBeTruthy();
