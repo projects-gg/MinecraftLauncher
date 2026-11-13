@@ -35,6 +35,7 @@ import { enGraphics } from "./en-graphics";
 import { enHelp } from "./en-help";
 import { enHomeLinks } from "./en-home-links";
 import { enHost } from "./en-host";
+import { enIasSync } from "./en-ias-sync";
 import { enIdentity } from "./en-identity";
 import { enImport } from "./en-import";
 import { enKeyClash } from "./en-key-clash";
@@ -61,6 +62,7 @@ import { enReminders } from "./en-reminders";
 import { enReports } from "./en-reports";
 import { enRoomChat } from "./en-room-chat";
 import { enSafety } from "./en-safety";
+import { enServerAccounts } from "./en-server-accounts";
 import { enSetup } from "./en-setup";
 import { enShare } from "./en-share";
 import { enShareView } from "./en-share-view";
@@ -381,6 +383,8 @@ export const en: DeepPartial<Strings> = {
   telemFix: enTelemFix,
   crewUi: enCrewUi,
   tweaks: enTweaks,
+  serverAccounts: enServerAccounts,
+  iasSync: enIasSync,
   nav: {
     home: "Home",
     library: "Library",
