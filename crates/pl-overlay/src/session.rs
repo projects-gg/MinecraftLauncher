@@ -877,8 +877,7 @@ pub(crate) type ThumbFn =
     Arc<dyn Fn(String, String, u8) -> Option<crate::voice::ThumbFuture> + Send + Sync>;
 
 /// SQOL-O: hands a room chat request to the launcher's voice chat (none: the app did not wire it).
-pub(crate) type RoomChatActFn =
-    Arc<dyn Fn(RoomChatAct) -> Option<RoomChatFuture> + Send + Sync>;
+pub(crate) type RoomChatActFn = Arc<dyn Fn(RoomChatAct) -> Option<RoomChatFuture> + Send + Sync>;
 
 /// VOICE-O: a session's ties to the launcher's voice chat.
 pub(crate) struct VoiceHooks {

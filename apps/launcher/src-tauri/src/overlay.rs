@@ -755,7 +755,11 @@ pub fn overlay_state(state: State<'_, AppState>) -> OverlayStateView {
 /// SQOL-O: the game's room chat requests ("Oda" chip: send, "Sil", "Rapor Et") go to the same
 /// voice chat and report path as the room panel's commands (`voice_chat_send`, `voice_chat_delete`,
 /// `voice_chat_report`). Called once, where voice chat is made.
-pub fn wire_room_chat(overlay: &Overlay, voice: &pl_voice::Voice, social: &pl_social::SocialService) {
+pub fn wire_room_chat(
+    overlay: &Overlay,
+    voice: &pl_voice::Voice,
+    social: &pl_social::SocialService,
+) {
     use pl_overlay::rchat::{RoomChatAct, RoomChatFuture, answer_of};
     use pl_voice::rchat::RoomChatError;
 

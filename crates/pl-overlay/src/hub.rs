@@ -32,14 +32,13 @@ use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::policy::NotifyPrefs;
 use crate::protocol::{ByeReason, ToGame};
 use crate::rchat::{RoomChatAct, RoomChatFuture, RoomLog};
-use crate::typing::GameTyping;
 use crate::server::{Bridge, Endpoint};
 use crate::session::{
     CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, EmojiFn, KindsFn, LangFn, Msg,
-    PeopleChange, PeopleFn, RoomChatActFn, Session, SocialActions, ThumbFn, VoiceActFn,
-    VoiceHooks,
+    PeopleChange, PeopleFn, RoomChatActFn, Session, SocialActions, ThumbFn, VoiceActFn, VoiceHooks,
 };
 use crate::tweaks::ClientTweaks;
+use crate::typing::GameTyping;
 use crate::voice::{VoiceAct, VoiceFuture};
 
 /// How long [`Overlay::stop`] waits for the goodbye to leave.
@@ -1082,7 +1081,10 @@ impl Overlay {
     /// SQOL-O: the launcher's voice chat, for the game's room chat requests: `sink` sends, deletes
     /// or reports and answers how it went (a deletion's and a report's as
     /// [`crate::rchat::answer_of`] makes them).
-    pub fn on_room_chat(&self, sink: impl Fn(RoomChatAct) -> RoomChatFuture + Send + Sync + 'static) {
+    pub fn on_room_chat(
+        &self,
+        sink: impl Fn(RoomChatAct) -> RoomChatFuture + Send + Sync + 'static,
+    ) {
         *self
             .shared
             .room_chat

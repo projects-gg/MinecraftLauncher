@@ -136,8 +136,10 @@ impl<S: SocialActions> Session<S> {
             return;
         }
         let on_screen = self.room_on_screen(room);
-        let counts = !mine && !self.scene.is_blocked(&msg.from) && !self.scene.is_ignored(&msg.from);
-        let Arrival::Shown { cid } = self.room_chat.arrived(room, msg, mine, on_screen, counts) else {
+        let counts =
+            !mine && !self.scene.is_blocked(&msg.from) && !self.scene.is_ignored(&msg.from);
+        let Arrival::Shown { cid } = self.room_chat.arrived(room, msg, mine, on_screen, counts)
+        else {
             return;
         };
         let mut frames = vec![self.room_msg(room, held, cid)];
@@ -279,7 +281,13 @@ impl<S: SocialActions> Session<S> {
 
     /// "Gönder" in the room's chat: what can never go is answered here (the chip is gone, too
     /// fast, too long, not a sticker), the room decides the rest; its answer comes as a wake-up.
-    pub(super) fn on_room_send(&mut self, cid: String, conv: &str, text: &str, sticker: Option<&str>) {
+    pub(super) fn on_room_send(
+        &mut self,
+        cid: String,
+        conv: &str,
+        text: &str,
+        sticker: Option<&str>,
+    ) {
         let Some(room) = rchat::room_of(conv).map(str::to_owned) else {
             return;
         };

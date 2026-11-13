@@ -23,8 +23,7 @@ use std::time::Duration;
 
 use pl_social::ReportReason;
 use pl_voice::rchat::{
-    LOG_MAX, RoomChatBy, RoomChatError, RoomChatMsg, RoomChatReason, RoomChatSend,
-    VoiceChatEvent,
+    LOG_MAX, RoomChatBy, RoomChatError, RoomChatMsg, RoomChatReason, RoomChatSend, VoiceChatEvent,
 };
 use pl_voice::view::{VoiceRoomKind, VoiceState};
 
@@ -231,7 +230,10 @@ pub fn direct_friend(
     }
     let other = match room.people.as_slice() {
         [one] => Some(one.id.as_str()),
-        [] => state.calling.as_ref().map(|calling| calling.friend.as_str()),
+        [] => state
+            .calling
+            .as_ref()
+            .map(|calling| calling.friend.as_str()),
         _ => None,
     }?;
     is_friend(other).then(|| other.to_owned())
@@ -272,7 +274,13 @@ pub struct Shown<'a> {
 /// for theirs), a sticker in words for a mod that cannot draw it, the links the player may press
 /// (the friends' chat's rule table and Studio's lists; no cards), a quiet mark for one taken away.
 /// `cid`: the panel's own key of the player's message it confirms.
-pub fn msg_view(conv: &str, held: &Held, name: &str, shown: &Shown<'_>, cid: Option<String>) -> MsgView {
+pub fn msg_view(
+    conv: &str,
+    held: &Held,
+    name: &str,
+    shown: &Shown<'_>,
+    cid: Option<String>,
+) -> MsgView {
     let msg = &held.msg;
     let mine = !shown.me.is_empty() && msg.from == shown.me;
     let deleted = held.gone.is_some();
@@ -343,7 +351,10 @@ pub fn history_frame(
 /// refused it; none when it went.
 pub fn send_failure(answer: &RoomChatSend) -> Option<(SendFailure, Option<String>)> {
     let RoomChatSend::Refused {
-        error, reason, rule, ..
+        error,
+        reason,
+        rule,
+        ..
     } = answer
     else {
         return None;
@@ -582,15 +593,13 @@ impl RoomChatLink {
                 }
             }
             RoomChatSend::Refused { .. } => {
-                let (reason, rule) =
-                    send_failure(answer).unwrap_or((SendFailure::Offline, None));
+                let (reason, rule) = send_failure(answer).unwrap_or((SendFailure::Offline, None));
                 out.frames.push(ToGame::SendFailed { cid, reason, rule });
             }
         }
         if self.pending.is_empty() {
             // Nothing else waits for an answer: what came early is shown as it is.
-            out.show
-                .extend(self.early.drain(..).map(|msg| (msg, None)));
+            out.show.extend(self.early.drain(..).map(|msg| (msg, None)));
         }
         out
     }
@@ -598,7 +607,14 @@ impl RoomChatLink {
     /// One of the room's messages came (`mine`: the player's own; `on_screen`: the panel shows the
     /// chip; `counts`: someone else's the player may hear of, not blocked nor ignored). Counts it
     /// as unread unless the chip is on screen; says how it goes to the mod.
-    pub fn arrived(&mut self, room: &str, msg: &RoomChatMsg, mine: bool, on_screen: bool, counts: bool) -> Arrival {
+    pub fn arrived(
+        &mut self,
+        room: &str,
+        msg: &RoomChatMsg,
+        mine: bool,
+        on_screen: bool,
+        counts: bool,
+    ) -> Arrival {
         if self.shown.as_deref() != Some(room) {
             return Arrival::Quiet;
         }
@@ -729,7 +745,10 @@ mod tests {
         }
         // A crew room always has its own (while it has a chat at all).
         let crew = room_state(VoiceRoomKind::Crew, &["f-ayse"], true, false);
-        assert_eq!(shown_room(&crew, "me", friends, true, false), Some(room.clone()));
+        assert_eq!(
+            shown_room(&crew, "me", friends, true, false),
+            Some(room.clone())
+        );
         let quiet = room_state(VoiceRoomKind::Crew, &["f-ayse"], false, false);
         assert_eq!(shown_room(&quiet, "me", friends, true, false), None);
         // The player's call still rings at a friend: that friend's messages.
@@ -771,7 +790,13 @@ mod tests {
             id: "1".into(),
             by: RoomChatBy::Mod,
         };
-        assert!(matches!(log.apply(&del), LogChange::Gone(Held { gone: Some(RoomChatBy::Mod), .. })));
+        assert!(matches!(
+            log.apply(&del),
+            LogChange::Gone(Held {
+                gone: Some(RoomChatBy::Mod),
+                ..
+            })
+        ));
         assert_eq!(log.apply(&del), LogChange::Nothing);
         assert_eq!(log.get("r1", "1"), None);
         assert!(log.get("r1", "2").is_some());
@@ -801,7 +826,10 @@ mod tests {
         link.set_shown(Some("r1".into()), Some("r1"));
         // The message first (the room's answer carries it), then the answer.
         link.sending("c1".into());
-        assert_eq!(link.arrived("r1", &msg("7", "me", "selam"), true, false, false), Arrival::Held);
+        assert_eq!(
+            link.arrived("r1", &msg("7", "me", "selam"), true, false, false),
+            Arrival::Held
+        );
         let out = link.answered(
             "c1".into(),
             &RoomChatSend::Sent {
@@ -809,7 +837,9 @@ mod tests {
                 at: 1,
             },
         );
-        assert!(matches!(&out.frames[..], [ToGame::Sent { cid, id, .. }] if cid == "c1" && id == "7"));
+        assert!(
+            matches!(&out.frames[..], [ToGame::Sent { cid, id, .. }] if cid == "c1" && id == "7")
+        );
         assert!(matches!(&out.show[..], [(m, Some(cid))] if m.id == "7" && cid == "c1"));
         // The answer first, then the message.
         link.sending("c2".into());
@@ -834,7 +864,10 @@ mod tests {
         );
         // A refusal says why; what came early meanwhile is shown once nothing waits.
         link.sending("c3".into());
-        assert_eq!(link.arrived("r1", &msg("10", "me", "?"), true, false, false), Arrival::Held);
+        assert_eq!(
+            link.arrived("r1", &msg("10", "me", "?"), true, false, false),
+            Arrival::Held
+        );
         let out = link.answered(
             "c3".into(),
             &RoomChatSend::Refused {
@@ -857,7 +890,10 @@ mod tests {
     fn others_messages_count_until_seen_and_gather_into_one_card() {
         let mut link = RoomChatLink::default();
         // No chip: nothing shows, nothing counts.
-        assert_eq!(link.arrived("r1", &msg("1", "u1", "a"), false, false, true), Arrival::Quiet);
+        assert_eq!(
+            link.arrived("r1", &msg("1", "u1", "a"), false, false, true),
+            Arrival::Quiet
+        );
         assert_eq!(link.frame(), None);
         link.set_shown(Some("r1".into()), Some("r1"));
         assert_eq!(
@@ -891,7 +927,10 @@ mod tests {
         assert_eq!(link.take_gather(next), None);
         // The chip goes: an empty frame says so, once.
         link.set_shown(None, None);
-        assert_eq!(link.frame(), Some(ToGame::RoomChat(RoomChatShown::default())));
+        assert_eq!(
+            link.frame(),
+            Some(ToGame::RoomChat(RoomChatShown::default()))
+        );
         assert_eq!(link.frame(), None);
     }
 
@@ -976,13 +1015,28 @@ mod tests {
             until: None,
         };
         for (answer, want) in [
-            (refused(RoomChatError::Rejected, Some(RoomChatReason::Phone)), SendFailure::Phone),
-            (refused(RoomChatError::Rejected, Some(RoomChatReason::Words)), SendFailure::Words),
-            (refused(RoomChatError::Rejected, Some(RoomChatReason::Length)), SendFailure::TooLong),
+            (
+                refused(RoomChatError::Rejected, Some(RoomChatReason::Phone)),
+                SendFailure::Phone,
+            ),
+            (
+                refused(RoomChatError::Rejected, Some(RoomChatReason::Words)),
+                SendFailure::Words,
+            ),
+            (
+                refused(RoomChatError::Rejected, Some(RoomChatReason::Length)),
+                SendFailure::TooLong,
+            ),
             (refused(RoomChatError::RateLimited, None), SendFailure::Rate),
             (refused(RoomChatError::Muted, None), SendFailure::Muted),
-            (refused(RoomChatError::Limited, None), SendFailure::LimitedLinks),
-            (refused(RoomChatError::StickersOff, None), SendFailure::FeatureOff),
+            (
+                refused(RoomChatError::Limited, None),
+                SendFailure::LimitedLinks,
+            ),
+            (
+                refused(RoomChatError::StickersOff, None),
+                SendFailure::FeatureOff,
+            ),
             (refused(RoomChatError::Off, None), SendFailure::Off),
             (refused(RoomChatError::Failed, None), SendFailure::Offline),
         ] {
@@ -990,7 +1044,10 @@ mod tests {
         }
         assert_eq!(send_failure(&answer_of(None)), None);
         assert_eq!(done_reason(&answer_of(None)), None);
-        assert_eq!(done_reason(&answer_of(Some(RoomChatError::Gone))), Some("gone"));
+        assert_eq!(
+            done_reason(&answer_of(Some(RoomChatError::Gone))),
+            Some("gone")
+        );
         assert_eq!(
             done_reason(&answer_of(Some(RoomChatError::RateLimited))),
             Some("rate")
@@ -999,7 +1056,10 @@ mod tests {
             done_reason(&answer_of(Some(RoomChatError::NotAllowed))),
             Some("failed")
         );
-        assert_eq!(message_reason("inappropriate"), Some(ReportReason::Inappropriate));
+        assert_eq!(
+            message_reason("inappropriate"),
+            Some(ReportReason::Inappropriate)
+        );
         assert_eq!(message_reason("name"), None);
         assert_eq!(room_of("v:abc"), Some("abc"));
         assert_eq!(room_of("v:"), None);
@@ -1008,12 +1068,33 @@ mod tests {
 
     #[test]
     fn a_card_says_the_newest_and_keeps_words_back_in_streamer_mode() {
-        let card = toast_of("r1", &msg("5", "u1", "selam"), "x7Ender".into(), Vec::new(), false, false, true);
+        let card = toast_of(
+            "r1",
+            &msg("5", "u1", "selam"),
+            "x7Ender".into(),
+            Vec::new(),
+            false,
+            false,
+            true,
+        );
         assert_eq!(
-            (card.key.as_str(), card.conv.as_deref(), card.body.as_str(), card.by.as_deref()),
+            (
+                card.key.as_str(),
+                card.conv.as_deref(),
+                card.body.as_str(),
+                card.by.as_deref()
+            ),
             ("room:r1", Some("v:r1"), "selam", Some("u1"))
         );
-        let quiet = toast_of("r1", &msg("5", "u1", "selam"), "x7Ender".into(), Vec::new(), true, true, true);
+        let quiet = toast_of(
+            "r1",
+            &msg("5", "u1", "selam"),
+            "x7Ender".into(),
+            Vec::new(),
+            true,
+            true,
+            true,
+        );
         assert_eq!(quiet.body, "New message");
     }
 }

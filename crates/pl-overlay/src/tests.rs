@@ -3470,14 +3470,22 @@ async fn the_rooms_own_chat_reaches_a_mod_that_shows_it_and_its_requests_reach_t
     assert_eq!(history["conv"], CONV);
     let first = &history["msgs"][0];
     assert_eq!(
-        (first["from"].as_str(), first["by"].as_str(), first["text"].as_str()),
+        (
+            first["from"].as_str(),
+            first["by"].as_str(),
+            first["text"].as_str()
+        ),
         (Some("Cem"), Some("u-cem"), Some("selam herkese"))
     );
     // While the chip is on screen a message is only shown: nothing unread, no card.
     overlay.room_chat(&said("2", "u-zz", "hey"));
     let shown = game.next().await.unwrap();
     assert_eq!(
-        (shown["t"].as_str(), shown["conv"].as_str(), shown["from"].as_str()),
+        (
+            shown["t"].as_str(),
+            shown["conv"].as_str(),
+            shown["from"].as_str()
+        ),
         (Some("msg"), Some(CONV), Some("Biri"))
     );
     // Another conversation on screen: they count, and one card comes for them after a moment.
@@ -3515,7 +3523,11 @@ async fn the_rooms_own_chat_reaches_a_mod_that_shows_it_and_its_requests_reach_t
     );
     let mine = game.next_of("msg").await;
     assert_eq!(
-        (mine["id"].as_str(), mine["cid"].as_str(), mine["mine"].as_bool()),
+        (
+            mine["id"].as_str(),
+            mine["cid"].as_str(),
+            mine["mine"].as_bool()
+        ),
         (Some("100"), Some("c1"), Some(true))
     );
     // "Sil" on the player's own message; on someone else's it goes nowhere.
@@ -3532,8 +3544,10 @@ async fn the_rooms_own_chat_reaches_a_mod_that_shows_it_and_its_requests_reach_t
         json!({"t":"done","act":"room-delete","id":"3","ok":false,"reason":"gone"})
     );
     // "Rapor Et" on someone else's: a message's reason, the note as the launcher keeps it.
-    game.send(json!({"t":"room-report","conv":CONV,"id":"3","reason":"spam","note":"  çok   spam "}))
-        .await;
+    game.send(
+        json!({"t":"room-report","conv":CONV,"id":"3","reason":"spam","note":"  çok   spam "}),
+    )
+    .await;
     assert_eq!(
         game.next_of("done").await,
         json!({"t":"done","act":"room-report","id":"3","ok":false,"reason":"rate"})
@@ -3608,7 +3622,10 @@ async fn a_text_field_in_the_game_keeps_single_key_voice_shortcuts_quiet() {
         serde_json::json!({"t":"keys-guard"})
     );
     game.send(json!({"t":"text-focus","on":true})).await;
-    eventually("the chat's field has the keyboard", || overlay.game_typing()).await;
+    eventually("the chat's field has the keyboard", || {
+        overlay.game_typing()
+    })
+    .await;
     game.send(json!({"t":"text-focus","on":false})).await;
     eventually("it let go", || !overlay.game_typing()).await;
     game.send(json!({"t":"text-focus","on":true})).await;

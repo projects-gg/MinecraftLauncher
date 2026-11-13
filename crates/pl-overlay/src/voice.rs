@@ -254,7 +254,9 @@ pub fn check(
         // go (`edit`); the launcher's voice chat checks the rest (a share still starting, a closed
         // source's "Sürdür").
         FromGame::VoiceShareHold { n, on } => match state {
-            Some(state) if state.share.edit && state.share.mine.iter().any(|share| share.n == *n) => {
+            Some(state)
+                if state.share.edit && state.share.mine.iter().any(|share| share.n == *n) =>
+            {
                 Ok(VoiceAct::ShareHold { n: *n, on: *on })
             }
             _ => Err(Refused::of("share-hold", "", VoiceRefusal::Nothing)),
@@ -2000,7 +2002,10 @@ pub(crate) mod tests {
             })
         );
         state.share.edit = true;
-        assert_eq!(serde_json::to_value(share_of(&state)).unwrap()["edit"], true);
+        assert_eq!(
+            serde_json::to_value(share_of(&state)).unwrap()["edit"],
+            true
+        );
         assert_eq!(
             check(&press, Some(&state), |_| true, |_| true),
             Some(Ok(VoiceAct::ShareHold { n: 1, on: false }))

@@ -4,17 +4,16 @@
 //!
 //! A mod whose hello lists `text-focus` hears `keys-guard` once it is greeted, and then says when
 //! a text field has the keyboard while the game's window is active (`text-focus`, debounced, said
-//! again every [`REFRESH`] while it lasts). Each word holds for [`HOLD`] at most: a lost "off" (a
-//! frozen game, a mod that went away without a word) never leaves the shortcuts dead for long; the
-//! connection's end ends it at once.
+//! again every 20 s while it lasts: the mod's `TextFocusGuard.REFRESH_MS`). Each word holds for
+//! [`HOLD`] at most: a lost "off" (a frozen game, a mod that went away without a word) never
+//! leaves the shortcuts dead for long; the connection's end ends it at once.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-/// How long one "a text field has the keyboard" holds without being said again.
+/// How long one "a text field has the keyboard" holds without being said again (the mod says it
+/// again every 20 s, well inside).
 pub const HOLD: Duration = Duration::from_secs(45);
-/// How often the mod says it again while it lasts (well inside [`HOLD`]).
-pub const REFRESH: Duration = Duration::from_secs(20);
 
 /// Which games say a text field of theirs has the keyboard, since when (by session).
 #[derive(Debug, Default)]
@@ -43,6 +42,9 @@ impl GameTyping {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// How often the mod says it again while it lasts (`TextFocusGuard.REFRESH_MS`).
+    const REFRESH: Duration = Duration::from_secs(20);
 
     #[test]
     fn a_games_word_holds_until_it_lets_go_or_its_hold_ends() {
