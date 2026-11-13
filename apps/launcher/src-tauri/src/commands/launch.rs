@@ -1756,8 +1756,8 @@ async fn prepare_and_spawn(
             crate::aot::game_ended(&app, aot, exit.crash.is_some(), exit.play_time().is_some());
         }
         if let Some(diagnosis) = exit.crash.clone() {
-            // Usage data: only the crash's kind (TELEMETRY).
-            crate::telemetry::game_crashed(diagnosis.kind);
+            // Usage data: the crash's kind and its coarse trace (TELEMETRY, TELEM-FIX).
+            crate::telemetry::game_crashed(&diagnosis);
             let view = modhealth::crash_view(
                 &app,
                 &state,

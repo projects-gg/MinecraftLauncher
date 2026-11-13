@@ -14,7 +14,7 @@ use parking_lot::Mutex;
 use crate::batch::{self, Carried, Outgoing};
 use crate::facts::AppFacts;
 use crate::feature::Feature;
-use crate::ledger::{CrashKind, CrashNote, Ledger, START_SAMPLES, Stored, push_sample};
+use crate::ledger::{CrashKind, CrashNote, GameCrash, Ledger, START_SAMPLES, Stored, push_sample};
 use crate::scrub;
 use crate::voice::{VoiceSeen, VoiceTracker};
 
@@ -34,6 +34,15 @@ pub enum Launch<'a> {
     Started,
     /// It failed before that, with this command error code.
     Failed(&'a str),
+}
+
+/// A game crash's coarse trace as the crash analysis made it (`pl_mc`'s `CrashTrace`):
+/// `native/gpu-amd`, `java/NullPointerException/sodium`, `exit/hung`; the phase from a closed
+/// list (`Rendering overlay`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GameTrace<'a> {
+    pub sig: &'a str,
+    pub phase: Option<&'a str>,
 }
 
 /// How the service answered a request.
@@ -233,12 +242,34 @@ impl Recorder {
         });
     }
 
-    /// A game crashed; `kind` is the crash analysis' (`modError`, `outOfMemory`).
-    pub fn game_crashed(&self, kind: &str, now_ms: i64) {
+    /// A game crashed; `kind` is the crash analysis' (`modError`, `outOfMemory`), `trace` its
+    /// coarse trace (`pl_mc`'s `CrashTrace`, TELEM-FIX) and `version` the launcher's.
+    pub fn game_crashed(
+        &self,
+        kind: &str,
+        trace: Option<GameTrace<'_>>,
+        version: &str,
+        now_ms: i64,
+    ) {
+        let game = trace.and_then(|trace| {
+            let sig = scrub::trace(trace.sig)?;
+            Some(GameCrash {
+                kind: scrub::category(kind),
+                sig,
+                phase: trace.phase.map(scrub::message).filter(|phase| phase != "-"),
+                ver: crate::facts::clean_version(version),
+                n: 1,
+            })
+        });
         self.count(now_ms, true, |inner| {
-            let counts = &mut inner.stored.ledger.counts;
-            counts.game_crashes = counts.game_crashes.saturating_add(1);
-            counts.add_fail(scrub::category(&format!("crash.{kind}")));
+            let ledger = &mut inner.stored.ledger;
+            ledger.counts.game_crashes = ledger.counts.game_crashes.saturating_add(1);
+            ledger
+                .counts
+                .add_fail(scrub::category(&format!("crash.{kind}")));
+            if let Some(game) = game {
+                ledger.add_game(game, secs(now_ms));
+            }
         });
     }
 
@@ -395,6 +426,7 @@ impl Recorder {
                     ledger.crash_sends.push(now);
                 }
                 ledger.drop_crashes(&carried.crashes);
+                ledger.drop_games(&carried.games);
                 // What came while the request was on its way starts the next batch now.
                 ledger.since = ledger.has_counts().then_some(now);
                 ledger.failures = 0;
@@ -500,7 +532,7 @@ mod tests {
         recorder.started(1_800, 1_000);
         recorder.launched(Launch::Started, 2_000);
         recorder.game_shown(3_000);
-        recorder.game_crashed("modError", 4_000);
+        recorder.game_crashed("modError", None, "2.0.8", 4_000);
         recorder.launched(Launch::Failed("DISK-DOLU"), 5_000);
         recorder.feature(Feature::Worlds, 6_000);
         assert!(
@@ -530,6 +562,70 @@ mod tests {
         let next = recorder.take_daily(&facts(), 42 * HOUR_MS).unwrap();
         let value: serde_json::Value = serde_json::from_slice(&next.json).unwrap();
         assert!(value.get("new").is_none());
+    }
+
+    /// TELEM-FIX: a game crash's trace goes with the daily batch after the launcher's own crashes
+    /// (an older service keeps only those), only in its shape, and comes off once it is taken.
+    #[test]
+    fn game_crash_traces_go_daily_after_the_launchers_crashes() {
+        let dir = tempfile::tempdir().unwrap();
+        let recorder = on(dir.path());
+        assert!(recorder.panicked(panic_note(), 500));
+        let sodium = GameTrace {
+            sig: "java/NullPointerException/sodium",
+            phase: Some("Rendering overlay"),
+        };
+        recorder.game_crashed("modCrash", Some(sodium), "2.2.1+telem", 1_000);
+        recorder.game_crashed("modCrash", Some(sodium), "2.2.1", 2_000);
+        recorder.game_crashed(
+            "notResponding",
+            Some(GameTrace {
+                sig: "exit/hung",
+                phase: None,
+            }),
+            "2.2.1",
+            3_000,
+        );
+        // Not in the trace's shape (a path, a name): counted, not kept.
+        for sig in [
+            "C:/Users/KorAtesi/x.dll",
+            "native/Kor Atesi",
+            "java/a/b/c",
+            "other/x",
+        ] {
+            recorder.game_crashed(
+                "unknown",
+                Some(GameTrace { sig, phase: None }),
+                "2.2.1",
+                4_000,
+            );
+        }
+        let ledger = recorder.ledger();
+        assert_eq!(ledger.counts.game_crashes, 7);
+        assert_eq!(ledger.counts.fail.get("crash.unknown"), Some(&4));
+        assert_eq!(ledger.games.len(), 2);
+        assert_eq!(ledger.games[0].n, 2, "the build suffix is cleaned off");
+        let out = recorder.take_daily(&facts(), 21 * HOUR_MS).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&out.json).unwrap();
+        let crash = value["crash"].as_array().unwrap();
+        assert_eq!(crash.len(), 3);
+        assert_eq!(crash[0]["k"], "panic");
+        assert_eq!(crash[1]["k"], "game");
+        assert_eq!(crash[1]["at"], "java/NullPointerException/sodium");
+        assert_eq!(crash[1]["msg"], "modCrash, Rendering overlay");
+        assert_eq!(crash[1]["ver"], "2.2.1");
+        assert_eq!(crash[1]["n"], 2);
+        assert_eq!(crash[2]["at"], "exit/hung");
+        assert_eq!(crash[2]["msg"], "notResponding");
+        recorder.answered(&out.carried, Answer::Taken, 21 * HOUR_MS + 1);
+        let ledger = recorder.ledger();
+        assert!(ledger.games.is_empty());
+        assert!(!ledger.has_counts());
+        // Turning it off forgets traces not sent yet, and counts none while off.
+        recorder.game_crashed("unknown", Some(sodium), "2.2.1", 22 * HOUR_MS);
+        recorder.set_choice(false, 22 * HOUR_MS + 1);
+        recorder.game_crashed("unknown", Some(sodium), "2.2.1", 22 * HOUR_MS + 2);
+        assert!(recorder.ledger().games.is_empty());
     }
 
     #[test]

@@ -11,8 +11,10 @@
 //!   go soon after a panic, at most once an hour ([`batch`]). Nothing wakes the launcher for it:
 //!   the daily send rides on the daily tidy-up, the crash send on the crash.
 //! - **Anonymous**: no account, no name, no install id, no IP address (the service keeps none),
-//!   no chat, no server, no mod names, no file paths. What a batch holds is in [`batch`] and
-//!   [`facts`]; crash summaries are scrubbed ([`scrub`]).
+//!   no chat, no server, no file paths, no list of installed mods. What a batch holds is in
+//!   [`batch`] and [`facts`]; crash summaries are scrubbed ([`scrub`]). A game crash's trace
+//!   (TELEM-FIX) names only things from closed lists: a Java or game exception class, the family
+//!   of a native module, a known public mod, an exit code's name ([`ledger::GameCrash`]).
 //! - **Nothing that looks like spying**: the counts come from what the launcher does anyway (its
 //!   own commands, its launches, its voice state, its own panics and page errors). No other
 //!   program, window, key press or file is looked at.
@@ -31,6 +33,6 @@ pub mod voice;
 pub use batch::{Carried, Outgoing};
 pub use facts::AppFacts;
 pub use feature::Feature;
-pub use ledger::{CrashKind, CrashNote};
-pub use recorder::{Answer, Launch, Recorder};
+pub use ledger::{CrashKind, CrashNote, GameCrash};
+pub use recorder::{Answer, GameTrace, Launch, Recorder};
 pub use voice::{Phase, VoiceSeen};
