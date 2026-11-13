@@ -809,7 +809,7 @@ pub fn share_notice_of(notice: &ShareNotice) -> Option<VoiceNoticeView> {
         name: String::new(),
     };
     Some(match notice {
-        ShareNotice::Refused { refusal } => view(
+        ShareNotice::Refused { refusal, .. } => view(
             "share-refused",
             Some(match refusal {
                 ShareRefusal::Off => "off",
@@ -1959,9 +1959,7 @@ pub(crate) mod tests {
                 .map(|view| serde_json::to_value(ToGame::VoiceNotice(view)).unwrap())
         };
         assert_eq!(
-            notice(ShareNotice::Refused {
-                refusal: ShareRefusal::NotAllowed
-            }),
+            notice(ShareNotice::refused(ShareRefusal::NotAllowed)),
             Some(json!({"t": "voice-notice", "kind": "share-refused", "reason": "not-allowed"}))
         );
         assert_eq!(
@@ -1983,12 +1981,7 @@ pub(crate) mod tests {
             None
         );
         assert_eq!(notice(ShareNotice::WatchFailed), None);
-        assert_eq!(
-            notice(ShareNotice::Refused {
-                refusal: ShareRefusal::WatchFull
-            }),
-            None
-        );
+        assert_eq!(notice(ShareNotice::refused(ShareRefusal::WatchFull)), None);
     }
 
     /// SQOL-O: the player's share says how its watchers see it, others' shares when they are paused

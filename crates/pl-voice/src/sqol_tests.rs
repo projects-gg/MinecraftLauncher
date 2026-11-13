@@ -9,9 +9,9 @@ use crate::engine::PageReport;
 use crate::machine::{Effect, Machine, ServiceVoice, StayStart};
 use crate::settings::Store;
 use crate::share::{
-    HOLD_STOP_MS, ServiceShare, ShareBy, ShareChange, ShareClosedWhy, ShareCmd, ShareEvent,
-    ShareHoldWhy, ShareKind, ShareMotion, ShareNotice, SharePreset, ShareRefusal, ShareSource,
-    ShareSt, ShareWire, ThumbJpeg,
+    HOLD_STOP_MS, ServiceShare, ShareAsked, ShareBy, ShareChange, ShareClosedWhy, ShareCmd,
+    ShareEvent, ShareHoldWhy, ShareKind, ShareMotion, ShareNotice, SharePreset, ShareRefusal,
+    ShareSource, ShareSt, ShareWire, ThumbJpeg,
 };
 use crate::wire::{FromRoom, MeWire, PersonWire, Role, RoomKind, RoomWire, Sdp, Ticket, ToRoom};
 
@@ -709,7 +709,12 @@ fn live_changes_hold_to_what_is_allowed() {
     assert_eq!(
         notices(&effects),
         [&ShareNotice::Refused {
-            refusal: ShareRefusal::Budget
+            refusal: ShareRefusal::Budget,
+            n: Some(1),
+            change: Some(ShareAsked {
+                fps: Some(15),
+                ..ShareAsked::default()
+            }),
         }]
     );
     let effects = machine
@@ -722,15 +727,28 @@ fn live_changes_hold_to_what_is_allowed() {
             4_000,
         )
         .unwrap();
+    // SQOL-R3: any other refusal of the player's change is told too, with what it asked (the
+    // page never rolls back silently).
     let effects = machine.socket_message(
         generation,
         error(set_rid(&effects).unwrap(), "share_off"),
         4_100,
         UNIX,
     );
-    assert!(notices(&effects).is_empty());
+    assert!(matches!(
+        notices(&effects)[..],
+        [ShareNotice::Refused {
+            n: Some(1),
+            change: Some(ShareAsked {
+                fps: Some(15),
+                preset: None,
+                audio: None
+            }),
+            ..
+        }]
+    ));
     assert_eq!(machine.view(4_100, UNIX).share.mine[0].fps, 30);
-    // An answer that never comes changes nothing after a while.
+    // An answer that never comes changes nothing after a while, and says so.
     let effects = machine
         .share_update(
             1,
@@ -743,8 +761,42 @@ fn live_changes_hold_to_what_is_allowed() {
         .unwrap();
     assert!(set_rid(&effects).is_some());
     assert!(machine.next_deadline(5_000).is_some_and(|at| at <= 15_000));
-    machine.tick(15_000, UNIX, 15_000);
+    let effects = machine.tick(15_000, UNIX, 15_000);
+    assert_eq!(
+        notices(&effects),
+        [&ShareNotice::Refused {
+            refusal: ShareRefusal::Failed,
+            n: Some(1),
+            change: Some(ShareAsked {
+                fps: Some(15),
+                ..ShareAsked::default()
+            }),
+        }]
+    );
     assert_eq!(machine.view(15_000, UNIX).share.mine[0].fps, 30);
+}
+
+/// SQOL-R3: the launcher's own report of a switch's kind (nothing the player asked) stays quiet
+/// when a room that does not take changes refuses it.
+#[test]
+fn a_refused_report_of_a_switchs_kind_stays_quiet() {
+    let mut machine = ready(true, true);
+    let generation = live(&mut machine, Vec::new());
+    sharing(&mut machine, generation, ShareSource::Game, 2_000);
+    machine
+        .share_switch(1, window("30:40"), "Tarayıcı")
+        .unwrap();
+    let effects = machine.share_event(
+        ShareEvent::Switched {
+            n: 1,
+            width: 1280,
+            height: 720,
+        },
+        2_500,
+    );
+    let rid = set_rid(&effects).expect("the new kind goes to the room");
+    let effects = machine.socket_message(generation, error(rid, "bad_request"), 2_600, UNIX);
+    assert!(notices(&effects).is_empty());
 }
 
 #[test]
@@ -801,4 +853,220 @@ fn others_shares_say_what_watchers_see_and_their_sound_goes_to_two_hundred() {
     assert_eq!(view.share.volumes["a"].volume, 180);
     machine.set_stream_volume("a", 900, false);
     assert_eq!(machine.view(2_000, UNIX).share.volumes["a"].volume, 200);
+}
+
+/// SQOL-R3 (P2-5): a pause the player chose before the source closed stays after another source
+/// comes; without one the share goes on.
+#[test]
+fn a_pause_chosen_before_the_source_closed_stays_after_a_switch() {
+    let mut machine = ready(true, true);
+    let generation = live(&mut machine, Vec::new());
+    sharing(&mut machine, generation, window("10:20"), 2_000);
+    machine.share_hold(1, true).unwrap();
+    machine.share_event(ShareEvent::SourceGone { n: 1 }, 3_000);
+    assert_eq!(
+        machine.view(3_000, UNIX).share.mine[0].hold,
+        Some(ShareHoldWhy::Closed)
+    );
+    machine
+        .share_switch(1, window("30:40"), "Tarayıcı")
+        .unwrap();
+    let effects = machine.share_event(
+        ShareEvent::Switched {
+            n: 1,
+            width: 1280,
+            height: 720,
+        },
+        3_500,
+    );
+    assert!(
+        !to_publisher(&effects)
+            .iter()
+            .any(|cmd| matches!(cmd, ShareCmd::Hold { on: false, .. }))
+    );
+    let view = machine.view(3_500, UNIX).share;
+    assert_eq!(view.mine[0].hold, Some(ShareHoldWhy::Paused));
+    assert_eq!(view.mine[0].st, ShareSt::Hold);
+    // "Sürdür" goes on with the new source.
+    let effects = machine.share_hold(1, false).unwrap();
+    assert_eq!(
+        to_publisher(&effects),
+        [&ShareCmd::Hold { n: 1, on: false }]
+    );
+    // Not paused before: the new source shows.
+    machine.share_event(ShareEvent::SourceGone { n: 1 }, 4_000);
+    machine.share_switch(1, window("50:60"), "Not").unwrap();
+    let effects = machine.share_event(
+        ShareEvent::Switched {
+            n: 1,
+            width: 1280,
+            height: 720,
+        },
+        4_500,
+    );
+    assert!(to_publisher(&effects).contains(&&ShareCmd::Hold { n: 1, on: false }));
+    assert_eq!(machine.view(4_500, UNIX).share.mine[0].hold, None);
+}
+
+/// SQOL-R3 (P2-6): a change made back before the room answered the first is asked for too; the
+/// share ends as the player left it.
+#[test]
+fn a_quick_change_back_is_asked_for_and_wins() {
+    let mut machine = ready(true, true);
+    let generation = live(&mut machine, Vec::new());
+    sharing(&mut machine, generation, ShareSource::Game, 2_000);
+    let before = machine.view(2_000, UNIX).share.mine[0].clone();
+    let on = !before.audio;
+    let change = |audio| ShareChange {
+        audio: Some(audio),
+        ..ShareChange::default()
+    };
+    let first = set_rid(&machine.share_update(1, change(on), 2_100).unwrap()).unwrap();
+    // Back at once, the room's answer to the first still on its way: asked as well.
+    let effects = machine.share_update(1, change(!on), 2_200).unwrap();
+    let second = set_rid(&effects).expect("the change back is asked for");
+    assert!(matches!(
+        sent(&effects)[..],
+        [ToRoom::ShareSet { audio: Some(audio), .. }] if *audio == !on
+    ));
+    // The answers come in order: the share ends as the player left it.
+    machine.socket_message(
+        generation,
+        applied(first, before.preset, before.fps, on),
+        2_300,
+        UNIX,
+    );
+    machine.socket_message(
+        generation,
+        applied(second, before.preset, before.fps, !on),
+        2_400,
+        UNIX,
+    );
+    assert_eq!(machine.view(2_400, UNIX).share.mine[0].audio, !on);
+    // The same for the quality: another one, then back.
+    let other = if before.preset == SharePreset::Low {
+        SharePreset::Normal
+    } else {
+        SharePreset::Low
+    };
+    let low = ShareChange {
+        preset: Some(other),
+        ..ShareChange::default()
+    };
+    let back = ShareChange {
+        preset: Some(before.preset),
+        ..ShareChange::default()
+    };
+    assert!(set_rid(&machine.share_update(1, low, 2_500).unwrap()).is_some());
+    assert!(set_rid(&machine.share_update(1, back, 2_600).unwrap()).is_some());
+    // Nothing waits any more: the same value again asks nothing.
+    machine.tick(2_600 + 10_000, UNIX, 0);
+    assert!(set_rid(&machine.share_update(1, back, 13_000).unwrap()).is_none());
+}
+
+/// SQOL-R3 (P2-7): the picker's double click asks for one switch.
+#[test]
+fn a_switch_to_the_source_already_on_its_way_is_one_switch() {
+    let mut machine = ready(true, true);
+    let generation = live(&mut machine, Vec::new());
+    sharing(&mut machine, generation, window("10:20"), 2_000);
+    let effects = machine
+        .share_switch(1, window("30:40"), "Tarayıcı")
+        .unwrap();
+    assert!(!to_publisher(&effects).is_empty());
+    assert_eq!(
+        machine.share_switch(1, window("30:40"), "Tarayıcı"),
+        Ok(Vec::new())
+    );
+    // Another source is a new switch.
+    let effects = machine.share_switch(1, window("50:60"), "Not").unwrap();
+    assert_eq!(
+        to_publisher(&effects),
+        [&ShareCmd::Switch {
+            n: 1,
+            source: window("50:60")
+        }]
+    );
+}
+
+/// SQOL-R3 (P2-11): a window minimized when the switch lands reads as minimized (the publisher
+/// tells it after the switch's news).
+#[test]
+fn a_minimized_window_switched_to_reads_as_minimized() {
+    let mut machine = ready(true, true);
+    let generation = live(&mut machine, Vec::new());
+    sharing(&mut machine, generation, window("10:20"), 2_000);
+    machine
+        .share_switch(1, window("30:40"), "Tarayıcı")
+        .unwrap();
+    machine.share_event(
+        ShareEvent::Switched {
+            n: 1,
+            width: 1280,
+            height: 720,
+        },
+        2_500,
+    );
+    let effects = machine.share_event(ShareEvent::Minimized { n: 1, on: true }, 2_500);
+    assert_eq!(sent(&effects), [&ToRoom::share_st(1, ShareSt::Min)]);
+    assert_eq!(machine.view(2_500, UNIX).share.mine[0].st, ShareSt::Min);
+}
+
+/// SQOL-R3 (P3): sound the publisher found none of stays off when a later answer of the room
+/// says it is on; the player's own "Sesi de Paylaş" tries again.
+#[test]
+fn sound_found_missing_stays_off_whatever_the_room_answers() {
+    let mut machine = ready(true, true);
+    let generation = live(&mut machine, Vec::new());
+    sharing(&mut machine, generation, ShareSource::Game, 2_000);
+    let audio = |on| ShareChange {
+        audio: Some(on),
+        ..ShareChange::default()
+    };
+    if !machine.view(2_000, UNIX).share.mine[0].audio {
+        let rid = set_rid(&machine.share_update(1, audio(true), 2_050).unwrap()).unwrap();
+        machine.socket_message(
+            generation,
+            applied(rid, SharePreset::Normal, 30, true),
+            2_060,
+            UNIX,
+        );
+    }
+    let effects = machine.share_event(ShareEvent::AudioUnavailable { n: 1 }, 2_100);
+    assert_eq!(notices(&effects), [&ShareNotice::AudioOff]);
+    // Another change's answer carries the room's own record of the sound.
+    let rid = set_rid(
+        &machine
+            .share_update(
+                1,
+                ShareChange {
+                    preset: Some(SharePreset::Low),
+                    ..ShareChange::default()
+                },
+                2_200,
+            )
+            .unwrap(),
+    )
+    .unwrap();
+    let effects = machine.socket_message(
+        generation,
+        applied(rid, SharePreset::Low, 30, true),
+        2_300,
+        UNIX,
+    );
+    assert!(!machine.view(2_300, UNIX).share.mine[0].audio);
+    assert!(
+        !to_publisher(&effects)
+            .iter()
+            .any(|cmd| matches!(cmd, ShareCmd::Update { opts, .. } if opts.audio))
+    );
+    // The player turns it on: asked, and the answer counts.
+    let rid = set_rid(&machine.share_update(1, audio(true), 2_400).unwrap()).unwrap();
+    machine.socket_message(
+        generation,
+        applied(rid, SharePreset::Low, 30, true),
+        2_500,
+        UNIX,
+    );
+    assert!(machine.view(2_500, UNIX).share.mine[0].audio);
 }

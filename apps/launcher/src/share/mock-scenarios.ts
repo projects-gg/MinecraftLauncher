@@ -38,7 +38,9 @@
 //   Normal.");
 // - `shareCapped`: the service allows at most "Normal" now ("Bu kalite şu an kapalı.");
 // - `shareNoEdit`: an older service: a live share only stops;
-// - `shareSwitchFail`: "Ekranı Değiştir" fails ("Bu pencere paylaşılamadı.", the game goes on).
+// - `shareSwitchFail`: "Ekranı Değiştir" fails ("Bu pencere paylaşılamadı.", the game goes on);
+// - `shareLiveMuted`: `shareLive` while a moderator mutes the player for everyone in a crew room
+//   (what the room checks stays dim: "Bir moderatör seni susturdu.").
 // `edit=refuse` refuses every raise (a quality, a frame rate, the sound) to show the rollback.
 //
 // SQOL-U1 (the stream viewer): `shareView…` scenarios live in mock-view.ts.
@@ -66,6 +68,7 @@ export function shareBase(scenario: string): string {
   ) {
     return "crewRooms";
   }
+  if (scenario === "shareLiveMuted") return "modMuted";
   return scenario === "shareCall" ? "call1" : "room";
 }
 
@@ -147,6 +150,7 @@ export function shareViewFor(scenario: string): VoiceShareView | null {
     case "shareOffer":
       return VIEW;
     case "shareLive":
+    case "shareLiveMuted":
       return {
         ...VIEW,
         mine: [

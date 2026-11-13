@@ -178,21 +178,17 @@ export function takeRefused(which: number): boolean {
 }
 
 /**
- * The room refused a live change (a `refused` notice, which names no share): the latest change
- * the room decides on goes back at once, whether the launcher answered yet or not, its room
- * fields only (its picture, cursor or small picture stay, as do every other change and share).
- * Returns what went back (for the sentence that says why), null when nothing waited for the room.
+ * Change `entry`'s `fields` go back at once, whether the launcher answered yet or not (the rest of
+ * it stays: its picture, cursor or small picture). Returns what went back.
  */
-export function dropRefused(): OwnPatch | null {
+function takeBack(entry: Pending, fields: ReadonlyArray<keyof OwnPatch>): OwnPatch {
   const { pending } = useOwnUi.getState();
-  const entry = [...pending].reverse().find((p) => asksRoom(p.patch));
-  if (!entry) return null;
   if (!entry.settled) refusedEarly.add(entry.seq);
   // Refused: never said as done, whatever stays of it.
   whenTaken.delete(entry.seq);
-  const pick = (patch: OwnPatch, room: boolean) =>
+  const pick = (patch: OwnPatch, refused: boolean) =>
     Object.fromEntries(
-      Object.entries(patch).filter(([key]) => ROOM_FIELDS.includes(key as keyof OwnPatch) === room),
+      Object.entries(patch).filter(([key]) => fields.includes(key as keyof OwnPatch) === refused),
     ) as OwnPatch;
   const refused = pick(entry.patch, true);
   const kept = pick(entry.patch, false);
@@ -207,6 +203,32 @@ export function dropRefused(): OwnPatch | null {
     });
   }
   return refused;
+}
+
+/**
+ * The room refused share `n`'s live change that asked `asked` (its notice names both): that
+ * change's fields go back, on that share only. It is the change asking the same values, else the
+ * oldest asking those fields (the room answers in order). Returns what went back, null when
+ * nothing waited for that answer any more.
+ */
+export function dropRefusedChange(n: number, asked: OwnPatch): OwnPatch | null {
+  const fields = ROOM_FIELDS.filter((key) => asked[key] !== undefined);
+  const waiting = useOwnUi
+    .getState()
+    .pending.filter((p) => p.n === n && fields.some((key) => p.patch[key] !== undefined));
+  const entry =
+    waiting.find((p) => fields.every((key) => sameValue(p.patch[key], asked[key]))) ?? waiting[0];
+  return entry ? takeBack(entry, fields) : null;
+}
+
+/**
+ * The room refused a live change and its notice names none (a launcher before SQOL-R's exact
+ * notice): the latest change the room decides on goes back, its room fields only (every other
+ * change and share stays). Returns what went back, null when nothing waited for the room.
+ */
+export function dropRefused(): OwnPatch | null {
+  const entry = [...useOwnUi.getState().pending].reverse().find((p) => asksRoom(p.patch));
+  return entry ? takeBack(entry, ROOM_FIELDS) : null;
 }
 
 /** The launcher refused (or failed): the share shows what it really has again. */

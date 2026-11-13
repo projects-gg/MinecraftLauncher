@@ -225,7 +225,7 @@ fn wire_overlay(overlay: &pl_overlay::Overlay, voice: &Voice) {
                     && let Some(overlay) =
                         PLATFORM.get().and_then(|platform| platform.overlay.get())
                 {
-                    overlay.share_notice(&pl_voice::share::ShareNotice::Refused { refusal });
+                    overlay.share_notice(&pl_voice::share::ShareNotice::refused(refusal));
                 }
                 done()
             }

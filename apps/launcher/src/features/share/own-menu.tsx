@@ -3,7 +3,9 @@
 // tile): "Ekranı Değiştir…", "Kalite" ›, "Sesi de Paylaş", "Duraklat"/"Sürdür", "Gelişmiş" ›, a
 // line, "Paylaşımı Durdur". A row that cannot be chosen now stays dim with one sentence why (this
 // computer's encoder, the service's or the month's limit, no sound on this computer). A service
-// that does not let a live share change leaves "Paylaşımı Durdur" alone.
+// that does not let a live share change leaves "Paylaşımı Durdur" alone. A moderator's mute for
+// everyone dims what the room checks (the source, quality, frame rate and sound), its sentence
+// once under the first such row of each menu; the rest is the launcher's own and stays.
 import {
   GearSix,
   Pause,
@@ -17,6 +19,7 @@ import type { MenuItem } from "@pl/ui";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useVoicePrefs } from "@/features/voice/prefs";
+import { useVoiceUi } from "@/features/voice/store";
 import {
   DEFAULT_SHARE_SETTINGS,
   type ShareChange,
@@ -49,6 +52,8 @@ export interface OwnMenuInput {
   canAudio: boolean;
   /** The player's kept choices (a share that does not say its cursor or picture follows them). */
   settings: VoiceShareSettings;
+  /** A moderator muted the player for everyone: the room refuses what it checks. */
+  muted: boolean;
 }
 
 /** What the rows do. */
@@ -79,8 +84,10 @@ export function ownShareItems(
   t: TFunction,
   act: OwnMenuActions = OWN_ACTIONS,
 ): Array<MenuItem | null> {
-  const { mine, status, edit, maxPreset, hwMax, canAudio, settings } = input;
+  const { mine, status, edit, maxPreset, hwMax, canAudio, settings, muted } = input;
   const { n } = mine;
+  // The mute's sentence once under the first row it dims (the rows after it are the same case).
+  const mutedHint = muted ? t("voice.mutedByMod") : undefined;
   const stop: MenuItem = {
     label: t("share.own.menu.stop"),
     // A ring around the square: a plain square read as an empty checkbox beside "Sesi de Paylaş".
@@ -92,6 +99,7 @@ export function ownShareItems(
   const quality: MenuItem = {
     label: t("share.quality.label"),
     icon: <SlidersHorizontal size={16} />,
+    disabled: muted,
     onSelect: nothing,
     items: PRESETS.map((preset) => {
       // This computer first (no limit lifts that), then the service's or the month's.
@@ -117,7 +125,7 @@ export function ownShareItems(
     label: t("share.audio.label"),
     icon: <SpeakerHigh size={16} />,
     checked: canAudio && mine.audio,
-    disabled: !canAudio,
+    disabled: muted || !canAudio,
     hint: canAudio ? undefined : t("share.audio.unsupported"),
     onSelect: () => act.change(n, { audio: !mine.audio }),
   };
@@ -150,14 +158,20 @@ export function ownShareItems(
     onSelect: nothing,
     items: [
       { label: t("share.advanced.fps"), heading: true, onSelect: nothing },
-      ...RATES.map((fps): MenuItem => {
+      ...RATES.map((fps, i): MenuItem => {
         const needsHigh = fps === 60 && mine.preset !== "high";
         return {
           label: t("share.own.fps", { fps }),
           radio: true,
           checked: mine.fps === fps,
-          disabled: needsHigh,
-          hint: needsHigh ? t("share.own.fpsNeedsHigh") : undefined,
+          disabled: muted || needsHigh,
+          hint: muted
+            ? i === 0
+              ? mutedHint
+              : undefined
+            : needsHigh
+              ? t("share.own.fpsNeedsHigh")
+              : undefined,
           onSelect: () => {
             if (mine.fps !== fps) act.change(n, { fps });
           },
@@ -197,6 +211,8 @@ export function ownShareItems(
     {
       label: t("share.own.menu.switch"),
       icon: <Swap size={16} />,
+      disabled: muted,
+      hint: mutedHint,
       onSelect: () => act.switchSource(n),
     },
     quality,
@@ -217,6 +233,7 @@ function useOwnMenuInputs(): {
   const shares = useOwnShares();
   const lost = useOwnUi((s) => s.lost);
   const stored = useVoicePrefs((s) => s.settings?.share);
+  const muted = useVoiceUi((s) => s.state.room?.me.mutedByModerator === true);
   const settings = { ...DEFAULT_SHARE_SETTINGS, ...stored };
   return {
     shares,
@@ -228,6 +245,7 @@ function useOwnMenuInputs(): {
       hwMax: share.hwMax ?? "high",
       canAudio: share.audio,
       settings,
+      muted,
     }),
   };
 }
