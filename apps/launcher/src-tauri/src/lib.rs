@@ -22,9 +22,25 @@ mod webview_rest;
 
 use tauri::Manager;
 
+/// Tauri's runtime as it would make it, with 8 MiB of stack a thread instead of tokio's 2 MiB:
+/// command futures are large in a release build, like the handler on the main thread (build.rs).
+/// The stack is reserved address space; pages are committed as they are touched. Set before
+/// anything uses `tauri::async_runtime`.
+fn async_runtime() {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(8 << 20)
+        .build()
+        .expect("the async runtime starts");
+    tauri::async_runtime::set(runtime.handle().clone());
+    // Tauri keeps only the handle: the runtime lives as long as the process.
+    std::mem::forget(runtime);
+}
+
 pub fn run() {
     // Usage data's startup time counts from here (TELEMETRY; nothing is counted while it is off).
     telemetry::process_started();
+    async_runtime();
     // Debug builds run under an identity of their own (identifier, keychain service, data
     // folder): they never forward to, read from or write over an installed launcher.
     identity::check();

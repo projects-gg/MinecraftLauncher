@@ -481,7 +481,9 @@ pub async fn launch_instance(
     crate::commands::java::yield_to_launch(&app).await;
     clock.lap("yield");
     let started = Instant::now();
-    let result = prepare_and_spawn(
+    // On the heap: the preparation's future is the largest of every command (tens of KiB), and
+    // Tauri's handler builds each command's future on the main thread's stack (build.rs).
+    let result = Box::pin(prepare_and_spawn(
         &app,
         &state,
         &instance_id,
@@ -490,7 +492,7 @@ pub async fn launch_instance(
         &on_event,
         &cancel,
         &clock,
-    )
+    ))
     .await;
     clock.report(match &result {
         Ok(()) => "done",

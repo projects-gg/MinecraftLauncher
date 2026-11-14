@@ -13,7 +13,20 @@ fn main() {
     if shipping_release() {
         check_overlay_jars(dir);
     }
+    main_thread_stack();
     tauri_build::build()
+}
+
+/// Windows gives a program's main thread 1 MiB of stack, and Tauri runs the command handler there:
+/// in a release build (one codegen unit, LTO) it took a 610 KiB frame in 2.2.2 and overflowed the
+/// stack when a launch reached it deeper. 8 MiB is reserved address space only; pages are committed
+/// as they are touched.
+fn main_thread_stack() {
+    let windows = std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows");
+    let msvc = std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc");
+    if windows && msvc {
+        println!("cargo:rustc-link-arg-bins=/STACK:8388608");
+    }
 }
 
 /// The release profile without debug assertions: what installers are made of. `tauri build
