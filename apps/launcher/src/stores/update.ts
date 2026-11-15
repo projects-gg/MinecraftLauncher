@@ -63,6 +63,33 @@ function currentRoute(): string | null {
   return route.startsWith("/") ? route : null;
 }
 
+/** The channel the launcher follows; the beta channel asks first whether it may stay (BETA-GATE). */
+async function followedChannel(): Promise<string> {
+  return usePrefs.getState().updateChannel === "beta" ? await keepBeta() : "stable";
+}
+
+/**
+ * What the channel says now about the update that waits downloaded. It waits in memory for as long
+ * as the launcher stays open (days, in the tray), and meanwhile the channel can move on to a fixed
+ * version or stop the rollout: installing the old download would put a withdrawn build on the
+ * player's machine. `same` also when the channel cannot be read: an update that was fine when it
+ * was downloaded still installs offline.
+ */
+async function lookAgain(pending: string | null): Promise<"same" | "moved" | "gone"> {
+  try {
+    const status = await commands.updateCheck(await followedChannel());
+    if (status.status === "error" || status.data.state === "unavailable") return "same";
+    const { state, version } = status.data;
+    if (state !== "available" && state !== "mandatory") return "gone";
+    return version === pending ? "same" : "moved";
+  } catch {
+    return "same";
+  }
+}
+
+/** Nothing is on offer (any more). */
+const NOTHING = { manual: false, version: null, notes: null, mandatory: false } as const;
+
 /** Background launcher updates: check, download silently, install on "restart". */
 export const useUpdate = create<UpdateState>()((set, get) => ({
   phase: "idle",
@@ -78,16 +105,27 @@ export const useUpdate = create<UpdateState>()((set, get) => ({
     if (!isTauri()) return "upToDate";
     const current = get().phase;
     if (current === "downloading") return "downloading";
-    if (current === "ready" || current === "applying") return "ready";
+    if (current === "applying") return "ready";
     if (current === "checking") return "busy";
+    if (current === "ready") {
+      // The download is only as good as the channel still says it is.
+      const now = await lookAgain(get().version);
+      // An install or another look started meanwhile: theirs counts.
+      if (get().phase !== "ready") return get().phase === "applying" ? "ready" : "busy";
+      if (now === "same") return "ready";
+      if (now === "gone") {
+        set({ phase: "idle", ...NOTHING });
+        return "upToDate";
+      }
+      // The channel moved on: the look below downloads its version over the old one.
+    }
     const { autoDownloadUpdates } = usePrefs.getState();
     // A background look at an update the title bar already offers keeps the offer in place.
     const quiet = !manual && current === "available";
     if (!quiet) set({ phase: "checking", error: null, manual });
     try {
       // BETA-GATE: the beta channel asks first whether this launcher may stay on it.
-      const updateChannel =
-        usePrefs.getState().updateChannel === "beta" ? await keepBeta() : "stable";
+      const updateChannel = await followedChannel();
       const status = await commands.updateCheck(updateChannel);
       if (status.status === "error") throw new Error(status.error.message);
       const s = status.data;
@@ -97,7 +135,7 @@ export const useUpdate = create<UpdateState>()((set, get) => ({
       }
       if (s.state !== "available" && s.state !== "mandatory") {
         // Nothing for this launcher (up to date, or held back by the staged rollout).
-        set({ phase: "idle", manual: false, version: null, notes: null, mandatory: false });
+        set({ phase: "idle", ...NOTHING });
         return "upToDate";
       }
       const mandatory = s.state === "mandatory";
@@ -124,9 +162,27 @@ export const useUpdate = create<UpdateState>()((set, get) => ({
     }
   },
   async apply(options) {
-    const { phase, notes, version } = get();
     // A second press (or the toast's button meanwhile) starts nothing more.
-    if (phase !== "ready") return;
+    if (get().phase !== "ready") return;
+    set({
+      phase: "applying",
+      step: options?.afkOpen ? "stoppingAfk" : null,
+      error: null,
+      asking: null,
+    });
+    // One last look before installing: the background look comes only every six hours.
+    const now = await lookAgain(get().version);
+    if (now === "gone") {
+      set({ phase: "idle", step: null, ...NOTHING });
+      return;
+    }
+    if (now === "moved") {
+      // The player asked for the update: the channel's version downloads now and installs.
+      set({ phase: "idle", step: null });
+      if ((await get().check(true)) === "ready") await get().apply(options);
+      return;
+    }
+    const { notes, version } = get();
     // Shown once by "Yenilikler" after the restart. The backend keeps them too (its restart note);
     // this copy is for when that could not be written.
     try {
@@ -134,12 +190,6 @@ export const useUpdate = create<UpdateState>()((set, get) => ({
     } catch {
       // Storage unavailable: the update still installs.
     }
-    set({
-      phase: "applying",
-      step: options?.afkOpen ? "stoppingAfk" : null,
-      error: null,
-      asking: null,
-    });
     const steps = new Channel<UpdateStep>();
     steps.onmessage = (step) => set({ step });
     const result = await commands.updateApply(currentRoute(), steps);

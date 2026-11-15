@@ -63,6 +63,9 @@ beforeEach(() => {
   prefs.autoDownloadUpdates = true;
 });
 
+/** The look at the channel before an install is over (it is asked first, one tick away). */
+const looked = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe("apply", () => {
   it("sends the page the player is on and follows the backend's steps", async () => {
     let finish: (value: unknown) => void = () => {};
@@ -74,6 +77,7 @@ describe("apply", () => {
     );
     const done = useUpdate.getState().apply({ afkOpen: true });
     expect(useUpdate.getState()).toMatchObject({ phase: "applying", step: "stoppingAfk" });
+    await looked();
     expect(updateApply).toHaveBeenCalledWith("/afk", channel());
     channel().onmessage?.("installing");
     expect(useUpdate.getState().step).toBe("installing");
@@ -103,6 +107,7 @@ describe("apply", () => {
     updateApply.mockImplementation(() => new Promise(() => {}));
     void useUpdate.getState().apply();
     void useUpdate.getState().apply();
+    await looked();
     expect(updateApply).toHaveBeenCalledTimes(1);
     useUpdate.setState({ phase: "available" });
     await useUpdate.getState().apply();
@@ -112,6 +117,7 @@ describe("apply", () => {
   it("keeps a copy of the notes for after the restart", async () => {
     updateApply.mockImplementation(() => new Promise(() => {}));
     void useUpdate.getState().apply();
+    await looked();
     expect(JSON.parse(storage.map.get("pl.pendingNotes") ?? "null")).toEqual({
       version: "2.5.0",
       notes: "- yeni",
@@ -180,6 +186,47 @@ describe("check", () => {
     expect(await useUpdate.getState().check(true)).toBe("ready");
     expect(seen).toEqual([1]);
     expect(useUpdate.getState()).toMatchObject({ phase: "ready", manual: true });
+  });
+});
+
+describe("a downloaded update the channel left behind", () => {
+  const offer = (version: string, state = "available") => ({
+    status: "ok",
+    data: { state, current: "2.2.1", version, notes: null },
+  });
+  const waiting = () =>
+    useUpdate.setState({ phase: "ready", version: "2.2.2", notes: null, mandatory: false });
+
+  it("downloads the channel's version over it at the next look", async () => {
+    waiting();
+    updateCheck.mockResolvedValue(offer("2.2.3"));
+    updateDownload.mockResolvedValue({ status: "ok", data: true });
+    expect(await useUpdate.getState().check()).toBe("ready");
+    expect(updateDownload).toHaveBeenCalledTimes(1);
+    expect(useUpdate.getState()).toMatchObject({ phase: "ready", version: "2.2.3" });
+  });
+
+  it("installs the channel's version, never the old download", async () => {
+    waiting();
+    updateCheck.mockResolvedValue(offer("2.2.3"));
+    updateDownload.mockResolvedValue({ status: "ok", data: true });
+    updateApply.mockImplementation(async () => {
+      expect(useUpdate.getState().version).toBe("2.2.3");
+      return { status: "ok", data: null };
+    });
+    await useUpdate.getState().apply();
+    expect(updateDownload).toHaveBeenCalledTimes(1);
+    expect(updateApply).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops it when the rollout stopped, keeps it when the channel cannot be read", async () => {
+    waiting();
+    updateCheck.mockResolvedValue(offer("2.2.2", "unavailable"));
+    expect(await useUpdate.getState().check()).toBe("ready");
+    updateCheck.mockResolvedValue(offer("2.2.2", "heldBack"));
+    await useUpdate.getState().apply();
+    expect(updateApply).not.toHaveBeenCalled();
+    expect(useUpdate.getState()).toMatchObject({ phase: "idle", version: null });
   });
 });
 
