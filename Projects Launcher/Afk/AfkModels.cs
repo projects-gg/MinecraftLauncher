@@ -136,6 +136,11 @@ namespace Projects_Launcher.Afk
         // bu varsayılan kullanılır.
         public string MinecraftVersion { get; set; } = AfkDefaults.MinecraftVersion;
 
+        // false: sunucunun gönderdiği kaynak paketi indirilmez. MCC dokuları hiç kullanmaz; paketi yalnızca
+        // çeviri metinleri için indirir. Sunucuya kabul/yüklendi yanıtı her iki durumda da gönderilir,
+        // bu yüzden kapalı olması zorunlu paket isteyen sunucularda atılmaya yol açmaz.
+        public bool AllowResourcePacks { get; set; }
+
         public AntiAfkOptions AntiAfk { get; set; } = new AntiAfkOptions();
         public AutoRelogOptions AutoRelog { get; set; } = new AutoRelogOptions();
         public AutoEatOptions AutoEat { get; set; } = new AutoEatOptions();

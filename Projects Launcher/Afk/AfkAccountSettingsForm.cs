@@ -76,6 +76,7 @@ namespace Projects_Launcher.Afk
         private Guna2Button minecraftVersionResetButton;
         private Label minecraftVersionHint;
         private Guna2ToggleSwitch autoStartToggle;
+        private Guna2ToggleSwitch resourcePacksToggle;
 
         // --- Giriş Komutları ---
         private Guna2ToggleSwitch loginCommandsToggle;
@@ -694,6 +695,11 @@ namespace Projects_Launcher.Afk
 
             autoStartToggle = AddToggleRow(page, ref y,
                 "Başlatıcı açılınca bu hesabı otomatik bağla", null);
+
+            resourcePacksToggle = AddToggleRow(page, ref y, "Doku paketlerine izin ver",
+                "Kapalıyken sunucunun gönderdiği doku paketi indirilmez; sunucuya yine de yüklendi bilgisi " +
+                "verilir, böylece doku paketi zorunlu sunucularda atılmazsınız. Açıkken paket indirilir ve " +
+                "yalnızca içindeki çeviri metinleri sohbet mesajlarını doğru göstermek için kullanılır.");
         }
 
         /// <summary>
@@ -1090,6 +1096,7 @@ namespace Projects_Launcher.Afk
             serverPortUpDown.Value = Clamp(account.ServerPort, 0, 65535);
             minecraftVersionCombo.SelectedIndex = AfkVersions.IndexOf(account.MinecraftVersion);
             autoStartToggle.Checked = account.AutoStart;
+            resourcePacksToggle.Checked = account.AllowResourcePacks;
 
             LoginCommandsOptions login = account.LoginCommands ?? new LoginCommandsOptions();
             loginCommandsToggle.Checked = login.Enabled;
@@ -1230,6 +1237,7 @@ namespace Projects_Launcher.Afk
             account.ServerPort = (int)serverPortUpDown.Value;
             account.MinecraftVersion = SelectedMinecraftVersion();
             account.AutoStart = autoStartToggle.Checked;
+            account.AllowResourcePacks = resourcePacksToggle.Checked;
 
             if (account.LoginCommands == null)
                 account.LoginCommands = new LoginCommandsOptions();

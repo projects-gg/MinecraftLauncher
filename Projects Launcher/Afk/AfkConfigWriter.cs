@@ -71,6 +71,8 @@ namespace Projects_Launcher.Afk
             // "auto" sunucunun ping'te bildirdiği sürümü kullanır; sunucu istemcinin henüz desteklemediği
             // bir sürüm bildirirse bağlantı kurulamaz. Bu yüzden hesap bazında sabit sürüm seçilebilir.
             sb.AppendLine("MinecraftVersion = " + Str(AfkVersions.Normalize(account.MinecraftVersion)));
+            // MCC kaynak paketini yalnızca çeviri metinleri için indirir; sunucuya kabul yanıtı bu ayardan bağımsızdır.
+            sb.AppendLine("LoadResourcePackTranslations = " + Bool(account.AllowResourcePacks));
             sb.AppendLine("AutoRespawn = true");
             sb.AppendLine("TerrainAndMovements = " + Bool(terrainAndMovements));
             sb.AppendLine("InventoryHandling = " + Bool(inventoryHandling));
