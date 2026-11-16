@@ -184,7 +184,9 @@ async function applyGameStartBehavior(run: number) {
     }
   }
   if (behavior === "minimize") await win.minimize();
-  else await win.hide();
+  // Minimized while it stepped aside (Win+D): it stays there, as above. Hiding a window that
+  // Windows minimized on its own leaves it at its minimized size (shell.rs, `hide_main_window`).
+  else if (!(await win.isMinimized())) await win.hide();
   await refreshWindowAway();
 }
 

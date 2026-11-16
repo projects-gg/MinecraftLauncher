@@ -44,7 +44,10 @@ pub fn window_state_file() -> String {
     }
 }
 
-/// The main window's saved state: physical inner size and whether it was maximized.
+/// The main window's saved state: physical inner size and whether it was maximized. A size far
+/// below the window's minimum is not the player's: it is a minimized window's (160 × 28), saved
+/// by a version that hid a minimized window without [`hide_main_window`]. Such a file counts as
+/// no saved state, so the start sizes the window for the screen again.
 #[cfg(desktop)]
 fn saved_main_window(app: &tauri::App) -> Option<(tauri::PhysicalSize<u32>, bool)> {
     use tauri_plugin_window_state::AppHandleExt;
@@ -59,10 +62,29 @@ fn saved_main_window(app: &tauri::App) -> Option<(tauri::PhysicalSize<u32>, bool
     let main = &states["main"];
     let size = |key: &str| u32::try_from(main[key].as_u64().unwrap_or(0)).unwrap_or(0);
     let (width, height) = (size("width"), size("height"));
-    (width > 0 && height > 0).then(|| {
-        let maximized = main["maximized"].as_bool().unwrap_or(false);
-        (tauri::PhysicalSize::new(width, height), maximized)
-    })
+    let maximized = main["maximized"].as_bool().unwrap_or(false);
+    // Physical pixels are never fewer than logical ones, so half the minimum is a safe floor.
+    let (min_width, min_height) = pl_desktop::window::MIN_SIZE;
+    let sound = width >= min_width / 2 && height >= min_height / 2;
+    // A maximized window's saved size is not applied at the start (`fit_main_window`).
+    (sound || maximized).then_some((tauri::PhysicalSize::new(width, height), maximized))
+}
+
+/// Hides the main window (the tray, a quit). Windows: when tao hides a window it writes the
+/// window's style again from its own flags, and it hears of a minimize only through its own call
+/// and the system command of the title bar and the taskbar button. Win+D, Win+M and a touchpad's
+/// "show desktop" minimize without either, so the style lost `WS_MINIMIZE` while the window kept
+/// its minimized size: a 160 × 28 window, shown like that the next time and saved like that at
+/// exit. Asking tao to minimize a window that already is minimized changes nothing on screen and
+/// gives tao the flag, with which it leaves the style alone.
+fn hide_main_window(window: &tauri::WebviewWindow) {
+    #[cfg(windows)]
+    {
+        if window.is_minimized().unwrap_or(false) {
+            let _ = window.minimize();
+        }
+    }
+    let _ = window.hide();
 }
 
 /// Sets the window's inner size exactly. On Windows, tao's `set_size` for a window without
@@ -342,7 +364,7 @@ pub fn launcher_leave_for_game(app: AppHandle) {
         }
         return;
     };
-    let _ = window.hide();
+    hide_main_window(&window);
     if action == CloseAction::Quit {
         quit_for(&app, leave);
         return;
@@ -423,7 +445,7 @@ pub fn close_requested(app: &AppHandle) {
     tracing::info!(?action, ?choice, ?activity, "window closed");
     if action == CloseAction::Quit {
         // Out of sight at once; the process ends right after.
-        let _ = window.hide();
+        hide_main_window(&window);
         quit(app);
         return;
     }
@@ -431,7 +453,7 @@ pub fn close_requested(app: &AppHandle) {
     if window.is_minimized().unwrap_or(false) {
         crate::webview_rest::wake_if_suspended(app, "the window was closed");
     }
-    let _ = window.hide();
+    hide_main_window(&window);
     if let Some(closed) = action.closed() {
         let _ = app.emit(close::CLOSED_EVENT, closed);
     }
