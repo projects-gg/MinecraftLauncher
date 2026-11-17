@@ -269,7 +269,7 @@ fn evaluate_callback(params: &HashMap<String, String>, expected_state: &str) -> 
 fn page_reason(error: &AuthError, lang: Lang) -> &'static str {
     match error {
         AuthError::Authorize { error, .. } if error.eq_ignore_ascii_case("access_denied") => {
-            lang.pick("Giriş izni verilmedi.", "Permission wasn't given.")
+            lang.pick("Giriş izni verilmedi.", "You didn't allow access.")
         }
         AuthError::Authorize { .. } => lang.pick(
             "Microsoft giriş isteğini tamamlamadı.",
@@ -351,7 +351,7 @@ mod tests {
         let response = browser_get(v4(port), "/?code=M.C123-abc&state=st4te").await;
         assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
         assert!(response.contains("Content-Type: text/html; charset=utf-8"));
-        assert!(response.contains("Hesabın onaylandı"));
+        assert!(response.contains("Hesabın Onaylandı"));
         assert!(response.contains("Cache-Control: no-store"));
         assert_eq!(task.await.unwrap().unwrap(), "M.C123-abc");
     }
@@ -373,7 +373,7 @@ mod tests {
     async fn rejects_a_state_mismatch() {
         let (port, _, task) = start("expected").await;
         let response = browser_get(v4(port), "/?code=abc&state=forged").await;
-        assert!(response.contains("Giriş tamamlanamadı"));
+        assert!(response.contains("Giriş Tamamlanamadı"));
         assert!(response.contains("doğrulanamadı"));
         assert!(matches!(
             task.await.unwrap(),
