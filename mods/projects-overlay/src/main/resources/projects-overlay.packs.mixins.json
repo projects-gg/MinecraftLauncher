@@ -2,7 +2,7 @@
   "required": true,
   "package": "gg.projects.overlay.packs.mixin",
   "compatibilityLevel": "JAVA_25",
-  "client": ["ServerPackManagerMixin"],
+  "client": ["MinecraftQuitReloadMixin", "ServerPackManagerMixin"],
   "injectors": {
     "defaultRequire": 0
   }
