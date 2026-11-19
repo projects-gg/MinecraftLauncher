@@ -13,8 +13,9 @@
 //   publish  Uploads a made folder to R2: the APK (immutable: the same bytes are skipped, other bytes
 //            under an existing name are refused), the .sig, the channel file last, each read back. A
 //            channel never moves to a lower versionCode. Then the clean-up: an APK folder no channel
-//            names goes once a newer version's folder is 14 days old (storage cleans itself; nothing
-//            is deleted when the listing or a channel file cannot be read).
+//            names goes once a newer version's folder is 3 days old, except the release before the
+//            channel's version, kept for a rollback (storage cleans itself; nothing is deleted when
+//            the listing or a channel file cannot be read).
 //   show     Prints a live channel file.
 //
 //   node scripts/release/android-channel.mjs make --apk <release.apk> --notes-tr <txt> --notes-en <txt> \
@@ -45,16 +46,18 @@ import { fileURLToPath } from "node:url";
 
 import {
   canonicalJson,
-  compareVersions,
   md5Hex,
   parseArgs,
   parseNotes,
   parseVersion,
+  planFolderPrune,
+  previousRelease,
   R2Client,
   rfc3339,
   run,
   sha256Hex,
   UsageError,
+  versionFolders,
 } from "./lib.mjs";
 
 const USAGE = `usage: node scripts/release/android-channel.mjs <make|verify|publish|show> [options]
@@ -62,7 +65,7 @@ const USAGE = `usage: node scripts/release/android-channel.mjs <make|verify|publ
           [--key <minisign secret key>] [--pubkey <public key>] [--cert <sha256>|any]
           [--package <application id>] [--source-tag <tag>] [--sdk <dir>] [--tauri <tauri.js>] [--allow-http]
   verify  --dir <dir> | --url <channel url> [--check-apk] [--channel stable|beta] [--pubkey <public key>]
-  publish --dir <dir> [--dry-run] [--allow-downgrade] [--no-prune] [--keep-days 14] [--pubkey <public key>]
+  publish --dir <dir> [--dry-run] [--allow-downgrade] [--no-prune] [--keep-days 3] [--pubkey <public key>]
   show    [--channel stable|beta]`;
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -82,6 +85,9 @@ const MAX_NOTES = 1500;
 const MAX_NOTE_LINES = 20;
 const MAX_APK = 512 * 1024 * 1024;
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** Days an old APK folder stays after a newer one is uploaded (the newest release before the
+ * channel's version is kept regardless). */
+const KEEP_DAYS = 3;
 
 const channelKey = (channel) => `${PREFIX}/android/${channel}.json`;
 const apkName = (versionName) => `projects-launcher-${versionName}.apk`;
@@ -571,49 +577,11 @@ async function verify(flags) {
 }
 
 /**
- * The clean-up's plan for `objects` under `${prefix}android/`: a version folder no channel names
- * goes once the next newer version's folder is `keepMs` old (players read a fresh channel before
- * they download, so only a download that started before the switch can still want it). Channel
- * files, folders that are not versions and folders with no newer one are never touched.
+ * The clean-up's plan for `objects` under `${prefix}android/` (lib.mjs `planFolderPrune`): a
+ * version folder no channel names goes once the next newer version's folder is `keepMs` old.
  */
 export function planPrune(objects, referenced, prefix, now, keepMs) {
-  const base = `${prefix}android/`;
-  const folders = new Map();
-  for (const object of objects) {
-    if (!object.key.startsWith(base)) continue;
-    const rest = object.key.slice(base.length);
-    const slash = rest.indexOf("/");
-    if (slash <= 0) continue;
-    const name = rest.slice(0, slash);
-    if (!folders.has(name)) folders.set(name, []);
-    folders.get(name).push(object);
-  }
-  const versions = [];
-  const unknown = [];
-  for (const name of folders.keys()) {
-    try {
-      parseVersion(name);
-      versions.push(name);
-    } catch {
-      unknown.push(name);
-    }
-  }
-  versions.sort(compareVersions);
-  const remove = [];
-  const waiting = [];
-  versions.forEach((name, i) => {
-    if (referenced.has(name)) return;
-    const newer = versions[i + 1];
-    if (!newer) {
-      waiting.push({ name, reason: "no newer version" });
-      return;
-    }
-    const since = Math.min(...folders.get(newer).map((o) => o.lastModified));
-    if (now - since >= keepMs) remove.push({ name, objects: folders.get(name) });
-    else
-      waiting.push({ name, reason: `${newer} is ${Math.floor((now - since) / DAY_MS)} days old` });
-  });
-  return { remove, waiting, unknown };
+  return planFolderPrune(objects, `${prefix}android/`, referenced, now, keepMs);
 }
 
 function folderOf(url) {
@@ -648,6 +616,12 @@ async function prune(r2, keys, keepMs, dryRun) {
   } catch (err) {
     console.log(`clean-up skipped: the listing failed (${err.message})`);
     return;
+  }
+  // And the release before the oldest named one: a rollback (--allow-downgrade) needs its APK.
+  const folders = versionFolders(objects, `${PREFIX}/android/`);
+  for (const name of [...referenced]) {
+    const previous = previousRelease(folders, name);
+    if (previous) referenced.add(previous);
   }
   const plan = planPrune(objects, referenced, `${PREFIX}/`, Date.now(), keepMs);
   for (const name of plan.unknown)
@@ -744,7 +718,7 @@ async function publish(flags, r2) {
   }
   // 3. The clean-up of folders no channel names.
   if (!flags["no-prune"]) {
-    const days = Number(flags["keep-days"] ?? 14);
+    const days = Number(flags["keep-days"] ?? KEEP_DAYS);
     if (!Number.isFinite(days) || days < 1) throw new UsageError("--keep-days must be at least 1");
     await prune(r2, keys, days * DAY_MS, dryRun);
   }

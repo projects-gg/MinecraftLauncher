@@ -14,11 +14,14 @@ import {
   notesFields,
   parseNotes,
   parseVersion,
+  planFolderPrune,
   plistString,
+  previousRelease,
   releaseBody,
   setMacBundleVersion,
   sha256Hex,
   signRequest,
+  versionFolders,
   versionStamps,
 } from "./lib.mjs";
 
@@ -362,4 +365,52 @@ test("Info.plist strings are read by key", () => {
   assert.equal(plistString(plist, "CFBundleShortVersionString"), "2.0.1-beta.2");
   assert.equal(plistString(plist, "CFBundleVersion"), "2.0.1202");
   assert.equal(plistString(plist, "CFBundleName"), undefined);
+});
+
+test("old release folders: what the clean-up keeps and deletes", () => {
+  const DAY = 86_400_000;
+  const now = Date.parse("2026-11-20T00:00:00Z");
+  const object = (key, daysAgo, size = 1) => ({ key, size, lastModified: now - daysAgo * DAY });
+  const base = "v1/releases/";
+  const objects = [
+    object("v1/releases/stable.json", 0),
+    object("v1/releases/beta.json", 0),
+    object("v1/releases/2.2.3/a.exe", 9),
+    object("v1/releases/2.2.4/a.exe", 7),
+    object("v1/releases/2.2.4/a.exe.sig", 7),
+    object("v1/releases/2.2.5-beta.1/a.exe", 5),
+    object("v1/releases/2.2.5/a.exe", 3),
+    object("v1/releases/2.2.6-beta.1/a.exe", 1),
+    object("v1/releases/2.2.7/a.exe", 0),
+    object("v1/releases/tmp/x", 30),
+  ];
+  const names = versionFolders(objects, base);
+  assert.deepEqual(names.sort(), [
+    "2.2.3",
+    "2.2.4",
+    "2.2.5",
+    "2.2.5-beta.1",
+    "2.2.6-beta.1",
+    "2.2.7",
+    "tmp",
+  ]);
+  // The release before stable skips prereleases and folders that are not versions.
+  assert.equal(previousRelease(names, "2.2.5"), "2.2.4");
+  assert.equal(previousRelease(names, "2.2.5-beta.1"), "2.2.4");
+  assert.equal(previousRelease(names, "2.2.3"), null);
+  const keep = new Set(["2.2.5", "2.2.6-beta.1", "2.2.4"]);
+  const plan = planFolderPrune(objects, base, keep, now, 2 * DAY);
+  // 2.2.3: 2.2.4 is 7 days old. 2.2.5-beta.1: 2.2.5 is 3 days old. 2.2.7 is the newest.
+  assert.deepEqual(
+    plan.remove.map((r) => [r.name, r.objects.length]),
+    [
+      ["2.2.3", 1],
+      ["2.2.5-beta.1", 1],
+    ],
+  );
+  assert.deepEqual(plan.waiting, [{ name: "2.2.7", reason: "no newer version" }]);
+  assert.deepEqual(plan.unknown, ["tmp"]);
+  // Inside the grace period nothing goes.
+  const fresh = planFolderPrune(objects, base, keep, now, 10 * DAY);
+  assert.deepEqual(fresh.remove, []);
 });

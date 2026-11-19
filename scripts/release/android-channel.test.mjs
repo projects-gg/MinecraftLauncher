@@ -510,7 +510,7 @@ test("publish refuses a folder whose signature or APK does not match", async () 
   await assert.rejects(channelTool("publish", "--dir", other, "--dry-run"), /untrusted key/);
 });
 
-test("publish cleans up folders no channel names, 14 days after a newer one", async () => {
+test("publish cleans up folders no channel names, 3 days after a newer one, but the release before", async () => {
   // State before: 0.4.6 live (above). Old folders: 0.4.4 (superseded by 0.4.5 30 days ago), 0.4.5.
   const put = (k, daysOld) =>
     objects.set(k, {
@@ -527,16 +527,19 @@ test("publish cleans up folders no channel names, 14 days after a newer one", as
   const f047 = madeFolder("0.4.7", 23, randomBytes(512));
   const dry = await channelTool("publish", "--dir", f047, "--dry-run");
   assert.match(dry.stdout, /\[dry-run\] would delete v1\/android\/0\.4\.4\//);
-  assert.match(dry.stdout, /\[dry-run\] would delete v1\/android\/0\.4\.5\//);
+  // A dry run sees the live channel (0.4.6), so 0.4.5 is the release before it and stays.
+  assert.doesNotMatch(dry.stdout, /would delete v1\/android\/0\.4\.5\//);
   assert.ok(objects.has("v1/android/0.4.4/projects-launcher-0.4.4.apk"));
   const { stdout } = await channelTool("publish", "--dir", f047);
-  // 0.4.4 and 0.4.5 go (their newer folders are 30 and 20 days old); 0.4.6 waits for 0.4.7 to age.
+  // 0.4.4 and 0.4.5 go (their newer folders are 30 and 20 days old); 0.4.6, the release before the
+  // channel's 0.4.7, stays for a rollback.
   assert.ok(!objects.has("v1/android/0.4.4/projects-launcher-0.4.4.apk"));
   assert.ok(!objects.has("v1/android/0.4.5/projects-launcher-0.4.5.apk"));
   assert.ok(objects.has("v1/android/0.4.6/projects-launcher-0.4.6.apk"));
   assert.ok(objects.has("v1/android/0.4.7/projects-launcher-0.4.7.apk"));
   assert.ok(objects.has("v1/android/odd/readme.txt"));
-  assert.match(stdout, /0\.4\.6 waits/);
+  assert.doesNotMatch(stdout, /deleted v1\/android\/0\.4\.6\/|0\.4\.6 waits/);
+  assert.match(stdout, /deleted v1\/android\/0\.4\.5\//);
   // A channel file that does not verify stops the clean-up: nothing is deleted.
   put("v1/android/0.4.3/projects-launcher-0.4.3.apk", 90);
   objects.set("v1/android/beta.json", {

@@ -123,6 +123,89 @@ export function compareVersions(a, b) {
   return 0;
 }
 
+// --- old version folders on R2 -------------------------------------------------------------
+
+/**
+ * The clean-up's plan for the version folders under `base` (`v1/releases/`, `v1/android/`): a
+ * folder whose version is not in `keep` goes once the next newer version's folder is `graceMs`
+ * old (a client reads a fresh channel right before it downloads, so only a download that started
+ * before the switch can still want it). Files directly under `base` (the channel files), folders
+ * that are not versions and the newest folder are never touched. Returns `{ remove: [{ name,
+ * objects }], waiting: [{ name, reason }], unknown: [name] }`.
+ */
+export function planFolderPrune(objects, base, keep, now, graceMs) {
+  const folders = new Map();
+  for (const object of objects) {
+    if (!object.key.startsWith(base)) continue;
+    const rest = object.key.slice(base.length);
+    const slash = rest.indexOf("/");
+    if (slash <= 0) continue;
+    const name = rest.slice(0, slash);
+    if (!folders.has(name)) folders.set(name, []);
+    folders.get(name).push(object);
+  }
+  const versions = [];
+  const unknown = [];
+  for (const name of folders.keys()) {
+    try {
+      parseVersion(name);
+      versions.push(name);
+    } catch {
+      unknown.push(name);
+    }
+  }
+  versions.sort(compareVersions);
+  const remove = [];
+  const waiting = [];
+  versions.forEach((name, i) => {
+    if (keep.has(name)) return;
+    const newer = versions[i + 1];
+    if (!newer) {
+      waiting.push({ name, reason: "no newer version" });
+      return;
+    }
+    const since = Math.min(...folders.get(newer).map((o) => o.lastModified));
+    if (now - since >= graceMs) remove.push({ name, objects: folders.get(name) });
+    else
+      waiting.push({
+        name,
+        reason: `${newer} is ${Math.floor((now - since) / 86_400_000)} days old`,
+      });
+  });
+  return { remove, waiting, unknown };
+}
+
+/**
+ * The newest release (no prerelease part) older than `version` among `names`, or null: the
+ * version a withdrawn or rolled-back channel goes back to, so the clean-up keeps its files.
+ */
+export function previousRelease(names, version) {
+  let best = null;
+  for (const name of names) {
+    let parsed;
+    try {
+      parsed = parseVersion(name);
+    } catch {
+      continue;
+    }
+    if (parsed.pre.length || compareVersions(name, version) >= 0) continue;
+    if (!best || compareVersions(name, best) > 0) best = name;
+  }
+  return best;
+}
+
+/** Version folder names directly under `base` in a listing. */
+export function versionFolders(objects, base) {
+  const names = new Set();
+  for (const { key } of objects) {
+    if (!key.startsWith(base)) continue;
+    const rest = key.slice(base.length);
+    const slash = rest.indexOf("/");
+    if (slash > 0) names.add(rest.slice(0, slash));
+  }
+  return [...names];
+}
+
 // --- macOS bundle version ------------------------------------------------------------------
 
 /** CFBundleVersion stage of each prerelease kind, in semver order; a release is MAC_RELEASE. */

@@ -33,6 +33,7 @@ function startServer() {
       req.on("data", (c) => chunks.push(c));
       req.on("end", () => {
         const body = Buffer.concat(chunks);
+        const url = new URL(req.url, "http://x");
         const auth = req.headers.authorization ?? "";
         const signedNames = /SignedHeaders=([^,]+)/.exec(auth)?.[1].split(";") ?? [];
         const headers = Object.fromEntries(signedNames.map((n) => [n, req.headers[n]]));
@@ -44,7 +45,8 @@ function startServer() {
         );
         const expected = signRequest({
           method: req.method,
-          path: decodeURIComponent(req.url),
+          path: decodeURIComponent(url.pathname),
+          query: url.search.slice(1),
           headers,
           payloadHash: req.headers["x-amz-content-sha256"],
           ...KEYS,
@@ -57,16 +59,42 @@ function startServer() {
           res.writeHead(403).end("SignatureDoesNotMatch");
           return;
         }
-        const key = decodeURIComponent(req.url).replace(/^\/bucket\//, "");
+        // ListObjectsV2, two keys a page (the clean-up must follow the pages).
+        if (url.pathname === "/bucket" && req.method === "GET") {
+          const prefix = url.searchParams.get("prefix") ?? "";
+          const keys = [...objects.keys()].filter((k) => k.startsWith(prefix)).sort();
+          const start = Number(url.searchParams.get("continuation-token") ?? 0);
+          const more = start + 2 < keys.length;
+          const contents = keys
+            .slice(start, start + 2)
+            .map((k) => {
+              const o = objects.get(k);
+              return `<Contents><Key>${k}</Key><LastModified>${new Date(o.lastModified).toISOString()}</LastModified><Size>${o.body.length}</Size></Contents>`;
+            })
+            .join("");
+          res
+            .writeHead(200)
+            .end(
+              `<ListBucketResult><IsTruncated>${more}</IsTruncated>${more ? `<NextContinuationToken>${start + 2}</NextContinuationToken>` : ""}${contents}</ListBucketResult>`,
+            );
+          return;
+        }
+        const key = decodeURIComponent(url.pathname).replace(/^\/bucket\//, "");
         if (req.method === "PUT") {
           objects.set(key, {
             body,
             md5: createHash("md5").update(body).digest("hex"),
             sha256: req.headers["x-amz-meta-sha256"],
             cacheControl: req.headers["cache-control"],
+            lastModified: Date.now(),
           });
           afterPut?.(key);
           res.writeHead(200).end();
+          return;
+        }
+        if (req.method === "DELETE") {
+          objects.delete(key);
+          res.writeHead(204).end();
           return;
         }
         const obj = objects.get(key);
@@ -352,4 +380,49 @@ test("channel.mjs writes latest.json for the GitHub release", async () => {
     ]),
     /missing updater platforms: windows-aarch64/,
   );
+});
+
+test("prune deletes old release folders but keeps the channels' and the release before stable", async () => {
+  const DAY = 86_400_000;
+  const put = (key, daysOld) =>
+    objects.set(key, {
+      body: Buffer.from("old"),
+      md5: createHash("md5").update("old").digest("hex"),
+      sha256: createHash("sha256").update("old").digest("hex"),
+      cacheControl: "public, max-age=31536000, immutable",
+      lastModified: Date.now() - daysOld * DAY,
+    });
+  const stable = JSON.parse(objects.get("v1/releases/stable.json").body).version;
+  const beta = JSON.parse(objects.get("v1/releases/beta.json").body).version;
+  // Folders around the live ones: two old releases, an old beta, and the live folders aged.
+  put("v1/releases/1.9.0/a.exe", 40);
+  put("v1/releases/1.9.0/a.exe.sig", 40);
+  put("v1/releases/2.0.0/a.exe", 30);
+  put("v1/releases/2.0.1-beta.1/a.exe", 20);
+  for (const [k, o] of objects)
+    if (k.startsWith(`v1/releases/${stable}/`)) o.lastModified = Date.now() - 10 * DAY;
+  const dry = await publishR2("prune", "--dry-run");
+  assert.match(dry.stdout, /would delete v1\/releases\/1\.9\.0\/a\.exe\.sig/);
+  assert.ok(objects.has("v1/releases/1.9.0/a.exe"));
+  const { stdout } = await publishR2("prune");
+  // 1.9.0 and the old beta go; 2.0.0 is the release before stable; the channels' folders stay.
+  assert.ok(!objects.has("v1/releases/1.9.0/a.exe"));
+  assert.ok(!objects.has("v1/releases/1.9.0/a.exe.sig"));
+  assert.ok(!objects.has("v1/releases/2.0.1-beta.1/a.exe"));
+  assert.ok(objects.has("v1/releases/2.0.0/a.exe"));
+  assert.ok([...objects.keys()].some((k) => k.startsWith(`v1/releases/${stable}/`)));
+  assert.ok([...objects.keys()].some((k) => k.startsWith(`v1/releases/${beta}/`)));
+  assert.ok(objects.has("v1/releases/stable.json") && objects.has("v1/releases/beta.json"));
+  assert.match(stdout, /clean-up: kept .*2\.0\.0/);
+  // A channel that cannot be read stops the clean-up, loudly in CI; the command still succeeds.
+  put("v1/releases/1.8.0/a.exe", 90);
+  const saved = objects.get("v1/releases/beta.json");
+  objects.set("v1/releases/beta.json", { ...saved, body: Buffer.from("{not json") });
+  const blocked = await run(process.execPath, [join(here, "publish-r2.mjs"), "prune"], {
+    env: { ...env, GITHUB_ACTIONS: "true" },
+  });
+  assert.match(blocked.stdout, /::warning title=R2 clean-up skipped::/);
+  assert.ok(objects.has("v1/releases/1.8.0/a.exe"));
+  objects.set("v1/releases/beta.json", saved);
+  objects.delete("v1/releases/1.8.0/a.exe");
 });

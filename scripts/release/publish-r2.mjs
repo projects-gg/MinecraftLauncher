@@ -8,6 +8,12 @@
 //   promote  Copy the release announced in <from>.json (it must be --version) to <to>.json with
 //            the rollout / mandatory / minVersion you choose. beta -> stable, or stable -> stable
 //            to widen a staged rollout. Its notes go along unchanged (`localizedNotes` too).
+//   prune    Delete old release folders (also run after every publish and promote unless
+//            --no-prune): a folder goes once a newer one is 2 days old, unless stable.json or
+//            beta.json names it or it is the release before stable (latest.php's previous stable,
+//            and what a rollback with --allow-downgrade needs). Nothing is deleted when a channel
+//            file or the listing cannot be read; a failed clean-up never fails the release.
+//            Every release also stays on GitHub Releases (projects-gg/MinecraftLauncher).
 //   show     Print a channel file.
 //
 // --notes-file: the release notes as the tag message gives them, Turkish, then optionally a
@@ -19,9 +25,11 @@
 //   node scripts/release/publish-r2.mjs publish --dir release-files --version 2.1.0 \
 //     [--channel beta|stable|none] [--notes-file notes.md] [--rollout 100] [--mandatory] \
 //     [--min-version 2.0.3|none] [--require windows-x86_64,...] [--expect-current 2.1.0-beta.2] \
-//     [--allow-downgrade] [--dry-run]
+//     [--allow-downgrade] [--no-prune] [--dry-run]
 //   node scripts/release/publish-r2.mjs promote --version 2.1.0 [--from beta] [--to stable] \
-//     [--rollout 25] [--mandatory[=false]] [--min-version 2.0.3|none] [--allow-downgrade] [--dry-run]
+//     [--rollout 25] [--mandatory[=false]] [--min-version 2.0.3|none] [--allow-downgrade] \
+//     [--no-prune] [--dry-run]
+//   node scripts/release/publish-r2.mjs prune [--dry-run]
 //   node scripts/release/publish-r2.mjs show [--channel stable]
 //
 // Environment: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET (an R2 API token
@@ -40,6 +48,8 @@ import {
   md5Hex,
   parseArgs,
   parseVersion,
+  planFolderPrune,
+  previousRelease,
   R2Client,
   Refusal,
   readBundles,
@@ -49,14 +59,16 @@ import {
   run,
   sha256Hex,
   UsageError,
+  versionFolders,
 } from "./lib.mjs";
 
-const USAGE = `usage: node scripts/release/publish-r2.mjs <publish|promote|show> [options]
+const USAGE = `usage: node scripts/release/publish-r2.mjs <publish|promote|prune|show> [options]
   publish --dir <dir> --version <v> [--channel beta|stable|none] [--notes-file <md>]
           [--rollout 0-100] [--mandatory] [--min-version <v>|none] [--require <keys>]
-          [--expect-current <v>] [--allow-downgrade] [--dry-run]
+          [--expect-current <v>] [--allow-downgrade] [--no-prune] [--dry-run]
   promote --version <v> [--from beta] [--to stable] [--rollout 0-100] [--mandatory[=false]]
-          [--min-version <v>|none] [--allow-downgrade] [--dry-run]
+          [--min-version <v>|none] [--allow-downgrade] [--no-prune] [--dry-run]
+  prune   [--dry-run]
   show    [--channel stable]`;
 
 const CDN = (process.env.CDN_BASE_URL || "https://cdn.projects.gg").replace(/\/+$/, "");
@@ -65,6 +77,8 @@ const CHANNELS = ["stable", "beta"];
 const IMMUTABLE = "public, max-age=31536000, immutable";
 const MUTABLE = "public, max-age=60";
 const JSON_TYPE = "application/json; charset=utf-8";
+/** An unnamed release folder stays this long after a newer one is uploaded. */
+const PRUNE_GRACE_MS = 2 * 24 * 60 * 60 * 1000;
 
 const channelKey = (channel) => `${PREFIX}/releases/${channel}.json`;
 const releaseDir = (version) => `${PREFIX}/releases/${version}/`;
@@ -202,6 +216,7 @@ async function publish(flags, r2) {
     }
     await writeChannel(r2, channel, manifest, dryRun);
   }
+  if (r2 && !flags["no-prune"]) await prune(flags, r2);
 }
 
 async function promote(flags, r2) {
@@ -247,6 +262,54 @@ async function promote(flags, r2) {
     minVersion: minVersion && minVersion !== "none" ? parseVersion(minVersion).raw : undefined,
   };
   await writeChannel(r2, to, doc, Boolean(flags["dry-run"]));
+  if (!flags["no-prune"]) await prune(flags, r2);
+}
+
+/** Old release folders (see the header). Never throws once R2 is there: the release succeeded. */
+async function prune(flags, r2) {
+  if (!r2) throw new Error("prune reads R2; set the R2_* variables (also for --dry-run)");
+  const dryRun = Boolean(flags["dry-run"]);
+  try {
+    const named = async () => {
+      const versions = [];
+      for (const channel of CHANNELS) {
+        const doc = await readChannel(r2, channel);
+        if (!doc) throw new Error(`${channelKey(channel)} does not exist`);
+        versions.push(doc.version);
+      }
+      return versions;
+    };
+    const [stable, beta] = await named();
+    const base = `${PREFIX}/releases/`;
+    const objects = await r2.list(base);
+    const keep = new Set([stable, beta]);
+    const previous = previousRelease(versionFolders(objects, base), stable);
+    if (previous) keep.add(previous);
+    // A channel that moved while listing: leave it to the next run rather than guess.
+    const again = await named();
+    if (again[0] !== stable || again[1] !== beta) throw new Error("a channel changed meanwhile");
+    const plan = planFolderPrune(objects, base, keep, Date.now(), PRUNE_GRACE_MS);
+    for (const name of plan.unknown) console.log(`clean-up: ${base}${name}/ is not a version`);
+    for (const { name, reason } of plan.waiting) console.log(`clean-up: ${name} waits (${reason})`);
+    let freed = 0;
+    for (const { name, objects: files } of plan.remove) {
+      for (const file of files) {
+        if (dryRun) console.log(`[dry-run] would delete ${file.key}`);
+        else await r2.delete(file.key);
+        freed += file.size;
+      }
+      console.log(`clean-up: ${dryRun ? "would delete" : "deleted"} ${base}${name}/`);
+    }
+    console.log(
+      `clean-up: kept ${[...keep].join(", ")}; ${dryRun ? "would free" : "freed"} ${Math.round(freed / 1e6)} MB`,
+    );
+  } catch (err) {
+    console.log(`clean-up skipped: ${err.message}`);
+    // In CI, an annotation on the run: a clean-up that keeps failing must not go unseen.
+    if (process.env.GITHUB_ACTIONS === "true") {
+      console.log(`::warning title=R2 clean-up skipped::${err.message.replace(/\r?\n/g, " ")}`);
+    }
+  }
 }
 
 async function show(flags, r2) {
@@ -272,10 +335,11 @@ run(async () => {
     require: "string",
     "expect-current": "string",
     "allow-downgrade": "boolean",
+    "no-prune": "boolean",
     "dry-run": "boolean",
   });
   if (positional.length) throw new UsageError(`unexpected argument ${positional[0]}`);
-  const commands = { publish, promote, show };
+  const commands = { publish, promote, prune, show };
   if (!Object.hasOwn(commands, command ?? "")) throw new UsageError("expected a command");
   const { client, missing } = R2Client.fromEnv();
   if (!client && flags["dry-run"]) console.log(`note: no R2 credentials (${missing.join(", ")})`);
