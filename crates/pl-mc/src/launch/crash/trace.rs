@@ -48,6 +48,11 @@ static THROWN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^(Caused by: )?((?:[A-Za-z_$][\w$]*\.)+[A-Za-z_$][\w$]*)(?::|[ \t]*\r?$)")
         .expect("valid regex")
 });
+/// What follows `ExceptionInInitializerError: ` when the JVM rethrows a class's earlier static
+/// initializer failure (JDK 17+): `Exception java.lang.NullPointerException: text [in thread "x"]`.
+static EARLIER_INIT_FAILURE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*Exception ((?:[A-Za-z_$][\w$]*\.)+[A-Za-z_$][\w$]*)").expect("valid regex")
+});
 static DESCRIPTION: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?m)^Description: ([^\r\n]{1,80})\r?$").expect("valid regex"));
 /// A Java stack frame: `at net.caffeinemc.mods.sodium.client.X.method(X.java:12)` (the module
@@ -236,9 +241,13 @@ const KNOWN_MODS: &[(&str, &[&str], &[&str])] = &[
         &["chesttracker"],
         &["red.jackf.chesttracker."],
     ),
-    ("wi-zoom", &["wi_zoom"], &[]),
+    ("wi-zoom", &["wi_zoom"], &["net.wimods.zoom."]),
     ("logical-zoom", &["logical_zoom"], &[]),
-    ("gamma-utils", &["gammautils"], &[]),
+    (
+        "gamma-utils",
+        &["gammautils"],
+        &["io.github.sjouwer.gammautils."],
+    ),
     ("modmenu", &["modmenu"], &["com.terraformersmc.modmenu."]),
     (
         "cloth-config",
@@ -312,6 +321,80 @@ const KNOWN_MODS: &[(&str, &[&str], &[&str])] = &[
         &["net.optifine.", "me.modmuss50.optifabric."],
     ),
     ("create", &["create"], &["com.simibubi.create."]),
+    // The rest of the official pack (a trace names our own mods, not only `mod`).
+    (
+        "badoptimizations",
+        &["badoptimizations"],
+        &["me.thosea.badoptimizations."],
+    ),
+    (
+        "betteradvancements",
+        &["betteradvancements"],
+        &["betteradvancements."],
+    ),
+    ("betterf3", &["betterf3"], &["me.cominixo.betterf3."]),
+    (
+        "bettermounthud",
+        &["bettermounthud"],
+        &["me.lortseam.bettermounthud."],
+    ),
+    (
+        "betterstats",
+        &["betterstats"],
+        &["com.thecsdev.betterstats."],
+    ),
+    (
+        "tcdcommons",
+        &["tcdcommons"],
+        &["com.thecsdev.common.", "com.thecsdev.commonmc."],
+    ),
+    ("boatiview", &["boatiview"], &["me.soapsuds.boatiview."]),
+    ("capes", &["capes"], &["me.cael.capes."]),
+    ("clumps", &["clumps"], &["com.blamejared.clumps."]),
+    ("fpsreducer", &["fpsreducer"], &["bre2el.fpsreducer."]),
+    ("ias", &["ias"], &["ru.vidtu.ias."]),
+    ("mousetweaks", &["mousetweaks"], &["yalter.mousetweaks."]),
+    (
+        "resourcify",
+        &["resourcify"],
+        &["dev.dediamondpro.resourcify."],
+    ),
+    (
+        "sodium-extra-information",
+        &["sodiumextrainformation"],
+        &["net.anvian.sodiumextrainformation."],
+    ),
+    ("anvianslib", &["anvianslib"], &["net.anvian.anvianslib."]),
+    (
+        "dynamiclights",
+        &["dynamiclights"],
+        &["net.tschipcraft.dynamiclights."],
+    ),
+    (
+        "entity-sound-features",
+        &["entity_sound_features"],
+        &["traben.entity_sound_features."],
+    ),
+    ("fabric-language-kotlin", &["fabric-language-kotlin"], &[]),
+    (
+        "language-reload",
+        &["languagereload"],
+        &["jerozgen.languagereload."],
+    ),
+    (
+        "morechathistory",
+        &["morechathistory"],
+        &["red.jackf.morechathistory."],
+    ),
+    ("optigui", &["optigui"], &["opekope2.optigui."]),
+    (
+        "placeholder-api",
+        &["placeholder-api"],
+        &["eu.pb4.placeholders."],
+    ),
+    ("quick-pack", &["quick-pack"], &["me.drex.quickpack."]),
+    ("replaymod", &["replaymod"], &["com.replaymod."]),
+    ("rrls", &["rrls"], &["org.redlance.dima_dencep.mods.rrls."]),
 ];
 
 /// Descriptions the game writes in its crash reports (`CrashReport.forThrowable`): one of them
@@ -429,7 +512,19 @@ fn root_exception(report: &str) -> Option<String> {
         .filter(|c| c.get(1).is_some())
         .last()
         .unwrap_or(first);
-    let class = &root[2];
+    let mut class = &root[2];
+    // A class whose static initializer failed earlier throws `NoClassDefFoundError: Could not
+    // initialize class X` from then on, caused by a stackless `ExceptionInInitializerError` that
+    // names the original failure on its line: that one is the root.
+    if class == "java.lang.ExceptionInInitializerError" {
+        let rest = stack[root.get(0).map_or(0, |m| m.end())..]
+            .lines()
+            .next()
+            .unwrap_or("");
+        if let Some(earlier) = EARLIER_INIT_FAILURE.captures(rest).and_then(|c| c.get(1)) {
+            class = earlier.as_str();
+        }
+    }
     let simple = class.rsplit('.').next().unwrap_or(class);
     let named = is_named_exception(class)
         && simple.len() <= 60
@@ -727,6 +822,44 @@ mod tests {
             \tat com.korates.secretmod.Thing.tick(Thing.java:3)";
         let d = shown(PLAYING, Some(&report("Ticking entity", stack)), Some(-1));
         assert_eq!(d.trace.sig, "java/other/mod");
+    }
+
+    #[test]
+    fn a_static_initializer_that_failed_earlier_names_its_first_exception() {
+        // JDK 17+: the class's first failure, rethrown on every later use without a stack.
+        let stack = "java.lang.NoClassDefFoundError: Could not initialize class xaero.common.misc.Misc\n\
+            \tat xaero.common.HudMod.tick(HudMod.java:12)\n\
+            \tat net.minecraft.client.Minecraft.tick(Minecraft.java:40)\n\
+            Caused by: java.lang.ExceptionInInitializerError: Exception java.lang.NullPointerException: Cannot invoke \"Object.getClass()\" [in thread \"Render thread\"]\n\
+            \tat xaero.common.misc.Misc.<clinit>(Misc.java:3)";
+        let d = shown(PLAYING, Some(&report("Unexpected error", stack)), Some(-1));
+        assert_eq!(d.trace.sig, "java/NullPointerException/xaero");
+        // A mod's own exception there is `other`, as anywhere.
+        let stack = "java.lang.NoClassDefFoundError: Could not initialize class xaero.common.misc.Misc\n\
+            \tat xaero.common.HudMod.tick(HudMod.java:12)\n\
+            Caused by: java.lang.ExceptionInInitializerError: Exception com.korates.secret.Boom [in thread \"Render thread\"]";
+        let d = shown(PLAYING, Some(&report("Unexpected error", stack)), Some(-1));
+        assert_eq!(d.trace.sig, "java/other/xaero");
+        // A first failure keeps its cause, as before.
+        let stack = "java.lang.ExceptionInInitializerError\n\
+            \tat xaero.common.HudMod.tick(HudMod.java:12)\n\
+            Caused by: java.lang.IllegalStateException: not ready\n\
+            \tat xaero.common.misc.Misc.<clinit>(Misc.java:3)";
+        let d = shown(PLAYING, Some(&report("Unexpected error", stack)), Some(-1));
+        assert_eq!(d.trace.sig, "java/IllegalStateException/xaero");
+    }
+
+    #[test]
+    fn the_official_packs_mods_are_named() {
+        assert_eq!(known_mod_by_id("replaymod"), Some("replaymod"));
+        assert_eq!(
+            known_mod_by_class("org.redlance.dima_dencep.mods.rrls.Rrls"),
+            Some("rrls")
+        );
+        assert_eq!(
+            known_mod_by_class("com.thecsdev.commonmc.api.Thing"),
+            Some("tcdcommons")
+        );
     }
 
     #[test]
