@@ -332,7 +332,8 @@ const KNOWN_MODS: &[(&str, &[&str], &[&str])] = &[
         &["betteradvancements"],
         &["betteradvancements."],
     ),
-    ("betterf3", &["betterf3"], &["me.cominixo.betterf3."]),
+    // No longer in the pack's jars here, so by its id only.
+    ("betterf3", &["betterf3"], &[]),
     (
         "bettermounthud",
         &["bettermounthud"],
