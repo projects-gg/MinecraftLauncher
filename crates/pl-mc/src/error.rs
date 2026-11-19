@@ -131,3 +131,79 @@ impl Error {
         }
     }
 }
+
+impl Error {
+    /// The finer cause of a download or a missing file, in closed words for usage data
+    /// (DL-CAUSE; never a URL, a path, a version or a name): a download's `<cause>.<origin>`
+    /// ([`pl_net::NetError::cause`], [`pl_net::NetError::origin`]: `http5xx.libraries`), and what
+    /// was missing for [`Error::NotFound`] (`loader-installer`). `None` for the other errors.
+    pub fn usage_detail(&self) -> Option<String> {
+        match self {
+            Self::Net(error) => Some(format!("{}.{}", error.cause(), error.origin())),
+            Self::NotFound(what) => Some(not_found_kind(what).to_owned()),
+            _ => None,
+        }
+    }
+}
+
+/// What an [`Error::NotFound`] was about, from the fixed beginnings and endings its makers write
+/// (the rest of the text names files and versions and is never used).
+fn not_found_kind(what: &str) -> &'static str {
+    if what.ends_with("(created by the mod loader installer)")
+        || what.contains("(needed by installer step ")
+    {
+        "loader-installer"
+    } else if what.starts_with("client jar of ") {
+        "client-jar"
+    } else if what.starts_with("files of Modrinth version ") || what.starts_with("Modrinth ") {
+        "modrinth"
+    } else if what.contains(" for Minecraft ") {
+        "loader-version"
+    } else if what.starts_with("instance ") {
+        "instance"
+    } else if what.starts_with("world folder ") {
+        "world"
+    } else if what.starts_with("trash item ") {
+        "trash"
+    } else if what == "user data directory" {
+        "data-dir"
+    } else {
+        "other"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn usage_details_are_closed_words() {
+        let net = Error::Net(pl_net::NetError::Status {
+            url: "https://resources.download.minecraft.net/ab/abcdef".into(),
+            status: 503,
+        });
+        assert_eq!(net.usage_detail().as_deref(), Some("http5xx.assets"));
+        for (what, kind) in [
+            (
+                "C:/Users/KorAtesi/x.jar (created by the mod loader installer)",
+                "loader-installer",
+            ),
+            (
+                "/home/korates/lib.jar (needed by installer step PROCESSOR 2)",
+                "loader-installer",
+            ),
+            ("client jar of 26.1.2", "client-jar"),
+            ("files of Modrinth version AbCd", "modrinth"),
+            ("Modrinth project sodium", "modrinth"),
+            ("Fabric 0.19.5 for Minecraft 26.1.2", "loader-version"),
+            ("instance korates-world", "instance"),
+            ("world folder C:/Users/KorAtesi/saves/x", "world"),
+            ("user data directory", "data-dir"),
+            ("something else", "other"),
+        ] {
+            let detail = Error::NotFound(what.into()).usage_detail();
+            assert_eq!(detail.as_deref(), Some(kind), "{what}");
+        }
+        assert_eq!(Error::Offline.usage_detail(), None);
+    }
+}

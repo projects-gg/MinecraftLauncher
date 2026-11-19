@@ -22,7 +22,7 @@ pub use download::{
     DownloadItem, DownloadOptions, DownloadProgress, DownloadSummary, Downloader, ProgressFn,
     VerifyMode, until_cancelled,
 };
-pub use error::{NetError, Result, is_disk_full, mentions_disk_full};
+pub use error::{NetError, Result, is_disk_full, mentions_disk_full, url_origin};
 pub use hash::{Checksum, HashAlgo, hash_bytes, hash_file, verify_file};
 pub use probe::{Probe, ProbeMethod, Reach};
 pub use tokio_util::sync::CancellationToken;

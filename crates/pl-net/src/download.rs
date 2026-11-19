@@ -10,7 +10,7 @@ use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 
 use crate::client::{Http, backoff};
-use crate::error::{NetError, Result, looks_offline};
+use crate::error::{NetError, Result, looks_offline, url_origin};
 use crate::hash::{Checksum, Hasher, verify_file};
 
 /// How much to trust files that already exist on disk.
@@ -279,14 +279,16 @@ impl Downloader {
                     if outcome.as_ref().is_err_and(NetError::is_disk_full) {
                         disk_full.cancel();
                     }
-                    (item.dest.clone(), outcome)
+                    let origin = item.urls.first().map_or("none", |url| url_origin(url));
+                    (item.dest.clone(), origin, outcome)
                 }
             })
             .collect();
-        let mut results: Vec<(PathBuf, Result<Outcome>)> = futures::stream::iter(jobs)
-            .buffer_unordered(options.concurrency.max(1))
-            .collect()
-            .await;
+        let mut results: Vec<(PathBuf, &'static str, Result<Outcome>)> =
+            futures::stream::iter(jobs)
+                .buffer_unordered(options.concurrency.max(1))
+                .collect()
+                .await;
 
         ticker_stop.cancel();
         if let Some(handle) = ticker {
@@ -301,9 +303,9 @@ impl Downloader {
         // The files it stopped report a cancel; the batch reports the full disk.
         let full = results
             .iter()
-            .position(|(_, result)| result.as_ref().is_err_and(NetError::is_disk_full));
+            .position(|(_, _, result)| result.as_ref().is_err_and(NetError::is_disk_full));
         if let Some(index) = full
-            && let (dest, Err(error)) = results.swap_remove(index)
+            && let (dest, _, Err(error)) = results.swap_remove(index)
         {
             tracing::warn!(dest = %dest.display(), %error, "downloads stopped: the disk is full");
             return Err(error);
@@ -314,7 +316,7 @@ impl Downloader {
             ..Default::default()
         };
         let mut failures = Vec::new();
-        for (dest, result) in results {
+        for (dest, origin, result) in results {
             match result {
                 Ok(Outcome::Skipped) => summary.skipped += 1,
                 Ok(Outcome::Downloaded(bytes)) => {
@@ -324,20 +326,22 @@ impl Downloader {
                 Err(NetError::Cancelled) => return Err(NetError::Cancelled),
                 Err(e) => {
                     tracing::warn!(dest = %dest.display(), error = %e, "download failed");
-                    failures.push(e);
+                    failures.push((e, origin));
                 }
             }
         }
 
-        if let Some(first) = failures.first() {
+        if let Some((first, origin)) = failures.first() {
             let offline = failures
                 .iter()
-                .all(|e| e.is_network() || looks_offline(&e.to_string()));
+                .all(|(e, _)| e.is_network() || looks_offline(&e.to_string()));
             return Err(NetError::Batch {
                 failed: failures.len(),
                 total: summary.total,
                 first: first.to_string(),
                 offline,
+                cause: first.cause(),
+                origin,
             });
         }
         Ok(summary)

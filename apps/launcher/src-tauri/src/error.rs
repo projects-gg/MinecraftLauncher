@@ -10,6 +10,10 @@ pub struct CmdError {
     pub code: String,
     pub message: String,
     pub details: String,
+    /// A finer category than `code` for usage data only (DL-CAUSE: `AG.http5xx.libraries`,
+    /// `BULUNAMADI.loader-installer`), closed words; never sent to the page.
+    #[serde(skip)]
+    pub usage: Option<String>,
 }
 
 impl CmdError {
@@ -26,7 +30,13 @@ impl CmdError {
             code: code.into(),
             message: message.into(),
             details: details.into(),
+            usage: None,
         }
+    }
+
+    /// The failure's category for usage data: [`CmdError::usage`] when it has one, else `code`.
+    pub fn usage_category(&self) -> &str {
+        self.usage.as_deref().unwrap_or(&self.code)
     }
 
     pub fn internal(details: impl std::fmt::Display) -> Self {
@@ -189,7 +199,13 @@ impl From<pl_mc::Error> for CmdError {
                 ),
             ),
         };
-        Self::new(code, message, details)
+        let mut out = Self::new(code, message, details);
+        if matches!(code, "AG" | "BULUNAMADI") {
+            out.usage = error
+                .usage_detail()
+                .map(|detail| format!("{code}.{detail}"));
+        }
+        out
     }
 }
 

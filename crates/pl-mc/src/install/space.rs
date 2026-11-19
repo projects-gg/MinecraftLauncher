@@ -780,6 +780,8 @@ mod tests {
             total: 9,
             first: format!("I/O error at /data/assets/x.part: {text}"),
             offline: false,
+            cause: "io",
+            origin: "assets",
         };
         assert!(Error::Net(batch).is_disk_full());
         assert!(!Error::NotFound("client jar".into()).is_disk_full());

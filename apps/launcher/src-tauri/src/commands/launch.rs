@@ -521,8 +521,8 @@ pub async fn launch_instance(
         }
         Err(error) => {
             let error = out_of_room(error, &state, &instance_id);
-            // Usage data: only the error's code (TELEMETRY).
-            crate::telemetry::launch_ended(Err(error.code.as_str()));
+            // Usage data: only the error's code, or its finer closed-word cause (TELEMETRY, DL-CAUSE).
+            crate::telemetry::launch_ended(Err(error.usage_category()));
             let _ = on_event.send(LaunchEventView::Error(error.clone()));
             Err(error)
         }
