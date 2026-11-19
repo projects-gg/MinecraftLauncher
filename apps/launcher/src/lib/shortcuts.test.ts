@@ -213,6 +213,12 @@ describe("isBrowserKey", () => {
     expect(isBrowserKey(altGr("r", "KeyR"), "windows")).toBe(false);
     expect(isBrowserKey(altGr("p", "KeyP"), "windows")).toBe(false);
   });
+
+  it("ignores a keydown without a key (Chromium autofill sends one)", () => {
+    const autofill = { code: "", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false };
+    expect(isBrowserKey(autofill, "windows")).toBe(false);
+    expect(matchShortcut({ ...autofill, ctrlKey: true }, "windows")).toBeNull();
+  });
 });
 
 describe("key caps", () => {

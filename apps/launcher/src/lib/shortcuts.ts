@@ -57,7 +57,11 @@ export const ESCAPE_KEYS: readonly string[] = ["Esc"];
 
 /** What the matcher reads from a `KeyboardEvent`. */
 export interface KeyPress {
-  key: string;
+  /**
+   * Missing on a `keydown` that is not a real key press: Chromium's autofill (picking a saved
+   * entry in a field's suggestion list) dispatches a plain `Event("keydown")` with no `key`.
+   */
+  key?: string;
   code: string;
   ctrlKey: boolean;
   metaKey: boolean;
@@ -67,6 +71,11 @@ export interface KeyPress {
   isComposing?: boolean;
   keyCode?: number;
   getModifierState?: (key: string) => boolean;
+}
+
+/** The pressed key in lower case, or "" for a `keydown` without a key (see `KeyPress.key`). */
+function lowerKey(event: KeyPress): string {
+  return typeof event.key === "string" ? event.key.toLowerCase() : "";
 }
 
 /**
@@ -79,7 +88,7 @@ export function matchShortcut(event: KeyPress, os: DesktopOs): ShortcutId | null
   if (event.altKey || event.shiftKey || event.getModifierState?.("AltGraph")) return null;
   const mac = os === "macos";
   if (mac ? !event.metaKey || event.ctrlKey : !event.ctrlKey || event.metaKey) return null;
-  const key = event.key.toLowerCase();
+  const key = lowerKey(event);
   for (const id of SHORTCUTS) {
     const chord = CHORDS[id];
     if (chord.keys.includes(key) || chord.codes?.includes(event.code)) return id;
@@ -135,7 +144,7 @@ export function shortcutAllowed(id: ShortcutId, context: ShortcutContext): boole
  * find bar, which works.
  */
 export function isBrowserKey(event: KeyPress, os: DesktopOs): boolean {
-  const key = event.key.toLowerCase();
+  const key = lowerKey(event);
   if (key === "f5" || key === "f7") return true;
   const modifier = os === "macos" ? event.metaKey : event.ctrlKey;
   return modifier && !event.altKey && (key === "r" || key === "p");
