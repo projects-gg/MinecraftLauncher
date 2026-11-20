@@ -140,8 +140,9 @@ function Lead({
         <label
           htmlFor={id}
           className={cn(
-            "block text-[14px] leading-snug font-semibold text-bone-50",
-            disabled ? "cursor-default" : "cursor-pointer",
+            // A row's label: the question above is the heading.
+            "block text-[13.5px] font-medium text-bone-100",
+            disabled ? "cursor-default opacity-55" : "cursor-pointer",
           )}
         >
           {t(`cloudAfkAuto.${mode}.title`)}

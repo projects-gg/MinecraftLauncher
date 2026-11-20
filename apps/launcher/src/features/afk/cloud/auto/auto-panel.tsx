@@ -113,18 +113,14 @@ function Figure({
   );
 }
 
-/** One kind of today's items: the game's slot with its count, the name on hover and for readers. */
+/** One kind of today's items: its texture, its name and how many (a day's count runs to thousands). */
 function ItemCount({ id, n, name }: { id: string; n: number; name: string }) {
   return (
-    <li title={`${name} \u00d7 ${n}`}>
-      <span role="img" aria-label={`${name}, ${n}`} className="relative block">
-        <ItemTile id={id} size={40} />
-        <span
-          aria-hidden
-          className="pointer-events-none absolute right-[3px] bottom-[1px] font-display text-[12px] leading-none font-semibold text-bone-50 tabular-nums [text-shadow:1px_1px_0_rgb(0_0_0/0.75)]"
-        >
-          {n > 1 ? n : ""}
-        </span>
+    <li className="flex min-h-8 items-center gap-2.5">
+      <ItemTile id={id} size={24} />
+      <span className="min-w-0 flex-1 truncate text-[13px] text-bone-100">{name}</span>
+      <span className="shrink-0 font-display text-[13px] font-semibold text-bone-50 tabular-nums">
+        {new Intl.NumberFormat(uiLocale()).format(n)}
       </span>
     </li>
   );
@@ -390,7 +386,7 @@ function AutoBody({
       <section aria-label={t(`cloudAfkAuto.${mode}.items`)} className="flex flex-col gap-2">
         <Heading>{t(`cloudAfkAuto.${mode}.items`)}</Heading>
         {items.length ? (
-          <ul className="flex flex-wrap gap-1.5">
+          <ul className="grid grid-cols-1 gap-x-6 gap-y-1 @min-[460px]/auto:grid-cols-2">
             {items.map((item) => (
               <ItemCount key={item.id} id={item.id} n={item.n} name={name(item.id)} />
             ))}
