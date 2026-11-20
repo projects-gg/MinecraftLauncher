@@ -950,6 +950,7 @@ mod tests {
             full: crate::auto::CloudWhenFull {
                 action: "command".into(),
                 command: Some(" ".into()),
+                paused: None,
             },
             ..CloudFishingSetting::default()
         });

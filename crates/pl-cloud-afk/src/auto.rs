@@ -10,7 +10,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
-use crate::model::{CloudEvery, CloudLocalized};
+use crate::model::{CloudEvery, CloudLocalized, CloudModPaused};
 
 /// The blocks mining may break (`fixed.miningBlocks`: stone kinds and ores), in the contract's
 /// order; a player's choice is a subset of it, in this order.
@@ -130,6 +130,10 @@ pub struct CloudWhenFull {
     pub action: String,
     /// Only with `command`: plain words under the text rules, never a secret.
     pub command: Option<String>,
+    /// The view's mark that a moderation case paused the command (the machine waits meanwhile, as
+    /// with `wait`): never stored, dropped when the setting is written back; changing the command
+    /// or `do` has it read again (FISHMINE-W `9b7aad4f`).
+    pub paused: Option<CloudModPaused>,
 }
 
 impl Default for CloudWhenFull {
@@ -137,6 +141,7 @@ impl Default for CloudWhenFull {
         Self {
             action: "wait".into(),
             command: None,
+            paused: None,
         }
     }
 }
@@ -585,69 +590,22 @@ pub fn check_auto_op(op: &Value) -> Result<(), CloudAutoError> {
 
 #[cfg(test)]
 mod tests {
-    //! The launcher's own cases in the shape of the contract's `test-vectors/auto-op-v1.json`
-    //! (`settings`, `shape`, `view`), until FM-W generates that file: then it is copied to
-    //! `tests/vectors/` and read here instead. `settings.fixed.miningBlocks` is projects-studio
-    //! `fishmine-k` `0e55f331`'s `feat/settings-v1.json`.
+    //! The contract's shared cases, copied from projects-studio `fishmine-w` `9b7aad4f`
+    //! (FISHMINE-W): `services/cloud-afk/test-vectors/auto-op-v1.json`. Copy it again when the contract
+    //! changes it.
 
     use super::*;
 
-    const CASES: &str = r#"{
-      "settings": {
-        "defaults": {"fishing": false, "fishingSlotsPerHost": 10, "fishingPerPlayer": 2,
-                     "mining": false, "miningPerPlayer": 1},
-        "fixed": {"miningBlocks": [
-          "minecraft:cobblestone", "minecraft:stone", "minecraft:cobbled_deepslate",
-          "minecraft:deepslate", "minecraft:andesite", "minecraft:diorite", "minecraft:granite",
-          "minecraft:tuff", "minecraft:basalt", "minecraft:smooth_basalt", "minecraft:blackstone",
-          "minecraft:netherrack", "minecraft:end_stone", "minecraft:obsidian", "minecraft:coal_ore",
-          "minecraft:deepslate_coal_ore", "minecraft:copper_ore", "minecraft:deepslate_copper_ore",
-          "minecraft:iron_ore", "minecraft:deepslate_iron_ore", "minecraft:gold_ore",
-          "minecraft:deepslate_gold_ore", "minecraft:redstone_ore",
-          "minecraft:deepslate_redstone_ore", "minecraft:lapis_ore",
-          "minecraft:deepslate_lapis_ore", "minecraft:diamond_ore",
-          "minecraft:deepslate_diamond_ore", "minecraft:emerald_ore",
-          "minecraft:deepslate_emerald_ore", "minecraft:nether_gold_ore",
-          "minecraft:nether_quartz_ore", "minecraft:ancient_debris"]}
-      },
-      "shape": [
-        {"name": "pause fishing", "op": {"mode": "fishing", "action": "pause"}, "problem": null},
-        {"name": "resume mining", "op": {"mode": "mining", "action": "resume"}, "problem": null},
-        {"name": "aim", "op": {"action": "aim", "yaw": 90, "pitch": 30}, "problem": null},
-        {"name": "aim at the edges", "op": {"action": "aim", "yaw": -180, "pitch": 90}, "problem": null},
-        {"name": "aim with fractions", "op": {"action": "aim", "yaw": 12.5, "pitch": -45.25}, "problem": null},
-        {"name": "not an object", "op": [1], "problem": {"reason": "type"}},
-        {"name": "no action", "op": {"mode": "fishing"}, "problem": {"reason": "action"}},
-        {"name": "unknown action", "op": {"mode": "fishing", "action": "stop"}, "problem": {"reason": "action"}},
-        {"name": "unknown mode", "op": {"mode": "farming", "action": "pause"}, "problem": {"reason": "mode"}},
-        {"name": "mode not text", "op": {"mode": 1, "action": "pause"}, "problem": {"reason": "mode"}},
-        {"name": "pause without its mode", "op": {"action": "pause"}, "problem": {"reason": "mode"}},
-        {"name": "an extra field", "op": {"mode": "mining", "action": "resume", "yaw": 1}, "problem": {"reason": "field", "field": "yaw"}},
-        {"name": "aim with a mode", "op": {"action": "aim", "mode": "fishing", "yaw": 0, "pitch": 0}, "problem": {"reason": "field", "field": "mode"}},
-        {"name": "aim without pitch", "op": {"action": "aim", "yaw": 0}, "problem": {"reason": "pitch"}},
-        {"name": "yaw too far", "op": {"action": "aim", "yaw": 181, "pitch": 0}, "problem": {"reason": "yaw"}},
-        {"name": "pitch too far", "op": {"action": "aim", "yaw": 0, "pitch": -90.5}, "problem": {"reason": "pitch"}},
-        {"name": "yaw as text", "op": {"action": "aim", "yaw": "90", "pitch": 0}, "problem": {"reason": "yaw"}}
-      ],
-      "view": [
-        {"name": "on", "expected": {"mode": "on", "on": true, "slot": null, "limited": null}},
-        {"name": "off by Studio", "expected": {"mode": "off", "on": false, "slot": null, "limited": null}},
-        {"name": "waits for a slot", "expected": {"mode": "on", "on": false, "slot": "player", "limited": null}},
-        {"name": "machine full", "expected": {"mode": "on", "on": false, "slot": "host", "limited": null}},
-        {"name": "limited, stored on", "expected": {"mode": "on", "on": true, "slot": null,
-          "limited": {"tr": "Projects sunucularında otomatik balık tutma kapalı.",
-                      "en": "Auto-fishing is off on Projects servers."}}}
-      ]
-    }"#;
-
-    fn cases() -> Value {
-        serde_json::from_str(CASES).unwrap()
+    fn vectors() -> Value {
+        serde_json::from_str(include_str!("../tests/vectors/auto-op-v1.json")).unwrap()
     }
 
     #[test]
-    fn every_operation_shape() {
-        let all = cases();
-        for case in all["shape"].as_array().unwrap() {
+    fn every_shared_operation_shape() {
+        let all = vectors();
+        let cases = all["shape"].as_array().unwrap();
+        assert_eq!(cases.len(), 31);
+        for case in cases {
             let got = check_auto_op(&case["op"]).err().map(|e| {
                 (
                     e.code,
@@ -670,9 +628,11 @@ mod tests {
     }
 
     #[test]
-    fn every_account_view_reads_back_as_sent() {
-        let all = cases();
-        for case in all["view"].as_array().unwrap() {
+    fn every_shared_account_view_reads_back_as_sent() {
+        let all = vectors();
+        let cases = all["view"].as_array().unwrap();
+        assert_eq!(cases.len(), 22);
+        for case in cases {
             let expected = &case["expected"];
             let read: CloudAutoFeature = serde_json::from_value(expected.clone()).unwrap();
             assert_eq!(
@@ -688,56 +648,141 @@ mod tests {
     }
 
     #[test]
-    fn the_blocks_are_the_contract_s() {
-        let fixed = &cases()["settings"]["fixed"]["miningBlocks"];
-        let fixed: Vec<&str> = fixed
+    fn the_fixed_rules_and_defaults_are_the_contract_s() {
+        let settings = &vectors()["settings"];
+        let fixed: Vec<&str> = settings["fixed"]["miningBlocks"]
             .as_array()
             .unwrap()
             .iter()
             .map(|b| b.as_str().unwrap())
             .collect();
         assert_eq!(fixed, MINING_BLOCKS);
-        assert_eq!(MINING_BLOCKS.len(), 33);
+        let defaults = &settings["configDefaults"];
+        let care: CloudToolCare = serde_json::from_value(defaults["tool"].clone()).unwrap();
+        assert_eq!(care, CloudToolCare::default());
+        let idle: CloudIdleMoves = serde_json::from_value(defaults["idle"].clone()).unwrap();
+        assert_eq!(idle, CloudIdleMoves::default());
+        assert_eq!(defaults["full"], serde_json::json!({"do": "wait"}));
+        assert_eq!(defaults["blocks"], Value::Null);
+        assert_eq!(defaults["look"], false);
+        // Every machine refusal code and every auto_off reason this launcher words.
+        let autores = &settings["autores"];
+        let codes: Vec<&str> = autores["codes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            codes,
+            [
+                "invalid",
+                "rate_limited",
+                "host_offline",
+                "not_running",
+                "auto_off",
+                "busy_trade"
+            ]
+        );
+    }
+
+    /// A stored form as the launcher sends it back: blocks every one of the list is the same as all
+    /// (null), and a full inventory's command goes trimmed.
+    fn sent_as_stored(mode: &str, value: &Value) -> Value {
+        if mode == "fishing" {
+            let read: CloudFishingSetting = serde_json::from_value(value.clone()).unwrap();
+            return serde_json::to_value(FishingInput::from(&read)).unwrap();
+        }
+        let read: CloudMiningSetting = serde_json::from_value(value.clone()).unwrap();
+        let mut sent = serde_json::to_value(MiningInput::from(&read)).unwrap();
+        if sent.get("blocks").is_none() {
+            sent["blocks"] = Value::Null;
+        }
+        sent
     }
 
     #[test]
-    fn a_stored_setting_reads_with_the_contract_s_defaults() {
-        // `{"enabled": true}` alone is the whole default setting, and it goes back out whole.
-        let fishing: CloudFishingSetting = serde_json::from_str(r#"{"enabled":true}"#).unwrap();
-        assert_eq!(
-            serde_json::to_value(FishingInput::from(&fishing)).unwrap(),
-            serde_json::json!({
-                "enabled": true,
-                "rod": {"switch": true, "keep": 5},
-                "full": {"do": "wait"},
-                "look": false
-            })
-        );
-        let mining: CloudMiningSetting = serde_json::from_str(r#"{"enabled":true}"#).unwrap();
-        assert_eq!(
-            serde_json::to_value(MiningInput::from(&mining)).unwrap(),
-            serde_json::json!({
-                "enabled": true,
-                "tool": {"switch": true, "keep": 5},
-                "full": {"do": "wait"},
-                "idle": {"look": false, "sneak": false, "jump": false, "step": false,
-                         "every": {"min": 60, "max": 180}}
-            })
-        );
-        // A part the service sent stays; a missing one takes its default.
-        let fishing: CloudFishingSetting = serde_json::from_str(
-            r#"{"enabled":false,"rod":{"switch":false,"keep":12},"full":{"do":"command","command":"/sell all"}}"#,
-        )
-        .unwrap();
-        assert_eq!(
-            fishing.rod,
-            CloudToolCare {
-                switch: false,
-                keep: 12
+    fn every_shared_stored_setting_reads_and_goes_back_whole() {
+        let all = vectors();
+        let cases = all["config"].as_array().unwrap();
+        assert_eq!(cases.len(), 60);
+        for case in cases
+            .iter()
+            .filter(|c| c["expected"].get("stored").is_some())
+        {
+            let mode = case["mode"].as_str().unwrap();
+            let mut stored = case["expected"]["stored"].clone();
+            // Every block of the list named is all of them.
+            if stored["blocks"]
+                .as_array()
+                .is_some_and(|b| b.len() == MINING_BLOCKS.len())
+            {
+                stored["blocks"] = Value::Null;
             }
-        );
-        assert_eq!(fishing.full.command.as_deref(), Some("/sell all"));
-        assert!(!fishing.look);
+            assert_eq!(
+                sent_as_stored(mode, &case["value"]),
+                stored,
+                "{}",
+                case["name"]
+            );
+        }
+    }
+
+    #[test]
+    fn every_shared_problem_the_editor_can_make_is_found_before_saving() {
+        // The editor holds typed settings: a wrong type, a missing or an unknown part never leaves
+        // it. What it can hold is checked here as the Worker would refuse it (the part named), or
+        // put right before it goes (blocks in the list's order, a command trimmed).
+        let all = vectors();
+        let mut checked = 0;
+        for case in all["config"].as_array().unwrap() {
+            let Some(error) = case["expected"].get("error") else {
+                continue;
+            };
+            let mode = case["mode"].as_str().unwrap();
+            let field = error["field"].as_str().unwrap();
+            let reason = error["reason"].as_str().unwrap();
+            let typed = error["code"] == "invalid_command" || reason == "range";
+            if !typed {
+                continue;
+            }
+            let problems = if mode == "fishing" {
+                let Ok(read) = serde_json::from_value::<CloudFishingSetting>(case["value"].clone())
+                else {
+                    continue;
+                };
+                fishing_problems(&read)
+            } else {
+                let Ok(read) = serde_json::from_value::<CloudMiningSetting>(case["value"].clone())
+                else {
+                    continue;
+                };
+                // Out of the list's order goes out in its order: never refused.
+                if case["name"] == "blocks out of the list's order" {
+                    let sent = serde_json::to_value(MiningInput::from(&read)).unwrap();
+                    assert_eq!(
+                        sent["blocks"],
+                        serde_json::json!(["minecraft:cobblestone", "minecraft:stone"])
+                    );
+                    continue;
+                }
+                mining_problems(&read)
+            };
+            // A command's leading space is trimmed before it goes.
+            if reason == "space" {
+                assert!(problems.is_empty(), "{}", case["name"]);
+                continue;
+            }
+            let part: Vec<&str> = field.split('.').take(2).collect();
+            let part = part.join(".");
+            assert!(
+                problems.iter().any(|(at, _)| *at == part),
+                "{}: {problems:?}",
+                case["name"]
+            );
+            checked += 1;
+        }
+        assert!(checked >= 15, "{checked}");
     }
 
     #[test]
@@ -746,28 +791,21 @@ mod tests {
             full: CloudWhenFull {
                 action: "wait".into(),
                 command: Some("/sell all".into()),
+                paused: Some(CloudModPaused {
+                    case: "mc_1".into(),
+                    category: "advertising".into(),
+                }),
             },
             ..CloudFishingSetting::default()
         };
         let sent = serde_json::to_value(FishingInput::from(&fishing)).unwrap();
         assert_eq!(sent["full"], serde_json::json!({"do": "wait"}));
         fishing.full.action = "command".into();
+        fishing.full.command = Some(" /sell all ".into());
         let sent = serde_json::to_value(FishingInput::from(&fishing)).unwrap();
         assert_eq!(
             sent["full"],
             serde_json::json!({"do": "command", "command": "/sell all"})
-        );
-        let mining = CloudMiningSetting {
-            blocks: Some(vec![
-                "minecraft:diamond_ore".into(),
-                "minecraft:cobblestone".into(),
-            ]),
-            ..CloudMiningSetting::default()
-        };
-        let sent = serde_json::to_value(MiningInput::from(&mining)).unwrap();
-        assert_eq!(
-            sent["blocks"],
-            serde_json::json!(["minecraft:cobblestone", "minecraft:diamond_ore"])
         );
         // Every block chosen is all of them: left out.
         let mining = CloudMiningSetting {
@@ -776,52 +814,6 @@ mod tests {
         };
         let sent = serde_json::to_value(MiningInput::from(&mining)).unwrap();
         assert!(sent.get("blocks").is_none());
-    }
-
-    #[test]
-    fn settings_problems_name_their_part() {
-        let mut fishing = CloudFishingSetting::default();
-        assert!(fishing_problems(&fishing).is_empty());
-        fishing.rod.keep = 0;
-        fishing.full.action = "command".into();
-        assert_eq!(
-            fishing_problems(&fishing),
-            [("fishing.rod", "range"), ("fishing.full", "empty")]
-        );
-        fishing.rod.keep = 100;
-        fishing.full.command = Some("/login hunter2".into());
-        assert_eq!(fishing_problems(&fishing), [("fishing.full", "secret")]);
-        fishing.full.command = Some("/sell all".into());
-        assert!(fishing_problems(&fishing).is_empty());
-        fishing.full.action = "drop".into();
-        assert_eq!(fishing_problems(&fishing), [("fishing.full", "format")]);
-
-        let mut mining = CloudMiningSetting::default();
-        assert!(mining_problems(&mining).is_empty());
-        mining.blocks = Some(vec![]);
-        mining.tool.keep = 101;
-        mining.idle.every = CloudEvery { min: 10, max: 60 };
-        assert_eq!(
-            mining_problems(&mining),
-            [
-                ("mining.blocks", "empty"),
-                ("mining.tool", "range"),
-                ("mining.idle", "range")
-            ]
-        );
-        mining.blocks = Some(vec!["minecraft:chest".into()]);
-        mining.tool.keep = 5;
-        mining.idle.every = CloudEvery { min: 200, max: 100 };
-        assert_eq!(
-            mining_problems(&mining),
-            [("mining.blocks", "format"), ("mining.idle", "order")]
-        );
-        mining.blocks = Some(vec!["minecraft:stone".into(), "minecraft:stone".into()]);
-        mining.idle.every = CloudEvery {
-            min: 20,
-            max: 3_600,
-        };
-        assert_eq!(mining_problems(&mining), [("mining.blocks", "duplicate")]);
     }
 
     #[test]
@@ -849,6 +841,12 @@ mod tests {
             (state.today.blocks, state.today.per_minute, state.since),
             (0, None, None)
         );
+        // The Worker's own switch-off has no today and no since.
+        let state = fish_state(Some(
+            serde_json::json!({"state": "off", "reason": "service"}),
+        ))
+        .unwrap();
+        assert_eq!((state.today.catches, state.since), (0, None));
         // Lists keep their contract's length.
         let many: Vec<Value> = (0..20)
             .map(|n| serde_json::json!({"id": format!("minecraft:item_{n}"), "n": 1}))
