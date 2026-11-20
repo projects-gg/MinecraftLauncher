@@ -33,11 +33,13 @@ import { Disclaimer, limitedPage } from "./auto-panel";
 import { ChoicePlate } from "./choice-plate";
 import {
   type AutoMode,
+  chosenKinds,
   defaultFishing,
   defaultMining,
   type FishingSetting,
   fishingOf,
   type IdleMoves,
+  limitKey,
   MINING_BLOCKS,
   type MiningSetting,
   miningOf,
@@ -47,6 +49,7 @@ import {
   slotKey,
   type ToolCare,
   type WhenFull,
+  type WordKey,
   withAuto,
 } from "./model";
 
@@ -119,8 +122,8 @@ function WholeField({
 }
 
 /**
- * The mode's switch row: its name, its one sentence (or why it waits), the one-job note while the
- * other mode is on; the disclaimer under the whole row.
+ * The mode's switch row: its name, its one sentence (or why it waits), the one-job note (what turning
+ * it on does to the other mode, or did); the disclaimer under the whole row.
  */
 function Lead({
   mode,
@@ -315,7 +318,7 @@ function BlockPlate({
   );
 }
 
-/** "Hangi Blokları Kırsın?": all of the list, or the player's choice of it in two groups. */
+/** "Kıracağı Bloklar": all of the list, or the player's choice of it in two groups. */
 function BlocksRows({
   blocks,
   error,
@@ -475,19 +478,26 @@ export function AutoQuestion({
   // A slot is missing only for turning it on: the stored "on" never waits.
   const waiting = !feature.on && feature.slot ? slotKey(feature.slot) : null;
   // One job at a time (the head agent's decision; the Worker refuses the second, reason "other"):
-  // turning this mode on turns the other off in the same draft.
+  // turning this mode on turns the other off in the same draft. Said as on the site, only where the
+  // other mode is offered: while the other is on in the draft (what turning this one on does), or
+  // once turning this one on has turned the stored other off (until saved).
   const other: AutoMode = mode === "fishing" ? "mining" : "fishing";
-  const otherOf = (config: Draft["config"]) =>
-    other === "fishing" ? fishingOf(config.fishing) : miningOf(config.mining);
-  // The site's rule: only while the other mode is on, under this switch, naming the other.
-  const otherOffered = view.account.features?.[other]?.mode === "on";
+  const otherOn = (config: Draft["config"]) =>
+    Boolean((other === "fishing" ? fishingOf(config.fishing) : miningOf(config.mining))?.enabled);
   const note =
-    otherOffered && otherOf(draft.config)?.enabled ? t(`cloudAfkAuto.exclusive.${other}`) : null;
+    view.account.features?.[other]?.mode !== "on"
+      ? null
+      : otherOn(draft.config)
+        ? t(`cloudAfkAuto.oneJob.will.${mode}`)
+        : on && otherOn(view.config)
+          ? t(`cloudAfkAuto.oneJob.did.${mode}`)
+          : null;
   const refused = issueAt(issues, "general", null, mode);
-  const refusal = refused
+  // A slot refusal names the player's own limit (`limit_<mode>`'s `max`), as on the site.
+  const refusal: WordKey | null = refused
     ? refused.problem === "off" || refused.problem === "limited" || refused.problem === "other"
       ? { key: refused.problem }
-      : slotKey(refused.problem)
+      : limitKey(refused.problem, refused.max)
     : null;
   const at = (part: string) => issueAt(issues, "general", null, `${mode}.${part}`)?.problem ?? null;
   const words = (part: string, problem: string | null): string | null => {
@@ -500,7 +510,8 @@ export function AutoQuestion({
       });
     }
     if (part === "blocks") return t("cloudAfkAuto.blocks.empty");
-    return t(problem === "order" ? "cloudAfkAuto.idle.order" : "cloudAfkAuto.idle.range");
+    // The interval's one sentence says both of its rules (the site's).
+    return t("cloudAfkAuto.idle.range");
   };
   const write = (next: FishingSetting | MiningSetting) =>
     setDraft((d) => ({ ...d, config: withAuto(d.config, mode, next) }));
@@ -527,8 +538,11 @@ export function AutoQuestion({
     </>
   ) : waiting && !on ? (
     t(`cloudAfkAuto.${mode}.${waiting.key}`)
+  ) : mode === "fishing" ? (
+    // Where it works, said where it is turned on (the client's e2e: the water's edge, facing it).
+    `${t("cloudAfkAuto.fishing.line")} ${t("cloudAfkAuto.fishing.waterHint")}`
   ) : (
-    t(`cloudAfkAuto.${mode}.line`)
+    t("cloudAfkAuto.mining.line")
   );
   const parts = mode === "fishing" ? ["rod", "full"] : ["blocks", "tool", "full", "idle"];
   return (
@@ -560,7 +574,7 @@ export function AutoQuestion({
               ? limited[lang]
               : refusal.key === "other"
                 ? t(`cloudAfkAuto.${mode}.otherOn`)
-                : t(`cloudAfkAuto.${mode}.${refusal.key}`)}
+                : t(`cloudAfkAuto.${mode}.${refusal.key}`, refusal.values)}
           </ErrorText>
         </div>
       ) : null}
@@ -673,9 +687,14 @@ export function AutoAnswer({
   if (mode === "fishing") return <>{a("fishingOn") + tail}</>;
   const blocks = (setting as MiningSetting).blocks;
   if (!blocks || blocks.length >= MINING_BLOCKS.length) return <>{a("miningAll") + tail}</>;
-  const [only] = blocks;
-  if (blocks.length === 1 && only) {
-    return <OneBlock view={view} block={only} text={(block) => a("miningOne", { block }) + tail} />;
+  // The site's count: an ore and its deepslate twin are one kind, named by the first of the list.
+  const chosen = orderedBlocks(blocks);
+  const kinds = chosenKinds(chosen);
+  const [first] = chosen;
+  if (kinds === 1 && first) {
+    return (
+      <OneBlock view={view} block={first} text={(block) => a("miningOne", { block }) + tail} />
+    );
   }
-  return <>{a("miningSome", { n: blocks.length }) + tail}</>;
+  return <>{a("miningSome", { n: kinds }) + tail}</>;
 }
