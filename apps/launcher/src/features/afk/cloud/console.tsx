@@ -974,9 +974,10 @@ export function CloudConsole({
     <AfkSidePanel
       open={open}
       onClose={onClose}
-      // The inventory's pixels stay crisp only on a solid surface: obsidian with the glass edge, no
+      // The inventory's and the auto modes' item pixels stay crisp only on a solid surface: obsidian
+      // with the glass edge, no
       // blur (docs/design.md §6 "Cloud inventory").
-      solid={inventory}
+      solid={inventory || fishing || mining}
       onOpenAutoFocus={(event) => {
         event.preventDefault();
         const sheet = event.currentTarget as HTMLElement;

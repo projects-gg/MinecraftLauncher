@@ -71,7 +71,18 @@ export function Disclaimer({ className }: { className?: string }) {
   );
 }
 
-function Quiet({ mode, text, action }: { mode: AutoMode; text: string; action?: ReactNode }) {
+function Quiet({
+  mode,
+  text,
+  action,
+  disclaimer = true,
+}: {
+  mode: AutoMode;
+  text: string;
+  action?: ReactNode;
+  /** Off on a limited server: the mode cannot run there, its reason says it all. */
+  disclaimer?: boolean;
+}) {
   return (
     <div className="flex flex-col items-center gap-2 pb-4">
       <EmptyState
@@ -80,7 +91,7 @@ function Quiet({ mode, text, action }: { mode: AutoMode; text: string; action?: 
         action={action}
         className="py-12"
       />
-      <Disclaimer className="max-w-[46ch]" />
+      {disclaimer ? <Disclaimer className="max-w-[46ch]" /> : null}
     </div>
   );
 }
@@ -213,23 +224,32 @@ function AutoBody({
       if (refusalTimer.current !== null) window.clearTimeout(refusalTimer.current);
       if (result.ok) {
         setRefusal(null);
-        return;
+        return true;
       }
       const key = refusalKey(mode, result.error, op.action === "aim");
       if (key) {
         setRefusal(t(`cloudAfkAuto.${key}`));
         refusalTimer.current = window.setTimeout(() => setRefusal(null), REFUSAL_MS);
       }
+      return false;
     },
     [auto, mode, t],
   );
 
   // A direction sends both angles; a look waits for a direction (no frame says where it looks now).
   const aimAt = (next: Aim) => {
+    const before = aim;
     setAim(next);
     lastAim.set(account.id, next);
     if (next.dir === null) return;
-    void act({ action: "aim", yaw: AIM_DIRECTIONS[next.dir], pitch: AIM_TILTS[next.tilt] });
+    // A refused turn leaves the plates where the account was last aimed.
+    void act({ action: "aim", yaw: AIM_DIRECTIONS[next.dir], pitch: AIM_TILTS[next.tilt] }).then(
+      (done) => {
+        if (done) return;
+        setAim(before);
+        lastAim.set(account.id, before);
+      },
+    );
   };
 
   // What holds it, from the account first (no need to wait for the machine), then the machine's word.
@@ -253,6 +273,7 @@ function AutoBody({
     return (
       <Quiet
         mode={mode}
+        disclaimer={false}
         text={limited?.[lang] || t(`cloudAfkAuto.${mode}.limited`)}
         action={
           <button
