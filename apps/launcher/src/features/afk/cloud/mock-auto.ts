@@ -2,16 +2,18 @@
 // auto-mining"), for mock.ts. Preview switch (read once, from the page URL), on top of
 // `?cloud=accounts&feat=on`; without it the service is one from before the modes (nothing of them
 // shows):
-// - `&auto=on`: Madenci07 (mc.madenciler.net) is in game with both modes on: "Balık" and "Kazma"
-//   show; a small stand-in machine casts and catches every few seconds and breaks a block a second
-//   while a panel is on screen. GeceBekcisi and TuccarBaykus (play.projects.gg) may mine (off), and
-//   their fishing is limited (Projects' servers, the contract's seed);
-// - `&auto=fishing|mining`: only that mode on for Madenci07;
+// - `&auto=on` (or `fishing`): Madenci07 (mc.madenciler.net) is in game and fishes ("Balık" shows; a
+//   small stand-in machine casts and catches every few seconds while the tab is on screen), mining
+//   offered and off (an account does one job at a time). GeceBekcisi and TuccarBaykus
+//   (play.projects.gg) may mine (off) and their fishing is limited (the contract's seed);
+// - `&auto=mining`: Madenci07 mines instead ("Kazma"; a block a second);
 // - `&auto=player|host`: Madenci07 has both off and no slot is free (the switches wait);
-// - `&auto=paused|moved|window|trade|full|norod|nowater|notarget|lowtool`: what the machine says;
-// - `&auto=restart|slots|version|limited`: the modes are off on the machine for that reason;
-// - `&auto=settings`: Madenci07 with every choice made (a command, chosen blocks, idle moves);
-// - `&auto=reviewed`: as `settings`, its fishing command paused by a moderation case.
+// - `&auto=paused|moved|trade|norod|nowater` (fishing), `window|full|notarget|lowtool` (mining):
+//   what the machine says;
+// - `&auto=restart|slots|version|limited`: fishing is off on the machine for that reason;
+// - `&auto=settings`: Madenci07 fishes with every choice made, its mining choices kept and off;
+//   `&auto=settings-mining` the other way round; `&auto=reviewed`: as `settings`, the fishing
+//   command paused by a moderation case.
 import type {
   CloudAutoError,
   CloudAutoFeature,
@@ -44,11 +46,13 @@ const PROJECTS_REASON = {
 
 const OFF_REASONS = ["restart", "slots", "version", "limited"];
 
+/** The scenarios where Madenci07 mines; in the others it fishes (one job at a time). */
+const MINING = ["mining", "settings-mining", "window", "full", "notarget", "lowtool"];
+const active: AutoMode = MINING.includes(autoScenario ?? "") ? "mining" : "fishing";
+
 function modeOn(mode: AutoMode): boolean {
   if (autoScenario === "player" || autoScenario === "host") return false;
-  if (autoScenario === "fishing") return mode === "fishing";
-  if (autoScenario === "mining") return mode === "mining";
-  return true;
+  return mode === active;
 }
 
 /** `Account.features.<mode>` of a mock account; null: a service before the modes. */
@@ -80,10 +84,14 @@ export function autoConfig(id: string): {
   mining: CloudMiningSetting | null;
 } {
   if (autoScenario === null || id !== MADENCI) return { fishing: null, mining: null };
-  if (autoScenario === "settings" || autoScenario === "reviewed") {
+  if (
+    autoScenario === "settings" ||
+    autoScenario === "reviewed" ||
+    autoScenario === "settings-mining"
+  ) {
     return {
       fishing: {
-        enabled: true,
+        enabled: active === "fishing",
         rod: { switch: false, keep: 10 },
         full: {
           do: "command",
@@ -96,7 +104,7 @@ export function autoConfig(id: string): {
         look: true,
       },
       mining: {
-        enabled: true,
+        enabled: active === "mining",
         blocks: [
           "minecraft:cobblestone",
           "minecraft:stone",

@@ -6,7 +6,7 @@
 // reason and the limited servers page. The mode's choices fold in under the switch while it is on,
 // the rod's or pickaxe's protection under "Gelişmiş". The whole setting is written at the first
 // touch (the contract's defaults) and sent whole. The words are the site's.
-import { ArrowSquareOut } from "@phosphor-icons/react";
+import { ArrowSquareOut, ShieldWarning } from "@phosphor-icons/react";
 import { cn, Input, Segmented, Switch } from "@pl/ui";
 import { ItemSprite } from "@pl/ui/items";
 import { type ReactNode, useEffect, useId, useState } from "react";
@@ -24,7 +24,6 @@ import {
   WideRow,
 } from "../../settings/controls";
 import type { CloudEditData } from "../api";
-import { PausedLine } from "../moderation-bits";
 import { WalkButton } from "../movement/movement-panel";
 import { PlusItemArt } from "../plus/item-icon";
 import { itemLabel, usePlusItemData } from "../plus/items";
@@ -48,6 +47,7 @@ import {
   slotKey,
   type ToolCare,
   type WhenFull,
+  withAuto,
 } from "./model";
 
 interface QuestionProps {
@@ -118,49 +118,57 @@ function WholeField({
   );
 }
 
-/** The mode's switch row: its name, its one sentence (or why it waits), the disclaimer. */
+/**
+ * The mode's switch row: its name, its one sentence (or why it waits), the one-job note while the
+ * other mode is on; the disclaimer under the whole row.
+ */
 function Lead({
   mode,
   on,
   disabled,
   help,
+  note,
   onChange,
 }: {
   mode: AutoMode;
   on: boolean;
   disabled: boolean;
   help: ReactNode;
+  note: string | null;
   onChange: (on: boolean) => void;
 }) {
   const { t } = useTranslation();
   const id = useId();
   return (
-    <div className="switch-row flex items-center justify-between gap-6 pt-1 pb-3">
-      <div className="min-w-0">
-        <label
-          htmlFor={id}
-          className={cn(
-            // A row's label: the question above is the heading.
-            "block text-[13.5px] font-medium text-bone-100",
-            disabled ? "cursor-default opacity-55" : "cursor-pointer",
-          )}
-        >
-          {t(`cloudAfkAuto.${mode}.title`)}
-        </label>
-        <p id={`${id}-help`} className="mt-0.5 max-w-[52ch] text-[12.5px] text-ash-400">
-          {help}
-        </p>
-        <Disclaimer className="mt-1.5 max-w-[52ch]" />
+    <div className="pt-1 pb-3">
+      <div className="switch-row flex items-center justify-between gap-6">
+        <div className="min-w-0">
+          <label
+            htmlFor={id}
+            className={cn(
+              // A row's label: the question above is the heading.
+              "block text-[13.5px] font-medium text-bone-100",
+              disabled ? "cursor-default opacity-55" : "cursor-pointer",
+            )}
+          >
+            {t(`cloudAfkAuto.${mode}.title`)}
+          </label>
+          <p id={`${id}-help`} className="mt-0.5 max-w-[60ch] text-[12.5px] text-ash-400">
+            {help}
+          </p>
+          {note ? <p className="mt-0.5 max-w-[60ch] text-[12.5px] text-ash-400">{note}</p> : null}
+        </div>
+        <Switch
+          id={id}
+          describedBy={`${id}-help`}
+          checked={on}
+          onCheckedChange={onChange}
+          label={t(`cloudAfkAuto.${mode}.title`)}
+          hideLabel
+          disabled={disabled}
+        />
       </div>
-      <Switch
-        id={id}
-        describedBy={`${id}-help`}
-        checked={on}
-        onCheckedChange={onChange}
-        label={t(`cloudAfkAuto.${mode}.title`)}
-        hideLabel
-        disabled={disabled}
-      />
+      <Disclaimer className="mt-2" />
     </div>
   );
 }
@@ -210,12 +218,10 @@ function CareRows({
 function FullRows({
   full,
   error,
-  account,
   onChange: change,
 }: {
   full: WhenFull;
   error: string | null;
-  account: CloudEditData["account"];
   onChange: (full: WhenFull) => void;
 }) {
   const onChange = (next: WhenFull) => change({ ...next, paused: null });
@@ -268,10 +274,10 @@ function FullRows({
               <ErrorText>{error}</ErrorText>
             </div>
           ) : full.paused ? (
-            <div className="mt-2 flex flex-col gap-1">
-              <PausedLine category={full.paused.category} account={account} />
-              <p className="text-[12.5px] text-ash-400">{t("cloudAfkAuto.full.pausedWait")}</p>
-            </div>
+            <p className="mt-2 flex items-start gap-1.5 text-[12.5px] text-bone-100">
+              <ShieldWarning size={14} aria-hidden className="mt-px shrink-0 text-gold-300" />
+              {t("cloudAfkAuto.full.paused")}
+            </p>
           ) : null}
         </WideRow>
       </Fold>
@@ -479,9 +485,18 @@ export function AutoQuestion({
   const limited = feature.limited ?? null;
   // A slot is missing only for turning it on: the stored "on" never waits.
   const waiting = !feature.on && feature.slot ? slotKey(feature.slot) : null;
+  // One job at a time (the head agent's decision; the Worker refuses the second, reason "other"):
+  // turning this mode on turns the other off in the same draft.
+  const other: AutoMode = mode === "fishing" ? "mining" : "fishing";
+  const otherOf = (config: Draft["config"]) =>
+    other === "fishing" ? fishingOf(config.fishing) : miningOf(config.mining);
+  // The site's rule: under both switches while one mode is on, named by the mode that is on.
+  const otherOffered = view.account.features?.[other]?.mode === "on";
+  const busy: AutoMode | null = on ? mode : otherOf(draft.config)?.enabled ? other : null;
+  const note = otherOffered && busy ? t(`cloudAfkAuto.exclusive.${busy}`) : null;
   const refused = issueAt(issues, "general", null, mode);
   const refusal = refused
-    ? refused.problem === "off" || refused.problem === "limited"
+    ? refused.problem === "off" || refused.problem === "limited" || refused.problem === "other"
       ? { key: refused.problem }
       : slotKey(refused.problem)
     : null;
@@ -499,7 +514,7 @@ export function AutoQuestion({
     return t(problem === "order" ? "cloudAfkAuto.idle.order" : "cloudAfkAuto.idle.range");
   };
   const write = (next: FishingSetting | MiningSetting) =>
-    setDraft((d) => ({ ...d, config: { ...d.config, [mode]: next } }));
+    setDraft((d) => ({ ...d, config: withAuto(d.config, mode, next) }));
   const current = (): FishingSetting | MiningSetting =>
     setting ??
     (mode === "fishing"
@@ -534,6 +549,7 @@ export function AutoQuestion({
         on={on}
         disabled={Boolean(limited) || (Boolean(waiting) && !on)}
         help={help}
+        note={note}
         onChange={(enabled) => write({ ...current(), enabled })}
       />
       {/* A choice of the folded part still wrong (it goes with the setting): said here. */}
@@ -552,7 +568,9 @@ export function AutoQuestion({
           <ErrorText>
             {refusal.key === "limited" && limited?.[lang]
               ? limited[lang]
-              : t(`cloudAfkAuto.${mode}.${refusal.key}`)}
+              : refusal.key === "other"
+                ? t(`cloudAfkAuto.${mode}.otherOn`)
+                : t(`cloudAfkAuto.${mode}.${refusal.key}`)}
           </ErrorText>
         </div>
       ) : null}
@@ -562,7 +580,6 @@ export function AutoQuestion({
             <FullRows
               full={fishing.full}
               error={words("full", at("full"))}
-              account={view.account}
               onChange={(full) => write({ ...fishing, full })}
             />
             <ToggleRow
@@ -591,7 +608,6 @@ export function AutoQuestion({
             <FullRows
               full={mining.full}
               error={words("full", at("full"))}
-              account={view.account}
               onChange={(full) => write({ ...mining, full })}
             />
             <IdleRows

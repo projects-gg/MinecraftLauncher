@@ -162,6 +162,24 @@ export function miningOf(setting: CloudMiningSetting | null | undefined): Mining
   };
 }
 
+/**
+ * A config with one mode's setting written: turning a mode on turns the other off in the same draft
+ * (an account does one job at a time; the Worker refuses the second, `invalid_config` "other").
+ */
+export function withAuto<
+  C extends { fishing?: CloudFishingSetting | null; mining?: CloudMiningSetting | null },
+>(config: C, mode: AutoMode, next: FishingSetting | MiningSetting): C {
+  const other: AutoMode = mode === "fishing" ? "mining" : "fishing";
+  const otherSetting = other === "fishing" ? fishingOf(config.fishing) : miningOf(config.mining);
+  return {
+    ...config,
+    [mode]: next,
+    ...(next.enabled && otherSetting?.enabled
+      ? { [other]: { ...otherSetting, enabled: false } }
+      : {}),
+  };
+}
+
 /** A chosen subset in the list's order (the picker's own order, whatever the clicks). */
 export function orderedBlocks(chosen: readonly string[]): string[] {
   return MINING_BLOCKS.filter((block) => chosen.includes(block));
@@ -271,6 +289,9 @@ export function stateLine(
           return { key: "mining.toolLow", tone: "quiet" };
         case "no_target":
           return { key: "mining.noTarget", tone: "quiet" };
+        // One job at a time: the other mode holds the account (a fallback; the Worker refuses it).
+        case "other":
+          return { key: `${mode}.otherFirst`, tone: "quiet" };
         default:
           return { key: "inventoryFull", tone: "quiet" };
       }

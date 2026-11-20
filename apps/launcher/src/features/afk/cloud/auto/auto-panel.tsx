@@ -86,24 +86,13 @@ function Quiet({ mode, text, action }: { mode: AutoMode; text: string; action?: 
 }
 
 /** A number in the game's own form with its word after it. */
-function Figure({
-  value,
-  label,
-  tone,
-  big,
-}: {
-  value: number;
-  label: string;
-  tone?: "gold";
-  big?: boolean;
-}) {
+function Figure({ value, label, big }: { value: number; label: string; big?: boolean }) {
   return (
     <span className="flex items-baseline gap-1.5">
       <span
         className={cn(
-          "font-display font-semibold tabular-nums",
+          "font-display font-semibold text-bone-50 tabular-nums",
           big ? "text-[22px] leading-none" : "text-[15px] leading-none",
-          tone === "gold" && value > 0 ? "text-gold-200" : "text-bone-50",
         )}
       >
         {new Intl.NumberFormat(uiLocale()).format(value)}
@@ -293,7 +282,8 @@ function AutoBody({
     : word
       ? {
           text: t(`cloudAfkAuto.${word.key}`, word.values),
-          tone: word.tone === "active" ? "text-gold-300" : "text-ash-300",
+          // Gold is never a sentence (design.md §2): the running mode's line is bone.
+          tone: word.tone === "active" ? "text-bone-50" : "text-ash-300",
         }
       : null;
   const resume = needsResume(state);
@@ -323,7 +313,6 @@ function AutoBody({
               <Figure
                 value={fishing?.today.treasure ?? 0}
                 label={t("cloudAfkAuto.fishing.treasure")}
-                tone="gold"
               />
               <Figure value={fishing?.today.junk ?? 0} label={t("cloudAfkAuto.fishing.junk")} />
             </>
@@ -399,7 +388,8 @@ function AutoBody({
       {lastCatches.length ? (
         <section className="flex flex-col gap-1.5 border-t border-white/7 pt-3">
           <Heading>{t("cloudAfkAuto.fishing.last")}</Heading>
-          <ul className="grid grid-cols-1 gap-x-6 gap-y-1 @min-[460px]/auto:grid-cols-2">
+          {/* Newest first, one column: a timeline reads down, never across. */}
+          <ul className="flex flex-col gap-1">
             {lastCatches.map((caught, index) => {
               const treasure = caught.cat === "treasure";
               return (
@@ -408,17 +398,21 @@ function AutoBody({
                   className="flex min-h-8 items-center gap-2.5"
                 >
                   <ItemTile id={caught.id} size={24} />
-                  <span className="min-w-0 flex-1 truncate text-[13px]">
-                    <span className={treasure ? "text-gold-200" : "text-bone-100"}>
-                      {name(caught.id)}
-                    </span>
-                    {caught.ench ? (
-                      <span className="text-ash-400"> · {t("cloudAfkAuto.enchanted")}</span>
-                    ) : null}
-                    {treasure ? (
-                      <span className="text-ash-400"> · {t("cloudAfkAuto.fishing.treasure")}</span>
-                    ) : null}
+                  <span
+                    className={cn(
+                      "min-w-0 truncate text-[13px]",
+                      treasure ? "font-medium text-bone-50" : "text-bone-100",
+                    )}
+                  >
+                    {name(caught.id)}
                   </span>
+                  {/* Treasure said in words, never by colour alone. */}
+                  {treasure ? (
+                    <span className="shrink-0 text-[12px] text-ash-400">
+                      {t("cloudAfkAuto.fishing.treasure")}
+                    </span>
+                  ) : null}
+                  <span className="flex-1" />
                   {caught.at ? (
                     <span className="shrink-0 text-[12px] text-ash-400 tabular-nums">
                       {time.format(new Date(caught.at * 1000))}
@@ -462,8 +456,13 @@ function AutoBody({
               <p className="truncate text-[13px] text-bone-100">
                 {t("cloudAfkAuto.mining.lookingAt", { name: name(targetId) })}
               </p>
-              <p className="text-[12.5px] text-ash-400 tabular-nums">
-                X {target.x ?? 0} · Y {target.y ?? 0} · Z {target.z ?? 0}
+              {/* The game's own form, as movement's position line: each letter with its number. */}
+              <p className="flex gap-3 text-[12.5px] text-ash-300 tabular-nums">
+                {(["x", "y", "z"] as const).map((axis) => (
+                  <span key={axis}>
+                    <span className="text-ash-400">{axis.toUpperCase()}</span> {target[axis] ?? 0}
+                  </span>
+                ))}
               </p>
             </div>
           </div>
@@ -495,9 +494,6 @@ function AutoBody({
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <span className="text-[13px] font-medium text-bone-100">
             {t("cloudAfkAuto.aim.look")}
-            {aim.dir === null && aimable ? (
-              <span className="ml-2 font-normal text-ash-400">{t("cloudAfkAuto.aim.first")}</span>
-            ) : null}
           </span>
           <fieldset
             aria-label={t("cloudAfkAuto.aim.look")}
@@ -515,6 +511,9 @@ function AutoBody({
             ))}
           </fieldset>
         </div>
+        {aim.dir === null && aimable ? (
+          <p className="text-right text-[12px] text-ash-400">{t("cloudAfkAuto.aim.first")}</p>
+        ) : null}
       </section>
 
       <Disclaimer />

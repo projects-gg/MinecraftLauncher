@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { CloudLiveEvent } from "@/bindings";
+import type { CloudFishingSetting, CloudLiveEvent, CloudMiningSetting } from "@/bindings";
 import { trCloudAfkAuto } from "@/locales/tr-cloud-afk-auto";
 import type { CloudAccount } from "../api";
 import {
@@ -26,6 +26,7 @@ import {
   slotKey,
   stateLine,
   wear,
+  withAuto,
 } from "./model";
 
 const fish = (over: Partial<FishState> = {}): FishState => ({
@@ -210,6 +211,23 @@ describe("auto model", () => {
     expect(AIM_TILTS).toEqual({ up: -45, level: 0, down: 45 });
     expect(wear(64, 64)).toEqual({ fill: 1, color: "hsl(120 100% 50%)" });
     expect(wear(0, 64).color).toBe("hsl(0 100% 50%)");
+  });
+
+  it("does one job at a time: turning a mode on turns the other off", () => {
+    const fishing = { ...defaultFishing(), enabled: true };
+    const start: { fishing: CloudFishingSetting | null; mining: CloudMiningSetting | null } = {
+      fishing,
+      mining: null,
+    };
+    const both = withAuto(start, "mining", { ...defaultMining(), enabled: true });
+    expect(both.fishing?.enabled).toBe(false);
+    expect(both.mining?.enabled).toBe(true);
+    // Turning one off, or changing a part, leaves the other as it is.
+    const off = withAuto(start, "mining", defaultMining());
+    expect(off.fishing).toBe(fishing);
+    expect(stateLine("mining", mine({ state: "waiting", reason: "other" }))?.key).toBe(
+      "mining.otherFirst",
+    );
   });
 
   it("shows a mode's tab only while it may run there", () => {
