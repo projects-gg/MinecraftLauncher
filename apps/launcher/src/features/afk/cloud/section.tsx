@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import type { AfkAccount } from "@/lib/api";
 import { afkFailed } from "../errors";
 import { type CloudAccount, cloudApi } from "./api";
+import { autoShown } from "./auto/model";
 import { BulkBar } from "./bulk-bar";
 import { CloudCard } from "./card";
 import { CloudConsole } from "./console";
@@ -87,6 +88,10 @@ export function useCloudCardActions(desktop: AfkAccount[]) {
         ? () => ui.openConsole(account.id, "inventory")
         : undefined,
     onMovement: movementShown(account) ? () => ui.openConsole(account.id, "movement") : undefined,
+    onFishing: autoShown(account, "fishing")
+      ? () => ui.openConsole(account.id, "fishing")
+      : undefined,
+    onMining: autoShown(account, "mining") ? () => ui.openConsole(account.id, "mining") : undefined,
   });
 }
 

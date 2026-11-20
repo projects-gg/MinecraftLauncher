@@ -12,7 +12,8 @@
 // command line's place for the player's word, a suggestion filling the command line, a copy
 // copying. Dialog cards (DIALOG-CARD) follow their own switch the same way. Across the whole
 // window the console keeps its place and the inventory and movement stand beside it instead of in
-// tabs.
+// tabs. Auto-fishing and auto-mining (FISHMINE) add "Balık" and "Kazma" the same way, while the
+// account has them on; both tabs share one stream, on while either is on screen.
 import { ArrowDown, ArrowUp, Key, PaperPlaneRight, X } from "@phosphor-icons/react";
 import {
   Button,
@@ -67,6 +68,9 @@ import { isFriendly } from "../errors";
 import { AfkSidePanel, PanelSizeButton, useAfkPanel } from "../panel/side-panel";
 import { SecretField } from "../secret";
 import { type CloudAccount, type CloudLiveEvent, cloudApi } from "./api";
+import { AutoPanel } from "./auto/auto-panel";
+import { type AutoMode, autoShown } from "./auto/model";
+import { type CloudAuto, useCloudAuto } from "./auto/use-cloud-auto";
 import {
   consoleShows,
   type KindFilter,
@@ -271,12 +275,22 @@ export function CloudConsole({
   const { kinds, looks, dialogCards } = consoleShows(account?.features);
   const [inventoryGone, setInventoryGone] = useState(false);
   const [movementGone, setMovementGone] = useState(false);
+  const [fishingGone, setFishingGone] = useState(false);
+  const [miningGone, setMiningGone] = useState(false);
   const inventory =
     (account?.features?.inventory?.mode ?? "off") !== "off" && Boolean(host) && !inventoryGone;
   const movement = movementShown(account) && !movementGone;
-  const tabbed = inventory || movement;
-  const shownTab: PanelTab =
-    (tab === "inventory" && inventory) || (tab === "movement" && movement) ? tab : "console";
+  const fishing = autoShown(account, "fishing") && !fishingGone;
+  const mining = autoShown(account, "mining") && !miningGone;
+  // The tabs beside the console, in the card menu's order.
+  const sideTabs: SideTab[] = [
+    ...(inventory ? (["inventory"] as const) : []),
+    ...(movement ? (["movement"] as const) : []),
+    ...(fishing ? (["fishing"] as const) : []),
+    ...(mining ? (["mining"] as const) : []),
+  ];
+  const tabbed = sideTabs.length > 0;
+  const shownTab: PanelTab = tab !== "console" && sideTabs.includes(tab) ? tab : "console";
   const [lines, setLines] = useState<Line[]>([]);
   const [status, setStatus] = useState<LinkStatus>("connecting");
   const [hostOnline, setHostOnline] = useState(true);
@@ -313,6 +327,8 @@ export function CloudConsole({
   const art = useInventoryArt(account);
   const inventoryUnavailable = useCallback(() => setInventoryGone(true), []);
   const movementUnavailable = useCallback(() => setMovementGone(true), []);
+  const fishingUnavailable = useCallback(() => setFishingGone(true), []);
+  const miningUnavailable = useCallback(() => setMiningGone(true), []);
 
   // Another account (or a fresh open) starts empty, at its newest line.
   // biome-ignore lint/correctness/useExhaustiveDependencies: resets when the account changes
@@ -335,6 +351,8 @@ export function CloudConsole({
     setMenuError(null);
     setInventoryGone(false);
     setMovementGone(false);
+    setFishingGone(false);
+    setMiningGone(false);
     atEnd.current = true;
   }, [id]);
 
@@ -901,8 +919,13 @@ export function CloudConsole({
     </>
   ) : null;
 
-  const inventoryTab = { value: "inventory" as const, label: t("cloudAfkFeat.tabs.inventory") };
-  const movementTab = { value: "movement" as const, label: t("cloudAfkMove.tab") };
+  const tabLabels: Record<SideTab, string> = {
+    inventory: t("cloudAfkFeat.tabs.inventory"),
+    movement: t("cloudAfkMove.tab"),
+    fishing: t("cloudAfkAuto.tabs.fishing"),
+    mining: t("cloudAfkAuto.tabs.mining"),
+  };
+  const tabItem = (value: SideTab) => ({ value, label: tabLabels[value] });
   /** The inventory, in a tab of its own or beside the console. */
   const inventoryPart = (active: boolean) =>
     account ? (
@@ -927,9 +950,25 @@ export function CloudConsole({
         onUnavailable={movementUnavailable}
       />
     ) : null;
-  // Beside the console, the inventory and movement share one place (the inventory first).
-  const sideTab: "inventory" | "movement" =
-    shownTab === "movement" || !inventory ? "movement" : "inventory";
+  /** A mode's panel: both read the console's one auto stream. */
+  const autoPart = (mode: AutoMode, auto: CloudAuto) =>
+    account ? (
+      <AutoPanel
+        mode={mode}
+        account={account}
+        auto={auto}
+        onReconnect={() => onRestart(account)}
+        onUnavailable={mode === "fishing" ? fishingUnavailable : miningUnavailable}
+      />
+    ) : null;
+  const sidePart = (value: SideTab, active: boolean, auto: CloudAuto) =>
+    value === "inventory"
+      ? inventoryPart(active)
+      : value === "movement"
+        ? movementPart(active)
+        : autoPart(value, auto);
+  // Beside the console, the side tabs share one place (the first one while the console is chosen).
+  const sideTab: SideTab = shownTab !== "console" ? shownTab : (sideTabs[0] ?? "inventory");
 
   return (
     <AfkSidePanel
@@ -955,97 +994,125 @@ export function CloudConsole({
     >
       {account ? (
         <PanelLayout>
-          {(wide) => (
-            <>
-              <header className="flex items-center gap-3 border-b border-white/8 px-5 py-4">
-                <AfkHead nickname={account.name} size={36} />
-                <div className="min-w-0 flex-1">
-                  <Dialog.Title className="truncate font-display text-[18px] leading-tight font-semibold text-bone-50">
-                    {tabbed ? account.name : t("cloudAfk.console.title", { name: account.name })}
-                  </Dialog.Title>
-                  <CloudStateLine account={account} skewMs={skewMs} className="mt-0.5" />
-                </div>
-                <PanelSizeButton />
-                <Dialog.Close asChild>
-                  <IconButton label={t("common.close")} icon={<X size={18} />} size="sm" />
-                </Dialog.Close>
-              </header>
-              <Banner
-                status={status}
-                hostOnline={hostOnline}
-                noHost={!host}
-                onReopen={() => {
-                  setStatus("connecting");
-                  setAttempt((n) => n + 1);
-                }}
-              />
-              {wide && tabbed ? (
-                // The whole window: the console and, beside it, the inventory and movement.
-                <div className="flex min-h-0 flex-1">
-                  <section
-                    aria-label={t("cloudAfkFeat.tabs.console")}
-                    className="flex min-h-0 min-w-0 flex-1 flex-col pt-1"
-                  >
-                    {consoleBody}
-                  </section>
-                  <div className="flex w-[clamp(400px,36vw,580px)] shrink-0 flex-col border-l border-white/8">
-                    {inventory && movement ? (
+          {(wide) => {
+            // What is on screen beside or instead of the console: the auto stream runs only then.
+            const visible = wide && tabbed ? sideTab : shownTab;
+            return (
+              <AutoStream
+                account={account}
+                visible={visible === "fishing" || visible === "mining"}
+                link={attempt}
+              >
+                {(auto) => (
+                  <>
+                    <header className="flex items-center gap-3 border-b border-white/8 px-5 py-4">
+                      <AfkHead nickname={account.name} size={36} />
+                      <div className="min-w-0 flex-1">
+                        <Dialog.Title className="truncate font-display text-[18px] leading-tight font-semibold text-bone-50">
+                          {tabbed
+                            ? account.name
+                            : t("cloudAfk.console.title", { name: account.name })}
+                        </Dialog.Title>
+                        <CloudStateLine account={account} skewMs={skewMs} className="mt-0.5" />
+                      </div>
+                      <PanelSizeButton />
+                      <Dialog.Close asChild>
+                        <IconButton label={t("common.close")} icon={<X size={18} />} size="sm" />
+                      </Dialog.Close>
+                    </header>
+                    <Banner
+                      status={status}
+                      hostOnline={hostOnline}
+                      noHost={!host}
+                      onReopen={() => {
+                        setStatus("connecting");
+                        setAttempt((n) => n + 1);
+                      }}
+                    />
+                    {wide && tabbed ? (
+                      // The whole window: the console and, beside it, the inventory and movement.
+                      <div className="flex min-h-0 flex-1">
+                        <section
+                          aria-label={t("cloudAfkFeat.tabs.console")}
+                          className="flex min-h-0 min-w-0 flex-1 flex-col pt-1"
+                        >
+                          {consoleBody}
+                        </section>
+                        <div className="flex w-[clamp(400px,36vw,580px)] shrink-0 flex-col border-l border-white/8">
+                          {sideTabs.length > 1 ? (
+                            <Tabs
+                              value={sideTab}
+                              onValueChange={setTab}
+                              label={t("cloudAfkFeat.tabs.label")}
+                              items={sideTabs.map(tabItem)}
+                              className="[&>[role=tablist]]:px-3.5"
+                            >
+                              {sideTabs.map((value) => (
+                                <TabPanel key={value} value={value} className="px-5 pt-5">
+                                  {sidePart(value, sideTab === value, auto)}
+                                </TabPanel>
+                              ))}
+                            </Tabs>
+                          ) : (
+                            <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-5 pb-4">
+                              {sidePart(sideTab, true, auto)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : tabbed ? (
                       <Tabs
-                        value={sideTab}
+                        value={shownTab}
                         onValueChange={setTab}
                         label={t("cloudAfkFeat.tabs.label")}
-                        items={[inventoryTab, movementTab]}
+                        items={[
+                          { value: "console", label: t("cloudAfkFeat.tabs.console") },
+                          ...sideTabs.map(tabItem),
+                        ]}
                         className="[&>[role=tablist]]:px-3.5"
                       >
-                        <TabPanel value="inventory" className="px-5 pt-5">
-                          {inventoryPart(sideTab === "inventory")}
+                        <TabPanel value="console" className="flex flex-col overflow-hidden pt-1">
+                          {consoleBody}
                         </TabPanel>
-                        <TabPanel value="movement" className="px-5 pt-5">
-                          {movementPart(sideTab === "movement")}
-                        </TabPanel>
+                        {sideTabs.map((value) => (
+                          <TabPanel key={value} value={value} className="px-5 pt-5">
+                            {sidePart(value, shownTab === value, auto)}
+                          </TabPanel>
+                        ))}
                       </Tabs>
                     ) : (
-                      <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-5 pb-4">
-                        {inventory ? inventoryPart(true) : movementPart(true)}
-                      </div>
+                      consoleBody
                     )}
-                  </div>
-                </div>
-              ) : tabbed ? (
-                <Tabs
-                  value={shownTab}
-                  onValueChange={setTab}
-                  label={t("cloudAfkFeat.tabs.label")}
-                  items={[
-                    { value: "console", label: t("cloudAfkFeat.tabs.console") },
-                    ...(inventory ? [inventoryTab] : []),
-                    ...(movement ? [movementTab] : []),
-                  ]}
-                  className="[&>[role=tablist]]:px-3.5"
-                >
-                  <TabPanel value="console" className="flex flex-col overflow-hidden pt-1">
-                    {consoleBody}
-                  </TabPanel>
-                  {inventory ? (
-                    <TabPanel value="inventory" className="px-5 pt-5">
-                      {inventoryPart(shownTab === "inventory")}
-                    </TabPanel>
-                  ) : null}
-                  {movement ? (
-                    <TabPanel value="movement" className="px-5 pt-5">
-                      {movementPart(shownTab === "movement")}
-                    </TabPanel>
-                  ) : null}
-                </Tabs>
-              ) : (
-                consoleBody
-              )}
-            </>
-          )}
+                  </>
+                )}
+              </AutoStream>
+            );
+          }}
         </PanelLayout>
       ) : null}
     </AfkSidePanel>
   );
+}
+
+type SideTab = Exclude<PanelTab, "console">;
+
+/**
+ * The account's one auto stream for both tabs (inside the panel, where its width is known), so a
+ * switch between "Balık" and "Kazma" keeps it and what it showed.
+ */
+function AutoStream({
+  account,
+  visible,
+  link,
+  children,
+}: {
+  account: CloudAccount;
+  visible: boolean;
+  link: number;
+  children: (auto: CloudAuto) => ReactNode;
+}) {
+  const auto = useCloudAuto(account, visible, link);
+  return <>{children(auto)}</>;
 }
 
 /** The surrounding panel's width class, for the layout inside it. */

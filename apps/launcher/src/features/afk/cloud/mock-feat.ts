@@ -35,6 +35,7 @@ import type {
   CloudSpan,
 } from "@/bindings";
 import type { TryRule } from "./api";
+import { autoScenario } from "./mock-auto";
 
 function param(key: string): string | null {
   try {
@@ -60,6 +61,9 @@ export function offerFeatures(): CloudFeatures | null {
     consoleKinds: kindsOn,
     placeholders: true,
     placeholderCommands: ["msg", "m", "tell", "w", "whisper", "r", "reply", "pm"],
+    // Studio's auto switches (`&auto=…`, mock-auto.ts).
+    fishing: autoScenario !== null,
+    mining: autoScenario !== null,
   };
 }
 

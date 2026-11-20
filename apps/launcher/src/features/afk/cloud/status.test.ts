@@ -63,6 +63,8 @@ function account(overrides: Partial<CloudAccount> = {}): CloudAccount {
       rules: [],
       inventory: null,
       movement: null,
+      fishing: null,
+      mining: null,
     },
     rev: 4,
     serverChanges: { used: 0, limit: 6, resetAt: null },

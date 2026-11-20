@@ -19,7 +19,9 @@ import {
   Copy,
   Desktop,
   DotsThreeVertical,
+  FishSimple,
   GearSix,
+  Hammer,
   Key,
   Play,
   SneakerMove,
@@ -413,6 +415,8 @@ export function CloudCard({
   onUpgrade,
   onInventory,
   onMovement,
+  onFishing,
+  onMining,
   onCopy,
   here = null,
   onHereConsole,
@@ -439,6 +443,9 @@ export function CloudCard({
   onInventory?: () => void;
   /** While this account's movement is on: the panel opens on Hareket. */
   onMovement?: () => void;
+  /** While this account's auto-fishing or auto-mining is on: the panel opens on Balık or Kazma. */
+  onFishing?: () => void;
+  onMining?: () => void;
   /** "Ayarlarını kopyala" (several accounts, the cloud features on). */
   onCopy?: () => void;
   /** The same account on this computer (one card for both; AFK-CLEAR). */
@@ -553,6 +560,18 @@ export function CloudCard({
       : []),
     ...(onMovement
       ? [{ label: t("cloudAfkMove.tab"), icon: <SneakerMove size={16} />, onSelect: onMovement }]
+      : []),
+    ...(onFishing
+      ? [
+          {
+            label: t("cloudAfkAuto.tabs.fishing"),
+            icon: <FishSimple size={16} />,
+            onSelect: onFishing,
+          },
+        ]
+      : []),
+    ...(onMining
+      ? [{ label: t("cloudAfkAuto.tabs.mining"), icon: <Hammer size={16} />, onSelect: onMining }]
       : []),
     null,
     { label: settingsLabel, icon: <GearSix size={16} />, onSelect: onSettings },

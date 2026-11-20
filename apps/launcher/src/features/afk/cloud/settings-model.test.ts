@@ -5,6 +5,7 @@ import { trCloudAfk } from "@/locales/tr-cloud-afk";
 import type { CloudAccount, CloudEditData } from "./api";
 import { looksSensitive } from "./sensitive";
 import {
+  autoIssues,
   type Draft,
   heldIssue,
   isDirty,
@@ -54,6 +55,8 @@ function view(): CloudEditData {
       rules: [],
       inventory: null,
       movement: null,
+      fishing: null,
+      mining: null,
     },
     rev: 4,
     serverChanges: { used: 0, limit: 6, resetAt: null },
@@ -102,6 +105,8 @@ function view(): CloudEditData {
       ],
       inventory: null,
       movement: null,
+      fishing: null,
+      mining: null,
     },
     versions: { versions: [], recommended: "26.3" },
     limits: { minIntervalSec: 60, minRuleCooldownSec: 10, maxCommandRows: 20, maxRules: 10 },
@@ -442,6 +447,39 @@ describe("issueKey", () => {
   });
 });
 
+describe("the auto modes' checks while typing (FISHMINE)", () => {
+  it("name the part of a setting that is wrong, as the backend does", () => {
+    const base = toDraft(view()).config;
+    expect(autoIssues(base)).toEqual([]);
+    const issues = autoIssues({
+      ...base,
+      fishing: {
+        enabled: true,
+        rod: { switch: true, keep: 0 },
+        full: { do: "command", command: " " },
+      },
+      mining: { enabled: false, blocks: [], idle: { every: { min: 200, max: 100 } } },
+    });
+    expect(issues.map((issue) => [issue.field, issue.problem])).toEqual([
+      ["fishing.rod", "range"],
+      ["fishing.full", "empty"],
+      ["mining.blocks", "empty"],
+      ["mining.idle", "order"],
+    ]);
+    // The command a full inventory types is stored plain: never a password.
+    const secret = autoIssues({
+      ...base,
+      fishing: { enabled: true, full: { do: "command", command: "/login hunter2" } },
+    });
+    expect(secret).toEqual([
+      { place: "general", index: null, field: "fishing.full", problem: "secret" },
+    ]);
+    expect(
+      autoIssues({ ...base, mining: { enabled: true, blocks: ["minecraft:chest"] } })[0]?.problem,
+    ).toBe("format");
+  });
+});
+
 describe("the panel's sections (SHEET-UX)", () => {
   it("shows a problem in the section that holds its field", () => {
     const at = (place: string, field: string) =>
@@ -451,6 +489,8 @@ describe("the panel's sections (SHEET-UX)", () => {
     expect(at("general", "port")).toBe("connection");
     expect(at("general", "antiAfk")).toBe("game");
     expect(at("general", "movement")).toBe("game");
+    expect(at("general", "fishing")).toBe("game");
+    expect(at("general", "mining.idle")).toBe("game");
     expect(at("general", "owner")).toBe("replies");
     expect(at("commands", "text")).toBe("commands");
     expect(at("rules", "reply")).toBe("replies");

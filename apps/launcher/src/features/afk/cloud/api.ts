@@ -5,6 +5,7 @@ import type { DialogPress } from "@pl/ui/console";
 import type { InvOp } from "@pl/ui/inventory";
 import {
   type CloudAccount_Serialize,
+  type CloudAutoError,
   type CloudConsoleFile,
   type CloudCopyResult_Serialize,
   type CloudCopySecret,
@@ -31,6 +32,7 @@ import {
 import { listen } from "@/lib/api/listen";
 import { CommandError } from "@/lib/api/tauri";
 import { isTauri } from "@/lib/platform";
+import type { AutoOp } from "./auto/model";
 import { mockCloudApi } from "./mock";
 import type { MoveOp } from "./movement/model";
 
@@ -42,6 +44,7 @@ export type CloudSaveResult = CloudSaveOutcome_Serialize;
 export type CloudMoveData = CloudMoveResult_Serialize;
 export type CloudCopyResult = CloudCopyResult_Serialize;
 export type {
+  CloudAutoError,
   CloudConsoleFile,
   CloudCopySecret,
   CloudCopySource,
@@ -124,6 +127,11 @@ export interface CloudApi {
   movementUnwatch(id: string): Promise<void>;
   /** A movement operation; null: sent (its answer comes as `movementResult`), else why not. */
   movementOp(id: string, opId: string, op: MoveOp): Promise<CloudMovementError | null>;
+  /** A "Balık" or "Kazma" panel is on screen: the account's auto states stream through `onLive`. */
+  autoWatch(id: string): Promise<void>;
+  autoUnwatch(id: string): Promise<void>;
+  /** An auto operation (pause, resume, aim); null: sent (its answer comes as `autoResult`). */
+  autoOp(id: string, opId: string, op: AutoOp): Promise<CloudAutoError | null>;
   /** "Dene": what the rule answers to a sample message, on this computer. */
   tryReply(rule: TryRule, sample: string, sender: string): Promise<CloudReplyTry>;
   /** "İndir": the console of a range as a file in Downloads; null: no line in that range. */
@@ -192,6 +200,11 @@ const tauriCloudApi: CloudApi = {
   },
   movementUnwatch: (id) => commands.cloudAfkMovementUnwatch(id),
   movementOp: (id, opId, op) => commands.cloudAfkMovementOp(id, opId, JSON.stringify(op)),
+  autoWatch: async (id) => {
+    await ok(commands.cloudAfkAutoWatch(id));
+  },
+  autoUnwatch: (id) => commands.cloudAfkAutoUnwatch(id),
+  autoOp: (id, opId, op) => commands.cloudAfkAutoOp(id, opId, JSON.stringify(op)),
   tryReply: (rule, sample, sender) =>
     commands.cloudAfkTryReply(rule.pattern, rule.regex, rule.from, rule.reply, sample, sender),
   download: (id, name, range) => ok(commands.cloudAfkConsoleDownload(id, name, range)),

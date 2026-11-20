@@ -410,6 +410,8 @@ describe("Account answers", () => {
         rules,
         inventory: null,
         movement: null,
+        fishing: null,
+        mining: null,
       },
     };
   }

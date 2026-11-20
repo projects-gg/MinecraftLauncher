@@ -213,9 +213,9 @@ function PadButton({
 
 /**
  * A walk's button: a secondary button's plate that stays pressed in (the pad's gold edge) while the
- * account walks that way, and a press then stops it.
+ * account walks that way, and a press then stops it. The auto panels' aim plates are the same.
  */
-function WalkButton({
+export function WalkButton({
   label,
   ariaLabel,
   pressed,
