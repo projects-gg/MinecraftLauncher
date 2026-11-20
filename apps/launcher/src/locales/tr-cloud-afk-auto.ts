@@ -40,6 +40,8 @@ export const trCloudAfkAuto = {
     },
   },
   limitedLink: "Sınırlı Sunucular",
+  // A mode stored on before its server was limited (it may only be turned off): before the reason.
+  limitedOn: "Bu sunucuda çalışmaz.",
   fishing: {
     title: "Otomatik Balık Tutma",
     line: "Olduğu yerde olta atar, balık vurunca çeker ve yeniden atar.",

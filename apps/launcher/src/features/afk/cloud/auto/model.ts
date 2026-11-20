@@ -299,6 +299,24 @@ export function limitKey(
   return n > 1 ? { key: "maxAccounts", values: { max: n } } : { key: "oneAccount" };
 }
 
+/**
+ * A mode's switch in the account settings (the head agent's rule, the same on every surface). On a
+ * limited server it shows the stored setting: stored on, it may be turned off (turning off always
+ * works; put back before saving, nothing changes), stored off, it waits; its line says it does not
+ * run there ("on") or only the reason ("off"). Elsewhere it waits while no slot is free, until it is
+ * on. The one-job line is said only under a switch that can be turned on (`canTurnOn`).
+ */
+export function autoSwitch(state: {
+  limited: boolean;
+  storedOn: boolean;
+  on: boolean;
+  waiting: boolean;
+}): { disabled: boolean; canTurnOn: boolean; line: "on" | "off" | null } {
+  const { limited, storedOn, on, waiting } = state;
+  if (limited) return { disabled: !storedOn, canTurnOn: false, line: storedOn ? "on" : "off" };
+  return { disabled: waiting && !on, canTurnOn: !waiting, line: null };
+}
+
 type Tone = "active" | "quiet";
 
 /** The pauses every mode has (keys under `cloudAfkAuto`). */

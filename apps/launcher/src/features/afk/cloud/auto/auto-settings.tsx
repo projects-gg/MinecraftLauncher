@@ -2,8 +2,8 @@
 // two questions after "Biri yazınca ne desin?", each only where Studio offers the mode for the account
 // (`features.<mode>.mode` on), as on the site (the same questions and order, product.md "Ayarlar").
 // A question leads with the mode's switch, its one sentence and the disclaimer; while no slot is free
-// the switch waits and the sentence says why; on a limited server it shows disabled with the public
-// reason and the limited servers page. The mode's choices fold in under the switch while it is on,
+// the switch waits and the sentence says why; on a limited server it shows the stored setting, may
+// only be turned off, and says why with the public reason and the limited servers page. The mode's choices fold in under the switch while it is on,
 // the rod's or pickaxe's protection under "Gelişmiş". The whole setting is written at the first
 // touch (the contract's defaults) and sent whole. The words are the site's.
 import { ArrowSquareOut, ShieldWarning } from "@phosphor-icons/react";
@@ -33,6 +33,7 @@ import { Disclaimer, limitedPage } from "./auto-panel";
 import { ChoicePlate } from "./choice-plate";
 import {
   type AutoMode,
+  autoSwitch,
   chosenKinds,
   defaultFishing,
   defaultMining,
@@ -477,6 +478,13 @@ export function AutoQuestion({
   const limited = feature.limited ?? null;
   // A slot is missing only for turning it on: the stored "on" never waits.
   const waiting = !feature.on && feature.slot ? slotKey(feature.slot) : null;
+  const stored = mode === "fishing" ? fishingOf(view.config.fishing) : miningOf(view.config.mining);
+  const lead = autoSwitch({
+    limited: Boolean(limited),
+    storedOn: stored?.enabled ?? feature.on ?? false,
+    on,
+    waiting: Boolean(waiting),
+  });
   // One job at a time (the head agent's decision; the Worker refuses the second, reason "other"):
   // turning this mode on turns the other off in the same draft. Said as on the site, only where the
   // other mode is offered: while the other is on in the draft (what turning this one on does), or
@@ -485,7 +493,7 @@ export function AutoQuestion({
   const otherOn = (config: Draft["config"]) =>
     Boolean((other === "fishing" ? fishingOf(config.fishing) : miningOf(config.mining))?.enabled);
   const note =
-    view.account.features?.[other]?.mode !== "on"
+    !lead.canTurnOn || view.account.features?.[other]?.mode !== "on"
       ? null
       : otherOn(draft.config)
         ? t(`cloudAfkAuto.oneJob.will.${mode}`)
@@ -524,9 +532,14 @@ export function AutoQuestion({
     mode === "fishing" ? "rod" : "tool",
     at(mode === "fishing" ? "rod" : "tool"),
   );
+  // The public reason (Studio's words; the site's fallback to Turkish); stored on, it says first
+  // that the mode does not run there.
+  const reason = limited ? limited[lang] || limited.tr || null : null;
   const help = limited ? (
     <>
-      {limited[lang] || t(`cloudAfkAuto.${mode}.limited`)}{" "}
+      {lead.line === "on"
+        ? [t("cloudAfkAuto.limitedOn"), reason].filter(Boolean).join(" ")
+        : (reason ?? t(`cloudAfkAuto.${mode}.limited`))}{" "}
       <button
         type="button"
         className={cn(TEXT_LINK, "inline-flex items-center gap-1 font-medium")}
@@ -550,7 +563,7 @@ export function AutoQuestion({
       <Lead
         mode={mode}
         on={on}
-        disabled={Boolean(limited) || (Boolean(waiting) && !on)}
+        disabled={lead.disabled}
         help={help}
         note={note}
         limited={Boolean(limited)}

@@ -11,6 +11,8 @@
 // - `&auto=paused|moved|trade|norod|nowater` (fishing), `window|full|notarget|lowtool` (mining):
 //   what the machine says;
 // - `&auto=restart|slots|version|limited`: fishing is off on the machine for that reason;
+// - `&auto=limited-on`: GeceBekcisi's fishing was stored on before Projects' servers were limited
+//   for it (it may only be turned off); TuccarBaykus's stays off (its switch waits);
 // - `&auto=settings`: Madenci07 fishes with every choice made, its mining choices kept and off;
 //   `&auto=settings-mining` the other way round; `&auto=reviewed`: as `settings`, the fishing
 //   command paused by a moderation case.
@@ -70,7 +72,7 @@ export function autoFeature(id: string, mode: AutoMode): CloudAutoFeature | null
   if (PROJECTS.includes(id)) {
     return {
       mode: "on",
-      on: false,
+      on: autoScenario === "limited-on" && id === GECE && mode === "fishing",
       slot: null,
       limited: mode === "fishing" ? PROJECTS_REASON : null,
     };
@@ -78,11 +80,18 @@ export function autoFeature(id: string, mode: AutoMode): CloudAutoFeature | null
   return { mode: "off", on: false, slot: null, limited: null };
 }
 
-/** The stored settings of a mock account (only Madenci07 has any). */
+/** The stored settings of a mock account (Madenci07's; GeceBekcisi's fishing in `limited-on`). */
 export function autoConfig(id: string): {
   fishing: CloudFishingSetting | null;
   mining: CloudMiningSetting | null;
 } {
+  if (autoScenario === "limited-on" && id === GECE) {
+    const full = { do: "wait", command: null };
+    return {
+      fishing: { enabled: true, rod: { switch: true, keep: 5 }, full, look: false },
+      mining: null,
+    };
+  }
   if (autoScenario === null || id !== MADENCI) return { fishing: null, mining: null };
   if (
     autoScenario === "settings" ||

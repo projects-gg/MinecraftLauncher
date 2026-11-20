@@ -9,6 +9,7 @@ import {
   AIM_TILTS,
   AUTO_WAITING,
   autoShown,
+  autoSwitch,
   canPause,
   chosenKinds,
   defaultFishing,
@@ -304,6 +305,19 @@ describe("auto model", () => {
       "minecraft:cobblestone",
     ]);
     expect(kindOn(["minecraft:cobblestone"], iron)).toBe(false);
+  });
+
+  it("keeps a limited server's switch as stored: turned off only", () => {
+    const at = (limited: boolean, storedOn: boolean, on: boolean, waiting = false) =>
+      autoSwitch({ limited, storedOn, on, waiting });
+    // Stored on: it may be turned off (and put back before saving); it says it does not run there.
+    expect(at(true, true, true)).toEqual({ disabled: false, canTurnOn: false, line: "on" });
+    expect(at(true, true, false)).toEqual({ disabled: false, canTurnOn: false, line: "on" });
+    // Stored off: it waits, with only the reason.
+    expect(at(true, false, false)).toEqual({ disabled: true, canTurnOn: false, line: "off" });
+    // Elsewhere: free, or waiting for a slot until it is on (no one-job line while it waits).
+    expect(at(false, false, false)).toEqual({ disabled: false, canTurnOn: true, line: null });
+    expect(at(false, false, false, true)).toEqual({ disabled: true, canTurnOn: false, line: null });
   });
 
   it("reads a stored setting with the contract's defaults", () => {
