@@ -15,20 +15,24 @@ import {
   defaultMining,
   type FishState,
   fishingOf,
+  kindOn,
   limitKey,
   MINING_BLOCKS,
   MINING_KINDS,
   type MineState,
   miningOf,
   needsResume,
+  ORE_KINDS,
   ORES,
   offKey,
   orderedBlocks,
   reduceAuto,
   refusalKey,
+  STONE_KINDS,
   STONES,
   slotKey,
   stateLine,
+  toggleKind,
   wear,
   withAuto,
 } from "./model";
@@ -283,6 +287,23 @@ describe("auto model", () => {
     expect(chosenKinds(["minecraft:iron_ore", "minecraft:deepslate_iron_ore"])).toBe(1);
     expect(chosenKinds(["minecraft:cobblestone", "minecraft:stone"])).toBe(2);
     expect(chosenKinds([])).toBe(0);
+  });
+
+  it("toggles a kind as the site does: an ore and its twin go together", () => {
+    const iron = ["minecraft:iron_ore", "minecraft:deepslate_iron_ore"];
+    expect(STONE_KINDS).toHaveLength(14);
+    expect(ORE_KINDS).toHaveLength(11);
+    expect(toggleKind(["minecraft:diamond_ore"], iron)).toEqual([
+      "minecraft:iron_ore",
+      "minecraft:deepslate_iron_ore",
+      "minecraft:diamond_ore",
+    ]);
+    // A stored half pair reads as chosen; pressing it takes the half away.
+    expect(kindOn(["minecraft:deepslate_iron_ore"], iron)).toBe(true);
+    expect(toggleKind(["minecraft:cobblestone", "minecraft:deepslate_iron_ore"], iron)).toEqual([
+      "minecraft:cobblestone",
+    ]);
+    expect(kindOn(["minecraft:cobblestone"], iron)).toBe(false);
   });
 
   it("reads a stored setting with the contract's defaults", () => {

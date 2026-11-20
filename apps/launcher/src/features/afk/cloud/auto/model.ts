@@ -89,6 +89,22 @@ export function chosenKinds(blocks: readonly string[]): number {
   return MINING_KINDS.filter((ids) => ids.some((id) => blocks.includes(id))).length;
 }
 
+/** The picker's plates, one per kind, in its two groups (the site's 25 choices). */
+export const STONE_KINDS = MINING_KINDS.slice(0, 14);
+export const ORE_KINDS = MINING_KINDS.slice(14);
+
+/** A kind is chosen while either twin is stored (a half pair a stored setting may hold). */
+export function kindOn(chosen: readonly string[], kind: readonly string[]): boolean {
+  return kind.some((id) => chosen.includes(id));
+}
+
+/** A kind's plate pressed, as the site's: on adds both twins in the list's order, off takes both. */
+export function toggleKind(chosen: readonly string[], kind: readonly string[]): string[] {
+  return kindOn(chosen, kind)
+    ? chosen.filter((id) => !kind.includes(id))
+    : orderedBlocks([...chosen, ...kind]);
+}
+
 export const KEEP_MIN = 1;
 export const KEEP_MAX = 100;
 export const IDLE_MIN_SECS = 20;

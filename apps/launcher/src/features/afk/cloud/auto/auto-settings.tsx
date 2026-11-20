@@ -39,15 +39,17 @@ import {
   type FishingSetting,
   fishingOf,
   type IdleMoves,
+  kindOn,
   limitKey,
   MINING_BLOCKS,
   type MiningSetting,
   miningOf,
-  ORES,
+  ORE_KINDS,
   orderedBlocks,
-  STONES,
+  STONE_KINDS,
   slotKey,
   type ToolCare,
+  toggleKind,
   type WhenFull,
   type WordKey,
   withAuto,
@@ -338,26 +340,24 @@ function BlocksRows({
   const name = (block: string) => itemLabel(block, { data, custom: [], unnamed: "" }, lang);
   const some = blocks !== null;
   const chosen = blocks ?? [];
-  const toggle = (block: string) =>
-    onChange(
-      orderedBlocks(
-        chosen.includes(block) ? chosen.filter((b) => b !== block) : [...chosen, block],
-      ),
-    );
-  const group = (title: string, list: readonly string[]) => (
+  // One plate per kind, as on the site: an ore and its deepslate twin go together.
+  const group = (title: string, kinds: readonly (readonly string[])[]) => (
     <div className="flex flex-col gap-1.5">
       <span className="text-[12px] font-medium text-ash-400">{title}</span>
       {/* Fixed columns spread to the row's end: a group ends where the controls do. */}
       <div className="grid grid-cols-[repeat(auto-fill,40px)] justify-between gap-1">
-        {list.map((block) => (
-          <BlockPlate
-            key={block}
-            id={block}
-            name={name(block)}
-            chosen={chosen.includes(block)}
-            onToggle={() => toggle(block)}
-          />
-        ))}
+        {kinds.map((kind) => {
+          const [first = ""] = kind;
+          return (
+            <BlockPlate
+              key={first}
+              id={first}
+              name={name(first)}
+              chosen={kindOn(chosen, kind)}
+              onToggle={() => onChange(toggleKind(chosen, kind))}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -374,7 +374,7 @@ function BlocksRows({
               className="mt-0.5 max-w-[64ch] text-[12.5px] text-pretty text-ash-400"
             >
               {some
-                ? t("cloudAfkAuto.blocks.chosen", { count: chosen.length })
+                ? t("cloudAfkAuto.blocks.chosen", { count: chosenKinds(chosen) })
                 : t("cloudAfkAuto.blocks.allHelp")}
             </p>
           </div>
@@ -396,8 +396,8 @@ function BlocksRows({
       <Fold open={some}>
         <WideRow className="flex flex-col gap-3">
           <PlusItemArt minecraft={version} server={serverLabel(view.account.server)}>
-            {group(t("cloudAfkAuto.blocks.stones"), STONES)}
-            {group(t("cloudAfkAuto.blocks.ores"), ORES)}
+            {group(t("cloudAfkAuto.blocks.stones"), STONE_KINDS)}
+            {group(t("cloudAfkAuto.blocks.ores"), ORE_KINDS)}
           </PlusItemArt>
           {error ? <ErrorText>{error}</ErrorText> : null}
         </WideRow>
