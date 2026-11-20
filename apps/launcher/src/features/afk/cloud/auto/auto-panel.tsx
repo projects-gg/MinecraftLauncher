@@ -15,10 +15,10 @@ import { uiLocale } from "@/lib/format";
 import { openWebLink } from "@/lib/links";
 import { TEXT_LINK } from "@/lib/text-link";
 import type { CloudAccount } from "../api";
-import { WalkButton } from "../movement/movement-panel";
 import { ItemTile, PlusItemArt } from "../plus/item-icon";
 import { itemLabel, usePlusItemData } from "../plus/items";
 import { serverLabel } from "../status";
+import { ChoicePlate } from "./choice-plate";
 import {
   AIM_DIRECTIONS,
   AIM_TILTS,
@@ -85,16 +85,11 @@ function Quiet({ mode, text, action }: { mode: AutoMode; text: string; action?: 
   );
 }
 
-/** A number in the game's own form with its word after it. */
-function Figure({ value, label, big }: { value: number; label: string; big?: boolean }) {
+/** A number in the game's own form with its word after it (one quiet line: no number louder). */
+function Figure({ value, label }: { value: number; label: string }) {
   return (
     <span className="flex items-baseline gap-1.5">
-      <span
-        className={cn(
-          "font-display font-semibold text-bone-50 tabular-nums",
-          big ? "text-[22px] leading-none" : "text-[15px] leading-none",
-        )}
-      >
+      <span className="font-display text-[16px] leading-none font-semibold text-bone-50 tabular-nums">
         {new Intl.NumberFormat(uiLocale()).format(value)}
       </span>
       <span className="text-[12.5px] text-ash-400">{label}</span>
@@ -134,8 +129,9 @@ function ToolTile({ item, dur, max }: { item: string; dur: number; max: number }
   );
 }
 
+/** A section's label: quieter than its rows, so the lists never read as one. */
 function Heading({ children }: { children: ReactNode }) {
-  return <span className="text-[13px] font-medium text-bone-100">{children}</span>;
+  return <span className="text-[12.5px] font-medium text-ash-300">{children}</span>;
 }
 
 export function AutoPanel({
@@ -305,7 +301,6 @@ function AutoBody({
           {mode === "fishing" ? (
             <>
               <Figure
-                big
                 value={fishing?.today.catches ?? 0}
                 label={t("cloudAfkAuto.fishing.caught")}
               />
@@ -317,7 +312,7 @@ function AutoBody({
               <Figure value={fishing?.today.junk ?? 0} label={t("cloudAfkAuto.fishing.junk")} />
             </>
           ) : (
-            <Figure big value={mining?.today.blocks ?? 0} label={t("cloudAfkAuto.mining.broken")} />
+            <Figure value={mining?.today.blocks ?? 0} label={t("cloudAfkAuto.mining.broken")} />
           )}
         </div>
         {rate !== null && rate > 0 ? (
@@ -329,7 +324,7 @@ function AutoBody({
 
       {/* One reserved line, nothing below moves: a refusal (4 s), else what the mode does; its one
           action at the end ("Devam Et" in gold where only the player can go on). */}
-      <div className="flex min-h-8 items-center gap-3">
+      <div className="flex min-h-10 items-center gap-3">
         <div aria-live="polite" className="grid min-w-0 flex-1">
           <AnimatePresence initial={false}>
             {line ? (
@@ -375,7 +370,7 @@ function AutoBody({
       <section aria-label={t(`cloudAfkAuto.${mode}.items`)} className="flex flex-col gap-2">
         <Heading>{t(`cloudAfkAuto.${mode}.items`)}</Heading>
         {items.length ? (
-          <ul className="grid grid-cols-1 gap-x-6 gap-y-1 @min-[460px]/auto:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-x-12 gap-y-1 @min-[460px]/auto:grid-cols-2">
             {items.map((item) => (
               <ItemCount key={item.id} id={item.id} n={item.n} name={name(item.id)} />
             ))}
@@ -471,48 +466,49 @@ function AutoBody({
 
       <section
         aria-label={t("cloudAfkAuto.aim.title")}
-        className="flex flex-col gap-2.5 border-t border-white/7 pt-3"
+        className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-5 gap-y-2 border-t border-white/7 pt-3"
       >
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <Heading>{t("cloudAfkAuto.aim.title")}</Heading>
-          <fieldset
-            aria-label={t("cloudAfkAuto.aim.title")}
-            className="m-0 flex gap-1.5 border-0 p-0"
-          >
-            {(["north", "east", "south", "west"] as const).map((dir) => (
-              <WalkButton
-                key={dir}
-                label={t(`cloudAfkAuto.aim.${dir}`)}
-                ariaLabel={t(`cloudAfkAuto.aim.${dir}`)}
-                pressed={aim.dir === dir}
-                disabled={!aimable}
-                onClick={() => aimAt({ ...aim, dir })}
-              />
-            ))}
-          </fieldset>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <span className="text-[13px] font-medium text-bone-100">
-            {t("cloudAfkAuto.aim.look")}
-          </span>
-          <fieldset
-            aria-label={t("cloudAfkAuto.aim.look")}
-            className="m-0 flex gap-1.5 border-0 p-0"
-          >
-            {(["up", "level", "down"] as const).map((tilt) => (
-              <WalkButton
-                key={tilt}
-                label={t(`cloudAfkAuto.aim.${tilt}`)}
-                ariaLabel={t(`cloudAfkAuto.aim.${tilt}`)}
-                pressed={aim.dir !== null && aim.tilt === tilt}
-                disabled={!aimable || aim.dir === null}
-                onClick={() => aimAt({ ...aim, tilt })}
-              />
-            ))}
-          </fieldset>
-        </div>
+        <span className={cn("text-[13px] font-medium text-bone-100", !aimable && "text-ash-400")}>
+          {t("cloudAfkAuto.aim.title")}
+        </span>
+        <fieldset
+          aria-label={t("cloudAfkAuto.aim.title")}
+          className="m-0 flex flex-wrap gap-1.5 border-0 p-0"
+        >
+          {(["north", "east", "south", "west"] as const).map((dir) => (
+            <ChoicePlate
+              key={dir}
+              label={t(`cloudAfkAuto.aim.${dir}`)}
+              pressed={aim.dir === dir}
+              disabled={!aimable}
+              onClick={() => aimAt({ ...aim, dir })}
+            />
+          ))}
+        </fieldset>
+        <span
+          className={cn(
+            "text-[13px] font-medium text-bone-100",
+            (!aimable || aim.dir === null) && "text-ash-400",
+          )}
+        >
+          {t("cloudAfkAuto.aim.look")}
+        </span>
+        <fieldset
+          aria-label={t("cloudAfkAuto.aim.look")}
+          className="m-0 flex flex-wrap gap-1.5 border-0 p-0"
+        >
+          {(["up", "level", "down"] as const).map((tilt) => (
+            <ChoicePlate
+              key={tilt}
+              label={t(`cloudAfkAuto.aim.${tilt}`)}
+              pressed={aim.dir !== null && aim.tilt === tilt}
+              disabled={!aimable || aim.dir === null}
+              onClick={() => aimAt({ ...aim, tilt })}
+            />
+          ))}
+        </fieldset>
         {aim.dir === null && aimable ? (
-          <p className="text-right text-[12px] text-ash-400">{t("cloudAfkAuto.aim.first")}</p>
+          <p className="col-start-2 text-[12px] text-ash-400">{t("cloudAfkAuto.aim.first")}</p>
         ) : null}
       </section>
 

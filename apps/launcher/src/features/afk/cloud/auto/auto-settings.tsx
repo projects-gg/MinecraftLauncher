@@ -24,13 +24,13 @@ import {
   WideRow,
 } from "../../settings/controls";
 import type { CloudEditData } from "../api";
-import { WalkButton } from "../movement/movement-panel";
 import { PlusItemArt } from "../plus/item-icon";
 import { itemLabel, usePlusItemData } from "../plus/items";
 import { type Draft, type Issue, issueAt } from "../settings-model";
 import { Advanced } from "../setup/question-list";
 import { serverLabel } from "../status";
 import { Disclaimer, limitedPage } from "./auto-panel";
+import { ChoicePlate } from "./choice-plate";
 import {
   type AutoMode,
   defaultFishing,
@@ -128,6 +128,7 @@ function Lead({
   disabled,
   help,
   note,
+  limited,
   onChange,
 }: {
   mode: AutoMode;
@@ -135,6 +136,8 @@ function Lead({
   disabled: boolean;
   help: ReactNode;
   note: string | null;
+  /** The account's server is limited for the mode: no disclaimer, the reason says it all. */
+  limited: boolean;
   onChange: (on: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -153,10 +156,15 @@ function Lead({
           >
             {t(`cloudAfkAuto.${mode}.title`)}
           </label>
-          <p id={`${id}-help`} className="mt-0.5 max-w-[60ch] text-[12.5px] text-ash-400">
+          <p
+            id={`${id}-help`}
+            className="mt-0.5 max-w-[64ch] text-[12.5px] text-pretty text-ash-400"
+          >
             {help}
           </p>
-          {note ? <p className="mt-0.5 max-w-[60ch] text-[12.5px] text-ash-400">{note}</p> : null}
+          {note ? (
+            <p className="mt-0.5 max-w-[64ch] text-[12.5px] text-pretty text-ash-400">{note}</p>
+          ) : null}
         </div>
         <Switch
           id={id}
@@ -168,7 +176,7 @@ function Lead({
           disabled={disabled}
         />
       </div>
-      <Disclaimer className="mt-2" />
+      {limited ? null : <Disclaimer className="mt-2" />}
     </div>
   );
 }
@@ -236,7 +244,10 @@ function FullRows({
             <p className="text-[13.5px] font-medium text-bone-100">
               {t("cloudAfkAuto.full.title")}
             </p>
-            <p id={`${id}-help`} className="mt-0.5 max-w-[52ch] text-[12.5px] text-ash-400">
+            <p
+              id={`${id}-help`}
+              className="mt-0.5 max-w-[64ch] text-[12.5px] text-pretty text-ash-400"
+            >
               {t(`cloudAfkAuto.full.${action}Help`)}
             </p>
           </div>
@@ -285,7 +296,7 @@ function FullRows({
   );
 }
 
-/** One block of the list: its texture, pressed in (gold edge) while chosen. */
+/** One block of the list: its texture on a plate, the quiet plate while chosen. */
 function BlockPlate({
   id,
   name,
@@ -298,34 +309,9 @@ function BlockPlate({
   onToggle: () => void;
 }) {
   return (
-    <button
-      type="button"
-      aria-label={name}
-      aria-pressed={chosen}
-      title={name}
-      data-on={chosen ? "" : undefined}
-      onClick={onToggle}
-      className={cn(
-        "group relative isolate grid size-[40px] cursor-pointer place-items-center select-none [--cut:6px]",
-        "transition-[transform,scale] duration-150 ease-out active:scale-[0.96] focus-visible:outline-none",
-      )}
-    >
-      <span
-        aria-hidden
-        className="chamfer-ring absolute -z-20 bg-gold-300 opacity-0 transition-opacity group-focus-visible:opacity-100"
-      />
-      <span
-        aria-hidden
-        className="chamfer absolute inset-0 -z-10 bg-white/10 transition-colors duration-150 group-hover:bg-white/20 group-data-[on]:bg-gold-500/70"
-      />
-      <span
-        aria-hidden
-        className="chamfer absolute inset-px -z-10 bg-obsidian-800 transition-colors duration-150 group-data-[on]:bg-[color-mix(in_oklab,var(--color-gold-500)_14%,var(--color-obsidian-800))]"
-      />
-      <span className="opacity-40 transition-opacity duration-150 group-hover:opacity-70 group-data-[on]:opacity-100">
-        <ItemSprite id={id} size={16} />
-      </span>
-    </button>
+    <ChoicePlate square label={name} title={name} pressed={chosen} onClick={onToggle}>
+      <ItemSprite id={id} size={16} />
+    </ChoicePlate>
   );
 }
 
@@ -358,7 +344,8 @@ function BlocksRows({
   const group = (title: string, list: readonly string[]) => (
     <div className="flex flex-col gap-1.5">
       <span className="text-[12px] font-medium text-ash-400">{title}</span>
-      <div className="flex flex-wrap gap-1">
+      {/* Fixed columns spread to the row's end: a group ends where the controls do. */}
+      <div className="grid grid-cols-[repeat(auto-fill,40px)] justify-between gap-1">
         {list.map((block) => (
           <BlockPlate
             key={block}
@@ -379,7 +366,10 @@ function BlocksRows({
             <p className="text-[13.5px] font-medium text-bone-100">
               {t("cloudAfkAuto.blocks.title")}
             </p>
-            <p id={`${id}-help`} className="mt-0.5 max-w-[52ch] text-[12.5px] text-ash-400">
+            <p
+              id={`${id}-help`}
+              className="mt-0.5 max-w-[64ch] text-[12.5px] text-pretty text-ash-400"
+            >
               {some
                 ? t("cloudAfkAuto.blocks.chosen", { count: chosen.length })
                 : t("cloudAfkAuto.blocks.allHelp")}
@@ -429,15 +419,14 @@ function IdleRows({
     <>
       <WideRow>
         <p className="text-[13.5px] font-medium text-bone-100">{t("cloudAfkAuto.idle.title")}</p>
-        <p className="mt-0.5 max-w-[52ch] text-[12.5px] text-ash-400">
+        <p className="mt-0.5 max-w-[64ch] text-[12.5px] text-pretty text-ash-400">
           {t("cloudAfkAuto.idle.help")}
         </p>
         <div className="mt-2.5 flex flex-wrap gap-1.5">
           {(["look", "sneak", "jump", "step"] as const).map((move) => (
-            <WalkButton
+            <ChoicePlate
               key={move}
               label={t(`cloudAfkAuto.idle.${move}`)}
-              ariaLabel={t(`cloudAfkAuto.idle.${move}`)}
               pressed={idle[move]}
               onClick={() => onChange({ ...idle, [move]: !idle[move] })}
             />
@@ -550,6 +539,7 @@ export function AutoQuestion({
         disabled={Boolean(limited) || (Boolean(waiting) && !on)}
         help={help}
         note={note}
+        limited={Boolean(limited)}
         onChange={(enabled) => write({ ...current(), enabled })}
       />
       {/* A choice of the folded part still wrong (it goes with the setting): said here. */}
