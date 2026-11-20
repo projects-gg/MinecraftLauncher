@@ -479,10 +479,10 @@ export function AutoQuestion({
   const other: AutoMode = mode === "fishing" ? "mining" : "fishing";
   const otherOf = (config: Draft["config"]) =>
     other === "fishing" ? fishingOf(config.fishing) : miningOf(config.mining);
-  // The site's rule: under both switches while one mode is on, named by the mode that is on.
+  // The site's rule: only while the other mode is on, under this switch, naming the other.
   const otherOffered = view.account.features?.[other]?.mode === "on";
-  const busy: AutoMode | null = on ? mode : otherOf(draft.config)?.enabled ? other : null;
-  const note = otherOffered && busy ? t(`cloudAfkAuto.exclusive.${busy}`) : null;
+  const note =
+    otherOffered && otherOf(draft.config)?.enabled ? t(`cloudAfkAuto.exclusive.${other}`) : null;
   const refused = issueAt(issues, "general", null, mode);
   const refusal = refused
     ? refused.problem === "off" || refused.problem === "limited" || refused.problem === "other"

@@ -27,7 +27,7 @@ export const trCloudAfkAuto = {
   },
   disclaimer: "Her sunucuda tek tek denenmedi. Her sunucuda çalışacağı garanti edilmez.",
   // One job at a time (the head agent, 20 Nov): under one mode's switch while the other is on.
-  // Under both switches while one mode is on (the site's words): named by the mode that is on.
+  // Under one mode's switch while the other is on (the site's words), naming the one that is on.
   exclusive: {
     fishing: "Hesap aynı anda tek iş yapar. Balık tutarken kazmaz.",
     mining: "Hesap aynı anda tek iş yapar. Kazarken balık tutmaz.",
