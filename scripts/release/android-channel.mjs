@@ -435,6 +435,43 @@ function apkFacts(apk, sdkFlag) {
   return facts;
 }
 
+/** The entry names of a zip's central directory (an APK is a zip). */
+export function zipEntryNames(bytes) {
+  const min = Math.max(0, bytes.length - 65_557);
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= min; i--) {
+    if (bytes.readUInt32LE(i) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) throw new Error("not a zip: no end of central directory");
+  const count = bytes.readUInt16LE(eocd + 10);
+  let at = bytes.readUInt32LE(eocd + 16);
+  if (count === 0xffff || at === 0xffffffff) throw new Error("zip64 APKs are not read");
+  const names = [];
+  for (let n = 0; n < count; n++) {
+    if (bytes.readUInt32LE(at) !== 0x02014b50) throw new Error("a broken central directory");
+    const nameLen = bytes.readUInt16LE(at + 28);
+    const extraLen = bytes.readUInt16LE(at + 30);
+    const commentLen = bytes.readUInt16LE(at + 32);
+    names.push(bytes.subarray(at + 46, at + 46 + nameLen).toString("utf8"));
+    at += 46 + nameLen + extraLen + commentLen;
+  }
+  return names;
+}
+
+/**
+ * What must not ride in a published APK: the JRE 8 component (docs/mobile.md: Java 8 downloads on
+ * demand from 0.4.5; a git-ignored assets/components/jre left in a tree slipped into 0.5.0's first
+ * build and into 0.5.6, +25 MB). --allow-jre takes it anyway.
+ */
+export const STRAY_APK_PREFIXES = ["assets/components/jre/"];
+
+export function strayEntries(names) {
+  return names.filter((name) => STRAY_APK_PREFIXES.some((prefix) => name.startsWith(prefix)));
+}
+
 function fileFacts(path) {
   const bytes = readFileSync(path);
   return { bytes, size: bytes.length, sha256: sha256Hex(bytes) };
@@ -490,6 +527,12 @@ async function make(flags) {
     );
   }
   const apk = fileFacts(flags.apk);
+  const stray = strayEntries(zipEntryNames(apk.bytes));
+  if (stray.length > 0 && !flags["allow-jre"]) {
+    throw new Error(
+      `the APK carries ${stray.length} file(s) of ${STRAY_APK_PREFIXES.join(", ")} (e.g. ${stray[0]}): move the git-ignored assets/components/jre out of the tree and build again, or pass --allow-jre`,
+    );
+  }
   const doc = buildChannel({
     facts,
     size: apk.size,
@@ -758,6 +801,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       url: "string",
       "dry-run": "boolean",
       "allow-downgrade": "boolean",
+      "allow-jre": "boolean",
       "no-prune": "boolean",
       "keep-days": "string",
     });

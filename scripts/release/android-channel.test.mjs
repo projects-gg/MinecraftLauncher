@@ -23,6 +23,8 @@ import {
   minisignVerify,
   parseBadging,
   parseSigners,
+  strayEntries,
+  zipEntryNames,
   planPrune,
   RELEASE_CERT,
   readMakeNotes,
@@ -558,4 +560,51 @@ test("publish cleans up folders no channel names, 3 days after a newer one, but 
   const blocked = await channelTool("publish", "--dir", madeFolder("0.4.8", 24, randomBytes(512)));
   assert.match(blocked.stdout, /clean-up skipped: v1\/android\/beta\.json does not verify/);
   assert.ok(objects.has("v1/android/0.4.3/projects-launcher-0.4.3.apk"));
+});
+
+/** A zip with the given names and no data (stored, empty), as the central directory reader sees it. */
+function emptyZip(names) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const name of names) {
+    const n = Buffer.from(name, "utf8");
+    const local = Buffer.alloc(30 + n.length);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(n.length, 26);
+    n.copy(local, 30);
+    const central = Buffer.alloc(46 + n.length);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(n.length, 28);
+    central.writeUInt32LE(offset, 42);
+    n.copy(central, 46);
+    locals.push(local);
+    centrals.push(central);
+    offset += local.length;
+  }
+  const cd = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(names.length, 8);
+  eocd.writeUInt16LE(names.length, 10);
+  eocd.writeUInt32LE(cd.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, cd, eocd]);
+}
+
+test("an APK with the JRE 8 component is stray", () => {
+  const names = [
+    "AndroidManifest.xml",
+    "assets/components/lwjgl3/version",
+    "assets/components/jre/universal.tar.xz",
+  ];
+  assert.deepEqual(zipEntryNames(emptyZip(names)), names);
+  assert.deepEqual(strayEntries(zipEntryNames(emptyZip(names))), [
+    "assets/components/jre/universal.tar.xz",
+  ]);
+  assert.deepEqual(
+    strayEntries(["assets/components/jre-21/x", "assets/components/lwjgl3/version"]),
+    [],
+  );
+  assert.throws(() => zipEntryNames(Buffer.from("not a zip at all, just bytes")), /not a zip/);
 });
