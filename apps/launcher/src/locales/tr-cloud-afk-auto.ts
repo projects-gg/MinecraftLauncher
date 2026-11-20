@@ -26,6 +26,12 @@ export const trCloudAfkAuto = {
     limited: "Bu sunucuda kapalı",
   },
   disclaimer: "Her sunucuda tek tek denenmedi. Her sunucuda çalışacağı garanti edilmez.",
+  // One job at a time (the head agent, 20 Nov): under one mode's switch while the other is on.
+  // Under both switches while one mode is on (the site's words): named by the mode that is on.
+  exclusive: {
+    fishing: "Hesap aynı anda tek iş yapar. Balık tutarken kazmaz.",
+    mining: "Hesap aynı anda tek iş yapar. Kazarken balık tutmaz.",
+  },
   limitedLink: "Sınırlı Sunucular",
   fishing: {
     title: "Otomatik Balık Tutma",
@@ -54,6 +60,8 @@ export const trCloudAfkAuto = {
     noRod: "Envanterde olta yok. Olta gelince başlar.",
     rodLow: "Oltanın dayanıklılığı azaldı. Başka olta gelince devam eder.",
     noWater: "Önünde su bulamadı. Suya doğru çevir.",
+    otherFirst: "Kazma açıkken balık tutmaz.",
+    otherOn: "Önce otomatik kazmayı kapat.",
     tool: "Olta",
     noTool: "Elinde olta yok.",
     caught: "Yakalanan",
@@ -88,6 +96,8 @@ export const trCloudAfkAuto = {
     noTool: "Envanterde kazma yok. Kazma gelince başlar.",
     toolLow: "Kazmanın dayanıklılığı azaldı. Başka kazma gelince devam eder.",
     noTarget: "Önünde kıracak blok yok. Blok gelince devam eder.",
+    otherFirst: "Balık tutma açıkken kazmaz.",
+    otherOn: "Önce otomatik balık tutmayı kapat.",
     tool: "Kazma",
     noToolHeld: "Elinde kazma yok.",
     broken: "Kırılan",
@@ -109,8 +119,8 @@ export const trCloudAfkAuto = {
     commandPlaceholder: "/sell all",
     empty: "Bir komut yaz.",
     secret: "Buraya şifre ya da gizli bir şey yazma.",
-    // Under a command a moderation case paused (after the command rows' own line).
-    pausedWait: "Şimdilik envanter dolunca bekler.",
+    // Under a command a moderation case paused (the view's full.paused).
+    paused: "Bu komut inceleniyor. Şimdilik envanter dolunca bekler.",
   },
   blocks: {
     title: "Hangi Blokları Kırsın?",
@@ -148,7 +158,6 @@ export const trCloudAfkAuto = {
   resume: "Devam Et",
   reconnect: "Şimdi Yeniden Bağlan",
   durability: "{{dur}} / {{max}}",
-  enchanted: "Büyülü",
   refusal: {
     slow: "Biraz yavaş.",
     turnTrade: "Takas sürerken çevrilemez.",

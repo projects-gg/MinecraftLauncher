@@ -23,6 +23,10 @@ export const enCloudAfkAuto = {
     limited: "Off on this server",
   },
   disclaimer: "Not tested server by server. It is not guaranteed to work on every server.",
+  exclusive: {
+    fishing: "An account does one job at a time. It doesn't mine while it fishes.",
+    mining: "An account does one job at a time. It doesn't fish while it mines.",
+  },
   limitedLink: "Limited Servers",
   fishing: {
     title: "Auto-Fishing",
@@ -52,6 +56,8 @@ export const enCloudAfkAuto = {
     noRod: "There's no rod in the inventory. It starts when it gets one.",
     rodLow: "The rod is nearly worn out. It goes on when it gets another.",
     noWater: "It can't find water in front of it. Turn it toward the water.",
+    otherFirst: "It doesn't fish while mining is on.",
+    otherOn: "Turn off auto-mining first.",
     tool: "Rod",
     noTool: "No rod in hand.",
     caught: "Caught",
@@ -86,6 +92,8 @@ export const enCloudAfkAuto = {
     noTool: "There's no pickaxe in the inventory. It starts when it gets one.",
     toolLow: "The pickaxe is nearly worn out. It goes on when it gets another.",
     noTarget: "Nothing to break in front of it. It goes on when a block appears.",
+    otherFirst: "It doesn't mine while fishing is on.",
+    otherOn: "Turn off auto-fishing first.",
     tool: "Pickaxe",
     noToolHeld: "No pickaxe in hand.",
     broken: "Broken",
@@ -107,7 +115,7 @@ export const enCloudAfkAuto = {
     commandPlaceholder: "/sell all",
     empty: "Type a command.",
     secret: "Don't type a password or anything secret here.",
-    pausedWait: "Until then it waits when the inventory is full.",
+    paused: "This command is being reviewed. Until then it waits when the inventory is full.",
   },
   blocks: {
     title: "Which Blocks?",
@@ -145,7 +153,6 @@ export const enCloudAfkAuto = {
   resume: "Resume",
   reconnect: "Reconnect Now",
   durability: "{{dur}} / {{max}}",
-  enchanted: "Enchanted",
   refusal: {
     slow: "A little slower.",
     turnTrade: "It can't turn during a trade.",
