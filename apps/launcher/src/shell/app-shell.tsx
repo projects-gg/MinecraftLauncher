@@ -1,7 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 import { useEffect } from "react";
-import heroFallback from "@/assets/art/hero-dragon-1.webp";
 import { useSelectedAccountMirror } from "@/features/accounts/use-own-launch";
 import { DropHost } from "@/features/drop/drop-host";
 import { GameSwitchDialog } from "@/features/game-switch/switch-dialog";
@@ -22,6 +21,7 @@ import {
   WhatsNew,
 } from "@/features/updates/update-ui";
 import { api } from "@/lib/api";
+import { heroArt, heroArtSrcSet } from "@/lib/hero-art";
 import { detectOs } from "@/lib/platform";
 import { homeParticles, pageClock, seasonLook, startSeasonClock } from "@/lib/season";
 import {
@@ -137,6 +137,7 @@ export function AppShell() {
   const newsId = useSearch({ strict: false, select: (s) => (s as { news?: string }).news });
   const navigate = useNavigate();
   const { data } = useQuery({ queryKey: ["home-content"], queryFn: () => api.homeContent() });
+  const heroUrl = data?.hero.imageUrl ?? heroArt;
   const home = pathname === "/";
   const migrationOpen = useUi((s) => s.migrationOpen);
   const setMigrationOpen = useUi((s) => s.setMigrationOpen);
@@ -160,7 +161,8 @@ export function AppShell() {
       <EventReminders />
       <SeasonClock until={data?.season?.until} />
       <Backdrop
-        imageUrl={data?.hero.imageUrl ?? heroFallback}
+        imageUrl={heroUrl}
+        srcSet={heroArtSrcSet(heroUrl)}
         variant={home ? "home" : "page"}
         particles={homeParticles(particlesOn, data?.hero.particles ?? "embers", season)}
         palette={season.palette}

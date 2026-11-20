@@ -32,7 +32,6 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import heroArt from "@/assets/art/hero-dragon-1.webp";
 import logo from "@/assets/brand/logo-96.webp";
 import { AccountFace } from "@/features/accounts/account-face";
 import { sortAccounts } from "@/features/accounts/account-order";
@@ -47,6 +46,7 @@ import { MicrosoftLoginDialog } from "@/features/settings/accounts-section";
 import { MicrosoftMark } from "@/features/settings/microsoft-mark";
 import { api, type InstanceSummary, type LegacyScan } from "@/lib/api";
 import { applyStartOnBoot } from "@/lib/autostart";
+import { heroArt, heroArtSrcSet } from "@/lib/hero-art";
 import { isTauri } from "@/lib/platform";
 import { TEXT_LINK } from "@/lib/text-link";
 import { InstanceIcon } from "@/shell/instance-icon";
@@ -198,6 +198,9 @@ export function Onboarding() {
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <img
           src={heroArt}
+          srcSet={heroArtSrcSet(heroArt)}
+          // Full window, covered by 16:9 art (HERO-SHARP, lib/hero-art.ts).
+          sizes="max(100vw, 178vh)"
           alt=""
           draggable={false}
           className="size-full object-cover object-[80%_center] opacity-90"

@@ -19,6 +19,7 @@ import { DEFAULT_SCRIM } from "@/lib/season";
  */
 export function Backdrop({
   imageUrl,
+  srcSet,
   variant,
   particles,
   palette = "ember",
@@ -27,6 +28,8 @@ export function Backdrop({
   grade,
 }: {
   imageUrl: string;
+  /** Larger copies of the art for Home's sharp layer (`lib/hero-art.ts`); the blurred layers keep `imageUrl`. */
+  srcSet?: string;
   variant: "home" | "page";
   particles: ParticleKind;
   palette?: EmberPalette;
@@ -86,8 +89,13 @@ export function Backdrop({
               while the player rests: it runs on the compositor, but every frame of it is a
               composite of the whole scene under the glass blurs, at the display's rate (OPT2).
               It moves a few pixels a second at most, so holding and moving on never shows. */}
+          {/* The art is drawn over the window plus 48 px (object-cover, so by height on windows
+              narrower than its 16:9) and the drift zooms it up to 1.13: `sizes` asks for that
+              width, so a large or scaled window gets a copy that is not stretched (HERO-SHARP). */}
           <img
             src={imageUrl}
+            srcSet={srcSet}
+            sizes={srcSet ? HOME_ART_SIZES : undefined}
             alt=""
             draggable={false}
             className="size-full animate-kenburns object-cover object-[88%_center]"
@@ -168,6 +176,9 @@ export function Backdrop({
     </>
   );
 }
+
+/** The sharp layer's drawn width: the box (window + 48 px) covered by 16:9 art, zoomed 1.13. */
+const HOME_ART_SIZES = "max(calc((100vw + 48px) * 1.13), calc((100vh + 48px) * 2.01))";
 
 /** The art's width in the pre-blurred copy: stretched over the window it reads as a ~40 px blur. */
 const PERF_ART_WIDTH = 48;
