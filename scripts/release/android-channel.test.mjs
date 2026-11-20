@@ -263,6 +263,13 @@ test("reading aapt2's badging and apksigner's certificates", () => {
   ].join("\r\n");
   assert.deepEqual(parseSigners(signers), [RELEASE_CERT]);
   assert.deepEqual(parseSigners("Signer #1 certificate SHA-256 digest: 0A:AB:80\n"), ["0aab80"]);
+  // build-tools 37's apksigner names the scheme instead of the signer's number.
+  assert.deepEqual(
+    parseSigners(
+      "V2 Signer: certificate DN: CN=Projects\nV2 Signer: certificate SHA-256 digest: 0a:ab:80\n",
+    ),
+    ["0aab80"],
+  );
   assert.throws(() => parseSigners("Verifies\n"), /no signer/);
 });
 

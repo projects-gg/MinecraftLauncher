@@ -391,7 +391,9 @@ export function parseBadging(text) {
 /** `apksigner verify --print-certs`: each signer's certificate SHA-256 (lowercase hex). */
 export function parseSigners(text) {
   const certs = [
-    ...text.matchAll(/^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F:]+)\s*$/gm),
+    ...text.matchAll(
+      /^(?:Signer #\d+|V\d+(?:\.\d+)? Signer:?) certificate SHA-256 digest: ([0-9a-fA-F:]+)\s*$/gm,
+    ),
   ].map((m) => m[1].replace(/:/g, "").toLowerCase());
   if (certs.length === 0) throw new Error("apksigner printed no signer");
   return [...new Set(certs)];
