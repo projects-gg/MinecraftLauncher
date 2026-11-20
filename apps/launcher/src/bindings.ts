@@ -4863,6 +4863,12 @@ export type CloudWhenFull = {
 	do?: string,
 	/**  Only with `command`: plain words under the text rules, never a secret. */
 	command?: string | null,
+	/**
+	 *  The view's mark that a moderation case paused the command (the machine waits meanwhile, as
+	 *  with `wait`): never stored, dropped when the setting is written back; changing the command
+	 *  or `do` has it read again (FISHMINE-W `9b7aad4f`).
+	 */
+	paused?: CloudModPaused | null,
 };
 
 /**
