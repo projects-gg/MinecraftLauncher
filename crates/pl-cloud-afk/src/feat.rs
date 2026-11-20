@@ -12,6 +12,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::auto::CloudAutoFeature;
 use crate::model::{CloudConsoleLine, CloudLocalized};
 use crate::movement::CloudMovementFeature;
 use crate::text::{MAX_TEXT_UNITS, without_leading_ignorable};
@@ -39,6 +40,10 @@ pub struct OfferFeatures {
     pub console_looks: bool,
     /// Studio's dialog cards switch (DIALOG-CARD), likewise.
     pub dialog_cards: bool,
+    /// Studio's auto-fishing and auto-mining switches (FISHMINE): the modes are offered. Off from a
+    /// service before them.
+    pub fishing: bool,
+    pub mining: bool,
 }
 
 impl Default for OfferFeatures {
@@ -48,6 +53,8 @@ impl Default for OfferFeatures {
             console_kinds: false,
             console_looks: false,
             dialog_cards: false,
+            fishing: false,
+            mining: false,
             placeholders: false,
             placeholder_commands: DEFAULT_PLACEHOLDER_COMMANDS
                 .iter()
@@ -79,6 +86,10 @@ pub struct CloudFeatures {
     pub placeholders: bool,
     /// The commands a reply with placeholders may start with (without `/`, lower case).
     pub placeholder_commands: Vec<String>,
+    /// Auto-fishing and auto-mining are offered (FISHMINE; each account says whether it may use
+    /// them).
+    pub fishing: bool,
+    pub mining: bool,
 }
 
 impl From<&OfferFeatures> for CloudFeatures {
@@ -92,6 +103,8 @@ impl From<&OfferFeatures> for CloudFeatures {
                 .iter()
                 .map(|c| c.to_ascii_lowercase())
                 .collect(),
+            fishing: offer.fishing,
+            mining: offer.mining,
         }
     }
 }
@@ -136,6 +149,10 @@ pub struct CloudAccountFeatures {
     /// Movement (README "Movement"); None from a service before it: nothing of it shows and the
     /// account's `config.movement` is never sent.
     pub movement: Option<CloudMovementFeature>,
+    /// Auto-fishing and auto-mining (README "Auto-fishing and auto-mining"); None from a service
+    /// before them: nothing of the mode shows and the account's `config.<mode>` is never sent.
+    pub fishing: Option<CloudAutoFeature>,
+    pub mining: Option<CloudAutoFeature>,
 }
 
 /// The account's own inventory choice (`config.inventory`; absent: never chosen).

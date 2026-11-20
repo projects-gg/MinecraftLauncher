@@ -381,9 +381,11 @@ pub fn plan(
             },
             commands: plan.commands,
             rules: plan.rules,
-            // The cloud account's own inventory and movement choices stay as they are.
+            // The cloud account's own inventory, movement and auto mode choices stay as they are.
             inventory: None,
             movement: None,
+            fishing: None,
+            mining: None,
         },
         dropped: plan.dropped,
         adjusted: plan.adjusted,

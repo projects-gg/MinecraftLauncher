@@ -23,6 +23,10 @@
 //! Movement (README "Movement"): the "Hareket" panel on screen watches with `move: true` (`movst`
 //! and `pos` stream) and stops it with `move: false`; its operations go out as `move` frames and
 //! come back as `movres`. Inventory and movement may stream together.
+//!
+//! Auto-fishing and auto-mining (README "Auto on the live socket"): the "Balık" or "Kazma" panel on
+//! screen watches with `auto: true` (`autost` streams, both modes on one flag) and stops it with
+//! `auto: false`; their operations go out as `auto` frames and come back as `autores`.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
@@ -43,6 +47,7 @@ use tokio_tungstenite::tungstenite::{self, Message};
 use tokio_tungstenite::{Connector, connect_async_tls_with_config};
 use url::Url;
 
+use crate::auto::{CloudAutoError, CloudFishState, CloudMineState, fish_state, mine_state};
 use crate::client::Bearer;
 use crate::feat::{
     CloudBarText, CloudBars, CloudBossBar, CloudInvError, CloudInvItem, CloudTitleBar, CloudWinOpen,
@@ -177,6 +182,20 @@ pub enum CloudLiveEvent {
         ok: bool,
         error: Option<CloudMovementError>,
     },
+    /// Auto-fishing and auto-mining (watched with `auto`): what the modes do, first after the watch
+    /// (each mode the account has), then on change. A mode left out is as it was.
+    AutoState {
+        acct: String,
+        fishing: Option<CloudFishState>,
+        mining: Option<CloudMineState>,
+    },
+    /// The answer to an operation this launcher sent (`id` its own): `ok` means the account's client
+    /// took it; what happens shows in the `autoState` that follows.
+    AutoResult {
+        id: String,
+        ok: bool,
+        error: Option<CloudAutoError>,
+    },
     /// A watched account's server dialog (DIALOG-CARD): `dialog`, its JSON as the service checked
     /// it (the view checks it again: `safeDialog`), or none when it closed. `rev` names it.
     /// `wait` (client 4.2.5): none shows because the game shows its "waiting for response" screen
@@ -228,30 +247,38 @@ enum Command {
         id: String,
         frame: String,
     },
+    /// An auto operation (`auto` frame, its `id`) for the account's machine.
+    AutoOp {
+        id: String,
+        frame: String,
+    },
 }
 
 /// What a socket streams of a watched account besides its console: the AI (the AFK+ panel), the
-/// inventory (a view on screen), movement (the "Hareket" panel on screen).
+/// inventory (a view on screen), movement (the "Hareket" panel on screen), the auto modes (the
+/// "Balık" or "Kazma" panel on screen).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct Streams {
     ai: bool,
     inv: bool,
     movement: bool,
+    auto: bool,
 }
 
-/// Who watches an account: its console, the AFK+ panel, an inventory view, the movement panel, or
-/// several.
+/// Who watches an account: its console, the AFK+ panel, an inventory view, the movement panel, an
+/// auto panel, or several.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct Want {
     console: bool,
     ai: bool,
     inv: bool,
     movement: bool,
+    auto: bool,
 }
 
 impl Want {
     fn any(self) -> bool {
-        self.console || self.ai || self.inv || self.movement
+        self.console || self.ai || self.inv || self.movement || self.auto
     }
 
     fn streams(self) -> Streams {
@@ -259,6 +286,7 @@ impl Want {
             ai: self.ai,
             inv: self.inv,
             movement: self.movement,
+            auto: self.auto,
         }
     }
 }
@@ -321,6 +349,12 @@ impl LiveHub {
     /// (`move: true`).
     pub fn watch_movement(&self, url: Url, token: Bearer, host: &str, acct: &str) {
         self.start(url, token, host, acct, |want| want.movement = true);
+    }
+
+    /// An auto panel ("Balık" or "Kazma") is on screen: streams `acct`'s auto states too
+    /// (`auto: true`).
+    pub fn watch_auto(&self, url: Url, token: Bearer, host: &str, acct: &str) {
+        self.start(url, token, host, acct, |want| want.auto = true);
     }
 
     fn start(&self, url: Url, token: Bearer, host: &str, acct: &str, change: fn(&mut Want)) {
@@ -393,6 +427,11 @@ impl LiveHub {
         self.stop(acct, |want| want.movement = false);
     }
 
+    /// The auto panels left the screen (`auto: false`, or the socket closes with them).
+    pub fn unwatch_auto(&self, acct: &str) {
+        self.stop(acct, |want| want.auto = false);
+    }
+
     /// Sends a move (`op`, the app's `InvOp`, shape already checked) for `acct` with the app's own
     /// `id`; its answer comes back as [`CloudLiveEvent::InvResult`]. False when no socket streams
     /// that account's inventory (the caller answers `host_offline`).
@@ -433,6 +472,26 @@ impl LiveHub {
             })
     }
 
+    /// Sends an auto operation (`op`, the app's `AutoOp`, shape already checked) for `acct` with
+    /// the app's own `id`; its answer comes back as [`CloudLiveEvent::AutoResult`]. False when no
+    /// socket streams that account's auto states (the caller answers `host_offline`).
+    pub fn auto_op(&self, acct: &str, id: &str, op: &serde_json::Value) -> bool {
+        let frame =
+            serde_json::json!({ "t": "auto", "acct": acct, "id": id, "op": op }).to_string();
+        let hosts = self.hub.hosts.lock();
+        hosts
+            .values()
+            .find(|task| task.watched.get(acct).is_some_and(|want| want.auto))
+            .is_some_and(|task| {
+                task.commands
+                    .send(Command::AutoOp {
+                        id: id.to_owned(),
+                        frame,
+                    })
+                    .is_ok()
+            })
+    }
+
     fn stop(&self, acct: &str, change: fn(&mut Want)) {
         let mut hosts = self.hub.hosts.lock();
         let mut emptied = None;
@@ -446,7 +505,8 @@ impl LiveHub {
                 continue;
             }
             if want.any() {
-                // Still watched, now without its AI, its inventory or its movement (or with).
+                // Still watched, now without its AI, its inventory, its movement or its auto
+                // modes (or with).
                 let _ = task.commands.send(Command::Watch {
                     acct: acct.to_owned(),
                     streams: want.streams(),
@@ -729,6 +789,22 @@ enum Incoming {
         #[serde(default)]
         error: Option<CloudMovementError>,
     },
+    // Each mode read on its own: one out of shape never costs the other.
+    Autost {
+        acct: String,
+        #[serde(default)]
+        fishing: Option<serde_json::Value>,
+        #[serde(default)]
+        mining: Option<serde_json::Value>,
+    },
+    Autores {
+        #[serde(default)]
+        id: String,
+        #[serde(default)]
+        ok: bool,
+        #[serde(default)]
+        error: Option<CloudAutoError>,
+    },
     Dlg {
         acct: String,
         #[serde(default)]
@@ -860,6 +936,20 @@ impl Incoming {
                 ok: ok && error.is_none(),
                 error,
             },
+            Self::Autost {
+                acct,
+                fishing,
+                mining,
+            } => CloudLiveEvent::AutoState {
+                acct,
+                fishing: fish_state(fishing),
+                mining: mine_state(mining),
+            },
+            Self::Autores { id, ok, error } => CloudLiveEvent::AutoResult {
+                id,
+                ok: ok && error.is_none(),
+                error,
+            },
             // A dialog out of shape or too large shows as none (the view checks the rest).
             Self::Dlg {
                 acct,
@@ -920,6 +1010,15 @@ fn movement_unsent(id: String) -> CloudLiveEvent {
     }
 }
 
+/// An auto operation that could not go out (the machine's socket is away).
+fn auto_unsent(id: String) -> CloudLiveEvent {
+    CloudLiveEvent::AutoResult {
+        id,
+        ok: false,
+        error: Some(CloudAutoError::new("host_offline")),
+    }
+}
+
 #[derive(Default, Deserialize)]
 #[serde(default)]
 struct HelloHost {
@@ -937,33 +1036,60 @@ fn watch_frame(t: &str, acct: &str) -> String {
 /// `watch`, with `ai: true` for the AFK+ panel.
 #[cfg(test)]
 fn watch_ai_frame(acct: &str, ai: bool) -> String {
-    watch_streams_frame(acct, ai, None, None)
+    watch_streams_frame(acct, ai, StreamChange::default())
 }
 
-/// `watch` with `ai: true` for the AFK+ panel, `inv` when the inventory stream starts (`true`)
-/// or stops (`false`), and `move` the same for movement (left out, a stream stays as it was).
-fn watch_streams_frame(acct: &str, ai: bool, inv: Option<bool>, movement: Option<bool>) -> String {
+/// The streams a `watch` starts (`true`) or stops (`false`); left out, a stream stays as it was.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct StreamChange {
+    inv: Option<bool>,
+    movement: Option<bool>,
+    auto: Option<bool>,
+}
+
+impl StreamChange {
+    /// From `old` to `new` on the same subscription.
+    fn between(old: Streams, new: Streams) -> Self {
+        let changed = |was: bool, now: bool| (was != now).then_some(now);
+        Self {
+            inv: changed(old.inv, new.inv),
+            movement: changed(old.movement, new.movement),
+            auto: changed(old.auto, new.auto),
+        }
+    }
+
+    /// What a new subscription asks for (only the streams that are on).
+    fn first(streams: Streams) -> Self {
+        Self {
+            inv: streams.inv.then_some(true),
+            movement: streams.movement.then_some(true),
+            auto: streams.auto.then_some(true),
+        }
+    }
+}
+
+/// `watch` with `ai: true` for the AFK+ panel, and `inv`, `move` and `auto` for the streams that
+/// start or stop.
+fn watch_streams_frame(acct: &str, ai: bool, change: StreamChange) -> String {
     let mut frame = serde_json::json!({ "t": "watch", "acct": acct });
     if ai {
         frame["ai"] = serde_json::Value::Bool(true);
     }
-    if let Some(inv) = inv {
+    if let Some(inv) = change.inv {
         frame["inv"] = serde_json::Value::Bool(inv);
     }
-    if let Some(movement) = movement {
+    if let Some(movement) = change.movement {
         frame["move"] = serde_json::Value::Bool(movement);
+    }
+    if let Some(auto) = change.auto {
+        frame["auto"] = serde_json::Value::Bool(auto);
     }
     frame.to_string()
 }
 
 /// The streams a new subscription asks for (only those that are on).
 fn first_watch_frame(acct: &str, streams: Streams) -> String {
-    watch_streams_frame(
-        acct,
-        streams.ai,
-        streams.inv.then_some(true),
-        streams.movement.then_some(true),
-    )
+    watch_streams_frame(acct, streams.ai, StreamChange::first(streams))
 }
 
 /// One machine's socket until nobody watches or it must not reopen.
@@ -1039,6 +1165,7 @@ async fn run(
                     // Never queued for later: a move made now must not land in a later state.
                     Some(Command::InvOp { id, .. }) => sink(unsent(id)),
                     Some(Command::MovementOp { id, .. }) => sink(movement_unsent(id)),
+                    Some(Command::AutoOp { id, .. }) => sink(auto_unsent(id)),
                 },
             }
         }
@@ -1065,6 +1192,7 @@ async fn connected(
             }
             Ok(Command::InvOp { id, .. }) => sink(unsent(id)),
             Ok(Command::MovementOp { id, .. }) => sink(movement_unsent(id)),
+            Ok(Command::AutoOp { id, .. }) => sink(auto_unsent(id)),
             Err(mpsc::error::TryRecvError::Empty) => break,
             Err(mpsc::error::TryRecvError::Disconnected) => return Outcome::Done,
         }
@@ -1144,19 +1272,18 @@ async fn connected(
                     let sent = match before {
                         Some(same) if same == streams => true,
                         // The AI's stream ends only with the subscription: watch again without it
-                        // (the inventory's and movement's come back with the new subscription).
+                        // (the inventory's, movement's and the auto modes' come back with the new
+                        // subscription).
                         Some(old) if old.ai && !streams.ai => {
                             let again = first_watch_frame(&acct, streams);
                             send_text(socket, watch_frame("unwatch", &acct)).await
                                 && send_text(socket, again).await
                         }
-                        // The inventory's and movement's streams start or stop on the same
-                        // subscription.
+                        // The inventory's, movement's and the auto modes' streams start or stop on
+                        // the same subscription.
                         Some(old) => {
-                            let inv = (old.inv != streams.inv).then_some(streams.inv);
-                            let movement =
-                                (old.movement != streams.movement).then_some(streams.movement);
-                            let frame = watch_streams_frame(&acct, streams.ai, inv, movement);
+                            let change = StreamChange::between(old, streams);
+                            let frame = watch_streams_frame(&acct, streams.ai, change);
                             send_text(socket, frame).await
                         }
                         None => send_text(socket, first_watch_frame(&acct, streams)).await,
@@ -1174,6 +1301,12 @@ async fn connected(
                 Some(Command::MovementOp { id, frame }) => {
                     if !send_text(socket, frame).await {
                         sink(movement_unsent(id));
+                        return Outcome::Retry(Duration::ZERO);
+                    }
+                }
+                Some(Command::AutoOp { id, frame }) => {
+                    if !send_text(socket, frame).await {
+                        sink(auto_unsent(id));
                         return Outcome::Retry(Duration::ZERO);
                     }
                 }
@@ -1632,10 +1765,7 @@ mod tests {
         hub.watch_inventory(url, Bearer::new("pls_test"), "kz1", "a_1");
         // Both came while the socket opened: its first frame asks for both.
         let frames = heard(&sent, 1).await;
-        assert_eq!(
-            frames[0],
-            watch_streams_frame("a_1", false, Some(true), None)
-        );
+        assert_eq!(frames[0], watch_streams_frame("a_1", false, only_inv(true)));
         assert!(hub.inv_op("a_1", "m1", &snapshot));
         let frames = heard(&sent, 2).await;
         let op: serde_json::Value = serde_json::from_str(&frames[1]).unwrap();
@@ -1648,7 +1778,7 @@ mod tests {
         let frames = heard(&sent, 3).await;
         assert_eq!(
             frames[2],
-            watch_streams_frame("a_1", false, Some(false), None)
+            watch_streams_frame("a_1", false, only_inv(false))
         );
         assert!(!hub.inv_op("a_1", "m2", &snapshot));
         assert!(hub.is_watching());
@@ -1743,14 +1873,11 @@ mod tests {
         let frames = heard(&sent, 1).await;
         assert_eq!(
             frames[0],
-            watch_streams_frame("a_1", false, None, Some(true))
+            watch_streams_frame("a_1", false, only_movement(true))
         );
         hub.watch_inventory(url, Bearer::new("pls_test"), "kz1", "a_1");
         let frames = heard(&sent, 2).await;
-        assert_eq!(
-            frames[1],
-            watch_streams_frame("a_1", false, Some(true), None)
-        );
+        assert_eq!(frames[1], watch_streams_frame("a_1", false, only_inv(true)));
         assert!(hub.movement_op("a_1", "m1", &step));
         let frames = heard(&sent, 3).await;
         let op: serde_json::Value = serde_json::from_str(&frames[2]).unwrap();
@@ -1763,11 +1890,167 @@ mod tests {
         let frames = heard(&sent, 4).await;
         assert_eq!(
             frames[3],
-            watch_streams_frame("a_1", false, None, Some(false))
+            watch_streams_frame("a_1", false, only_movement(false))
         );
         assert!(!hub.movement_op("a_1", "m2", &step));
         hub.unwatch_inventory("a_1");
         assert!(!hub.is_watching());
+    }
+
+    fn only_inv(on: bool) -> StreamChange {
+        StreamChange {
+            inv: Some(on),
+            ..StreamChange::default()
+        }
+    }
+
+    fn only_movement(on: bool) -> StreamChange {
+        StreamChange {
+            movement: Some(on),
+            ..StreamChange::default()
+        }
+    }
+
+    fn only_auto(on: bool) -> StreamChange {
+        StreamChange {
+            auto: Some(on),
+            ..StreamChange::default()
+        }
+    }
+
+    #[test]
+    fn reads_the_auto_frames() {
+        let event = |text: &str| {
+            serde_json::from_str::<Incoming>(text)
+                .unwrap()
+                .feature_event()
+                .unwrap()
+        };
+        let CloudLiveEvent::AutoState {
+            acct,
+            fishing,
+            mining,
+        } = event(
+            r#"{"t":"autost","acct":"a_1","fishing":{"state":"on","doing":"wait","rod":{"item":"minecraft:fishing_rod","dur":40,"max":64},"today":{"catches":3,"fish":2,"treasure":1,"junk":0,"perHour":9.5,"items":[{"id":"minecraft:cod","n":2}],"last":[{"id":"minecraft:name_tag","cat":"treasure","at":1793000000}]}}}"#,
+        )
+        else {
+            panic!("not an auto state");
+        };
+        assert_eq!(acct, "a_1");
+        let fishing = fishing.unwrap();
+        assert_eq!(fishing.doing.as_deref(), Some("wait"));
+        assert_eq!(fishing.today.per_hour, Some(9.5));
+        assert_eq!(fishing.today.last[0].cat, "treasure");
+        // A frame without mining leaves it as it was.
+        assert!(mining.is_none());
+        // One mode out of shape never costs the other.
+        let CloudLiveEvent::AutoState {
+            fishing, mining, ..
+        } = event(
+            r#"{"t":"autost","acct":"a_1","fishing":"broken","mining":{"state":"paused","reason":"moved","since":1793000050,"target":null,"tool":null,"today":{"blocks":120,"perMinute":14,"items":[]}}}"#,
+        )
+        else {
+            panic!("not an auto state");
+        };
+        assert!(fishing.is_none());
+        let mining = mining.unwrap();
+        assert_eq!(
+            (
+                mining.state.as_str(),
+                mining.reason.as_deref(),
+                mining.since
+            ),
+            ("paused", Some("moved"), Some(1_793_000_050))
+        );
+        assert_eq!(mining.today.per_minute, Some(14.0));
+        assert_eq!(
+            event(r#"{"t":"autores","id":"f3","ok":true}"#),
+            CloudLiveEvent::AutoResult {
+                id: "f3".into(),
+                ok: true,
+                error: None,
+            }
+        );
+        let CloudLiveEvent::AutoResult { ok, error, .. } =
+            event(r#"{"t":"autores","id":"f4","error":{"code":"auto_off","reason":"limited"}}"#)
+        else {
+            panic!("not an answer");
+        };
+        assert!(!ok);
+        let error = error.unwrap();
+        assert_eq!(
+            (error.code.as_str(), error.reason.as_deref()),
+            ("auto_off", Some("limited"))
+        );
+    }
+
+    #[tokio::test]
+    async fn auto_streams_on_the_console_subscription_and_operations_go_out() {
+        let sent = Arc::new(StdMutex::new(Vec::new()));
+        let url = fake_service(sent.clone()).await;
+        let sink: LiveSink = Arc::new(|_| {});
+        let hub = LiveHub::new(Handle::current(), "test", sink);
+        let pause = serde_json::json!({ "mode": "fishing", "action": "pause" });
+        assert!(!hub.auto_op("a_1", "f0", &pause), "nothing streams it");
+        // The console first, as the panel opens; the tab after, on the open subscription.
+        hub.watch(url.clone(), Bearer::new("pls_test"), "kz1", "a_1");
+        let frames = heard(&sent, 1).await;
+        assert_eq!(frames[0], watch_frame("watch", "a_1"));
+        hub.watch_auto(url.clone(), Bearer::new("pls_test"), "kz1", "a_1");
+        let frames = heard(&sent, 2).await;
+        assert_eq!(
+            frames[1],
+            watch_streams_frame("a_1", false, only_auto(true))
+        );
+        assert!(hub.auto_op("a_1", "f1", &pause));
+        let frames = heard(&sent, 3).await;
+        let op: serde_json::Value = serde_json::from_str(&frames[2]).unwrap();
+        assert_eq!(
+            op,
+            serde_json::json!({"t": "auto", "acct": "a_1", "id": "f1", "op": pause})
+        );
+        // Movement joins and leaves without touching the auto stream.
+        hub.watch_movement(url, Bearer::new("pls_test"), "kz1", "a_1");
+        let frames = heard(&sent, 4).await;
+        assert_eq!(
+            frames[3],
+            watch_streams_frame("a_1", false, only_movement(true))
+        );
+        // The tab leaves, the console stays: auto stops on the same subscription.
+        hub.unwatch_auto("a_1");
+        let frames = heard(&sent, 5).await;
+        assert_eq!(
+            frames[4],
+            watch_streams_frame("a_1", false, only_auto(false))
+        );
+        assert!(!hub.auto_op("a_1", "f2", &pause));
+        hub.unwatch_movement("a_1");
+        hub.unwatch("a_1");
+        assert!(!hub.is_watching());
+    }
+
+    #[test]
+    fn a_new_subscription_asks_for_every_stream_that_is_on() {
+        let streams = Streams {
+            ai: true,
+            inv: false,
+            movement: true,
+            auto: true,
+        };
+        let frame: serde_json::Value =
+            serde_json::from_str(&first_watch_frame("a_1", streams)).unwrap();
+        assert_eq!(
+            frame,
+            serde_json::json!({"t": "watch", "acct": "a_1", "ai": true, "move": true, "auto": true})
+        );
+        let change = StreamChange::between(
+            streams,
+            Streams {
+                auto: false,
+                ..streams
+            },
+        );
+        assert_eq!(change, only_auto(false));
     }
 
     #[test]
