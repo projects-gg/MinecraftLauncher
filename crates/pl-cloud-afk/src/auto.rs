@@ -368,8 +368,10 @@ fn rate<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<f64>, D::Er
 pub struct CloudAutoTool {
     pub item: String,
     #[serde(deserialize_with = "count")]
+    #[specta(type = u32)]
     pub dur: u32,
     #[serde(deserialize_with = "count")]
+    #[specta(type = u32)]
     pub max: u32,
 }
 
@@ -379,6 +381,7 @@ pub struct CloudAutoTool {
 pub struct CloudAutoCount {
     pub id: String,
     #[serde(deserialize_with = "count")]
+    #[specta(type = u32)]
     pub n: u32,
 }
 
@@ -391,6 +394,7 @@ pub struct CloudCatch {
     pub cat: String,
     pub ench: Option<bool>,
     #[serde(deserialize_with = "whole")]
+    #[specta(type = Option<i64>)]
     pub at: Option<i64>,
 }
 
@@ -399,15 +403,20 @@ pub struct CloudCatch {
 #[serde(rename_all = "camelCase", default)]
 pub struct CloudFishToday {
     #[serde(deserialize_with = "count")]
+    #[specta(type = u32)]
     pub catches: u32,
     #[serde(deserialize_with = "count")]
+    #[specta(type = u32)]
     pub fish: u32,
     #[serde(deserialize_with = "count")]
+    #[specta(type = u32)]
     pub treasure: u32,
     #[serde(deserialize_with = "count")]
+    #[specta(type = u32)]
     pub junk: u32,
     /// Catches per hour of fishing time today.
     #[serde(deserialize_with = "rate")]
+    #[specta(type = Option<f64>)]
     pub per_hour: Option<f64>,
     /// By kind, most first (at most 12).
     pub items: Vec<CloudAutoCount>,
@@ -426,6 +435,7 @@ pub struct CloudFishState {
     pub reason: Option<String>,
     /// When this state began (Unix seconds).
     #[serde(deserialize_with = "whole")]
+    #[specta(type = Option<i64>)]
     pub since: Option<i64>,
     pub doing: Option<String>,
     pub rod: Option<CloudAutoTool>,
@@ -447,8 +457,10 @@ pub struct CloudMineTarget {
 #[serde(rename_all = "camelCase", default)]
 pub struct CloudMineToday {
     #[serde(deserialize_with = "count")]
+    #[specta(type = u32)]
     pub blocks: u32,
     #[serde(deserialize_with = "rate")]
+    #[specta(type = Option<f64>)]
     pub per_minute: Option<f64>,
     /// Blocks broken by kind, most first (at most 12).
     pub items: Vec<CloudAutoCount>,
@@ -462,6 +474,7 @@ pub struct CloudMineState {
     pub state: String,
     pub reason: Option<String>,
     #[serde(deserialize_with = "whole")]
+    #[specta(type = Option<i64>)]
     pub since: Option<i64>,
     pub target: Option<CloudMineTarget>,
     pub tool: Option<CloudAutoTool>,
