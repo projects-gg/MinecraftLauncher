@@ -898,6 +898,8 @@ The signature envelope and rules are those of `index.json.sig`: Ed25519 over the
   admin).
 - `status` (optional): a short-lived notice about an active problem on the server's status
   page ([Status notice](#status-notice)); missing while everything works.
+- `announcement` (optional): the announcement on the server's status page, any type, for the
+  website ([Announcement](#announcement)); launchers ignore it. Missing while there is none.
 - `minecraft` (optional): Minecraft's own updates, summarized by the bot from Mojang's public
   launcher content ([Minecraft news](#minecraft-news)). A separate array, so launchers that do not
   know it never show these entries as Projects news; they only fill places Projects news leaves
@@ -982,14 +984,16 @@ never starts the game by itself. Without `join` the card looks as before.
 ### Status notice
 
 `status` tells players about a problem on the server's status page while it lasts: services
-that are down or reachable only in part, or a warning posted on the status page. It also carries
-a maintenance posted on the status page, upcoming or under way, until its window ends. The bot
+that are down or reachable only in part, or an announcement posted on the status page, whatever
+its type (info, neutral, positive, warning, critical; any type since SITEANN2, 20 November 2026).
+It also carries a maintenance posted on the status page, upcoming or under way, until its window
+ends. The bot
 writes it only while there is such a problem or post (example in
 [News feed (Discord bot)](#news-feed-discord-bot)).
 
 | Field | Rule |
 | --- | --- |
-| `level` | `outage` (services down), `degraded` (services reachable only in part) or `notice` (a warning or a maintenance posted on the status page). Missing or unknown: `notice`. |
+| `level` | `outage` (services down), `degraded` (services reachable only in part) or `notice` (an announcement of any type or a maintenance posted on the status page). Missing or unknown: `notice`. |
 | `title` | Required, 1–80 characters, not blank. |
 | `message` | Optional, at most 200 characters; default empty. |
 | `services` | Optional, at most 20 `{ name, state }`: `name` 1–64 characters, not blank; `state` `down` or `degraded` (unknown: `unknown`). |
@@ -1015,10 +1019,42 @@ writes it only while there is such a problem or post (example in
   even while the post stays on the page. During the window, services the post affects that are
   down or degraded may be listed in its `services` instead of an `outage`. Services the status
   page has in maintenance mode are never reported as down.
+- Order: services down or degraded first, then a maintenance post, then any other announcement
+  (any type counts: its title, the first paragraph of its text and the status page link). Only
+  one notice at a time.
 - Studio's maintenance notice (`LauncherConfig.maintenance`) wins: while it is active, the status
   notice is not shown. The status notice is information only: it never blocks or turns off
   anything (playing, joining, direct connect, mod sync, AFK). Launchers show `title`, `message`
   and a link to `url`; `services` is for readers that list the services.
+
+### Announcement
+
+`announcement` carries the announcement posted on the server's status page, whatever its type,
+for the website. Optional and additive: the bot writes it only while an announcement is on the
+status page (its title or text is not empty); launchers currently ignore it (unknown fields are
+ignored), and it changes nothing in `status`. A maintenance post whose window is over is left
+out even while it stays on the page (the same rule as in `status`), and its `expiresAt` never
+passes the end of the window. Example in the bot's `docs/launcher-feed.md`
+("Announcement block").
+
+| Field | Rule |
+| --- | --- |
+| `type` | `info`, `warning`, `critical`, `positive` or `neutral` (the status page's announcement type). Unknown: `info`. |
+| `title` | Required, 1–80 characters, one line, not blank. |
+| `message` | Optional, at most 300 characters, one line of plain text (no HTML, no Markdown); default empty. |
+| `url` | Optional: the status page, an `https://` URL with a host and no credentials. |
+| `updatedAt` | Required: when the bot last confirmed the announcement. |
+| `expiresAt` | Required: after `updatedAt`, at most 15 minutes after it. |
+
+- Characters are Unicode scalar values. Texts are in the players' language; the bot writes them.
+- An `announcement` that breaks a rule of the table is ignored on its own: the rest of the feed
+  is used as usual. Readers show it only while `now < expiresAt`; an expired one is ignored,
+  also in a cached feed. While the announcement stays on the page the bot publishes it again
+  before it expires (renewed together with `status` when both are present); when it is taken
+  down, the bot publishes the feed without `announcement`.
+- Any announcement and a maintenance post may appear in both `status` and `announcement`
+  (each with its own wording). The website shows `announcement` only when it shows no status notice; the
+  status notice wins.
 
 ### Minecraft news
 
