@@ -351,13 +351,17 @@ export function limitQuestion(field: LimitField): { question: PlusQuestion; adva
 
 export const ACCOUNT_STEPS = ["server", "login", "join", "replies"] as const;
 export type AccountStep = (typeof ACCOUNT_STEPS)[number];
-export type AccountQuestion = AccountStep | "more";
+/** The questions of the settings' list: the setup's steps, the auto modes where offered, the rest. */
+export type AccountQuestion = AccountStep | "fishing" | "mining" | "more";
 
 export const ACCOUNT_ITEMS: Record<AccountQuestion, string> = {
   server: "minecraft:compass",
   login: "minecraft:trial_key",
   join: "minecraft:command_block",
   replies: "minecraft:oak_sign",
+  // The site's (FISHMINE-WEB).
+  fishing: "minecraft:fishing_rod",
+  mining: "minecraft:diamond_pickaxe",
   more: "minecraft:comparator",
 };
 
@@ -404,12 +408,15 @@ function hostOf(draft: Pick<Draft, "host" | "port">): string {
   return port && port !== "25565" && port !== "0" ? `${host}:${port}` : host;
 }
 
-/** One sentence per account question, from the draft as it stands. */
+/**
+ * One sentence per account question, from the draft as it stands (the auto modes' answers are
+ * auto-settings.tsx's `AutoAnswer`: one may name a block from the game's item data).
+ */
 export function accountAnswers(
   draft: Pick<Draft, "host" | "port" | "version" | "config">,
   place: (row: Command) => CommandPlace,
   t: TFunction,
-): Record<AccountQuestion, string> {
+): Record<AccountStep | "more", string> {
   const a = (key: string, values?: Record<string, unknown>) =>
     t(`setup.account.answers.${key}`, values);
   const version = draft.version === "auto" ? a("versionAuto") : draft.version;

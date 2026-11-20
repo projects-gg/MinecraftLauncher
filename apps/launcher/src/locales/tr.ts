@@ -17,6 +17,7 @@ import { trChatProd } from "./tr-chat-prod";
 import { trChat2 } from "./tr-chat2";
 import { trClean } from "./tr-clean";
 import { trCloudAfk } from "./tr-cloud-afk";
+import { trCloudAfkAuto } from "./tr-cloud-afk-auto";
 import { trCloudAfkFeat } from "./tr-cloud-afk-feat";
 import { trCloudAfkMove } from "./tr-cloud-afk-move";
 import { trCloudStale } from "./tr-cloud-stale";
@@ -147,6 +148,7 @@ export const tr = {
   identity: trIdentity,
   badges: trBadges,
   cloudAfk: trCloudAfk,
+  cloudAfkAuto: trCloudAfkAuto,
   cloudAfkFeat: trCloudAfkFeat,
   cloudAfkMove: trCloudAfkMove,
   cloudStale: trCloudStale,

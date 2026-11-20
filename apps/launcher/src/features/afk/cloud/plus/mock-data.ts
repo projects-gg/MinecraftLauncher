@@ -326,6 +326,22 @@ const ITEMS: Row[] = [
   ["minecraft:potion", 1, 0, "İksir", "Potion", -1],
   ["minecraft:purple_shulker_box", 1, 0, "Mor Shulker Kutusu", "Purple Shulker Box", -1],
   ["minecraft:cobblestone", 64, 0, "Kırıktaş", "Cobblestone", -1],
+  // What the auto-fishing and auto-mining previews catch and break (mock-auto.ts).
+  ["minecraft:fishing_rod", 1, 64, "Olta", "Fishing Rod", -1],
+  ["minecraft:iron_pickaxe", 1, 250, "Demir Kazma", "Iron Pickaxe", 2],
+  ["minecraft:cod", 64, 0, "Çiğ Morina", "Raw Cod", -1],
+  ["minecraft:salmon", 64, 0, "Çiğ Somon", "Raw Salmon", -1],
+  ["minecraft:tropical_fish", 64, 0, "Tropikal Balık", "Tropical Fish", -1],
+  ["minecraft:pufferfish", 64, 0, "Balon Balığı", "Pufferfish", -1],
+  ["minecraft:name_tag", 64, 0, "İsim Etiketi", "Name Tag", -1],
+  ["minecraft:saddle", 1, 0, "Eyer", "Saddle", -1],
+  ["minecraft:bowl", 64, 0, "Kâse", "Bowl", -1],
+  ["minecraft:string", 64, 0, "İp", "String", -1],
+  ["minecraft:leather_boots", 1, 65, "Deri Botlar", "Leather Boots", 4],
+  ["minecraft:stone", 64, 0, "Taş", "Stone", -1],
+  ["minecraft:coal_ore", 64, 0, "Kömür Cevheri", "Coal Ore", -1],
+  ["minecraft:iron_ore", 64, 0, "Demir Cevheri", "Iron Ore", -1],
+  ["minecraft:diamond_ore", 64, 0, "Elmas Cevheri", "Diamond Ore", -1],
   ["minecraft:command_block", 64, 0, "Komut Bloğu", "Command Block", -1, { o: 1 }],
 ];
 

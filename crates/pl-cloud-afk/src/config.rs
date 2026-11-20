@@ -6,6 +6,10 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::auto::{
+    CloudFishingSetting, CloudMiningSetting, FishingInput, MiningInput, fishing_problems,
+    mining_problems,
+};
 use crate::copies::{RowCopies, RowCopy};
 use crate::feat::{CloudInventorySetting, PlaceholderRow, PlaceholderRules, placeholder_problem};
 use crate::model::{
@@ -86,13 +90,21 @@ pub struct CloudEditConfig {
     /// Movement (README "Movement"): the player's switch; None: nothing stored, and then nothing
     /// about it is sent. A change restarts a running client.
     pub movement: Option<bool>,
+    /// Auto-fishing and auto-mining (README "Auto-fishing and auto-mining"): the whole setting;
+    /// None: nothing stored and nothing chosen, and then nothing about it is sent. A change of
+    /// `enabled` restarts a running client; a change of the other parts reaches it as it runs.
+    pub fishing: Option<CloudFishingSetting>,
+    pub mining: Option<CloudMiningSetting>,
 }
 
 /// Where a problem is and what it is. `place` is `general`, `commands` or `rules`; `index` the
 /// row; `field` what of it (`owner`, `antiAfk`, `count`, `id`, `on`, `delay`, `every`, `at`,
 /// `text`, `match`, `from`, `ownerOnly`, `cooldown`, `reply`); `problem` a key the UI words
 /// (a text problem, a pattern problem, `range`, `order`, `format`, `duplicate`, `limit`, `reseal`,
-/// `owner`, `server`; for `movement`: `off`, `player`, `host`).
+/// `owner`, `server`; for `movement`: `off`, `player`, `host`; for `fishing` and `mining`: those and
+/// `limited`, and their parts `fishing.rod`, `fishing.full`, `mining.blocks`, `mining.tool`,
+/// `mining.full`, `mining.idle` with `range`, `order`, `format`, `empty`, `duplicate`, `secret` or a
+/// text problem).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CloudIssue {
@@ -157,6 +169,16 @@ impl CloudIssue {
                 problem: problem.into(),
                 max: None,
             },
+            // A mode's part keeps its name ("fishing.rod.keep" is `fishing.rod`); its switch is the
+            // mode itself ("fishing.enabled").
+            "fishing" | "mining" => {
+                let part = rest.split(['.', '[']).next().unwrap_or("");
+                if matches!(part, "rod" | "tool" | "full" | "idle" | "blocks") {
+                    Self::general(&format!("{head}.{part}"), problem)
+                } else {
+                    Self::general(head, problem)
+                }
+            }
             _ => Self::general(head.split(['.', '[']).next().unwrap_or(head), problem),
         }
     }
@@ -213,6 +235,8 @@ pub fn edit_config(view: &CloudConfigView, copies: &RowCopies) -> CloudEditConfi
             .collect(),
         inventory: view.inventory.map(|setting| setting.enabled),
         movement: view.movement.map(|setting| setting.enabled),
+        fishing: view.fishing.clone(),
+        mining: view.mining.clone(),
     }
 }
 
@@ -403,6 +427,16 @@ pub fn validate_with(
         }
         check_words(&rule.reply, "rules", index, "reply", &mut issues);
     }
+    if let Some(fishing) = &config.fishing {
+        for (field, problem) in fishing_problems(fishing) {
+            issues.push(CloudIssue::general(field, problem));
+        }
+    }
+    if let Some(mining) = &config.mining {
+        for (field, problem) in mining_problems(mining) {
+            issues.push(CloudIssue::general(field, problem));
+        }
+    }
     if placeholders.on {
         check_placeholders(config, placeholders, &mut issues);
     }
@@ -553,6 +587,8 @@ pub fn build(
             movement: config
                 .movement
                 .map(|enabled| CloudMovementSetting { enabled }),
+            fishing: config.fishing.as_ref().map(FishingInput::from),
+            mining: config.mining.as_ref().map(MiningInput::from),
         },
         sealed,
         kept,
@@ -630,6 +666,8 @@ mod tests {
             rules,
             inventory: None,
             movement: None,
+            fishing: None,
+            mining: None,
         }
     }
 
@@ -870,6 +908,79 @@ mod tests {
             edit_config(&CloudConfigView::default(), &RowCopies::new()).movement,
             None
         );
+        // The modes the same way, and whole: the stored setting with its defaults goes back out.
+        assert_eq!(
+            (built.config.fishing.clone(), built.config.mining.clone()),
+            (None, None)
+        );
+        let view = CloudConfigView {
+            fishing: Some(serde_json::from_str(r#"{"enabled":true}"#).unwrap()),
+            ..CloudConfigView::default()
+        };
+        let read = edit_config(&view, &RowCopies::new());
+        assert_eq!(read.mining, None);
+        let mut edit = config(vec![], vec![]);
+        edit.fishing = read.fishing;
+        let built = build(
+            &edit,
+            &limits(),
+            &off,
+            &ctx,
+            &RowCopies::new(),
+            &HashMap::new(),
+        )
+        .unwrap();
+        let sent = serde_json::to_value(&built.config).unwrap();
+        assert_eq!(
+            sent["fishing"],
+            serde_json::json!({
+                "enabled": true,
+                "rod": {"switch": true, "keep": 5},
+                "full": {"do": "wait"},
+                "look": false
+            })
+        );
+        assert!(sent.get("mining").is_none());
+    }
+
+    #[test]
+    fn mode_problems_name_their_part_and_refusals_keep_it() {
+        let mut edit = config(vec![], vec![]);
+        edit.fishing = Some(CloudFishingSetting {
+            full: crate::auto::CloudWhenFull {
+                action: "command".into(),
+                command: Some(" ".into()),
+                paused: None,
+            },
+            ..CloudFishingSetting::default()
+        });
+        edit.mining = Some(CloudMiningSetting {
+            blocks: Some(vec![]),
+            ..CloudMiningSetting::default()
+        });
+        let issues = validate(&edit, &limits());
+        let at = |field: &str| {
+            issues
+                .iter()
+                .find(|i| i.place == "general" && i.field == field)
+                .map(|i| i.problem.clone())
+        };
+        assert_eq!(at("fishing.full").as_deref(), Some("empty"));
+        assert_eq!(at("mining.blocks").as_deref(), Some("empty"));
+        // The service's refusals land on the same parts; the switch is the mode itself.
+        assert_eq!(
+            CloudIssue::from_path("mining.idle.every.min", "range").field,
+            "mining.idle"
+        );
+        assert_eq!(
+            CloudIssue::from_path("mining.blocks[2]", "format").field,
+            "mining.blocks"
+        );
+        assert_eq!(
+            CloudIssue::from_path("fishing.enabled", "limited").field,
+            "fishing"
+        );
+        assert_eq!(CloudIssue::from_path("fishing", "format").field, "fishing");
     }
 
     #[test]
@@ -1098,6 +1209,8 @@ mod tests {
             }],
             inventory: None,
             movement: None,
+            fishing: None,
+            mining: None,
         };
         let mut copies = RowCopies::new();
         for id in ["c1", "c2"] {

@@ -28,6 +28,8 @@ import {
 import { SettingsPanel } from "../settings/panel";
 import { useReadBack } from "../settings/read-back";
 import { type CloudAccount, type CloudEditData, cloudApi } from "./api";
+import { AutoAnswer, AutoQuestion } from "./auto/auto-settings";
+import { autoOffered } from "./auto/model";
 import { withoutRefusal } from "./moderation";
 import { DOCK_HEIGHT, PlusChangeDock } from "./plus/change-dock";
 import {
@@ -70,8 +72,28 @@ import { CLOUD_KEY, startOrAsk, storeAccount, useCloudPage } from "./use-cloud";
 
 const QUESTIONS: AccountQuestion[] = ["server", "login", "join", "replies", "more"];
 
+/**
+ * An account's questions: auto-fishing and auto-mining after the replies, where Studio offers them
+ * (the site's order, FISHMINE-WEB).
+ */
+function questionsOf(account: CloudEditData["account"]): AccountQuestion[] {
+  return [
+    "server",
+    "login",
+    "join",
+    "replies",
+    ...(autoOffered(account, "fishing") ? (["fishing"] as const) : []),
+    ...(autoOffered(account, "mining") ? (["mining"] as const) : []),
+    "more",
+  ];
+}
+
 /** Accounts whose "Kurulumu bitir" was finished or put away this session: it goes for good then. */
 const setupPutAway = new Set<string>();
+
+/** A question of the setup's steps (the auto modes and "more" are only in the list). */
+const isStep = (question: AccountQuestion): question is AccountStep =>
+  (ACCOUNT_STEPS as readonly string[]).includes(question);
 
 /** The question a problem shows under. */
 function questionOf(
@@ -88,6 +110,8 @@ function questionOf(
   if (issue.field === "server" || issue.field === "port" || issue.field === "version") {
     return "server";
   }
+  const head = issue.field.split(".")[0];
+  if (head === "fishing" || head === "mining") return head;
   return "more";
 }
 
@@ -107,6 +131,10 @@ function questionValue(
       return JSON.stringify(rows("join"));
     case "replies":
       return JSON.stringify([draft.config.rules, draft.config.owner]);
+    case "fishing":
+      return JSON.stringify(draft.config.fishing ?? null);
+    case "mining":
+      return JSON.stringify(draft.config.mining ?? null);
     case "more":
       return JSON.stringify([
         draft.name,
@@ -155,6 +183,17 @@ function QuestionFields({
       );
     case "replies":
       return <RepliesPart {...part} />;
+    case "fishing":
+    case "mining":
+      return (
+        <AutoQuestion
+          mode={question}
+          draft={part.draft}
+          setDraft={part.setDraft}
+          view={part.view}
+          issues={part.issues}
+        />
+      );
     case "more":
       return (
         <>
@@ -256,7 +295,7 @@ function Editor({
     if (login) return login === "replies" ? "replies" : "login";
     const now = settled(draft, baseline);
     return (
-      QUESTIONS.find(
+      questionsOf(account).find(
         (q) => questionValue(now, q, placeOf) !== questionValue(baseline, q, placeOf),
       ) ?? null
     );
@@ -303,7 +342,9 @@ function Editor({
   const shown = held ? [...issues, held] : issues;
   const now = settled(draft, baseline);
   const unsaved = new Set(
-    QUESTIONS.filter((q) => questionValue(now, q, placeOf) !== questionValue(baseline, q, placeOf)),
+    questionsOf(account).filter(
+      (q) => questionValue(now, q, placeOf) !== questionValue(baseline, q, placeOf),
+    ),
   );
   const marked = new Set(shown.map((issue) => questionOf(issue, draft, placeOf)));
 
@@ -322,7 +363,7 @@ function Editor({
     if (first) {
       if (setup) {
         const step = questionOf(first, draft, placeOf);
-        if (step !== "more") setSetup({ step, direction: -1 });
+        if (isStep(step)) setSetup({ step, direction: -1 });
         else {
           setSetup(null);
           goTo(step);
@@ -538,15 +579,25 @@ function Editor({
             </div>
           ) : null}
           <QuestionList label={t("setup.questionsLabel")}>
-            {QUESTIONS.map((question) => (
+            {questionsOf(account).map((question) => (
               <QuestionRow
                 key={question}
                 id={question}
                 item={ACCOUNT_ITEMS[question]}
                 question={
-                  question === "more" ? t("setup.other") : t(`setup.account.questions.${question}`)
+                  question === "more"
+                    ? t("setup.other")
+                    : question === "fishing" || question === "mining"
+                      ? t(`cloudAfkAuto.questions.${question}`)
+                      : t(`setup.account.questions.${question}`)
                 }
-                answer={answers[question]}
+                answer={
+                  question === "fishing" || question === "mining" ? (
+                    <AutoAnswer mode={question} draft={draft} view={view} />
+                  ) : (
+                    answers[question]
+                  )
+                }
                 open={open === question}
                 onToggle={() => setOpen((current) => (current === question ? null : question))}
                 dirty={unsaved.has(question)}

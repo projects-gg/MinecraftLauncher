@@ -1,14 +1,15 @@
 //! 7/24 Bulut's cloud features (CAFK-FEAT phase 1) over `pl_cloud_afk`: the live inventory (its
 //! stream while a view is on screen, the moves), the account's inventory choice, "Dene" for an
 //! auto-reply, the console download and "Ayarları kopyala"; movement (its stream while the
-//! "Hareket" panel is on screen, the operations). Each shows in the UI only when the service offers
-//! it (`CloudOverview.features`, `CloudAccount.features`).
+//! "Hareket" panel is on screen, the operations); auto-fishing and auto-mining (their stream while
+//! the "Balık" or "Kazma" panel is on screen, the operations). Each shows in the UI only when the
+//! service offers it (`CloudOverview.features`, `CloudAccount.features`).
 
 use std::path::{Path, PathBuf};
 
 use pl_cloud_afk::{
-    CloudAccount, CloudCopyOutcome, CloudCopySecret, CloudCopySource, CloudInvError, CloudLogRange,
-    CloudMovementError, CloudReplyTry, CloudSaveOutcome,
+    CloudAccount, CloudAutoError, CloudCopyOutcome, CloudCopySecret, CloudCopySource,
+    CloudInvError, CloudLogRange, CloudMovementError, CloudReplyTry, CloudSaveOutcome,
 };
 use pl_lang::{Lang, pick};
 use serde::{Deserialize, Serialize};
@@ -86,6 +87,41 @@ pub fn cloud_afk_movement_op(
     op: String,
 ) -> Option<CloudMovementError> {
     service(&app, &state).movement_op(&id, &op_id, &op)
+}
+
+/// An auto panel ("Balık" or "Kazma") is on screen: the account's auto states stream as
+/// `cloud-afk-live` events (`autoState`).
+#[tauri::command]
+#[specta::specta]
+pub async fn cloud_afk_auto_watch(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<()> {
+    let token = token(&state)?;
+    Ok(service(&app, &state).watch_auto(&token, &id).await?)
+}
+
+/// The auto panels left the screen (closed, another tab, the window hidden).
+#[tauri::command]
+#[specta::specta]
+pub fn cloud_afk_auto_unwatch(app: AppHandle, state: State<'_, AppState>, id: String) {
+    service(&app, &state).unwatch_auto(&id);
+}
+
+/// An auto operation (`op`: the panel's `AutoOp` as JSON, `opId` its own id): pause or resume a
+/// mode, or aim. Null: sent, its answer comes as an `autoResult` event; else why it could not go
+/// out (its shape, or `host_offline`).
+#[tauri::command]
+#[specta::specta]
+pub fn cloud_afk_auto_op(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    op_id: String,
+    op: String,
+) -> Option<CloudAutoError> {
+    service(&app, &state).auto_op(&id, &op_id, &op)
 }
 
 /// The inventory view on or off for this account ("Aç"; the settings' switch saves with the rest).

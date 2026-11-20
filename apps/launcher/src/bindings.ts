@@ -926,6 +926,23 @@ export const commands = {
 	retryAfter?: number | null,
 } | null>("cloud_afk_movement_op", { id, opId, op }),
 	/**
+	 *  An auto panel ("Balık" or "Kazma") is on screen: the account's auto states stream as
+	 *  `cloud-afk-live` events (`autoState`).
+	 */
+	cloudAfkAutoWatch: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_auto_watch", { id })),
+	/**  The auto panels left the screen (closed, another tab, the window hidden). */
+	cloudAfkAutoUnwatch: (id: string) => __TAURI_INVOKE<void>("cloud_afk_auto_unwatch", { id }),
+	/**
+	 *  An auto operation (`op`: the panel's `AutoOp` as JSON, `opId` its own id): pause or resume a
+	 *  mode, or aim. Null: sent, its answer comes as an `autoResult` event; else why it could not go
+	 *  out (its shape, or `host_offline`).
+	 */
+	cloudAfkAutoOp: (id: string, opId: string, op: string) => __TAURI_INVOKE<{
+	code?: string,
+	reason?: string | null,
+	field?: string | null,
+} | null>("cloud_afk_auto_op", { id, opId, op }),
+	/**
 	 *  The inventory view on or off for this account ("Aç"; the settings' switch saves with the rest).
 	 *  It applies at the client's next start.
 	 */
@@ -3036,6 +3053,12 @@ export type CloudAccountFeatures = {
 	 *  account's `config.movement` is never sent.
 	 */
 	movement?: CloudMovementFeature | null,
+	/**
+	 *  Auto-fishing and auto-mining (README "Auto-fishing and auto-mining"); None from a service
+	 *  before them: nothing of the mode shows and the account's `config.<mode>` is never sent.
+	 */
+	fishing?: CloudAutoFeature | null,
+	mining?: CloudAutoFeature | null,
 };
 
 /**  A cloud account (`GET /accounts`, `GET /accounts/:id`, and the answer of every change). */
@@ -3156,6 +3179,71 @@ export type CloudAntiAfk = {
 	delayMax: number,
 };
 
+/**  One kind of item and how many today. */
+export type CloudAutoCount = CloudAutoCount_Serialize | CloudAutoCount_Deserialize;
+
+/**  One kind of item and how many today. */
+export type CloudAutoCount_Deserialize = {
+	id?: string,
+	n?: number,
+};
+
+/**  One kind of item and how many today. */
+export type CloudAutoCount_Serialize = {
+	id: string,
+	n: number,
+};
+
+/**
+ *  Why an operation was refused (`autores.error`): `invalid` (`reason`, `field`), `rate_limited`,
+ *  `host_offline`, `not_running`, `auto_off` (`reason`: `service`, `setting`, `restart`, `slots`,
+ *  `version`, `limited`), `busy_trade`.
+ */
+export type CloudAutoError = {
+	code?: string,
+	reason?: string | null,
+	field?: string | null,
+};
+
+/**
+ *  `Account.features.fishing` and `.mining`: Studio's switch while the account's machine can do
+ *  the mode (else `off`: nothing of it shows), the account's own setting, why it cannot be turned
+ *  on now, and the public reason when the account's server is limited for it.
+ */
+export type CloudAutoFeature = {
+	/**  `off` or `on`. */
+	mode?: string,
+	/**  `config.<mode>.enabled`. */
+	on?: boolean,
+	/**
+	 *  Only while `mode` is on and `on` false: `player` (the player's own number of accounts with
+	 *  the mode is reached) or `host` (the machine's slots are taken); the switch waits.
+	 */
+	slot?: string | null,
+	/**
+	 *  The account's server is limited for this mode: the public reason. The switch shows disabled
+	 *  with it (also while `on` is true: the setting stays, the mode does not run there).
+	 */
+	limited?: CloudLocalized | null,
+};
+
+/**  A rod or a pickaxe in hand: its namespaced id, durability left and maximum. */
+export type CloudAutoTool = CloudAutoTool_Serialize | CloudAutoTool_Deserialize;
+
+/**  A rod or a pickaxe in hand: its namespaced id, durability left and maximum. */
+export type CloudAutoTool_Deserialize = {
+	item?: string,
+	dur?: number,
+	max?: number,
+};
+
+/**  A rod or a pickaxe in hand: its namespaced id, durability left and maximum. */
+export type CloudAutoTool_Serialize = {
+	item: string,
+	dur: number,
+	max: number,
+};
+
 /**  The action bar's text, shown until `untilMs` (Unix milliseconds) unless a newer strip came. */
 export type CloudBarText = {
 	text?: string,
@@ -3197,6 +3285,34 @@ export type CloudCanBuy = {
 	until: number | null,
 };
 
+/**
+ *  One of today's last catches: the item, its category (`fish`, `treasure` or `junk`), whether it
+ *  is enchanted, when (Unix seconds).
+ */
+export type CloudCatch = CloudCatch_Serialize | CloudCatch_Deserialize;
+
+/**
+ *  One of today's last catches: the item, its category (`fish`, `treasure` or `junk`), whether it
+ *  is enchanted, when (Unix seconds).
+ */
+export type CloudCatch_Deserialize = {
+	id?: string,
+	cat?: string,
+	ench?: boolean | null,
+	at?: number | null,
+};
+
+/**
+ *  One of today's last catches: the item, its category (`fish`, `treasure` or `junk`), whether it
+ *  is enchanted, when (Unix seconds).
+ */
+export type CloudCatch_Serialize = {
+	id: string,
+	cat: string,
+	ench: boolean | null,
+	at: number | null,
+};
+
 export type CloudClick = {
 	a: string,
 	v: string,
@@ -3232,6 +3348,12 @@ export type CloudConfigView = {
 	inventory: CloudInventorySetting | null,
 	/**  The player's movement switch, only when stored (absent: off). */
 	movement: CloudMovementSetting | null,
+	/**
+	 *  Auto-fishing and auto-mining, only when stored (absent: off), read with the contract's
+	 *  defaults for the parts the service left out.
+	 */
+	fishing: CloudFishingSetting | null,
+	mining: CloudMiningSetting | null,
 };
 
 /**  A console download written to the Downloads folder. */
@@ -3426,6 +3548,13 @@ export type CloudEditConfig = {
 	 *  about it is sent. A change restarts a running client.
 	 */
 	movement: boolean | null,
+	/**
+	 *  Auto-fishing and auto-mining (README "Auto-fishing and auto-mining"): the whole setting;
+	 *  None: nothing stored and nothing chosen, and then nothing about it is sent. A change of
+	 *  `enabled` restarts a running client; a change of the other parts reaches it as it runs.
+	 */
+	fishing: CloudFishingSetting | null,
+	mining: CloudMiningSetting | null,
 };
 
 /**  An auto-reply rule: `from` is `any`, `player`, `private` or `server`. */
@@ -3479,6 +3608,97 @@ export type CloudFeatures = {
 	placeholders: boolean,
 	/**  The commands a reply with placeholders may start with (without `/`, lower case). */
 	placeholderCommands: string[],
+	/**
+	 *  Auto-fishing and auto-mining are offered (FISHMINE; each account says whether it may use
+	 *  them).
+	 */
+	fishing: boolean,
+	mining: boolean,
+};
+
+/**
+ *  What fishing does (`autost`'s `fishing`): `off` with why (`service`, `setting`, `restart`,
+ *  `slots`, `version`, `limited`, `not_running`), `on` with what (`cast`, `wait`, `reel`),
+ *  `paused` (`player` and `moved` wait for the player's "Devam et"; `window` and `trade` end by
+ *  themselves) or `waiting` (`full`, `no_rod`, `rod_low`, `no_water`: it goes on by itself).
+ */
+export type CloudFishState = CloudFishState_Serialize | CloudFishState_Deserialize;
+
+/**
+ *  What fishing does (`autost`'s `fishing`): `off` with why (`service`, `setting`, `restart`,
+ *  `slots`, `version`, `limited`, `not_running`), `on` with what (`cast`, `wait`, `reel`),
+ *  `paused` (`player` and `moved` wait for the player's "Devam et"; `window` and `trade` end by
+ *  themselves) or `waiting` (`full`, `no_rod`, `rod_low`, `no_water`: it goes on by itself).
+ */
+export type CloudFishState_Deserialize = {
+	state?: string,
+	reason?: string | null,
+	/**  When this state began (Unix seconds). */
+	since?: number | null,
+	doing?: string | null,
+	rod?: CloudAutoTool_Deserialize | null,
+	today?: CloudFishToday_Deserialize,
+};
+
+/**
+ *  What fishing does (`autost`'s `fishing`): `off` with why (`service`, `setting`, `restart`,
+ *  `slots`, `version`, `limited`, `not_running`), `on` with what (`cast`, `wait`, `reel`),
+ *  `paused` (`player` and `moved` wait for the player's "Devam et"; `window` and `trade` end by
+ *  themselves) or `waiting` (`full`, `no_rod`, `rod_low`, `no_water`: it goes on by itself).
+ */
+export type CloudFishState_Serialize = {
+	state: string,
+	reason: string | null,
+	/**  When this state began (Unix seconds). */
+	since: number | null,
+	doing: string | null,
+	rod: CloudAutoTool_Serialize | null,
+	today: CloudFishToday_Serialize,
+};
+
+/**  Today's fishing (since 00:00 Europe/Istanbul, kept by the machine across restarts). */
+export type CloudFishToday = CloudFishToday_Serialize | CloudFishToday_Deserialize;
+
+/**  Today's fishing (since 00:00 Europe/Istanbul, kept by the machine across restarts). */
+export type CloudFishToday_Deserialize = {
+	catches?: number,
+	fish?: number,
+	treasure?: number,
+	junk?: number,
+	/**  Catches per hour of fishing time today. */
+	perHour?: number | null,
+	/**  By kind, most first (at most 12). */
+	items?: CloudAutoCount_Deserialize[],
+	/**  Newest first (at most 8). */
+	last?: CloudCatch_Deserialize[],
+};
+
+/**  Today's fishing (since 00:00 Europe/Istanbul, kept by the machine across restarts). */
+export type CloudFishToday_Serialize = {
+	catches: number,
+	fish: number,
+	treasure: number,
+	junk: number,
+	/**  Catches per hour of fishing time today. */
+	perHour: number | null,
+	/**  By kind, most first (at most 12). */
+	items: CloudAutoCount_Serialize[],
+	/**  Newest first (at most 8). */
+	last: CloudCatch_Serialize[],
+};
+
+/**
+ *  `config.fishing`, read with the contract's defaults for what the service left out: the form
+ *  the view, the editor and the change all use (a change carries it whole). Its parts' defaults
+ *  are their own (`CloudToolCare`, `CloudWhenFull`).
+ */
+export type CloudFishingSetting = {
+	/**  The player's own choice. */
+	enabled?: boolean,
+	rod?: CloudToolCare,
+	full?: CloudWhenFull,
+	/**  A small turn between casts. */
+	look?: boolean,
 };
 
 /**
@@ -3587,6 +3807,19 @@ export type CloudHover_Deserialize = ({ text: string; st?: CloudSpan[] | null })
 
 /**  A part's hover: the server's text, an item (as the inventory shows it) or an entity. */
 export type CloudHover_Serialize = ({ text: string; st?: CloudSpan[] | null }) & { entity?: never; item?: never } | ({ item: CloudInvItem_Serialize }) & { entity?: never; st?: never; text?: never } | ({ entity: CloudHoverEntity_Serialize }) & { item?: never; st?: never; text?: never };
+
+/**
+ *  The idle movements while mining ("Arada hareket etsin"): a small turn of the head and back, a
+ *  moment of sneaking, a jump, one step back and again (only on a safe floor), once in a random
+ *  time within `every` (seconds, 20 ≤ min ≤ max ≤ 3600).
+ */
+export type CloudIdleMoves = {
+	look?: boolean,
+	sneak?: boolean,
+	jump?: boolean,
+	step?: boolean,
+	every?: CloudEvery,
+};
 
 export type CloudInvDurability = {
 	left?: number,
@@ -3755,7 +3988,10 @@ export type CloudInventorySetting = {
  *  row; `field` what of it (`owner`, `antiAfk`, `count`, `id`, `on`, `delay`, `every`, `at`,
  *  `text`, `match`, `from`, `ownerOnly`, `cooldown`, `reply`); `problem` a key the UI words
  *  (a text problem, a pattern problem, `range`, `order`, `format`, `duplicate`, `limit`, `reseal`,
- *  `owner`, `server`; for `movement`: `off`, `player`, `host`).
+ *  `owner`, `server`; for `movement`: `off`, `player`, `host`; for `fishing` and `mining`: those and
+ *  `limited`, and their parts `fishing.rod`, `fishing.full`, `mining.blocks`, `mining.tool`,
+ *  `mining.full`, `mining.idle` with `range`, `order`, `format`, `empty`, `duplicate`, `secret` or a
+ *  text problem).
  */
 export type CloudIssue = CloudIssue_Serialize | CloudIssue_Deserialize;
 
@@ -3764,7 +4000,10 @@ export type CloudIssue = CloudIssue_Serialize | CloudIssue_Deserialize;
  *  row; `field` what of it (`owner`, `antiAfk`, `count`, `id`, `on`, `delay`, `every`, `at`,
  *  `text`, `match`, `from`, `ownerOnly`, `cooldown`, `reply`); `problem` a key the UI words
  *  (a text problem, a pattern problem, `range`, `order`, `format`, `duplicate`, `limit`, `reseal`,
- *  `owner`, `server`; for `movement`: `off`, `player`, `host`).
+ *  `owner`, `server`; for `movement`: `off`, `player`, `host`; for `fishing` and `mining`: those and
+ *  `limited`, and their parts `fishing.rod`, `fishing.full`, `mining.blocks`, `mining.tool`,
+ *  `mining.full`, `mining.idle` with `range`, `order`, `format`, `empty`, `duplicate`, `secret` or a
+ *  text problem).
  */
 export type CloudIssue_Deserialize = {
 	place: string,
@@ -3780,7 +4019,10 @@ export type CloudIssue_Deserialize = {
  *  row; `field` what of it (`owner`, `antiAfk`, `count`, `id`, `on`, `delay`, `every`, `at`,
  *  `text`, `match`, `from`, `ownerOnly`, `cooldown`, `reply`); `problem` a key the UI words
  *  (a text problem, a pattern problem, `range`, `order`, `format`, `duplicate`, `limit`, `reseal`,
- *  `owner`, `server`; for `movement`: `off`, `player`, `host`).
+ *  `owner`, `server`; for `movement`: `off`, `player`, `host`; for `fishing` and `mining`: those and
+ *  `limited`, and their parts `fishing.rod`, `fishing.full`, `mining.blocks`, `mining.tool`,
+ *  `mining.full`, `mining.idle` with `range`, `order`, `format`, `empty`, `duplicate`, `secret` or a
+ *  text problem).
  */
 export type CloudIssue_Serialize = {
 	place: string,
@@ -3832,174 +4074,194 @@ export type CloudLiveEvent = CloudLiveEvent_Serialize | CloudLiveEvent_Deseriali
 /**  What the socket tells the launcher. */
 export type CloudLiveEvent_Deserialize = 
 /**  The socket of `host` is open; whether its machine is connected now. */
-({ kind: "hello"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "hello"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**  A watched account's live state changed (also once right after `watch`). */
-({ kind: "state"; acct: string; live: CloudLiveState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "state"; acct: string; live: CloudLiveState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  Masked console lines of a watched account. `snapshot`: the recent lines right after
  *  `watch` (they replace what was shown); `skipped`: lines dropped in between.
  */
-({ kind: "lines"; acct: string; lines: CloudConsoleLine_Deserialize[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; snap?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "lines"; acct: string; lines: CloudConsoleLine_Deserialize[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; snap?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**  The machine connected or went away. */
-({ kind: "machine"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "machine"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  The service said no to something: `not_found` (not the player's account there),
  *  `rate_limited`, `host_offline`, `bad_request`.
  */
-({ kind: "problem"; acct: string | null; code: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | ({ kind: "status"; host: string; status: CloudLiveStatus }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; wait?: never; wseq?: never } | 
+({ kind: "problem"; acct: string | null; code: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | ({ kind: "status"; host: string; status: CloudLiveStatus }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; wait?: never; wseq?: never } | 
 /**  AFK+ (watched with `ai`): the account's AI state changed (also once right after `watch`). */
-({ kind: "ai"; acct: string; ai: PlusAi | null }) & { approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "ai"; acct: string; ai: PlusAi | null }) & { approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  AFK+: new audit log entries, in batches at least 2 s apart (the backlog is read on
  *  demand, from the last entry kept).
  */
-({ kind: "audit"; acct: string; items: PlusAuditEntry_Deserialize[] }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "audit"; acct: string; items: PlusAuditEntry_Deserialize[] }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**  AFK+: orders whose progress or live state changed (clients derive the status). */
-({ kind: "orders"; acct: string; orders: { [key in string]: PlusOrderLive } }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "orders"; acct: string; orders: { [key in string]: PlusOrderLive } }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**  AFK+: an approval came, was answered, expired or closed. */
-({ kind: "approval"; acct: string; approval: PlusApproval }) & { ai?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "approval"; acct: string; approval: PlusApproval }) & { ai?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**  AFK+ (QoL Q1): the assistant left the owner a message: "Mesajlar" is read again. */
-({ kind: "messages"; acct: string; count: number; at: number }) & { ai?: never; approval?: never; bars?: never; closed?: never; code?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "messages"; acct: string; count: number; at: number }) & { ai?: never; approval?: never; bars?: never; closed?: never; code?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  The inventory (watched with `inv`): whether it shows now (`state` `ok`, or `off` with
  *  `reason` `not_running`, `setting`, `restart`, `version` or `service`); `lock: "trade"`
  *  while an AFK+ trade holds it (the view stays live, moves wait).
  */
-({ kind: "invState"; acct: string; state: string; reason: string | null; lock: string | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "invState"; acct: string; state: string; reason: string | null; lock: string | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  The player inventory, whole: the selected hotbar slot (0-8), the cursor's item and every
  *  non-empty slot; `snap`: the first frame after a watch.
  */
-({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem_Deserialize | null; items: CloudInvItem_Deserialize[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; dialog?: never; error?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem_Deserialize | null; items: CloudInvItem_Deserialize[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; dialog?: never; error?: never; fishing?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  The window the server opened (`open` and its own slots' `items`), or `closed`; `wseq`
  *  names this opening (every move names the one the player sees).
  */
-({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem_Deserialize[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never } | 
+({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem_Deserialize[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never } | 
 /**
  *  The answer to a move this launcher sent (`id` its own): `ok` means the account's client
  *  sent it on; what the server did shows in the frames that follow.
  */
-({ kind: "invResult"; id: string; ok: boolean; error: CloudInvError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "invResult"; id: string; ok: boolean; error: CloudInvError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; fishing?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  A watched account's status strip: the action bar, a title and the boss bars (never in the
  *  log).
  */
-({ kind: "bars"; acct: string; bars: CloudBars }) & { ai?: never; approval?: never; at?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "bars"; acct: string; bars: CloudBars }) & { ai?: never; approval?: never; at?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  Movement (watched with `move`): whether the account can move now and what it does (also
  *  once right after the watch, then on change).
  */
-({ kind: "movementState"; acct: string; state: CloudMovementState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "movementState"; acct: string; state: CloudMovementState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  Where a watched account stands and looks: after the watch, then on change, at most once a
  *  second, only while it can move.
  */
-({ kind: "pos"; acct: string; pos: CloudPos }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "pos"; acct: string; pos: CloudPos }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  The answer to an operation this launcher sent (`id` its own): `ok` means the account started
  *  it; what happens shows in the frames that follow.
  */
-({ kind: "movementResult"; id: string; ok: boolean; error: CloudMovementError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "movementResult"; id: string; ok: boolean; error: CloudMovementError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; fishing?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+/**
+ *  Auto-fishing and auto-mining (watched with `auto`): what the modes do, first after the watch
+ *  (each mode the account has), then on change. A mode left out is as it was.
+ */
+({ kind: "autoState"; acct: string; fishing: CloudFishState_Deserialize | null; mining: CloudMineState_Deserialize | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+/**
+ *  The answer to an operation this launcher sent (`id` its own): `ok` means the account's client
+ *  took it; what happens shows in the `autoState` that follows.
+ */
+({ kind: "autoResult"; id: string; ok: boolean; error: CloudAutoError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; fishing?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  A watched account's server dialog (DIALOG-CARD): `dialog`, its JSON as the service checked
  *  it (the view checks it again: `safeDialog`), or none when it closed. `rev` names it.
  *  `wait` (client 4.2.5): none shows because the game shows its "waiting for response" screen
  *  in its place, which a close of `rev` leaves.
  */
-({ kind: "dialog"; acct: string; rev: number; dialog: string | null; wait: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "dialog"; acct: string; rev: number; dialog: string | null; wait: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  A watched account's menus (client 4.2.5): what the game's pause screen and quick actions
  *  key open, `{pause?, quick?}` (each `{label, labelSt?}`) as JSON; the view checks it again
  *  (`safeMenus`).
  */
-({ kind: "menus"; acct: string; menus: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never };
+({ kind: "menus"; acct: string; menus: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never };
 
 /**  What the socket tells the launcher. */
 export type CloudLiveEvent_Serialize = 
 /**  The socket of `host` is open; whether its machine is connected now. */
-({ kind: "hello"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "hello"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**  A watched account's live state changed (also once right after `watch`). */
-({ kind: "state"; acct: string; live: CloudLiveState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "state"; acct: string; live: CloudLiveState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  Masked console lines of a watched account. `snapshot`: the recent lines right after
  *  `watch` (they replace what was shown); `skipped`: lines dropped in between.
  */
-({ kind: "lines"; acct: string; lines: CloudConsoleLine_Serialize[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; snap?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "lines"; acct: string; lines: CloudConsoleLine_Serialize[]; skipped: number; snapshot: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; snap?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**  The machine connected or went away. */
-({ kind: "machine"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "machine"; host: string; online: boolean }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  The service said no to something: `not_found` (not the player's account there),
  *  `rate_limited`, `host_offline`, `bad_request`.
  */
-({ kind: "problem"; acct: string | null; code: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | ({ kind: "status"; host: string; status: CloudLiveStatus }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; wait?: never; wseq?: never } | 
+({ kind: "problem"; acct: string | null; code: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | ({ kind: "status"; host: string; status: CloudLiveStatus }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; wait?: never; wseq?: never } | 
 /**  AFK+ (watched with `ai`): the account's AI state changed (also once right after `watch`). */
-({ kind: "ai"; acct: string; ai: PlusAi | null }) & { approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "ai"; acct: string; ai: PlusAi | null }) & { approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  AFK+: new audit log entries, in batches at least 2 s apart (the backlog is read on
  *  demand, from the last entry kept).
  */
-({ kind: "audit"; acct: string; items: PlusAuditEntry_Serialize[] }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "audit"; acct: string; items: PlusAuditEntry_Serialize[] }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**  AFK+: orders whose progress or live state changed (clients derive the status). */
-({ kind: "orders"; acct: string; orders: { [key in string]: PlusOrderLive } }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "orders"; acct: string; orders: { [key in string]: PlusOrderLive } }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**  AFK+: an approval came, was answered, expired or closed. */
-({ kind: "approval"; acct: string; approval: PlusApproval }) & { ai?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "approval"; acct: string; approval: PlusApproval }) & { ai?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**  AFK+ (QoL Q1): the assistant left the owner a message: "Mesajlar" is read again. */
-({ kind: "messages"; acct: string; count: number; at: number }) & { ai?: never; approval?: never; bars?: never; closed?: never; code?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "messages"; acct: string; count: number; at: number }) & { ai?: never; approval?: never; bars?: never; closed?: never; code?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  The inventory (watched with `inv`): whether it shows now (`state` `ok`, or `off` with
  *  `reason` `not_running`, `setting`, `restart`, `version` or `service`); `lock: "trade"`
  *  while an AFK+ trade holds it (the view stays live, moves wait).
  */
-({ kind: "invState"; acct: string; state: string; reason: string | null; lock: string | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "invState"; acct: string; state: string; reason: string | null; lock: string | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  The player inventory, whole: the selected hotbar slot (0-8), the cursor's item and every
  *  non-empty slot; `snap`: the first frame after a watch.
  */
-({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem_Serialize | null; items: CloudInvItem_Serialize[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; dialog?: never; error?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "inventory"; acct: string; held: number; cursor: CloudInvItem_Serialize | null; items: CloudInvItem_Serialize[]; snap: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; dialog?: never; error?: never; fishing?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  The window the server opened (`open` and its own slots' `items`), or `closed`; `wseq`
  *  names this opening (every move names the one the player sees).
  */
-({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem_Serialize[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never } | 
+({ kind: "window"; acct: string; wseq: number; open: CloudWinOpen | null; items: CloudInvItem_Serialize[]; closed: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never } | 
 /**
  *  The answer to a move this launcher sent (`id` its own): `ok` means the account's client
  *  sent it on; what the server did shows in the frames that follow.
  */
-({ kind: "invResult"; id: string; ok: boolean; error: CloudInvError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "invResult"; id: string; ok: boolean; error: CloudInvError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; fishing?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  A watched account's status strip: the action bar, a title and the boss bars (never in the
  *  log).
  */
-({ kind: "bars"; acct: string; bars: CloudBars }) & { ai?: never; approval?: never; at?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "bars"; acct: string; bars: CloudBars }) & { ai?: never; approval?: never; at?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  Movement (watched with `move`): whether the account can move now and what it does (also
  *  once right after the watch, then on change).
  */
-({ kind: "movementState"; acct: string; state: CloudMovementState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "movementState"; acct: string; state: CloudMovementState }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  Where a watched account stands and looks: after the watch, then on change, at most once a
  *  second, only while it can move.
  */
-({ kind: "pos"; acct: string; pos: CloudPos }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "pos"; acct: string; pos: CloudPos }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  The answer to an operation this launcher sent (`id` its own): `ok` means the account started
  *  it; what happens shows in the frames that follow.
  */
-({ kind: "movementResult"; id: string; ok: boolean; error: CloudMovementError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+({ kind: "movementResult"; id: string; ok: boolean; error: CloudMovementError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; fishing?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+/**
+ *  Auto-fishing and auto-mining (watched with `auto`): what the modes do, first after the watch
+ *  (each mode the account has), then on change. A mode left out is as it was.
+ */
+({ kind: "autoState"; acct: string; fishing: CloudFishState_Serialize | null; mining: CloudMineState_Serialize | null }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
+/**
+ *  The answer to an operation this launcher sent (`id` its own): `ok` means the account's client
+ *  took it; what happens shows in the `autoState` that follows.
+ */
+({ kind: "autoResult"; id: string; ok: boolean; error: CloudAutoError | null }) & { acct?: never; ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; fishing?: never; held?: never; host?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never } | 
 /**
  *  A watched account's server dialog (DIALOG-CARD): `dialog`, its JSON as the service checked
  *  it (the view checks it again: `safeDialog`), or none when it closed. `rev` names it.
  *  `wait` (client 4.2.5): none shows because the game shows its "waiting for response" screen
  *  in its place, which a close of `rev` leaves.
  */
-({ kind: "dialog"; acct: string; rev: number; dialog: string | null; wait: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
+({ kind: "dialog"; acct: string; rev: number; dialog: string | null; wait: boolean }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; menus?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wseq?: never } | 
 /**
  *  A watched account's menus (client 4.2.5): what the game's pause screen and quick actions
  *  key open, `{pause?, quick?}` (each `{label, labelSt?}`) as JSON; the view checks it again
  *  (`safeMenus`).
  */
-({ kind: "menus"; acct: string; menus: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never };
+({ kind: "menus"; acct: string; menus: string }) & { ai?: never; approval?: never; at?: never; bars?: never; closed?: never; code?: never; count?: never; cursor?: never; dialog?: never; error?: never; fishing?: never; held?: never; host?: never; id?: never; items?: never; lines?: never; live?: never; lock?: never; mining?: never; ok?: never; online?: never; open?: never; orders?: never; pos?: never; reason?: never; rev?: never; skipped?: never; snap?: never; snapshot?: never; state?: never; status?: never; wait?: never; wseq?: never };
 
 /**
  *  What the machine says about the account now. `state` is one of `unknown`, `stopped`, `queued`,
@@ -4062,6 +4324,75 @@ export type CloudLogRange =
 "today" | 
 /**  "Son 3 gün" (the log keeps three days). */
 "days3";
+
+/**
+ *  What mining does (`autost`'s `mining`): as fishing, `waiting` with `full`, `no_tool`,
+ *  `tool_low` or `no_target`.
+ */
+export type CloudMineState = CloudMineState_Serialize | CloudMineState_Deserialize;
+
+/**
+ *  What mining does (`autost`'s `mining`): as fishing, `waiting` with `full`, `no_tool`,
+ *  `tool_low` or `no_target`.
+ */
+export type CloudMineState_Deserialize = {
+	state?: string,
+	reason?: string | null,
+	since?: number | null,
+	target?: CloudMineTarget | null,
+	tool?: CloudAutoTool_Deserialize | null,
+	today?: CloudMineToday_Deserialize,
+};
+
+/**
+ *  What mining does (`autost`'s `mining`): as fishing, `waiting` with `full`, `no_tool`,
+ *  `tool_low` or `no_target`.
+ */
+export type CloudMineState_Serialize = {
+	state: string,
+	reason: string | null,
+	since: number | null,
+	target: CloudMineTarget | null,
+	tool: CloudAutoTool_Serialize | null,
+	today: CloudMineToday_Serialize,
+};
+
+/**  The block mining looks at (its coordinates go only to the player's own watchers). */
+export type CloudMineTarget = {
+	id?: string,
+	x?: number,
+	y?: number,
+	z?: number,
+};
+
+/**  Today's mining. */
+export type CloudMineToday = CloudMineToday_Serialize | CloudMineToday_Deserialize;
+
+/**  Today's mining. */
+export type CloudMineToday_Deserialize = {
+	blocks?: number,
+	perMinute?: number | null,
+	/**  Blocks broken by kind, most first (at most 12). */
+	items?: CloudAutoCount_Deserialize[],
+};
+
+/**  Today's mining. */
+export type CloudMineToday_Serialize = {
+	blocks: number,
+	perMinute: number | null,
+	/**  Blocks broken by kind, most first (at most 12). */
+	items: CloudAutoCount_Serialize[],
+};
+
+/**  `config.mining`, read with the contract's defaults for what the service left out. */
+export type CloudMiningSetting = {
+	enabled?: boolean,
+	/**  None: every block of [`MINING_BLOCKS`]; else the player's subset of it. */
+	blocks?: string[] | null,
+	tool?: CloudToolCare,
+	full?: CloudWhenFull,
+	idle?: CloudIdleMoves,
+};
 
 /**  Whether, and until when, the player may appeal the step in force. */
 export type CloudModAppeal = {
@@ -4494,6 +4825,16 @@ export type CloudTitleBar = {
 };
 
 /**
+ *  A rod's or a pickaxe's care (`rod`, `tool`): it is put away with `keep` durability left (1–100;
+ *  it never breaks), and with `switch` another one from the inventory (the hotbar first) is taken
+ *  instead of waiting.
+ */
+export type CloudToolCare = {
+	switch?: boolean,
+	keep?: number,
+};
+
+/**
  *  A desktop AFK account and the cloud account with its name on its server (the same account in
  *  two places keeps kicking itself).
  */
@@ -4511,6 +4852,23 @@ export type CloudVersionOption = {
 export type CloudVersions = {
 	versions: CloudVersionOption[],
 	recommended: string,
+};
+
+/**
+ *  What happens when the inventory has no room for what comes next (`full`): `wait` (until there
+ *  is room), `keep` (what does not fit falls to the ground) or `command` (the machine types
+ *  `command` at most once a minute, then waits).
+ */
+export type CloudWhenFull = {
+	do?: string,
+	/**  Only with `command`: plain words under the text rules, never a secret. */
+	command?: string | null,
+	/**
+	 *  The view's mark that a moderation case paused the command (the machine waits meanwhile, as
+	 *  with `wait`): never stored, dropped when the setting is written back; changing the command
+	 *  or `do` has it read again (FISHMINE-W `9b7aad4f`).
+	 */
+	paused?: CloudModPaused | null,
 };
 
 /**

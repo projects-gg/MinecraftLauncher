@@ -5,6 +5,17 @@
 import type { CloudEditConfig, CloudIssue, CloudRowText } from "@/bindings";
 import type { CloudEdit, CloudEditData } from "./api";
 import {
+  fishingOf,
+  IDLE_MAX_SECS,
+  IDLE_MIN_SECS,
+  KEEP_MAX,
+  KEEP_MIN,
+  MINING_BLOCKS,
+  miningOf,
+  type ToolCare,
+  type WhenFull,
+} from "./auto/model";
+import {
   captureCount,
   type PlaceholderProblem,
   placeholderNames,
@@ -39,6 +50,9 @@ const GENERAL_PART: Record<string, Part> = {
   antiAfk: "game",
   inventory: "game",
   movement: "game",
+  // The auto modes and their parts ("fishing.rod", "mining.idle").
+  fishing: "game",
+  mining: "game",
   owner: "replies",
 };
 
@@ -46,7 +60,7 @@ const GENERAL_PART: Record<string, Part> = {
 export function partOf(issue: Issue): Part {
   if (issue.place === "commands") return "commands";
   if (issue.place === "rules") return "replies";
-  return GENERAL_PART[issue.field] ?? "connection";
+  return GENERAL_PART[issue.field] ?? GENERAL_PART[issue.field.split(".")[0] ?? ""] ?? "connection";
 }
 
 /**
@@ -103,7 +117,13 @@ const partValue = (draft: Draft, part: Part): unknown => {
     case "commands":
       return draft.config.commands;
     case "game":
-      return [draft.config.antiAfk, draft.config.inventory, draft.config.movement];
+      return [
+        draft.config.antiAfk,
+        draft.config.inventory,
+        draft.config.movement,
+        draft.config.fishing,
+        draft.config.mining,
+      ];
     case "replies":
       return [draft.config.owner, draft.config.rules];
   }
@@ -326,6 +346,51 @@ export function missingPart(rule: Rule): number | null {
   return part ?? null;
 }
 
+const careProblem = (care: ToolCare) =>
+  !Number.isInteger(care.keep) || care.keep < KEEP_MIN || care.keep > KEEP_MAX ? "range" : null;
+
+/** A full inventory's choice: the command it types is plain text under the rules, never a secret. */
+function fullProblem(full: WhenFull): string | null {
+  if (full.do !== "wait" && full.do !== "keep" && full.do !== "command") return "format";
+  if (full.do !== "command") return null;
+  const command = (full.command ?? "").trim();
+  if (!command) return "empty";
+  return textProblem(command) ?? (looksSensitive(command) ? "secret" : null);
+}
+
+/**
+ * The auto modes' problems (pl_cloud_afk's checks of the same parts: `fishing.rod`, `fishing.full`,
+ * `mining.blocks`, `mining.tool`, `mining.full`, `mining.idle`).
+ */
+export function autoIssues(config: CloudEditConfig): Issue[] {
+  const issues: Issue[] = [];
+  const at = (field: string, problem: string | null) => {
+    if (problem) issues.push({ place: "general", index: null, field, problem });
+  };
+  const fishing = fishingOf(config.fishing);
+  if (fishing) {
+    at("fishing.rod", careProblem(fishing.rod));
+    at("fishing.full", fullProblem(fishing.full));
+  }
+  const mining = miningOf(config.mining);
+  if (mining) {
+    const blocks = mining.blocks;
+    if (blocks) {
+      if (!blocks.length) at("mining.blocks", "empty");
+      else if (!blocks.every((b) => (MINING_BLOCKS as readonly string[]).includes(b)))
+        at("mining.blocks", "format");
+      else if (new Set(blocks).size !== blocks.length) at("mining.blocks", "duplicate");
+    }
+    at("mining.tool", careProblem(mining.tool));
+    at("mining.full", fullProblem(mining.full));
+    const { min, max } = mining.idle.every;
+    if (!Number.isInteger(min) || !Number.isInteger(max)) at("mining.idle", "range");
+    else if (min > max) at("mining.idle", "order");
+    else if (min < IDLE_MIN_SECS || max > IDLE_MAX_SECS) at("mining.idle", "range");
+  }
+  return issues;
+}
+
 /** Problems found while typing (the backend finds the rest, pattern safety included). */
 export function localIssues(
   draft: Draft,
@@ -394,6 +459,7 @@ export function localIssues(
     const problem = wordsProblem(rule.reply);
     if (problem) row("rules", index, "reply", problem);
   });
+  issues.push(...autoIssues(config));
   if (placeholders?.on) {
     config.commands.forEach((command, index) => {
       const text = plainWords(command.words);

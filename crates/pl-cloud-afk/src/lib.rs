@@ -28,10 +28,15 @@
 //! - Movement (README "Movement"): what an account may do ([`CloudMovementFeature`]), its switch,
 //!   the live frames ([`CloudMovementState`], [`CloudPos`]) and the shape of an operation
 //!   ([`check_move_op`]).
+//! - Auto-fishing and auto-mining (README "Auto-fishing and auto-mining"): what an account may do
+//!   ([`CloudAutoFeature`]), its settings ([`CloudFishingSetting`], [`CloudMiningSetting`], sent
+//!   whole), the live frames ([`CloudFishState`], [`CloudMineState`]) and the shape of an
+//!   operation ([`check_auto_op`]).
 //!
 //! Nothing polls: the gate is read when the AFK page opens (cached a minute), the accounts with it
 //! and after an action, and the socket runs only while a console is on screen.
 
+mod auto;
 mod client;
 mod config;
 mod copies;
@@ -54,6 +59,13 @@ mod service_plus;
 mod text;
 mod tls;
 
+pub use auto::{
+    AUTO_IDLE_MAX_SECS, AUTO_IDLE_MIN_SECS, AUTO_KEEP_MAX, AUTO_KEEP_MIN, CloudAutoCount,
+    CloudAutoError, CloudAutoFeature, CloudAutoTool, CloudCatch, CloudFishState, CloudFishToday,
+    CloudFishingSetting, CloudIdleMoves, CloudMineState, CloudMineTarget, CloudMineToday,
+    CloudMiningSetting, CloudToolCare, CloudWhenFull, FishingInput, MINING_BLOCKS, MiningInput,
+    WhenFullInput, check_auto_op,
+};
 pub use client::{Bearer, CloudClient, CloudConfig, LogQuery, PRODUCTION_URL, api_url};
 pub use config::{
     BuildError, Built, CloudEditCommand, CloudEditConfig, CloudEditRule, CloudIssue, CloudRowText,

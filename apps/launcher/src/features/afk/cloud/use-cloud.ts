@@ -189,8 +189,8 @@ type GuardRequest =
   /** "Bu bilgisayarda çalıştır" while the account runs in the cloud (AFK-CLEAR). */
   | { where: "move"; desktop: AfkAccount; cloud: CloudAccount };
 
-/** The account panel's tabs (the inventory's only while the service offers it). */
-export type PanelTab = "console" | "inventory" | "movement";
+/** The account panel's tabs (each feature's only while the service offers it). */
+export type PanelTab = "console" | "inventory" | "movement" | "fishing" | "mining";
 
 interface CloudUi {
   consoleId: string | null;

@@ -15,7 +15,8 @@
 // features add `&feat=on|view` and their own switches (mock-feat.ts); without them the service is
 // one from before the features. `&link=down`: the machine is not connected (a read cannot ask it, a
 // console streams nothing); `window.__plMockCloudLink(online)` changes it while the page is open
-// (mock-live.ts). Movement adds `&move=<scenario>` (mock-move.ts).
+// (mock-live.ts). Movement adds `&move=<scenario>` (mock-move.ts); auto-fishing and auto-mining
+// `&auto=<scenario>` (mock-auto.ts).
 import { api } from "@/lib/api";
 import i18n from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
@@ -32,6 +33,7 @@ import type {
   CloudMovePlan,
   CloudPageData,
 } from "./api";
+import { autoConfig, autoFeature, autoOperation, unwatchAuto, watchAuto } from "./mock-auto";
 import {
   accountFeatures,
   barsEvent,
@@ -211,13 +213,25 @@ function config(rows: "full" | "plain"): CloudAccount["config"] {
     ],
     inventory: null,
     movement: null,
+    fishing: null,
+    mining: null,
   };
 }
 
-/** The account's features with movement's preview (`&move=…`), while the features are on. */
+/**
+ * The account's features with the previews of movement (`&move=…`) and the auto modes
+ * (`&auto=…`), while the features are on.
+ */
 function withMovement(id: string): CloudAccount["features"] {
   const features = accountFeatures(id);
-  return features ? { ...features, movement: movementFeature(id) } : features;
+  return features
+    ? {
+        ...features,
+        movement: movementFeature(id),
+        fishing: autoFeature(id, "fishing"),
+        mining: autoFeature(id, "mining"),
+      }
+    : features;
 }
 
 function account(
@@ -253,7 +267,7 @@ function account(
       retryAt: null,
     },
     everJoined: true,
-    config: config("full"),
+    config: { ...config("full"), ...autoConfig(id) },
     rev: 4,
     serverChanges: { used: 0, limit: 6, resetAt: null },
     tier: plusScenario === "off" ? "" : "plain",
@@ -599,6 +613,8 @@ function editView(cloud: CloudAccount): CloudEditData {
       })),
       inventory: cloud.config.inventory?.enabled ?? null,
       movement: cloud.config.movement?.enabled ?? null,
+      fishing: cloud.config.fishing ?? null,
+      mining: cloud.config.mining ?? null,
     },
     versions: {
       versions: [
@@ -667,6 +683,8 @@ function plan(name: string, server: string): CloudMovePlan {
       ],
       inventory: null,
       movement: null,
+      fishing: null,
+      mining: null,
     },
     dropped: [
       { what: "walking", count: 1 },
@@ -858,6 +876,36 @@ export const mockCloudApi: CloudApi = {
         ],
       };
     }
+    // The auto modes (README "Auto settings"): turning one on needs a slot and a server that is not
+    // limited for it (`&auto=player|host`, Projects' fishing).
+    for (const mode of ["fishing", "mining"] as const) {
+      const wanted = edit.config?.[mode];
+      const now = current.features?.[mode];
+      const was = current.config[mode]?.enabled ?? false;
+      if (!wanted?.enabled || was || !now) continue;
+      if (now.limited) {
+        return {
+          kind: "invalid",
+          issues: [{ place: "general", index: null, field: mode, problem: "limited" }],
+        };
+      }
+      if (!now.on && now.slot) {
+        return {
+          kind: "invalid",
+          issues: [
+            {
+              place: "general",
+              index: null,
+              field: mode,
+              problem: now.slot,
+              max: now.slot === "player" ? (mode === "fishing" ? 2 : 1) : 10,
+            },
+          ],
+        };
+      }
+    }
+    const fishing = edit.config?.fishing;
+    const mining = edit.config?.mining;
     const next = replace({
       ...current,
       name: edit.name ?? current.name,
@@ -869,9 +917,15 @@ export const mockCloudApi: CloudApi = {
         ...current.config,
         ...(typeof inventory === "boolean" ? { inventory: { enabled: inventory } } : {}),
         ...(typeof movement === "boolean" ? { movement: { enabled: movement } } : {}),
+        ...(fishing ? { fishing } : {}),
+        ...(mining ? { mining } : {}),
       },
       features:
-        (typeof inventory === "boolean" || typeof movement === "boolean") && current.features
+        (typeof inventory === "boolean" ||
+          typeof movement === "boolean" ||
+          Boolean(fishing) ||
+          Boolean(mining)) &&
+        current.features
           ? {
               ...current.features,
               ...(typeof inventory === "boolean"
@@ -879,6 +933,20 @@ export const mockCloudApi: CloudApi = {
                 : {}),
               ...(typeof movement === "boolean" && current.features.movement
                 ? { movement: { ...current.features.movement, on: movement, slot: null } }
+                : {}),
+              ...(fishing && current.features.fishing
+                ? {
+                    fishing: {
+                      ...current.features.fishing,
+                      on: Boolean(fishing.enabled),
+                      slot: null,
+                    },
+                  }
+                : {}),
+              ...(mining && current.features.mining
+                ? {
+                    mining: { ...current.features.mining, on: Boolean(mining.enabled), slot: null },
+                  }
                 : {}),
             }
           : current.features,
@@ -979,6 +1047,21 @@ export const mockCloudApi: CloudApi = {
     );
     return null;
   },
+  async autoWatch(id) {
+    await delay(60);
+    watchAuto(id, find(id).live.state === "running", emit);
+  },
+  async autoUnwatch(id) {
+    unwatchAuto(id);
+  },
+  async autoOp(id, opId, op) {
+    const refused = autoOperation(id, op);
+    window.setTimeout(
+      () => emit({ kind: "autoResult", id: opId, ok: refused === null, error: refused }),
+      40,
+    );
+    return null;
+  },
   async setInventory(id, enabled) {
     await delay(380);
     const current = find(id);
@@ -1032,6 +1115,8 @@ export const mockCloudApi: CloudApi = {
           ...from.config,
           inventory: current.config.inventory,
           movement: current.config.movement,
+          fishing: current.config.fishing,
+          mining: current.config.mining,
         },
         rev: current.rev + 1,
       });

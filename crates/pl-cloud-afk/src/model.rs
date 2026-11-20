@@ -8,6 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::auto::{CloudFishingSetting, CloudMiningSetting, FishingInput, MiningInput};
 use crate::feat::{CloudAccountFeatures, CloudInventorySetting, OfferFeatures};
 use crate::movement::CloudMovementSetting;
 use crate::plus::{MePlus, PlusAi, PlusOffer};
@@ -424,6 +425,10 @@ pub struct CloudConfigView {
     pub inventory: Option<CloudInventorySetting>,
     /// The player's movement switch, only when stored (absent: off).
     pub movement: Option<CloudMovementSetting>,
+    /// Auto-fishing and auto-mining, only when stored (absent: off), read with the contract's
+    /// defaults for the parts the service left out.
+    pub fishing: Option<CloudFishingSetting>,
+    pub mining: Option<CloudMiningSetting>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -734,8 +739,8 @@ pub struct RuleInput {
 }
 
 /// `CloudAccountConfig` v1 in its input form. The fields the features added (`inventory`, later
-/// `sequences` and `movement`) are kept by the service when a change leaves them out, so a field
-/// this launcher does not send is never erased.
+/// `sequences`, `movement`, `fishing` and `mining`) are kept by the service when a change leaves
+/// them out, so a field this launcher does not send is never erased.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigInput {
@@ -751,6 +756,12 @@ pub struct ConfigInput {
     /// field), and only when there is a choice.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub movement: Option<CloudMovementSetting>,
+    /// Sent only to a service whose `Account.features` has the mode, only when there is a setting,
+    /// and then whole (a change that carries it carries every part).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fishing: Option<FishingInput>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mining: Option<MiningInput>,
 }
 
 /// `PATCH /accounts/:id`: at least one field. A new `server` needs `config` with every secret row
@@ -988,9 +999,12 @@ mod tests {
             rules: vec![],
             inventory: None,
             movement: None,
+            fishing: None,
+            mining: None,
         };
         let sent = serde_json::to_value(&config).unwrap();
         assert!(sent.get("inventory").is_none() && sent.get("movement").is_none());
+        assert!(sent.get("fishing").is_none() && sent.get("mining").is_none());
     }
 
     #[test]
@@ -1021,6 +1035,50 @@ mod tests {
         assert!(movement.mode == "on" && movement.on);
         assert_eq!(movement.follow.main.as_deref(), Some("Kaan_07"));
         assert_eq!(movement.follow.own, ["AfkBot_2"]);
+    }
+
+    #[test]
+    fn reads_the_auto_modes_and_a_service_before_them() {
+        let json = account_json("run", "null", r#"{"state": "running"}"#);
+        let old: CloudAccount = serde_json::from_str(&json).unwrap();
+        assert_eq!((old.config.fishing, old.config.mining), (None, None));
+        let json = json
+            .replace(
+                r#""commands": [], "rules": []"#,
+                r#""commands": [], "rules": [], "fishing": {"enabled": true, "look": true},
+                  "mining": {"enabled": false, "blocks": ["minecraft:cobblestone"]}"#,
+            )
+            .replace(
+                r#""rev": 7"#,
+                r#""features": {"inventory": {"mode": "off", "on": false}, "consoleKinds": false,
+                  "placeholders": false, "legacyRules": false,
+                  "fishing": {"mode": "on", "on": true, "slot": null,
+                    "limited": {"tr": "Projects sunucularında otomatik balık tutma kapalı.",
+                                "en": "Auto-fishing is off on Projects servers."}},
+                  "mining": {"mode": "on", "on": false, "slot": "host", "limited": null}},
+                  "rev": 7"#,
+            );
+        let account: CloudAccount = serde_json::from_str(&json).unwrap();
+        let fishing = account.config.fishing.unwrap();
+        // The parts the service left out read as the contract's defaults.
+        assert!(fishing.enabled && fishing.look && fishing.rod.switch && fishing.rod.keep == 5);
+        assert_eq!(fishing.full.action, "wait");
+        let mining = account.config.mining.unwrap();
+        assert_eq!(
+            mining.blocks.as_deref(),
+            Some(&["minecraft:cobblestone".to_owned()][..])
+        );
+        assert_eq!((mining.idle.every.min, mining.idle.every.max), (60, 180));
+        let features = account.features.unwrap();
+        let limited = features.fishing.unwrap().limited.unwrap();
+        assert_eq!(limited.en, "Auto-fishing is off on Projects servers.");
+        let mining = features.mining.unwrap();
+        assert!(mining.offered() && !mining.on);
+        assert_eq!(mining.slot.as_deref(), Some("host"));
+        // A service before the modes has none: nothing of them shows.
+        let offer: Offer = serde_json::from_str(r#"{"mode": "on", "features": {}}"#).unwrap();
+        let features = offer.features.unwrap();
+        assert!(!features.fishing && !features.mining);
     }
 
     #[test]

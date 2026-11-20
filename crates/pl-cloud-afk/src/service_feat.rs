@@ -1,11 +1,13 @@
 //! The cloud features' calls (CAFK-FEAT phase 1): the inventory's stream and moves, the account's
 //! inventory choice, the console download, and copying one account's settings to others ("Ayarları
-//! kopyala"); movement's stream and operations (README "Movement"). Nothing here polls: the
-//! inventory and movement stream only while their panel is on screen.
+//! kopyala"); movement's stream and operations (README "Movement"); the auto modes' stream and
+//! operations (README "Auto on the live socket"). Nothing here polls: the inventory, movement and
+//! the auto modes stream only while their panel is on screen.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::auto::{CloudAutoError, check_auto_op};
 use crate::client::{Bearer, LogQuery};
 use crate::config::{
     BuildError, CloudEditConfig, CloudRowText, SealContext, build, copies_after, edit_config,
@@ -114,6 +116,39 @@ impl CloudService {
         }
         (!self.inner.live.movement_op(id, op_id, &value))
             .then(|| CloudMovementError::new("host_offline"))
+    }
+
+    /// An auto panel ("Balık" or "Kazma") is on screen: the account's auto states stream with its
+    /// console.
+    pub async fn watch_auto(&self, token: &Bearer, id: &str) -> Result<()> {
+        let account = self.account(token, id).await?;
+        let Some(host) = account.host.clone() else {
+            return Err(CloudError::Invalid("no machine yet"));
+        };
+        let url = self.inner.client.live_url(&host);
+        self.inner.live.watch_auto(url, token.clone(), &host, id);
+        Ok(())
+    }
+
+    /// The auto panels left the screen.
+    pub fn unwatch_auto(&self, id: &str) {
+        self.inner.live.unwatch_auto(id);
+    }
+
+    /// An auto operation: `op` is the app's `AutoOp` as JSON, `op_id` its own id. None: sent, the
+    /// answer follows as `autoResult`; Some: refused here (its shape, or no socket:
+    /// `host_offline`).
+    pub fn auto_op(&self, id: &str, op_id: &str, op: &str) -> Option<CloudAutoError> {
+        if !is_inv_op_id(op_id) || op.len() > 768 {
+            return Some(CloudAutoError::invalid("id", None));
+        }
+        let Ok(value) = serde_json::from_str::<Value>(op) else {
+            return Some(CloudAutoError::invalid("type", None));
+        };
+        if let Err(problem) = check_auto_op(&value) {
+            return Some(problem);
+        }
+        (!self.inner.live.auto_op(id, op_id, &value)).then(|| CloudAutoError::new("host_offline"))
     }
 
     /// A move: `op` is the app's `InvOp` as JSON, `op_id` its own id. None: sent, the answer
@@ -342,7 +377,8 @@ struct CopyJob<'a> {
 impl CopyJob<'_> {
     /// The source's settings for target `id`: every secret row with words to seal for it (this
     /// computer's copy, or what the player typed for this target, else for all); None when a row's
-    /// words are missing. The target keeps its own inventory and movement choices.
+    /// words are missing. The target keeps its own inventory, movement and auto mode choices (the
+    /// contract's copy never copies them).
     fn config_for(&self, id: &str) -> Option<CloudEditConfig> {
         let typed = |row: &str| {
             self.secrets
@@ -377,6 +413,8 @@ impl CopyJob<'_> {
         }
         config.inventory = None;
         config.movement = None;
+        config.fishing = None;
+        config.mining = None;
         Some(config)
     }
 }
@@ -444,6 +482,11 @@ mod tests {
             }],
             inventory: Some(true),
             movement: Some(true),
+            fishing: Some(crate::auto::CloudFishingSetting {
+                enabled: true,
+                ..crate::auto::CloudFishingSetting::default()
+            }),
+            mining: Some(crate::auto::CloudMiningSetting::default()),
         }
     }
 
@@ -492,6 +535,11 @@ mod tests {
         );
         assert_eq!(for_two.inventory, None);
         assert_eq!(for_two.movement, None, "movement is never copied");
+        assert_eq!(
+            (for_two.fishing.clone(), for_two.mining.clone()),
+            (None, None),
+            "the auto modes are never copied"
+        );
         assert_eq!(for_two.owner, "Ahmet");
         let for_three = job.config_for("a_3").unwrap();
         assert_eq!(

@@ -690,6 +690,14 @@ impl CloudService {
             {
                 config.movement = None;
             }
+            // The same for each auto mode.
+            let features = current.features.as_ref();
+            if features.and_then(|f| f.fishing.as_ref()).is_none() {
+                config.fishing = None;
+            }
+            if features.and_then(|f| f.mining.as_ref()).is_none() {
+                config.mining = None;
+            }
             let key = self.vault_key().await?;
             let ctx = SealContext {
                 key: &key,
@@ -877,6 +885,21 @@ fn refusal_issues(error: &CloudError) -> Option<Vec<CloudIssue>> {
                     .and_then(|max| u32::try_from(max).ok()),
                 ..CloudIssue::from_path(
                     "movement",
+                    if scope == "player" { "player" } else { "host" },
+                )
+            }
+        }
+        // No slot for an auto mode (README "Auto slots"): the player's number of accounts with
+        // it is reached (`player`), or the machine's slots are taken (`host`).
+        "limit_fishing" | "limit_mining" => {
+            let scope = error.extra_str("scope").unwrap_or("host");
+            CloudIssue {
+                max: error
+                    .extra("max")
+                    .and_then(serde_json::Value::as_u64)
+                    .and_then(|max| u32::try_from(max).ok()),
+                ..CloudIssue::from_path(
+                    error.code().trim_start_matches("limit_"),
                     if scope == "player" { "player" } else { "host" },
                 )
             }
@@ -1090,6 +1113,50 @@ mod tests {
             (issue.field.as_str(), issue.problem.as_str()),
             ("movement", "off")
         );
+        // The auto modes: no slot, a limited server, switched off meanwhile.
+        let error = from_response(
+            422,
+            None,
+            json!({"error": {"code": "limit_fishing", "scope": "player", "max": 2}})
+                .to_string()
+                .as_bytes(),
+        );
+        assert_eq!(
+            refusal_issues(&error),
+            Some(vec![CloudIssue {
+                place: "general".into(),
+                index: None,
+                field: "fishing".into(),
+                problem: "player".into(),
+                max: Some(2),
+            }])
+        );
+        let error = from_response(
+            422,
+            None,
+            json!({"error": {"code": "limit_mining", "scope": "host", "max": 10}})
+                .to_string()
+                .as_bytes(),
+        );
+        let issue = &refusal_issues(&error).unwrap()[0];
+        assert_eq!(
+            (issue.field.as_str(), issue.problem.as_str()),
+            ("mining", "host")
+        );
+        for reason in ["limited", "off"] {
+            let error = from_response(
+                400,
+                None,
+                json!({"error": {"code": "invalid_config", "field": "fishing.enabled", "reason": reason}})
+                    .to_string()
+                    .as_bytes(),
+            );
+            let issue = &refusal_issues(&error).unwrap()[0];
+            assert_eq!(
+                (issue.field.as_str(), issue.problem.as_str()),
+                ("fishing", reason)
+            );
+        }
     }
 
     #[test]

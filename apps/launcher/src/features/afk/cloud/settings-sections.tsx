@@ -286,7 +286,10 @@ function MovementBlock({
   );
 }
 
-/** Oyun içi: anti-AFK with its interval, the inventory view, movement (each where it is offered). */
+/**
+ * Oyun içi: anti-AFK with its interval, the inventory view, movement (each where it is offered).
+ * Auto-fishing and auto-mining are questions of their own (auto/auto-settings.tsx).
+ */
 export function GamePart({ draft, setDraft, view, issues }: PartProps) {
   const { t } = useTranslation();
   const issueText = useIssueText(view, draft);
