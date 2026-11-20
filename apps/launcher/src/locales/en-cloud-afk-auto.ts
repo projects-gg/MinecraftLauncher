@@ -35,6 +35,7 @@ export const enCloudAfkAuto = {
     },
   },
   limitedLink: "Limited Servers",
+  limitedOn: "It doesn't run on this server.",
   fishing: {
     title: "Auto-Fishing",
     line: "It casts where it stands, reels in when a fish bites and casts again.",

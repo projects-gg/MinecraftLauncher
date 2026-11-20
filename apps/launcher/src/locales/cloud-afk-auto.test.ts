@@ -77,6 +77,11 @@ describe("auto-fishing and auto-mining texts", () => {
     );
   });
 
+  it("say a limited server's stored-on mode does not run there, as every surface does", () => {
+    expect(trCloudAfkAuto.limitedOn).toBe("Bu sunucuda çalışmaz.");
+    expect(enCloudAfkAuto.limitedOn).toBe("It doesn't run on this server.");
+  });
+
   it("title the modes, tabs and buttons in Title Case", () => {
     const titles = [
       trCloudAfkAuto.fishing.title,
