@@ -315,7 +315,7 @@ function AutoBody({
   return (
     <div data-auto-panel={mode} className="@container/auto flex flex-col gap-4 pb-4">
       <section
-        aria-label={t(`cloudAfkAuto.${mode}.items`)}
+        aria-label={t("cloudAfkAuto.today")}
         className="flex min-h-7 flex-wrap items-baseline justify-between gap-x-6 gap-y-1"
       >
         <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
@@ -420,7 +420,11 @@ function AutoBody({
                       treasure ? "font-medium text-bone-50" : "text-bone-100",
                     )}
                   >
-                    {name(caught.id)}
+                    {/* The site's form: an enchanted catch says so after its name (a book's name
+                        already does: the client counts its stored enchantments). */}
+                    {caught.ench && caught.id !== "minecraft:enchanted_book"
+                      ? `${name(caught.id)} (${t("cloudAfkAuto.enchanted")})`
+                      : name(caught.id)}
                   </span>
                   {/* Treasure said in words, never by colour alone. */}
                   {treasure ? (
@@ -455,13 +459,18 @@ function AutoBody({
               {tool ? name(tool.item || MODE_ITEM[mode]) : t(`cloudAfkAuto.${mode}.tool`)}
             </p>
             <p className="text-[12.5px] text-ash-400 tabular-nums">
-              {tool && tool.max > 0
-                ? t("cloudAfkAuto.durability", { dur: tool.dur, max: tool.max })
-                : t(
-                    mode === "fishing"
-                      ? "cloudAfkAuto.fishing.noTool"
-                      : "cloudAfkAuto.mining.noToolHeld",
-                  )}
+              {tool && tool.max > 0 ? (
+                <>
+                  <span className="sr-only">{t("cloudAfkAuto.durabilityLabel")} </span>
+                  {t("cloudAfkAuto.durability", { dur: tool.dur, max: tool.max })}
+                </>
+              ) : (
+                t(
+                  mode === "fishing"
+                    ? "cloudAfkAuto.fishing.noTool"
+                    : "cloudAfkAuto.mining.noToolHeld",
+                )
+              )}
             </p>
           </div>
         </div>
@@ -528,9 +537,12 @@ function AutoBody({
             />
           ))}
         </fieldset>
-        {aim.dir === null && aimable ? (
-          <p className="col-start-2 text-[12px] text-ash-400">{t("cloudAfkAuto.aim.first")}</p>
-        ) : null}
+        {/* What to face (the site's words); while nothing is chosen, a direction comes first. */}
+        <p className="col-start-2 text-[12px] text-ash-400">
+          {aim.dir === null && aimable
+            ? `${t(`cloudAfkAuto.${mode}.aimHelp`)} ${t("cloudAfkAuto.aim.first")}`
+            : t(`cloudAfkAuto.${mode}.aimHelp`)}
+        </p>
       </section>
 
       <Disclaimer />

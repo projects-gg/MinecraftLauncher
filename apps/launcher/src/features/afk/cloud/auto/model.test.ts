@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { CloudFishingSetting, CloudLiveEvent, CloudMiningSetting } from "@/bindings";
+import { enCloudAfkAuto } from "@/locales/en-cloud-afk-auto";
 import { trCloudAfkAuto } from "@/locales/tr-cloud-afk-auto";
 import type { CloudAccount } from "../api";
 import {
@@ -9,22 +10,29 @@ import {
   AUTO_WAITING,
   autoShown,
   canPause,
+  chosenKinds,
   defaultFishing,
   defaultMining,
   type FishState,
   fishingOf,
+  kindOn,
+  limitKey,
   MINING_BLOCKS,
+  MINING_KINDS,
   type MineState,
   miningOf,
   needsResume,
+  ORE_KINDS,
   ORES,
   offKey,
   orderedBlocks,
   reduceAuto,
   refusalKey,
+  STONE_KINDS,
   STONES,
   slotKey,
   stateLine,
+  toggleKind,
   wear,
   withAuto,
 } from "./model";
@@ -152,6 +160,20 @@ describe("auto model", () => {
       "paused.moved",
     );
     expect(stateLine("fishing", null)).toBeNull();
+    // Every reason has its own words; one a newer machine sends reads plainly, never as the player's.
+    expect(stateLine("fishing", fish({ state: "paused", reason: "player" }))?.key).toBe(
+      "paused.player",
+    );
+    expect(stateLine("fishing", fish({ state: "paused", reason: "later" }))?.key).toBe(
+      "pausedOther",
+    );
+    expect(stateLine("mining", mine({ state: "waiting", reason: "later" }))?.key).toBe(
+      "waitingOther",
+    );
+    // A wait is the mode's own: a rod's never reads on mining.
+    expect(stateLine("mining", mine({ state: "waiting", reason: "no_rod" }))?.key).toBe(
+      "waitingOther",
+    );
     expect(needsResume(fish({ state: "paused", reason: "player" }))).toBe(true);
     expect(needsResume(fish({ state: "paused", reason: "window" }))).toBe(false);
     expect(canPause(fish({ state: "waiting", reason: "no_water" }))).toBe(true);
@@ -166,6 +188,11 @@ describe("auto model", () => {
     expect(offKey("later")).toBe("off");
     expect(slotKey("host")).toEqual({ key: "noSlot" });
     expect(slotKey("player")).toEqual({ key: "elsewhere" });
+    // A refused save names the player's own limit (none sent reads as one, as on the site).
+    expect(limitKey("player", 3)).toEqual({ key: "maxAccounts", values: { max: 3 } });
+    expect(limitKey("player", 1)).toEqual({ key: "oneAccount" });
+    expect(limitKey("player", null)).toEqual({ key: "oneAccount" });
+    expect(limitKey("host", 10)).toEqual({ key: "noSlot" });
     expect(refusalKey("fishing", { code: "busy_trade", reason: null, field: null }, true)).toBe(
       "refusal.turnTrade",
     );
@@ -173,7 +200,7 @@ describe("auto model", () => {
       "paused.trade",
     );
     expect(refusalKey("mining", { code: "not_running", reason: null, field: null })).toBe(
-      "mining.notRunning",
+      "refusal.notRunning",
     );
     expect(refusalKey("mining", { code: "auto_off", reason: "version", field: null })).toBe(
       "mining.version",
@@ -182,6 +209,101 @@ describe("auto model", () => {
       "refusal.slow",
     );
     expect(refusalKey("fishing", { code: "invalid", reason: "yaw", field: null })).toBeNull();
+  });
+
+  it("words every state, refusal and limit in both languages", () => {
+    const at = (words: unknown, key: string) =>
+      key
+        .split(".")
+        .reduce<unknown>(
+          (node, part) => (node as Record<string, unknown> | undefined)?.[part],
+          words,
+        );
+    const keys = new Set<string>();
+    const add = (key: string | null | undefined) => {
+      if (key) keys.add(key);
+    };
+    const reasons = {
+      paused: ["player", "moved", "window", "trade", "later"],
+      waiting: [
+        "full",
+        "no_rod",
+        "rod_low",
+        "no_water",
+        "no_tool",
+        "tool_low",
+        "no_target",
+        "other",
+        "later",
+      ],
+    };
+    for (const mode of ["fishing", "mining"] as const) {
+      const make = (state: string, reason: string | null) =>
+        mode === "fishing" ? fish({ state, reason }) : mine({ state, reason });
+      add(stateLine(mode, make("on", null))?.key);
+      for (const doing of ["cast", "wait", "reel", "later"]) {
+        add(stateLine("fishing", fish({ doing }))?.key);
+      }
+      for (const [state, list] of Object.entries(reasons)) {
+        for (const reason of list) add(stateLine(mode, make(state, reason))?.key);
+      }
+      for (const reason of ["not_running", "setting", "restart", "slots", "version", "limited"]) {
+        add(`${mode}.${offKey(reason)}`);
+      }
+      add(`${mode}.${offKey("later")}`);
+      for (const [scope, max] of [
+        ["player", 3],
+        ["player", 1],
+        ["player", null],
+        ["host", 10],
+      ] as const) {
+        add(`${mode}.${limitKey(scope, max).key}`);
+      }
+      for (const scope of ["player", "host"]) add(`${mode}.${slotKey(scope).key}`);
+      for (const code of [
+        "invalid",
+        "rate_limited",
+        "busy_trade",
+        "not_running",
+        "auto_off",
+        "host_offline",
+        "later",
+      ]) {
+        for (const aim of [false, true]) {
+          add(refusalKey(mode, { code, reason: "later", field: null }, aim));
+        }
+      }
+    }
+    expect(keys.size).toBeGreaterThan(30);
+    for (const key of keys) {
+      expect(typeof at(trCloudAfkAuto, key), key).toBe("string");
+      expect(typeof at(enCloudAfkAuto, key), key).toBe("string");
+    }
+  });
+
+  it("counts the kinds the site counts: an ore and its deepslate twin are one", () => {
+    expect(MINING_KINDS.flat()).toEqual([...MINING_BLOCKS]);
+    expect(chosenKinds([...MINING_BLOCKS])).toBe(25);
+    expect(chosenKinds(["minecraft:iron_ore", "minecraft:deepslate_iron_ore"])).toBe(1);
+    expect(chosenKinds(["minecraft:cobblestone", "minecraft:stone"])).toBe(2);
+    expect(chosenKinds([])).toBe(0);
+  });
+
+  it("toggles a kind as the site does: an ore and its twin go together", () => {
+    const iron = ["minecraft:iron_ore", "minecraft:deepslate_iron_ore"];
+    expect(STONE_KINDS).toHaveLength(14);
+    expect(ORE_KINDS).toHaveLength(11);
+    expect(toggleKind(["minecraft:diamond_ore"], iron)).toEqual([
+      "minecraft:iron_ore",
+      "minecraft:deepslate_iron_ore",
+      "minecraft:diamond_ore",
+    ]);
+    // A stored half pair reads as chosen; pressing it takes the half away.
+    expect(kindOn(["minecraft:deepslate_iron_ore"], iron)).toBe(true);
+    expect(toggleKind(["minecraft:cobblestone", "minecraft:deepslate_iron_ore"], iron)).toEqual([
+      "minecraft:cobblestone",
+    ]);
+    expect(kindOn(["minecraft:cobblestone"], iron)).toBe(false);
   });
 
   it("reads a stored setting with the contract's defaults", () => {

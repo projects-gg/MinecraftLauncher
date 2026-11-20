@@ -1,5 +1,6 @@
 // 24/7 Cloud's auto-fishing and auto-mining (FISHMINE-L). English counterpart of tr-cloud-afk-auto.ts:
-// the same keys, the site's English words (FM-WEB's table). Root key `cloudAfkAuto`.
+// the same keys, the site's English words (afk-web en-auto.ts and en-auto-panel.ts). Root key
+// `cloudAfkAuto`.
 export const enCloudAfkAuto = {
   tabs: {
     fishing: "Fishing",
@@ -23,19 +24,28 @@ export const enCloudAfkAuto = {
     limited: "Off on this server",
   },
   disclaimer: "Not tested server by server. It is not guaranteed to work on every server.",
-  exclusive: {
-    fishing: "An account does one job at a time. It doesn't mine while it fishes.",
-    mining: "An account does one job at a time. It doesn't fish while it mines.",
+  oneJob: {
+    will: {
+      fishing: "An account does one job at a time. Turning this on turns auto-mining off.",
+      mining: "An account does one job at a time. Turning this on turns auto-fishing off.",
+    },
+    did: {
+      fishing: "An account does one job at a time. Auto-mining is now off.",
+      mining: "An account does one job at a time. Auto-fishing is now off.",
+    },
   },
   limitedLink: "Limited Servers",
   fishing: {
     title: "Auto-Fishing",
     line: "It casts where it stands, reels in when a fish bites and casts again.",
+    waterHint: "Leave your account at the water's edge, facing the water.",
     limited: "Auto-fishing is off on this server.",
     off: "Auto-fishing is off right now.",
     noSlot: "No room for auto-fishing right now.",
     slots: "No room for auto-fishing right now. It tries again when the account reconnects.",
-    elsewhere: "It's on for your other accounts, so it can't be turned on here.",
+    elsewhere: "It's on for your other accounts. Turn it off on one of them to turn it on here.",
+    oneAccount: "Auto-fishing can be on for only one of your accounts at a time.",
+    maxAccounts: "Auto-fishing can be on for at most {{max}} of your accounts.",
     notRunning: "It doesn't fish while the account isn't in the game.",
     setting: "Auto-fishing is off for this account.",
     restart: "Auto-fishing starts on the next reconnect.",
@@ -45,8 +55,7 @@ export const enCloudAfkAuto = {
     switch: "Switch to Another Rod",
     switchHelp: "It takes the best rod in the inventory. If there's none, it waits.",
     look: "Look Around Now and Then",
-    lookHelp:
-      "Between casts it turns its head a little and back, so the server doesn't mark you AFK.",
+    lookHelp: "Between casts it turns its head a little and back.",
     doing: {
       on: "Fishing.",
       cast: "Casting.",
@@ -55,9 +64,11 @@ export const enCloudAfkAuto = {
     },
     noRod: "There's no rod in the inventory. It starts when it gets one.",
     rodLow: "The rod is nearly worn out. It goes on when it gets another.",
-    noWater: "It can't find water in front of it. Turn it toward the water.",
+    noWater:
+      "It can't find water in front of it. Leave your account at the water's edge, facing the water.",
     otherFirst: "It doesn't fish while mining is on.",
     otherOn: "Turn off auto-mining first.",
+    aimHelp: "Turn it to the water.",
     tool: "Rod",
     noTool: "No rod in hand.",
     caught: "Caught",
@@ -76,7 +87,9 @@ export const enCloudAfkAuto = {
     off: "Auto-mining is off right now.",
     noSlot: "No room for auto-mining right now.",
     slots: "No room for auto-mining right now. It tries again when the account reconnects.",
-    elsewhere: "It's on for your other accounts, so it can't be turned on here.",
+    elsewhere: "It's on for your other accounts. Turn it off on one of them to turn it on here.",
+    oneAccount: "Auto-mining can be on for only one of your accounts at a time.",
+    maxAccounts: "Auto-mining can be on for at most {{max}} of your accounts.",
     notRunning: "It doesn't mine while the account isn't in the game.",
     setting: "Auto-mining is off for this account.",
     restart: "Auto-mining starts on the next reconnect.",
@@ -94,6 +107,7 @@ export const enCloudAfkAuto = {
     noTarget: "Nothing to break in front of it. It goes on when a block appears.",
     otherFirst: "It doesn't mine while fishing is on.",
     otherOn: "Turn off auto-fishing first.",
+    aimHelp: "Turn it to the block it should break.",
     tool: "Pickaxe",
     noToolHeld: "No pickaxe in hand.",
     broken: "Broken",
@@ -113,12 +127,12 @@ export const enCloudAfkAuto = {
     commandHelp: "It sends this command, then waits for room. At most once a minute.",
     commandLabel: "Command",
     commandPlaceholder: "/sell all",
-    empty: "Type a command.",
+    empty: "Type the command.",
     secret: "Don't type a password or anything secret here.",
     paused: "This command is being reviewed. Until then it waits when the inventory is full.",
   },
   blocks: {
-    title: "Which Blocks?",
+    title: "Blocks to Break",
     all: "All",
     some: "Selected",
     allHelp: "Only stone kinds and ores. It never touches chests, beds or crops.",
@@ -136,19 +150,23 @@ export const enCloudAfkAuto = {
     jump: "Jump",
     step: "Step",
     every: "Interval",
-    min: "Min",
-    max: "Max",
+    min: "Min (s)",
+    max: "Max (s)",
     seconds: "s",
-    range: "Enter 20 to 3600 seconds.",
-    order: "The max can't be less than the min.",
+    range: "Enter 20 to 3600 seconds. The max can't be less than the min.",
   },
   paused: {
     player: "You paused it.",
-    moved: "The account was moved, so it stopped. Resume it to go on where it is now.",
+    moved: "The account was moved, so it stopped. Press Resume to go on where it is now.",
     window: "A menu is open. It goes on when it closes.",
     trade: "A trade is open. It goes on when it ends.",
   },
+  pausedOther: "Paused.",
+  waitingOther: "Waiting.",
   inventoryFull: "The inventory is full. It goes on when there's room.",
+  today: "Today",
+  enchanted: "Enchanted",
+  durabilityLabel: "Durability",
   pause: "Pause",
   resume: "Resume",
   reconnect: "Reconnect Now",
@@ -156,6 +174,7 @@ export const enCloudAfkAuto = {
   refusal: {
     slow: "A little slower.",
     turnTrade: "It can't turn during a trade.",
+    notRunning: "The account isn't in the game.",
     unreachable: "Can't reach the account right now.",
   },
   aim: {

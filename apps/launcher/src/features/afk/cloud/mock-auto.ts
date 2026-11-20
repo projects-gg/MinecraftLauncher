@@ -175,12 +175,13 @@ function fishFor(now: number): FishState | null {
         { id: "minecraft:string", n: 2 },
         { id: "minecraft:tropical_fish", n: 1 },
         { id: "minecraft:pufferfish", n: 1 },
-        { id: "minecraft:name_tag", n: 1 },
+        { id: "minecraft:bow", n: 1 },
         { id: "minecraft:enchanted_book", n: 1 },
         { id: "minecraft:leather_boots", n: 1 },
       ],
       last: [
-        { id: "minecraft:name_tag", cat: "treasure", ench: null, at: minutesAgo(now, 3) },
+        // A treasure bow is always enchanted: its name says so, as on the site.
+        { id: "minecraft:bow", cat: "treasure", ench: true, at: minutesAgo(now, 3) },
         { id: "minecraft:cod", cat: "fish", ench: null, at: minutesAgo(now, 5) },
         { id: "minecraft:salmon", cat: "fish", ench: null, at: minutesAgo(now, 9) },
         { id: "minecraft:enchanted_book", cat: "treasure", ench: true, at: minutesAgo(now, 12) },

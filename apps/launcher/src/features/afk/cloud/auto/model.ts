@@ -68,6 +68,43 @@ export const MINING_BLOCKS = [
 export const STONES: readonly string[] = MINING_BLOCKS.slice(0, 14);
 export const ORES: readonly string[] = MINING_BLOCKS.slice(14);
 
+/**
+ * The kinds the mining answer counts, as the site's editor offers them (afk-web `MINING_CHOICES`):
+ * each stone kind alone, each ore with its deepslate twin, the Nether's ores alone. The same stored
+ * blocks read the same sentence on both ("Önüne gelen {n} tür bloğu kırar").
+ */
+export const MINING_KINDS: readonly (readonly string[])[] = [
+  ...STONES.map((id) => [id]),
+  ...["coal", "copper", "iron", "gold", "redstone", "lapis", "diamond", "emerald"].map((ore) => [
+    `minecraft:${ore}_ore`,
+    `minecraft:deepslate_${ore}_ore`,
+  ]),
+  ...["minecraft:nether_gold_ore", "minecraft:nether_quartz_ore", "minecraft:ancient_debris"].map(
+    (id) => [id],
+  ),
+];
+
+/** How many kinds the chosen blocks make (an ore and its twin are one), as the site counts. */
+export function chosenKinds(blocks: readonly string[]): number {
+  return MINING_KINDS.filter((ids) => ids.some((id) => blocks.includes(id))).length;
+}
+
+/** The picker's plates, one per kind, in its two groups (the site's 25 choices). */
+export const STONE_KINDS = MINING_KINDS.slice(0, 14);
+export const ORE_KINDS = MINING_KINDS.slice(14);
+
+/** A kind is chosen while either twin is stored (a half pair a stored setting may hold). */
+export function kindOn(chosen: readonly string[], kind: readonly string[]): boolean {
+  return kind.some((id) => chosen.includes(id));
+}
+
+/** A kind's plate pressed, as the site's: on adds both twins in the list's order, off takes both. */
+export function toggleKind(chosen: readonly string[], kind: readonly string[]): string[] {
+  return kindOn(chosen, kind)
+    ? chosen.filter((id) => !kind.includes(id))
+    : orderedBlocks([...chosen, ...kind]);
+}
+
 export const KEEP_MIN = 1;
 export const KEEP_MAX = 100;
 export const IDLE_MIN_SECS = 20;
@@ -242,14 +279,49 @@ export function offKey(reason: string | null | undefined): string {
 }
 
 /**
- * Why the switch cannot be turned on now (`features.<mode>.slot`, `limit_<mode>`'s scope); keys
- * under `cloudAfkAuto.<mode>`, the site's words.
+ * Why the switch cannot be turned on now (`features.<mode>.slot`): the player's other accounts hold
+ * it, or the machine has no room. Keys under `cloudAfkAuto.<mode>`, the site's words.
  */
 export function slotKey(scope: string | null | undefined): WordKey {
   return scope === "player" ? { key: "elsewhere" } : { key: "noSlot" };
 }
 
+/**
+ * A save refused for want of a slot (`limit_<mode>`): the player's own limit names its number (none
+ * sent reads as one, as on the site), the machine's has none. Keys under `cloudAfkAuto.<mode>`.
+ */
+export function limitKey(
+  scope: string | null | undefined,
+  max: number | null | undefined,
+): WordKey {
+  if (scope !== "player") return { key: "noSlot" };
+  const n = max ?? 1;
+  return n > 1 ? { key: "maxAccounts", values: { max: n } } : { key: "oneAccount" };
+}
+
 type Tone = "active" | "quiet";
+
+/** The pauses every mode has (keys under `cloudAfkAuto`). */
+const PAUSES = new Map([
+  ["player", "paused.player"],
+  ["moved", "paused.moved"],
+  ["window", "paused.window"],
+  ["trade", "paused.trade"],
+]);
+
+/** Each mode's own waits: a rod's and the water's on fishing, a pickaxe's and the target's on mining. */
+const WAITS: Record<AutoMode, Map<string, string>> = {
+  fishing: new Map([
+    ["no_rod", "fishing.noRod"],
+    ["rod_low", "fishing.rodLow"],
+    ["no_water", "fishing.noWater"],
+  ]),
+  mining: new Map([
+    ["no_tool", "mining.noTool"],
+    ["tool_low", "mining.toolLow"],
+    ["no_target", "mining.noTarget"],
+  ]),
+};
 
 /** What a mode does now, in one line (keys under `cloudAfkAuto`); null before the first word. */
 export function stateLine(
@@ -264,37 +336,16 @@ export function stateLine(
       const known = doing === "cast" || doing === "wait" || doing === "reel";
       return { key: `fishing.doing.${known ? doing : "on"}`, tone: "active" };
     }
+    // A reason a newer machine sends reads plainly (the site's "Durakladı."), never as the player's.
     case "paused":
-      switch (state.reason) {
-        case "moved":
-          return { key: "paused.moved", tone: "quiet" };
-        case "window":
-          return { key: "paused.window", tone: "quiet" };
-        case "trade":
-          return { key: "paused.trade", tone: "quiet" };
-        default:
-          return { key: "paused.player", tone: "quiet" };
-      }
-    case "waiting":
-      switch (state.reason) {
-        case "no_rod":
-          return { key: "fishing.noRod", tone: "quiet" };
-        case "rod_low":
-          return { key: "fishing.rodLow", tone: "quiet" };
-        case "no_water":
-          return { key: "fishing.noWater", tone: "quiet" };
-        case "no_tool":
-          return { key: "mining.noTool", tone: "quiet" };
-        case "tool_low":
-          return { key: "mining.toolLow", tone: "quiet" };
-        case "no_target":
-          return { key: "mining.noTarget", tone: "quiet" };
-        // One job at a time: the other mode holds the account (a fallback; the Worker refuses it).
-        case "other":
-          return { key: `${mode}.otherFirst`, tone: "quiet" };
-        default:
-          return { key: "inventoryFull", tone: "quiet" };
-      }
+      return { key: PAUSES.get(state.reason ?? "") ?? "pausedOther", tone: "quiet" };
+    case "waiting": {
+      const reason = state.reason ?? "";
+      if (reason === "full") return { key: "inventoryFull", tone: "quiet" };
+      // One job at a time: the other mode holds the account (a fallback; the Worker refuses it).
+      if (reason === "other") return { key: `${mode}.otherFirst`, tone: "quiet" };
+      return { key: WAITS[mode].get(reason) ?? "waitingOther", tone: "quiet" };
+    }
     default:
       return null;
   }
@@ -321,8 +372,8 @@ export function granted(state: FishState | MineState | null): boolean {
 
 /**
  * A refused operation in one line; null when there is nothing to say (`invalid`: the next frame
- * redraws). Keys under `cloudAfkAuto` (an `auto_off` under the mode); `aim`: the refused one turned
- * the account.
+ * redraws). Keys under `cloudAfkAuto` (an `auto_off` under the mode, as its off state); `aim`: the
+ * refused one turned the account. The site's words (afk-web auto-panel `errorLine`).
  */
 export function refusalKey(mode: AutoMode, error: CloudAutoError, aim = false): string | null {
   switch (error.code) {
@@ -333,7 +384,7 @@ export function refusalKey(mode: AutoMode, error: CloudAutoError, aim = false): 
     case "busy_trade":
       return aim ? "refusal.turnTrade" : "paused.trade";
     case "not_running":
-      return `${mode}.notRunning`;
+      return "refusal.notRunning";
     case "auto_off":
       return `${mode}.${offKey(error.reason)}`;
     default:

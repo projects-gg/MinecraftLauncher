@@ -56,6 +56,27 @@ describe("auto-fishing and auto-mining texts", () => {
     expect([...turkish, ...english].filter(([, text]) => text.includes(";"))).toEqual([]);
   });
 
+  it("say what the account does, never what the server makes of it, and where fishing works", () => {
+    // FM-WEB's final words (fishmine-web 566799aa): no promise about the server (servers differ).
+    expect(trCloudAfkAuto.fishing.lookHelp).toBe(
+      "Atışlar arasında başını biraz çevirip geri döner.",
+    );
+    expect(enCloudAfkAuto.fishing.lookHelp).toBe(
+      "Between casts it turns its head a little and back.",
+    );
+    expect([...turkish, ...english].filter(([, text]) => /\bAFK\b/.test(text))).toEqual([]);
+    expect(trCloudAfkAuto.fishing.waterHint).toBe("Hesabını suyun kenarında, suya bakarken bırak.");
+    expect(enCloudAfkAuto.fishing.waterHint).toBe(
+      "Leave your account at the water's edge, facing the water.",
+    );
+    expect(trCloudAfkAuto.fishing.noWater).toBe(
+      `Önünde su bulamadı. ${trCloudAfkAuto.fishing.waterHint}`,
+    );
+    expect(enCloudAfkAuto.fishing.noWater).toBe(
+      `It can't find water in front of it. ${enCloudAfkAuto.fishing.waterHint}`,
+    );
+  });
+
   it("title the modes, tabs and buttons in Title Case", () => {
     const titles = [
       trCloudAfkAuto.fishing.title,

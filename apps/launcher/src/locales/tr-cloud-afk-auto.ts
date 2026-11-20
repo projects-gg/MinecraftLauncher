@@ -1,8 +1,8 @@
 // 7/24 Bulut's auto-fishing and auto-mining (FISHMINE-L, services/cloud-afk README "Auto-fishing and
 // auto-mining"): the account settings' two questions and the panel's "Balık" and "Kazma" tabs. The
-// words are the site's (FM-WEB's table in docs/tasks/fishmine-web.md), so the two read as one
-// product; the disclaimer is the contract's sentence in two (no semicolons, QA-COPY O2). Short,
-// titles in Title Case, "sen". Root key `cloudAfkAuto`.
+// words are the site's, word for word (afk-web tr-auto.ts and tr-auto-panel.ts, fishmine-web
+// 566799aa), so the two read as one product; the disclaimer is the contract's sentence in two (no
+// semicolons, QA-COPY O2). Short, titles in Title Case, "sen". Root key `cloudAfkAuto`.
 export const trCloudAfkAuto = {
   tabs: {
     fishing: "Balık",
@@ -18,7 +18,7 @@ export const trCloudAfkAuto = {
     miningOff: "Maden kazmaz",
     miningAll: "Önüne gelen taşı ve madeni kırar",
     miningSome: "Önüne gelen {{n}} tür bloğu kırar",
-    miningOne: "Yalnız {{block}} kırar",
+    miningOne: "Yalnız {{block}} bloklarını kırar",
     keep: ", envanter dolsa da sürer",
     command: ", envanter dolunca {{command}} yazar",
     look: ", arada etrafına bakar",
@@ -26,21 +26,32 @@ export const trCloudAfkAuto = {
     limited: "Bu sunucuda kapalı",
   },
   disclaimer: "Her sunucuda tek tek denenmedi. Her sunucuda çalışacağı garanti edilmez.",
-  // One job at a time (the head agent, 20 Nov): under one mode's switch while the other is on.
-  // Under one mode's switch while the other is on (the site's words), naming the one that is on.
-  exclusive: {
-    fishing: "Hesap aynı anda tek iş yapar. Balık tutarken kazmaz.",
-    mining: "Hesap aynı anda tek iş yapar. Kazarken balık tutmaz.",
+  // One job at a time (the head agent, 20 Nov): under one mode's switch while the other is on in
+  // the draft (what turning this one on does), or after turning this one on turned the stored other
+  // off (until saved).
+  oneJob: {
+    will: {
+      fishing: "Hesap aynı anda tek iş yapar. Bunu açarsan otomatik kazma kapanır.",
+      mining: "Hesap aynı anda tek iş yapar. Bunu açarsan otomatik balık tutma kapanır.",
+    },
+    did: {
+      fishing: "Hesap aynı anda tek iş yapar. Otomatik kazma kapandı.",
+      mining: "Hesap aynı anda tek iş yapar. Otomatik balık tutma kapandı.",
+    },
   },
   limitedLink: "Sınırlı Sunucular",
   fishing: {
     title: "Otomatik Balık Tutma",
-    line: "Olduğu yere olta atar, balık vurunca çeker ve yeniden atar.",
+    line: "Olduğu yerde olta atar, balık vurunca çeker ve yeniden atar.",
+    // Where fishing works (the client's e2e: catches that land short of the water are not collected).
+    waterHint: "Hesabını suyun kenarında, suya bakarken bırak.",
     limited: "Bu sunucuda otomatik balık tutma kapalı.",
     off: "Otomatik balık tutma şu an kapalı.",
     noSlot: "Şu an otomatik balık tutma için yer yok.",
     slots: "Şu an otomatik balık tutma için yer yok. Hesap yeniden bağlanınca yine dener.",
-    elsewhere: "Başka hesaplarında açık olduğu için bu hesapta açılamaz.",
+    elsewhere: "Başka hesaplarında açık. Burada açmak için önce birinde kapat.",
+    oneAccount: "Otomatik balık tutma aynı anda yalnız bir hesabında açık olabilir.",
+    maxAccounts: "Otomatik balık tutma en çok {{max}} hesabında açık olabilir.",
     notRunning: "Hesap oyunda değilken balık tutmaz.",
     setting: "Otomatik balık tutma bu hesapta kapalı.",
     restart: "Otomatik balık tutma bir sonraki bağlanmada açılır.",
@@ -50,7 +61,8 @@ export const trCloudAfkAuto = {
     switch: "Başka Oltaya Geçsin",
     switchHelp: "Envanterdeki en iyi oltayı alır. Başka olta yoksa bekler.",
     look: "Arada Etrafına Baksın",
-    lookHelp: "Atışlar arasında başını biraz çevirip geri döner. Sunucu seni AFK saymaz.",
+    // What it does; no promise about the server (servers differ).
+    lookHelp: "Atışlar arasında başını biraz çevirip geri döner.",
     doing: {
       on: "Balık tutuyor.",
       cast: "Olta atıyor.",
@@ -59,9 +71,10 @@ export const trCloudAfkAuto = {
     },
     noRod: "Envanterde olta yok. Olta gelince başlar.",
     rodLow: "Oltanın dayanıklılığı azaldı. Başka olta gelince devam eder.",
-    noWater: "Önünde su bulamadı. Suya doğru çevir.",
+    noWater: "Önünde su bulamadı. Hesabını suyun kenarında, suya bakarken bırak.",
     otherFirst: "Kazma açıkken balık tutmaz.",
     otherOn: "Önce otomatik kazmayı kapat.",
+    aimHelp: "Suya dönük olsun.",
     tool: "Olta",
     noTool: "Elinde olta yok.",
     caught: "Yakalanan",
@@ -80,7 +93,9 @@ export const trCloudAfkAuto = {
     off: "Otomatik kazma şu an kapalı.",
     noSlot: "Şu an otomatik kazma için yer yok.",
     slots: "Şu an otomatik kazma için yer yok. Hesap yeniden bağlanınca yine dener.",
-    elsewhere: "Başka hesaplarında açık olduğu için bu hesapta açılamaz.",
+    elsewhere: "Başka hesaplarında açık. Burada açmak için önce birinde kapat.",
+    oneAccount: "Otomatik kazma aynı anda yalnız bir hesabında açık olabilir.",
+    maxAccounts: "Otomatik kazma en çok {{max}} hesabında açık olabilir.",
     notRunning: "Hesap oyunda değilken kazmaz.",
     setting: "Otomatik kazma bu hesapta kapalı.",
     restart: "Otomatik kazma bir sonraki bağlanmada açılır.",
@@ -98,6 +113,7 @@ export const trCloudAfkAuto = {
     noTarget: "Önünde kıracak blok yok. Blok gelince devam eder.",
     otherFirst: "Balık tutma açıkken kazmaz.",
     otherOn: "Önce otomatik balık tutmayı kapat.",
+    aimHelp: "Kıracağı bloğa dönük olsun.",
     tool: "Kazma",
     noToolHeld: "Elinde kazma yok.",
     broken: "Kırılan",
@@ -117,20 +133,20 @@ export const trCloudAfkAuto = {
     commandHelp: "Bu komutu gönderir, sonra yer açılmasını bekler. Dakikada en çok bir kez.",
     commandLabel: "Komut",
     commandPlaceholder: "/sell all",
-    empty: "Bir komut yaz.",
+    empty: "Komutu yaz.",
     secret: "Buraya şifre ya da gizli bir şey yazma.",
     // Under a command a moderation case paused (the view's full.paused).
     paused: "Bu komut inceleniyor. Şimdilik envanter dolunca bekler.",
   },
   blocks: {
-    title: "Hangi Blokları Kırsın?",
+    title: "Kıracağı Bloklar",
     all: "Hepsi",
     some: "Seçtiklerim",
     allHelp: "Yalnız taş türlerini ve madenleri kırar. Sandığa, yatağa, ekine dokunmaz.",
     chosen_one: "{{count}} blok seçili.",
     chosen_other: "{{count}} blok seçili.",
     stones: "Taşlar",
-    ores: "Madenler",
+    ores: "Cevherler",
     empty: "En az bir blok seç.",
   },
   idle: {
@@ -141,19 +157,25 @@ export const trCloudAfkAuto = {
     jump: "Zıplasın",
     step: "Adım Atsın",
     every: "Aralık",
-    min: "En Az",
-    max: "En Çok",
+    min: "En Az (sn)",
+    max: "En Çok (sn)",
     seconds: "sn",
-    range: "20 ile 3600 saniye arasında gir.",
-    order: "En çok, en azdan küçük olamaz.",
+    range: "20 ile 3600 saniye arasında gir. En çok, en azdan küçük olamaz.",
   },
   paused: {
     player: "Duraklattın.",
-    moved: "Hesap yerinden oynadı, durdu. Devam ettirince bulunduğu yerde sürer.",
+    moved: "Hesap yerinden oynadı, durdu. Devam Et'e basınca bulunduğu yerde sürer.",
     window: "Bir menü açık. Kapanınca devam eder.",
     trade: "Takas sürüyor. Bitince devam eder.",
   },
+  // A paused or waiting reason a newer machine may send that this launcher does not know yet.
+  pausedOther: "Durakladı.",
+  waitingOther: "Bekliyor.",
   inventoryFull: "Envanter dolu. Yer açılınca devam eder.",
+  // The panel: today's figures (read out), an enchanted catch, the tool's durability (read out).
+  today: "Bugün",
+  enchanted: "Büyülü",
+  durabilityLabel: "Dayanıklılık",
   pause: "Duraklat",
   resume: "Devam Et",
   reconnect: "Şimdi Yeniden Bağlan",
@@ -161,6 +183,7 @@ export const trCloudAfkAuto = {
   refusal: {
     slow: "Biraz yavaş.",
     turnTrade: "Takas sürerken çevrilemez.",
+    notRunning: "Hesap oyunda değil.",
     unreachable: "Hesaba şu an ulaşılamıyor.",
   },
   aim: {
