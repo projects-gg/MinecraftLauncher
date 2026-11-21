@@ -50,6 +50,7 @@ import { enNewsColumn } from "./en-news-column";
 import { enOverlay } from "./en-overlay";
 import { enOverview } from "./en-overview";
 import { enPackEdit } from "./en-pack-edit";
+import { enPackOffer } from "./en-pack-offer";
 import { enPlacement } from "./en-placement";
 import { enPlayAcct } from "./en-play-acct";
 import { enPlayAgain } from "./en-play-again";
@@ -345,6 +346,7 @@ export const en: DeepPartial<Strings> = {
   overlay: enOverlay,
   fastPack: enFastPack,
   packEdit: enPackEdit,
+  packOffer: enPackOffer,
   lib1: enLib1,
   fix2: enFix2,
   chat2: enChat2,
