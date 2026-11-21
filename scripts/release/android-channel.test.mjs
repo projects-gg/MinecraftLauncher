@@ -23,12 +23,12 @@ import {
   minisignVerify,
   parseBadging,
   parseSigners,
-  strayEntries,
-  zipEntryNames,
   planPrune,
   RELEASE_CERT,
   readMakeNotes,
+  strayEntries,
   verifyChannel,
+  zipEntryNames,
 } from "./android-channel.mjs";
 import { canonicalJson, parseListing, signRequest } from "./lib.mjs";
 
