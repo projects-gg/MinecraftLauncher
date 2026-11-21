@@ -20,7 +20,8 @@ import { ManualModsDialog } from "@/features/content/manual-mods-dialog";
 import { useModpackBrowser } from "@/features/content/modpack-browser";
 import { useModpackImport } from "@/features/content/modpack-import";
 import { useDrop } from "@/features/drop/store";
-import { useSetSource } from "@/features/modsets/set-source";
+import { fitFor } from "@/features/modsets/model";
+import { useSetCatalog, useSetSource } from "@/features/modsets/set-source";
 import {
   api,
   type InstanceIcon as IconKey,
@@ -30,6 +31,8 @@ import {
 import { InstanceIcon, instanceIcons } from "@/shell/instance-icon";
 import { usePrefs } from "@/stores/prefs";
 import { defaultInstanceName } from "./default-name";
+import { officialFamilyQuery, packOffer } from "./pack-offer";
+import { OfferPresence, PackOfferNotice, SetsHint } from "./pack-offer-ui";
 import { ConfirmDialog } from "./parts";
 
 type Source = "new" | "sets" | "browse" | "import";
@@ -167,6 +170,7 @@ export function CreateInstanceDialog({
   });
   const setFlow = useSetSource({
     active: open && source === "sets",
+    prefer: mcVersion,
     onCancel: () => onOpenChange(false),
     onStop: () => setAskStop(true),
     instances: (instancesQuery.data ?? []).map((i) => i.name),
@@ -233,6 +237,26 @@ export function CreateInstanceDialog({
   const loaderPicked =
     loader === "vanilla" || Boolean(loaderQuery.data?.some((v) => v.version === loaderVersion));
   const canCreate = !create.isPending && Boolean(mcVersion) && loaderPicked && !loaderProblem;
+  // PACK-OFFER: the official pack for the version and loader picked here (from the signed
+  // content: its member for the version and that member's loader), else the ready-made sets that
+  // have it. "Kurulum Oluştur" stays what it was.
+  const familyQuery = useQuery({
+    ...officialFamilyQuery(mcVersion),
+    enabled: open && source === "new" && loader !== "vanilla" && Boolean(mcVersion),
+  });
+  // "Kurulumu Aç" stays off here: the official instance already on the picked version is not news
+  // (the default pick is that version), and a second instance next to it is a fair choice.
+  const found =
+    source === "new" && loader !== "vanilla"
+      ? packOffer(familyQuery.data, { minecraft: mcVersion, loader })
+      : null;
+  const offer = found?.kind === "open" ? null : found;
+  const catalog = useSetCatalog(open && source === "new");
+  const setCount =
+    offer || !mcVersion
+      ? 0
+      : (catalog.data?.sets ?? []).filter((set) => fitFor(set, mcVersion, loader).kind === "fits")
+          .length;
   const versionSearch = {
     searchLabel: t("modCenter.versions.search"),
     emptyText: t("create.noMatch"),
@@ -406,6 +430,18 @@ export function CreateInstanceDialog({
                 </div>
               </Field>
             </div>
+            <OfferPresence show={Boolean(offer)}>
+              {offer ? (
+                <PackOfferNotice
+                  offer={offer}
+                  surface="dialog"
+                  onLeave={() => onOpenChange(false)}
+                />
+              ) : null}
+            </OfferPresence>
+            <OfferPresence show={setCount > 0}>
+              <SetsHint onOpen={() => setSource("sets")} />
+            </OfferPresence>
           </div>
         ) : source === "sets" ? (
           setFlow.body

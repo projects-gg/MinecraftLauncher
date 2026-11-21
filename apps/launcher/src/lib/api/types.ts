@@ -493,6 +493,29 @@ export interface OfficialPack {
   summary?: string;
 }
 
+/** One published member of the official pack family (PACK-OFFER). */
+export interface FamilyMember {
+  packId: string;
+  name: string;
+  version: string;
+  minecraft: string;
+  /** The member new installs get. */
+  default: boolean;
+}
+
+/** The official pack family as the suggestions need it (PACK-OFFER). */
+export interface OfficialFamily {
+  /** Members with a Minecraft version, newest first (empty while nothing is published). */
+  members: FamilyMember[];
+  /** The member published for the asked Minecraft version, with its loader. */
+  matched?: OfficialPack;
+  /** The official instance and its Minecraft version, when there is one. */
+  instanceId?: string;
+  instanceMinecraft?: string;
+  /** The player deleted the official instance (LIB1). */
+  removed: boolean;
+}
+
 export interface OfficialStatus {
   /** The pack the server publishes; absent until one is published. */
   pack?: OfficialPack;

@@ -42,7 +42,8 @@ const REST = "translateY(0px) scale(1)";
 export function useInstallOfficial() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => api.installOfficialInstance(),
+    // PACK-OFFER: a version picked by hand installs the family member for it.
+    mutationFn: (minecraft?: string) => api.installOfficialInstance(minecraft),
     onSuccess: (made) => {
       queryClient.setQueryData<InstanceSummary[]>(["instances"], (prev) =>
         prev && !prev.some((i) => i.id === made.id) ? [...prev, made] : prev,
@@ -53,6 +54,7 @@ export function useInstallOfficial() {
       usePrefs.getState().selectInstance(made.id);
       void queryClient.invalidateQueries({ queryKey: ["instances"] });
       void queryClient.invalidateQueries({ queryKey: ["official-status"] });
+      void queryClient.invalidateQueries({ queryKey: ["official-family"] });
     },
     onError: (error) => showError(error),
   });

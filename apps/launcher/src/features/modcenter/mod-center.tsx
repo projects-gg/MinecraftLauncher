@@ -15,6 +15,7 @@ import {
   modsSections,
   pickModsSection,
 } from "@/features/library/instance-tab";
+import { EmptyInstanceOffer, NewerMemberNotice } from "@/features/library/pack-offer-ui";
 import { ModsTab, VanillaModsEmpty } from "@/features/library/tabs/mods-tab";
 import { useModCheck } from "@/features/modhealth/flow";
 import { ModHealthSection } from "@/features/modhealth/health-banner";
@@ -74,7 +75,8 @@ export function ModCenter({
   onSwitchVersion,
 }: {
   instance: InstanceDetail;
-  onSwitchVersion: () => void;
+  /** The version dialog, on `target`'s preview when one is given (PACK-OFFER). */
+  onSwitchVersion: (target?: string) => void;
 }) {
   const { t } = useTranslation();
   const prefs = useMotionPrefs();
@@ -204,7 +206,7 @@ export function ModCenter({
                 : ""}
             </p>
           </div>
-          <Button size="sm" variant="secondary" onClick={onSwitchVersion}>
+          <Button size="sm" variant="secondary" onClick={() => onSwitchVersion()}>
             {t("modCenter.dropped.action")}
           </Button>
         </motion.div>
@@ -255,6 +257,16 @@ export function ModCenter({
               {healthSection}
             </ModIssuesBanner>
           ) : null}
+          {/* PACK-OFFER: the official pack for an empty custom instance's version; a newer version
+              of the family told once on the official instance. */}
+          {instance.managed ? (
+            <NewerMemberNotice
+              instance={instance}
+              onSwitch={(minecraft) => onSwitchVersion(minecraft)}
+            />
+          ) : (
+            <EmptyInstanceOffer instance={instance} empty={instance.mods.length === 0} />
+          )}
           <motion.div
             layout={position}
             transition={{ layout: glide }}

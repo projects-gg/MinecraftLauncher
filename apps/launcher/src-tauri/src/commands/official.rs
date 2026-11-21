@@ -111,6 +111,37 @@ pub(crate) fn pack_loader(manifest: &PackManifest) -> InstanceLoader {
     }
 }
 
+/// One published member of the official pack family (PACK-OFFER): what the launcher can suggest
+/// when the player picks its Minecraft version by hand.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FamilyMemberView {
+    pub pack_id: String,
+    pub name: String,
+    pub version: String,
+    pub minecraft: String,
+    /// The member new installs get.
+    pub default: bool,
+}
+
+/// The official pack family as the suggestions need it (PACK-OFFER).
+#[derive(Debug, Clone, Default, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct OfficialFamilyView {
+    /// The members with a Minecraft version, newest first; empty while nothing is published (or
+    /// offline without a cache).
+    pub members: Vec<FamilyMemberView>,
+    /// The member published for the asked Minecraft version, with its loader (read from its
+    /// manifest, which is cached and immutable). `None` when there is none or it cannot be read.
+    pub matched: Option<OfficialPackView>,
+    /// The official instance, when there is one.
+    pub instance_id: Option<String>,
+    /// Its Minecraft version.
+    pub instance_minecraft: Option<String>,
+    /// The player deleted the official instance (LIB1).
+    pub removed: bool,
+}
+
 /// The pack new installs use: the default member of `recommendedPack`'s family, else of the
 /// first published pack's family.
 pub(crate) fn official_pack_ref(snapshot: &ContentSnapshot) -> Option<&PackRef> {
@@ -368,6 +399,71 @@ pub async fn official_status(state: State<'_, AppState>) -> CmdResult<OfficialSt
     })
 }
 
+/// The official pack family (PACK-OFFER): its members, and the member published for `minecraft`
+/// with its loader, so the page can suggest the pack when the player picks that version by hand
+/// (a new instance, an empty one). Nothing is fetched but the matching member's manifest.
+#[tauri::command]
+#[specta::specta]
+pub async fn official_family(
+    state: State<'_, AppState>,
+    minecraft: Option<String>,
+) -> CmdResult<OfficialFamilyView> {
+    let instances = state.instances.list().await.map_err(CmdError::from)?;
+    let snapshot = cached_or_fresh(&state).await;
+    let instance = official_of(&state, &instances, snapshot.as_ref());
+    let removed = instance.is_none() && OfficialChoice::load(&state.root).await.removed();
+    let mut view = OfficialFamilyView {
+        instance_id: instance.map(|i| i.id.clone()),
+        instance_minecraft: instance.map(|i| i.mc_version.clone()),
+        removed,
+        ..OfficialFamilyView::default()
+    };
+    let Some(snapshot) = snapshot.as_ref() else {
+        return Ok(view);
+    };
+    let Some(official) = official_pack_ref(snapshot) else {
+        return Ok(view);
+    };
+    let family = official.family_id();
+    let default_id = snapshot.index.family_default(family).map(|p| p.id.clone());
+    view.members = snapshot
+        .index
+        .family_members(family)
+        .into_iter()
+        .filter_map(|pack| {
+            Some(FamilyMemberView {
+                pack_id: pack.id.clone(),
+                name: pack.name.clone(),
+                version: pack.latest.clone(),
+                minecraft: pack.minecraft()?.to_owned(),
+                default: default_id.as_deref() == Some(pack.id.as_str()),
+            })
+        })
+        .collect();
+    let asked = minecraft
+        .as_deref()
+        .map(str::trim)
+        .filter(|m| !m.is_empty());
+    if let Some(member) = asked.and_then(|mc| snapshot.index.family_member(family, mc)) {
+        match state.content.pack_manifest(member).await {
+            Ok(manifest) => {
+                view.matched = Some(OfficialPackView {
+                    id: member.id.clone(),
+                    name: member.name.clone(),
+                    version: member.latest.clone(),
+                    mc_version: manifest.dependencies.minecraft.clone(),
+                    loader: pack_loader(&manifest).kind,
+                    summary: manifest.summary.clone(),
+                })
+            }
+            Err(error) => {
+                tracing::info!(%error, pack = %member.id, "family member manifest unread")
+            }
+        }
+    }
+    Ok(view)
+}
+
 /// The Projects instance, made when there is none. It follows the official pack family when one
 /// is published (new installs get the family's default member); until then it is vanilla on the
 /// newest release. Files are installed by the first launch.
@@ -376,13 +472,18 @@ pub async fn official_status(state: State<'_, AppState>) -> CmdResult<OfficialSt
 /// deletion. Without it (the first start, the pack watcher, the welcome flow, "Katıl", the tray,
 /// an import) nothing is made once the player deleted the official instance: `None` comes back
 /// and the page offers "Resmî paketi kur" instead (LIB1).
+///
+/// `minecraft` (PACK-OFFER): a new instance follows the family member published for that version
+/// instead of the default one (the suggestion after the player picked the version by hand). An
+/// existing official instance comes back unchanged; moving it is the version switch's job.
 #[tauri::command]
 #[specta::specta]
 pub async fn official_instance_ensure(
     state: State<'_, AppState>,
     install: bool,
+    minecraft: Option<String>,
 ) -> CmdResult<Option<InstanceView>> {
-    let instance = ensure_official(&state, install).await?;
+    let instance = ensure_official_at(&state, install, minecraft.as_deref()).await?;
     Ok(instance.map(|instance| view(&state, &instance)))
 }
 
@@ -390,6 +491,15 @@ pub async fn official_instance_ensure(
 pub(crate) async fn ensure_official(
     state: &AppState,
     install: bool,
+) -> CmdResult<Option<Instance>> {
+    ensure_official_at(state, install, None).await
+}
+
+/// [`ensure_official`], a new instance following the member published for `minecraft`.
+async fn ensure_official_at(
+    state: &AppState,
+    install: bool,
+    minecraft: Option<&str>,
 ) -> CmdResult<Option<Instance>> {
     // The first-run screen and the pack watcher may ask at the same time: one creation only.
     static ENSURE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
@@ -416,22 +526,31 @@ pub(crate) async fn ensure_official(
         }
         OfficialEnsure::Create => {}
     }
-    let created = create_official(state, &instances, snapshot.as_ref()).await?;
+    let created = create_official(state, &instances, snapshot.as_ref(), minecraft).await?;
     if install {
         forget_removal_locked(state).await;
     }
     Ok(Some(created))
 }
 
-/// Makes the official instance (there is none): following the published pack, else vanilla.
+/// Makes the official instance (there is none): following the published pack (the member for
+/// `minecraft` when the family has one, else the default member), else vanilla.
 async fn create_official(
     state: &AppState,
     instances: &[Instance],
     snapshot: Option<&ContentSnapshot>,
+    minecraft: Option<&str>,
 ) -> CmdResult<Instance> {
     if let Some(snapshot) = snapshot
-        && let Some(pack) = official_pack_ref(snapshot)
+        && let Some(official) = official_pack_ref(snapshot)
     {
+        let pack = minecraft
+            .and_then(|mc| {
+                snapshot
+                    .index
+                    .family_member(official.family_id(), mc.trim())
+            })
+            .unwrap_or(official);
         let manifest = state
             .content
             .pack_manifest(pack)

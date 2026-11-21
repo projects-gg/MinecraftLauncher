@@ -41,7 +41,7 @@ const instanceRoute = createRoute({
   path: "/library/$instanceId",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { tab?: string; browse?: string; log?: string; focus?: string } => ({
+  ): { tab?: string; browse?: string; log?: string; focus?: string; switchTo?: string } => ({
     tab: typeof search.tab === "string" ? search.tab : undefined,
     // Modrinth browser for "mod" | "resourcePack" | "shaderPack".
     browse: typeof search.browse === "string" ? search.browse : undefined,
@@ -50,6 +50,12 @@ const instanceRoute = createRoute({
     // Settings tab: the group the command palette came for ("graphics" | "memory"); mod center:
     // its sets ("sets", the crash dialog's set update). Taken once.
     focus: typeof search.focus === "string" ? search.focus : undefined,
+    // PACK-OFFER: the version dialog opens on this Minecraft version (the official pack's offer
+    // after a version picked by hand). Taken once.
+    switchTo:
+      typeof search.switchTo === "string" && /^[A-Za-z0-9._-]{1,40}$/.test(search.switchTo)
+        ? search.switchTo
+        : undefined,
   }),
   component: InstancePage,
 });

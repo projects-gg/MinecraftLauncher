@@ -54,6 +54,7 @@ import type {
   McVersion,
   MicrosoftLoginResult,
   NewInstance,
+  OfficialFamily,
   OfficialStatus,
   ResumeTarget,
   ServerStatus,
@@ -206,8 +207,16 @@ export interface LauncherApi {
    * the player deleted it: then `null`, and the caller offers "Resmî paketi kur" (LIB1).
    */
   ensureOfficialInstance(): Promise<InstanceSummary | null>;
-  /** "Resmî paketi kur": the Projects instance, made now even after the player deleted it. */
-  installOfficialInstance(): Promise<InstanceSummary>;
+  /**
+   * "Resmî paketi kur": the Projects instance, made now even after the player deleted it. With
+   * `minecraft` a new one follows the family member for that version (PACK-OFFER).
+   */
+  installOfficialInstance(minecraft?: string): Promise<InstanceSummary>;
+  /**
+   * The official pack family (PACK-OFFER): its members, and the member for `minecraft` with its
+   * loader, for the suggestions where the player picks a version by hand.
+   */
+  officialFamily(minecraft?: string): Promise<OfficialFamily>;
   /** New content arrived in the background. Returns an unsubscribe function. */
   onContentChanged(listener: () => void): () => void;
   /** Whether the last content refresh reached the servers (the home screen's offline strip). */

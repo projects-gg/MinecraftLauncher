@@ -109,6 +109,11 @@ interface PrefsState {
   onboarded: boolean;
   /** "Still running in the tray" was explained once. */
   trayHintShown: boolean;
+  /**
+   * PACK-OFFER: official family members the official instance was told about (pack ids) and
+   * offers hidden on an instance (`<instance id>:<pack id>`).
+   */
+  packOffersSeen: string[];
   /** Maximum memory for new instances; `null` = recommended for this machine. */
   defaultMaxMemoryMb: number | null;
   /** Extra JVM arguments for new instances. */
@@ -174,6 +179,7 @@ export const usePrefs = create<PrefsState>()(
       legacyOffered: false,
       onboarded: false,
       trayHintShown: false,
+      packOffersSeen: [],
       defaultMaxMemoryMb: null,
       defaultJvmArgs: "",
       showSnapshots: false,

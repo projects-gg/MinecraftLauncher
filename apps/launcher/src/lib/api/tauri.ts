@@ -806,12 +806,22 @@ export const tauriApi: LauncherApi = {
       removed: s.removed,
     };
   },
+  async officialFamily(minecraft) {
+    const f = await ok(commands.officialFamily(minecraft ?? null));
+    return {
+      members: f.members,
+      matched: f.matched ? { ...f.matched, summary: f.matched.summary ?? undefined } : undefined,
+      instanceId: f.instanceId ?? undefined,
+      instanceMinecraft: f.instanceMinecraft ?? undefined,
+      removed: f.removed,
+    };
+  },
   async ensureOfficialInstance() {
-    const made = await ok(commands.officialInstanceEnsure(false));
+    const made = await ok(commands.officialInstanceEnsure(false, null));
     return made ? instance(made) : null;
   },
-  async installOfficialInstance() {
-    const made = await ok(commands.officialInstanceEnsure(true));
+  async installOfficialInstance(minecraft) {
+    const made = await ok(commands.officialInstanceEnsure(true, minecraft ?? null));
     if (!made) throw new Error("the official instance was not made");
     return instance(made);
   },
