@@ -39,8 +39,11 @@ export function useSetSource({
   onDone,
   instances,
   onStop,
+  prefer,
 }: {
   active: boolean;
+  /** PACK-OFFER: the version picked under "Sıfırdan": a set opens on it when it has it. */
+  prefer?: string;
   onCancel: () => void;
   onDone: (created: InstanceSummary) => void;
   /** Names already taken (a new name is numbered like the dialog's default name). */
@@ -62,7 +65,7 @@ export function useSetSource({
     enabled: active,
     staleTime: 5 * 60_000,
   });
-  const recommended = versions.data?.find((v) => v.recommended)?.id;
+  const recommended = prefer || versions.data?.find((v) => v.recommended)?.id;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [version, setVersion] = useState<string>("");

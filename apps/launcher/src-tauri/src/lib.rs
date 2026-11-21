@@ -570,6 +570,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             // official pack & desktop shell
             commands::official::official_status,
             commands::official::official_instance_ensure,
+            commands::official::official_family,
             shell::deep_link_pending,
             shell::app_quit,
             shell::launcher_leave_for_game,

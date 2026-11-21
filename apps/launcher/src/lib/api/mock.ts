@@ -704,7 +704,19 @@ if (libraryFlag === "noOfficial") {
 let officialRemoved = libraryFlag === "empty" || libraryFlag === "noOfficial";
 
 /** The official instance: the one there, else made now (offline under `?join=offline`). */
-async function mockInstallOfficial(): Promise<InstanceSummary> {
+/** The preview's official family (PACK-OFFER): a newer member beside the default one. */
+const mockFamily = [
+  {
+    packId: "projects-26.3",
+    name: "Projects",
+    version: "1.0.8",
+    minecraft: "26.3",
+    default: false,
+  },
+  { packId: "projects", name: "Projects", version: "1.0.6", minecraft: "26.1.2", default: true },
+];
+
+async function mockInstallOfficial(minecraft?: string): Promise<InstanceSummary> {
   await delay(500);
   const existing = instances.find((i) => i.managed);
   if (existing) return existing;
@@ -723,7 +735,8 @@ async function mockInstallOfficial(): Promise<InstanceSummary> {
     id: "projects",
     name: "Projects",
     icon: "dragon-egg",
-    mcVersion: "26.1.2",
+    mcVersion:
+      mockFamily.some((m) => m.minecraft === minecraft) && minecraft ? minecraft : "26.1.2",
     loader: "fabric",
     loaderVersion: "0.19.5",
     managed: true,
@@ -1381,9 +1394,29 @@ export const mockApi: LauncherApi = {
     }
     return mockInstallOfficial();
   },
-  async installOfficialInstance() {
+  async installOfficialInstance(minecraft) {
     officialRemoved = false;
-    return mockInstallOfficial();
+    return mockInstallOfficial(minecraft);
+  },
+  async officialFamily(minecraft) {
+    await delay(120);
+    const official = instances.find((i) => i.managed);
+    const member = mockFamily.find((m) => m.minecraft === minecraft);
+    return {
+      members: mockFamily,
+      matched: member
+        ? {
+            id: member.packId,
+            name: member.name,
+            version: member.version,
+            mcVersion: member.minecraft,
+            loader: "fabric",
+          }
+        : undefined,
+      instanceId: official?.id,
+      instanceMinecraft: official?.mcVersion,
+      removed: officialRemoved && !official,
+    };
   },
   onContentChanged(listener) {
     // Preview: `dispatchEvent(new Event("pl-mock-content-changed"))` acts like newly published

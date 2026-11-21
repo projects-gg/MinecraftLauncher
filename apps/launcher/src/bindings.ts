@@ -1167,8 +1167,12 @@ export const commands = {
 	 *  deletion. Without it (the first start, the pack watcher, the welcome flow, "Katıl", the tray,
 	 *  an import) nothing is made once the player deleted the official instance: `None` comes back
 	 *  and the page offers "Resmî paketi kur" instead (LIB1).
+	 * 
+	 *  `minecraft` (PACK-OFFER): a new instance follows the family member published for that version
+	 *  instead of the default one (the suggestion after the player picked the version by hand). An
+	 *  existing official instance comes back unchanged; moving it is the version switch's job.
 	 */
-	officialInstanceEnsure: (install: boolean) => typedError<{
+	officialInstanceEnsure: (install: boolean, minecraft: string | null) => typedError<{
 	id: string,
 	name: string,
 	icon: string,
@@ -1184,7 +1188,13 @@ export const commands = {
 	/**  Library group (`None`: no group). */
 	group: string | null,
 	createdAt: string,
-} | null, CmdError>(__TAURI_INVOKE("official_instance_ensure", { install })),
+} | null, CmdError>(__TAURI_INVOKE("official_instance_ensure", { install, minecraft })),
+	/**
+	 *  The official pack family (PACK-OFFER): its members, and the member published for `minecraft`
+	 *  with its loader, so the page can suggest the pack when the player picks that version by hand
+	 *  (a new instance, an empty one). Nothing is fetched but the matching member's manifest.
+	 */
+	officialFamily: (minecraft: string | null) => typedError<OfficialFamilyView, CmdError>(__TAURI_INVOKE("official_family", { minecraft })),
 	/**  The link that started the app, if any (taken once). */
 	deepLinkPending: () => __TAURI_INVOKE<{ kind: "home" } | 
 /**  Start the selected instance (`projects://play`, `projects://join`). */
@@ -5764,6 +5774,19 @@ export type FailureReason =
  */
 { kind: "refused"; cause: KickCause; message: string | null };
 
+/**
+ *  One published member of the official pack family (PACK-OFFER): what the launcher can suggest
+ *  when the player picks its Minecraft version by hand.
+ */
+export type FamilyMemberView = {
+	packId: string,
+	name: string,
+	version: string,
+	minecraft: string,
+	/**  The member new installs get. */
+	default: boolean,
+};
+
 /**  What Settings → Genel "Hızlı kaynak paketi yükleme" shows for the install Play opens. */
 export type FastPacksView = {
 	/**  The signed config's `features.fastPacks`: the switch shows. */
@@ -8104,6 +8127,26 @@ export type NotifyPrefs = {
 	favoritesProjects?: boolean,
 	/**  OVL-SOC2: "Katılma istekleri" (on unless turned off). */
 	joinRequests?: boolean,
+};
+
+/**  The official pack family as the suggestions need it (PACK-OFFER). */
+export type OfficialFamilyView = {
+	/**
+	 *  The members with a Minecraft version, newest first; empty while nothing is published (or
+	 *  offline without a cache).
+	 */
+	members: FamilyMemberView[],
+	/**
+	 *  The member published for the asked Minecraft version, with its loader (read from its
+	 *  manifest, which is cached and immutable). `None` when there is none or it cannot be read.
+	 */
+	matched: OfficialPackView | null,
+	/**  The official instance, when there is one. */
+	instanceId: string | null,
+	/**  Its Minecraft version. */
+	instanceMinecraft: string | null,
+	/**  The player deleted the official instance (LIB1). */
+	removed: boolean,
 };
 
 export type OfficialPackView = {

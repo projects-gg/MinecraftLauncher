@@ -10,7 +10,7 @@ import {
 import { Button, IconButton, Menu, Skeleton, TabPanel, Tabs, Tooltip } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelectedAccountId } from "@/features/accounts/use-own-launch";
 import { ContentBrowser } from "@/features/content/content-browser";
@@ -53,6 +53,13 @@ export function InstancePage() {
   const browse = browseKinds.find((k) => k === search.browse);
   const [exporting, setExporting] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
+  // PACK-OFFER: the version the dialog opens on (a link's `switchTo`, a newer version told once).
+  const [versionTarget, setVersionTarget] = useState<string | undefined>();
+  const openVersions = (target?: string) => {
+    setVersionTarget(target);
+    setVersionsOpen(true);
+  };
+
   const { data, isPending } = useQuery({
     queryKey: ["instance", instanceId],
     queryFn: () => api.instance(instanceId),
@@ -72,6 +79,21 @@ export function InstancePage() {
   // shows a small marker so they are not forgotten.
   const settingsDraft = useDrafts((s) => s.settings[instanceId]);
   const modsPending = useDrafts((s) => Boolean(s.mods[instanceId]));
+  // A link aimed at a version opens the dialog on it once (when the instance is in), then leaves
+  // the address.
+  const switchTo = search.switchTo;
+  const loaded = Boolean(data);
+  useEffect(() => {
+    if (!switchTo || !loaded) return;
+    setVersionTarget(switchTo);
+    setVersionsOpen(true);
+    void navigate({
+      to: "/library/$instanceId",
+      params: { instanceId },
+      search: (prev) => ({ ...prev, switchTo: undefined }),
+      replace: true,
+    });
+  }, [switchTo, loaded, instanceId, navigate]);
 
   const setTab = (next: InstanceTab) =>
     void navigate({
@@ -162,7 +184,7 @@ export function InstancePage() {
               variant="ghost"
               icon={<ArrowsLeftRight size={16} />}
               aria-label={t("modCenter.version.changeFor", { version: data.mcVersion })}
-              onClick={() => setVersionsOpen(true)}
+              onClick={() => openVersions()}
             >
               {data.mcVersion}
             </Button>
@@ -277,7 +299,7 @@ export function InstancePage() {
             value="mods"
             className="flex flex-col pb-0 [mask-image:linear-gradient(to_bottom,black_calc(100%-10px),transparent)]"
           >
-            <ModCenter instance={data} onSwitchVersion={() => setVersionsOpen(true)} />
+            <ModCenter instance={data} onSwitchVersion={openVersions} />
           </TabPanel>
           <TabPanel value="resourcePacks" className="page-scroll overflow-x-hidden pb-8">
             <PacksTab
@@ -322,6 +344,7 @@ export function InstancePage() {
       <VersionDialog
         instance={data}
         open={versionsOpen}
+        initialTarget={versionTarget}
         onClose={() => setVersionsOpen(false)}
         onOpenModCenter={data.managed ? () => openMods("recommended") : undefined}
       />

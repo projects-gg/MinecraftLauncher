@@ -169,11 +169,17 @@ export function VersionDialog({
   open,
   onClose,
   onOpenModCenter,
+  initialTarget,
 }: {
   instance: InstanceSummary;
   open: boolean;
   onClose: () => void;
   onOpenModCenter?: () => void;
+  /**
+   * PACK-OFFER: open on this version's preview (the official pack's offer, a newer version told
+   * once); "Geri" still leads to the list. A version that is the current one opens the list.
+   */
+  initialTarget?: string;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -189,11 +195,14 @@ export function VersionDialog({
   // A set of the target that cleanup moved to the trash comes back unless the player turns it off.
   const [restoreOld, setRestoreOld] = useState(true);
 
+  // Only when it opens: the version it was aimed at is not applied again later.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: read once per opening
   useEffect(() => {
     if (open) {
-      setStep("list");
+      const aimed = initialTarget && initialTarget !== instance.mcVersion ? initialTarget : null;
+      setStep(aimed ? "preview" : "list");
       setDirection(1);
-      setTarget(null);
+      setTarget(aimed);
       setQuery("");
       setResult(null);
       setBusy(false);
