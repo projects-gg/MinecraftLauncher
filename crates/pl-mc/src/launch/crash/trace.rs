@@ -12,7 +12,9 @@
 //!   `other`.
 //!
 //! [`CrashTrace::phase`] is the crash report's description when the game itself writes it
-//! (`Rendering overlay`).
+//! (`Rendering overlay`). [`CrashTrace::opening`] says whether the game's window had shown, and a
+//! JVM fatal error's [`NativeFault`] what the JVM reported and what kind of thread it hit, from the
+//! closed lists [`FAULT_ERRORS`] and [`FAULT_THREADS`] (TELEM-JVM): never a thread's own name.
 
 use std::sync::LazyLock;
 
@@ -27,7 +29,71 @@ pub struct CrashTrace {
     pub sig: String,
     /// The crash report's description, when it is one of [`PHASES`].
     pub phase: Option<&'static str>,
+    /// The game's window had not shown yet: it failed while it opened.
+    pub opening: bool,
+    /// What a JVM fatal error log says about the failure (`native/…` traces only).
+    pub fault: Option<NativeFault>,
 }
+
+impl CrashTrace {
+    /// The JVM itself or the code it compiled failed (`native/jvm`, `native/java-code`), not a
+    /// driver, a library or another program: what Java's AOT cache could be behind.
+    pub fn in_jvm(&self) -> bool {
+        matches!(self.sig.as_str(), "native/jvm" | "native/java-code")
+    }
+}
+
+/// A JVM fatal error's error and the kind of thread it hit, from [`FAULT_ERRORS`] and
+/// [`FAULT_THREADS`] (kept as their places in the lists: a crash diagnosis travels in events).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NativeFault {
+    error: u8,
+    thread: u8,
+}
+
+impl NativeFault {
+    fn new(error: &str, thread: &str) -> Self {
+        let place = |list: &[&str], token: &str| {
+            let at = list.iter().position(|known| *known == token);
+            u8::try_from(at.unwrap_or(list.len() - 1)).unwrap_or(u8::MAX)
+        };
+        Self {
+            error: place(FAULT_ERRORS, error),
+            thread: place(FAULT_THREADS, thread),
+        }
+    }
+
+    /// One of [`FAULT_ERRORS`].
+    pub fn error(self) -> &'static str {
+        FAULT_ERRORS
+            .get(usize::from(self.error))
+            .copied()
+            .unwrap_or("other")
+    }
+
+    /// One of [`FAULT_THREADS`].
+    pub fn thread(self) -> &'static str {
+        FAULT_THREADS
+            .get(usize::from(self.thread))
+            .copied()
+            .unwrap_or("other")
+    }
+}
+
+/// What a JVM fatal error log reports (keep in step with `pl_telemetry::detail`): an access
+/// violation (`av`; `av-null` at an address below 64 KiB, a missing null check rather than
+/// memory that was overwritten), a stack overflow, an illegal instruction, a page the system
+/// could not read in (`inpage`: the disk or the page file), the JVM's own check that failed
+/// (`internal`), memory it could not get (`oom`).
+pub const FAULT_ERRORS: &[&str] = &[
+    "av", "av-null", "stack", "ill", "inpage", "internal", "oom", "other",
+];
+/// The kind of thread a JVM fatal error hit: the JIT compiler, the garbage collector, the VM's
+/// own, the game's render, server and worker threads, another Java thread, a thread outside Java
+/// (`native`: a driver's or a library's).
+pub const FAULT_THREADS: &[&str] = &[
+    "jit", "gc", "vm", "render", "server", "worker", "java", "native", "other",
+];
 
 /// Windows ends a program that stopped responding with this code (`0xCFFFFFFF`): the player
 /// closed the frozen window ("Close the program") or the system did.
@@ -60,6 +126,29 @@ static DESCRIPTION: LazyLock<Regex> =
 static FRAME_CLASS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"^\s*at (?:[\w.\-]+(?:@[^/\s]*)?/)*((?:[a-z_][\w$]*\.)+[A-Za-z_$][\w$]*)\.[\w$<>]+\(",
+    )
+    .expect("valid regex")
+});
+
+/// The error line of a JVM fatal error log's header (`#  EXCEPTION_ACCESS_VIOLATION (0xc0000005)
+/// at pc=…`, `#  SIGSEGV (0xb) at pc=…`, `#  Internal Error (g1…cpp:12), pid=…`,
+/// `#  Out of Memory Error (os_windows.cpp:3600), pid=…`).
+static FATAL_ERROR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^#\s+(EXCEPTION_[A-Z_]+|SIG[A-Z]+|Internal Error|Out of Memory Error)\b")
+        .expect("valid regex")
+});
+/// The address an access violation touched: `siginfo: EXCEPTION_ACCESS_VIOLATION (0xc0000005),
+/// reading address 0x0000000000000008`, `si_addr: 0x0000000000000008`.
+static FAULT_ADDRESS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^siginfo:[^\r\n]*?(?:address|si_addr:)\s*0x([0-9a-fA-F]{1,16})")
+        .expect("valid regex")
+});
+/// The thread a JVM fatal error hit: `Current thread (0x…):  JavaThread "Render thread" daemon
+/// [_thread_in_native, …]`, `Current thread (0x…):  GCTaskThread "GC Thread#3" […]`, or `Current
+/// thread is native thread`. Its name is only compared, never kept.
+static CURRENT_THREAD: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(
+        r#"(?m)^Current thread (?:is (native) thread|\(0x[0-9a-fA-F]+\):[ \t]+([A-Za-z0-9_]+)(?:[ \t]+"([^"\r\n]{0,120})")?)"#,
     )
     .expect("valid regex")
 });
@@ -460,6 +549,63 @@ pub(super) fn overlay_crash(text: &str) -> Option<&'static str> {
     Some(native_family(frame, module)).filter(|family| family.starts_with("overlay-"))
 }
 
+/// What a JVM fatal error log reports, as one of [`FAULT_ERRORS`].
+fn fault_error(log: &str) -> &'static str {
+    let Some(error) = FATAL_ERROR.captures(log) else {
+        return "other";
+    };
+    match &error[1] {
+        "EXCEPTION_ACCESS_VIOLATION" | "SIGSEGV" => {
+            let near_null = FAULT_ADDRESS
+                .captures(log)
+                .and_then(|address| u64::from_str_radix(&address[1], 16).ok())
+                .is_some_and(|address| address < 0x1_0000);
+            if near_null { "av-null" } else { "av" }
+        }
+        "EXCEPTION_STACK_OVERFLOW" => "stack",
+        "EXCEPTION_ILLEGAL_INSTRUCTION" | "EXCEPTION_PRIV_INSTRUCTION" | "SIGILL" => "ill",
+        "EXCEPTION_IN_PAGE_ERROR" | "SIGBUS" => "inpage",
+        "Internal Error" => "internal",
+        "Out of Memory Error" => "oom",
+        _ => "other",
+    }
+}
+
+/// The kind of thread a JVM fatal error hit, as one of [`FAULT_THREADS`].
+fn fault_thread(log: &str) -> &'static str {
+    let Some(current) = CURRENT_THREAD.captures(log) else {
+        return "other";
+    };
+    if current.get(1).is_some() {
+        return "native";
+    }
+    let kind = current.get(2).map_or("", |m| m.as_str());
+    let name = current.get(3).map_or("", |m| m.as_str());
+    if kind == "CompilerThread" || name.contains("CompilerThread") {
+        "jit"
+    } else if kind == "JavaThread" {
+        match name {
+            "Render thread" => "render",
+            "Server thread" => "server",
+            _ if name.starts_with("Worker-Main") => "worker",
+            _ => "java",
+        }
+    } else if matches!(kind, "VMThread" | "WatcherThread") {
+        "vm"
+    } else if kind.contains("GC")
+        || kind.starts_with("G1")
+        || kind.starts_with('Z')
+        || kind.starts_with("Shenandoah")
+        || kind == "WorkerThread"
+        || name.starts_with("GC Thread")
+        || name.starts_with("G1 ")
+    {
+        "gc"
+    } else {
+        "other"
+    }
+}
+
 /// Windows' name for an exit code, a few common numbers, else `other`.
 fn exit_name(code: Option<i32>) -> &'static str {
     match code {
@@ -609,21 +755,26 @@ fn phase(report: &str) -> Option<&'static str> {
 }
 
 /// The trace of a crash the analyzer classified as `kind` (see the module). `report` is the
-/// crash report or JVM fatal error log of the run, `text` all it read.
+/// crash report or JVM fatal error log of the run, `text` all it read; `opening` when the game's
+/// window had not shown.
 pub(super) fn trace(
     text: &str,
     report: Option<&str>,
     exit_code: Option<i32>,
     kind: CrashKind,
     suspects: &[CrashSuspect],
+    opening: bool,
 ) -> CrashTrace {
     let game_report = report.filter(|report| report.contains(REPORT_HEADER));
     if game_report.is_none()
         && let Some((frame, module)) = problematic_frame(text)
     {
+        let log = report.unwrap_or(text);
         return CrashTrace {
             sig: format!("native/{}", native_family(frame, module)),
             phase: None,
+            opening,
+            fault: Some(NativeFault::new(fault_error(log), fault_thread(log))),
         };
     }
     if let Some(report) = game_report {
@@ -643,11 +794,15 @@ pub(super) fn trace(
         return CrashTrace {
             sig: format!("java/{exception}/{}", culprit(&named, &frames)),
             phase: phase(report),
+            opening,
+            fault: None,
         };
     }
     CrashTrace {
         sig: format!("exit/{}", exit_name(exit_code)),
         phase: None,
+        opening,
+        fault: None,
     }
 }
 
@@ -655,7 +810,7 @@ pub(super) fn trace(
 mod tests {
     use std::time::Duration;
 
-    use super::super::{CrashInput, analyze_crash};
+    use super::super::{CrashInput, SuggestedAction, analyze_crash};
     use super::*;
 
     fn shown(
@@ -894,6 +1049,187 @@ mod tests {
         assert_ne!(d.kind, CrashKind::ModCrash);
         assert_eq!(d.trace.sig, "java/IllegalStateException/sodium");
         assert_eq!(d.trace.phase, Some("Initializing game"));
+    }
+
+    /// A JVM fatal error log with its thread part and a process part that quotes exceptions the
+    /// game caught before.
+    fn fatal(error: &str, siginfo: &str, thread: &str, frame: &str) -> String {
+        format!(
+            "#\n# A fatal error has been detected by the Java Runtime Environment:\n#\n#  {error}\n#\n# JRE version: OpenJDK Runtime Environment Microsoft-12574223 (25.0.1+8) (build 25.0.1+8-LTS)\n# Problematic frame:\n# {frame}\n#\n\n---------------  S U M M A R Y ------------\n\nHost: AMD Ryzen 7 5800X 8-Core Processor, 16 cores, 31G,  Windows 11 , 64 bit Build 26100\n\n---------------  T H R E A D  ---------------\n\n{thread}\n\nStack: [0x0000003a29800000,0x0000003a29900000]\n\n{siginfo}\n\n---------------  P R O C E S S  ---------------\n\nExceptions (2 events):\nEvent: 8601.2 Thread 0x000001b8d0638980 Exception <a 'java/nio/file/AccessDeniedException'{{0x00000007}}: C:\\Users\\KorAtesi\\x> (0x00000007) thrown\nEvent: 8602.0 Thread 0x000001b8d0638980 Exception <a 'java/lang/OutOfMemoryError'{{0x00000008}}> (0x00000008) thrown\n\n---------------  S Y S T E M  ---------------\n\nOS:\n Windows 11 , 64 bit Build 26100\n"
+        )
+    }
+
+    const AV: &str =
+        "EXCEPTION_ACCESS_VIOLATION (0xc0000005) at pc=0x00007ffe1b2c3d4e, pid=4242, tid=1717";
+    const WILD: &str =
+        "siginfo: EXCEPTION_ACCESS_VIOLATION (0xc0000005), reading address 0x00000473000007d4";
+    const GC: &str = "Current thread (0x000001b8d0638980):  GCTaskThread \"GC Thread#3\" [id=1717]";
+
+    #[test]
+    fn a_fatal_error_names_its_error_and_the_kind_of_thread_it_hit() {
+        let null =
+            "siginfo: EXCEPTION_ACCESS_VIOLATION (0xc0000005), reading address 0x0000000000000010";
+        let thread = |kind: &str, name: &str| {
+            format!(
+                "Current thread (0x000001b8d0638980):  {kind} \"{name}\" daemon [_thread_in_native, id=1717]"
+            )
+        };
+        for (error, siginfo, current, want) in [
+            (AV, WILD, GC.to_owned(), ("av", "gc")),
+            (
+                AV,
+                null,
+                thread("JavaThread", "C2 CompilerThread0"),
+                ("av-null", "jit"),
+            ),
+            (
+                AV,
+                WILD,
+                thread("CompilerThread", "C1 CompilerThread0"),
+                ("av", "jit"),
+            ),
+            (
+                AV,
+                WILD,
+                thread("JavaThread", "Render thread"),
+                ("av", "render"),
+            ),
+            (
+                AV,
+                WILD,
+                thread("JavaThread", "Server thread"),
+                ("av", "server"),
+            ),
+            (
+                AV,
+                WILD,
+                thread("JavaThread", "Worker-Main-125"),
+                ("av", "worker"),
+            ),
+            (
+                AV,
+                WILD,
+                thread("JavaThread", "KorAtesi's thread"),
+                ("av", "java"),
+            ),
+            (AV, WILD, thread("VMThread", "VM Thread"), ("av", "vm")),
+            (
+                AV,
+                WILD,
+                thread("ConcurrentGCThread", "G1 Conc#0"),
+                ("av", "gc"),
+            ),
+            (
+                AV,
+                WILD,
+                thread("WorkerThread", "GC Thread#0"),
+                ("av", "gc"),
+            ),
+            (
+                AV,
+                WILD,
+                "Current thread is native thread".to_owned(),
+                ("av", "native"),
+            ),
+            (
+                "EXCEPTION_STACK_OVERFLOW (0xc00000fd) at pc=0x00007ffe1b2c3d4e, pid=4242, tid=1717",
+                "",
+                thread("JavaThread", "Render thread"),
+                ("stack", "render"),
+            ),
+            (
+                "EXCEPTION_IN_PAGE_ERROR (0xc0000006) at pc=0x00007ffe1b2c3d4e, pid=4242, tid=1717",
+                "",
+                String::new(),
+                ("inpage", "other"),
+            ),
+            (
+                "EXCEPTION_ILLEGAL_INSTRUCTION (0xc000001d) at pc=0x00007ffe1b2c3d4e, pid=4242",
+                "",
+                String::new(),
+                ("ill", "other"),
+            ),
+            (
+                "Internal Error (g1ConcurrentMark.cpp:1234), pid=4242, tid=1717",
+                "",
+                thread("ConcurrentGCThread", "G1 Conc#0"),
+                ("internal", "gc"),
+            ),
+            (
+                "SIGSEGV (0xb) at pc=0x00007f1b2c3d4e5f, pid=4242, tid=1717",
+                "siginfo: si_signo: 11 (SIGSEGV), si_code: 1 (SEGV_MAPERR), si_addr: 0x0000000000000008",
+                thread("JavaThread", "Render thread"),
+                ("av-null", "render"),
+            ),
+        ] {
+            let log = fatal(error, siginfo, &current, "V  [jvm.dll+0x3e1f20]");
+            let d = shown(PLAYING, Some(&log), Some(1));
+            assert_eq!(d.trace.sig, "native/jvm", "{error} {current}");
+            let fault = d.trace.fault.expect("a fatal error's fault");
+            assert_eq!((fault.error(), fault.thread()), want, "{error} {current}");
+            assert!(FAULT_ERRORS.contains(&fault.error()));
+            assert!(FAULT_THREADS.contains(&fault.thread()));
+            assert!(!d.trace.opening);
+            assert!(d.trace.in_jvm());
+        }
+        // While the window opened, in a driver.
+        let log = fatal(
+            AV,
+            WILD,
+            "Current thread is native thread",
+            "C  [atio6axx.dll+0x1b8a0f]",
+        );
+        let d = analyze_crash(&CrashInput {
+            output: PLAYING,
+            crash_report: Some(&log),
+            exit_code: Some(1),
+            ..CrashInput::default()
+        });
+        assert_eq!(d.trace.sig, "native/gpu-amd");
+        assert!(d.trace.opening);
+        assert!(!d.trace.in_jvm());
+        // Only a fatal error has a fault.
+        assert_eq!(shown(PLAYING, None, Some(1)).trace.fault, None);
+    }
+
+    #[test]
+    fn what_a_fatal_errors_process_part_quotes_is_no_reason() {
+        // The exceptions the game caught before (the log's events) are not why the JVM died.
+        let log = fatal(AV, WILD, GC, "V  [jvm.dll+0x3e1f20]");
+        let d = shown(PLAYING, Some(&log), Some(1));
+        assert_eq!(d.kind, CrashKind::Unknown);
+        assert_eq!(d.trace.sig, "native/jvm");
+        assert!(
+            d.suggested_actions
+                .contains(&SuggestedAction::OpenCrashReport)
+        );
+    }
+
+    #[test]
+    fn a_crash_report_before_the_hang_says_what_happened() {
+        let stack = "java.util.ConcurrentModificationException\n\
+            \tat java.base/java.util.ArrayList$Itr.checkForComodification(ArrayList.java:1096)\n\
+            \tat java.base/java.util.ArrayList$Itr.next(ArrayList.java:1050)\n\
+            \tat net.minecraft.client.multiplayer.ClientLevel.tickEntities(ClientLevel.java:300)";
+        let crash = report("Unexpected error", stack);
+        let d = shown(PLAYING, Some(&crash), Some(NOT_RESPONDING_EXIT));
+        assert_eq!(d.kind, CrashKind::Unknown);
+        assert_eq!(d.trace.sig, "java/ConcurrentModificationException/none");
+        assert_eq!(d.trace.phase, Some("Unexpected error"));
+        // A mod in the report's stack is named, as without the hang.
+        let stack = "java.util.ConcurrentModificationException\n\
+            \tat java.base/java.util.ArrayList$Itr.checkForComodification(ArrayList.java:1096)\n\
+            \tat net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer.tick(SodiumWorldRenderer.java:88)";
+        let crash = report("Unexpected error", stack);
+        let d = shown(PLAYING, Some(&crash), Some(NOT_RESPONDING_EXIT));
+        assert_eq!(d.kind, CrashKind::ModCrash);
+        assert_eq!(d.trace.sig, "java/ConcurrentModificationException/sodium");
+        // The server's watchdog reports a freeze: that stays one.
+        let stack = "java.lang.Error: Watchdog\n\
+            \tat net.minecraft.server.MinecraftServer.tickServer(MinecraftServer.java:1)";
+        let crash = report("Watching Server", stack);
+        let d = shown(PLAYING, Some(&crash), Some(NOT_RESPONDING_EXIT));
+        assert_eq!(d.kind, CrashKind::NotResponding);
     }
 
     #[test]
