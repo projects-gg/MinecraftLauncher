@@ -7,7 +7,8 @@
 //!   cache, or records when it has none; a recording that waits for its create step means a
 //!   normal start.
 //! - [`game_ended`]: a training game that crashed gives its key up; a cached game that crashed
-//!   before it got to play drops its cache for good. With no game left, [`run_pending`].
+//!   before it got to play, or whose JVM itself died later (TELEM-JVM), drops its cache for good.
+//!   With no game left, [`run_pending`].
 //! - [`run_pending`]: the create steps, one at a time, below normal priority, only while no game
 //!   runs; a launch stops one ([`pause`]) and it runs again after that game.
 //!
@@ -23,7 +24,9 @@ use pl_mc::install::InstalledVersion;
 use pl_mc::java::JavaSource;
 use pl_mc::launch::LaunchCommand;
 use pl_mc::launch::aot::{AotPlan, AotStore, CreateOutcome, TRAINING_ROOM, launch_key};
+use pl_mc::launch::crash::CrashDiagnosis;
 use pl_net::CancellationToken;
+use pl_telemetry::AotUse;
 use tauri::{AppHandle, Manager};
 
 use crate::state::AppState;
@@ -114,6 +117,15 @@ pub(crate) async fn for_launch(
     .flatten()
 }
 
+/// A start's plan as usage data names it (TELEM-JVM).
+pub(crate) fn usage(plan: &AotPlan) -> AotUse {
+    match plan {
+        AotPlan::Off => AotUse::Off,
+        AotPlan::Use { .. } => AotUse::Use,
+        AotPlan::Train { .. } => AotUse::Train,
+    }
+}
+
 fn plan_name(plan: &AotPlan) -> &'static str {
     match plan {
         AotPlan::Off => "off",
@@ -139,8 +151,14 @@ impl AotLaunch {
     }
 }
 
-/// A game of `launch` ended: `crashed` with a crash diagnosis, `played` when it got to play.
-pub(crate) fn game_ended(app: &AppHandle, launch: AotLaunch, crashed: bool, played: bool) {
+/// A game of `launch` ended: `crash` its crash diagnosis, `played` when it got to play.
+pub(crate) fn game_ended(
+    app: &AppHandle,
+    launch: AotLaunch,
+    crash: Option<&CrashDiagnosis>,
+    played: bool,
+) {
+    let crashed = crash.is_some();
     match &launch.plan {
         AotPlan::Train { config } => {
             let recorded = config.is_file();
@@ -153,6 +171,16 @@ pub(crate) fn game_ended(app: &AppHandle, launch: AotLaunch, crashed: bool, play
             tracing::warn!(
                 instance = %launch.instance,
                 "a game with an AOT cache crashed while it opened; that cache is not used again"
+            );
+            launch.store.give_up(&launch.instance, &launch.key);
+        }
+        // TELEM-JVM: the JVM itself, or the code it compiled, died with a cache in its start. The
+        // cache is the one thing of ours in there: the next starts go without it (until the setup
+        // changes and a new one is made), and usage data shows whether such crashes go with it.
+        AotPlan::Use { .. } if crash.is_some_and(|crash| crash.trace.in_jvm()) => {
+            tracing::warn!(
+                instance = %launch.instance,
+                "the JVM of a game with an AOT cache crashed; that cache is not used again"
             );
             launch.store.give_up(&launch.instance, &launch.key);
         }

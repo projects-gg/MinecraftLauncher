@@ -24,7 +24,8 @@
 //! cache stay out of the game's log (`-Xlog:aot*=off,cds*=off`): a cache the JVM still refuses
 //! just means a normal start. A training whose game crashed is not tried again for that key, nor
 //! after [`MAX_TRAININGS`] starts without a recording; a cached start that crashed before it got
-//! to play drops its cache for good ([`AotStore::give_up`]).
+//! to play, or whose JVM itself died later (TELEM-JVM), drops its cache for good
+//! ([`AotStore::give_up`]).
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};

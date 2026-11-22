@@ -14,7 +14,9 @@
 //!   no chat, no server, no file paths, no list of installed mods. What a batch holds is in
 //!   [`batch`] and [`facts`]; crash summaries are scrubbed ([`scrub`]). A game crash's trace
 //!   (TELEM-FIX) names only things from closed lists: a Java or game exception class, the family
-//!   of a native module, a known public mod, an exit code's name ([`ledger::GameCrash`]).
+//!   of a native module, a known public mod, an exit code's name ([`ledger::GameCrash`]), and
+//!   (TELEM-JVM) whether the game was opening or played, whether Java's AOT cache was in its start
+//!   and a JVM fatal error's error and kind of thread ([`detail`]).
 //! - **Nothing that looks like spying**: the counts come from what the launcher does anyway (its
 //!   own commands, its launches, its voice state, its own panics and page errors). No other
 //!   program, window, key press or file is looked at.
@@ -23,6 +25,7 @@
 //! `telemetry.rs`) and sends the requests.
 
 pub mod batch;
+pub mod detail;
 pub mod facts;
 pub mod feature;
 pub mod ledger;
@@ -31,6 +34,7 @@ pub mod scrub;
 pub mod voice;
 
 pub use batch::{Carried, Outgoing};
+pub use detail::AotUse;
 pub use facts::AppFacts;
 pub use feature::Feature;
 pub use ledger::{CrashKind, CrashNote, GameCrash};

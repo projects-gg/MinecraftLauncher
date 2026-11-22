@@ -140,6 +140,8 @@ pub struct Counts {
     pub shown: u32,
     /// Games that crashed (any time).
     pub game_crashes: u32,
+    /// Games that started with Java's AOT cache (TELEM-JVM).
+    pub aot_games: u32,
     /// The launcher's own panics, and the page's uncaught errors.
     pub panics: u32,
     pub page_errors: u32,
@@ -177,6 +179,7 @@ impl Counts {
         self.launches = self.launches.saturating_sub(sent.launches);
         self.shown = self.shown.saturating_sub(sent.shown);
         self.game_crashes = self.game_crashes.saturating_sub(sent.game_crashes);
+        self.aot_games = self.aot_games.saturating_sub(sent.aot_games);
         self.panics = self.panics.saturating_sub(sent.panics);
         self.page_errors = self.page_errors.saturating_sub(sent.page_errors);
         subtract_map(&mut self.fail, &sent.fail);
