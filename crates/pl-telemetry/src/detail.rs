@@ -5,22 +5,29 @@
 //! exception and its mod) and keeps its shape. The service checks the same lists
 //! (`services/studio-team`'s `wire.ts`).
 
-/// Java's AOT cache in a game's start.
+/// Java's AOT cache in a game's start. `Off` and `Never` stay apart: a start that could have a
+/// cache and went without one is what a cached start's crashes are measured against, not every
+/// other game (another loader, another Java).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AotUse {
-    /// A normal start.
+    /// This start could have no cache (the feature off, not Fabric, a Java older than 25 or the
+    /// player's own, a wrapper).
     #[default]
+    Never,
+    /// It could, and went without one (its recording waits for its create step, the cache was
+    /// given up, no room for a recording).
     Off,
-    /// The start used a cache.
+    /// It used a cache.
     Use,
-    /// The start recorded one.
+    /// It recorded one.
     Train,
 }
 
 impl AotUse {
     pub fn key(self) -> &'static str {
         match self {
-            Self::Off => "std",
+            Self::Never => "std",
+            Self::Off => "off",
             Self::Use => "aot",
             Self::Train => "rec",
         }
@@ -76,7 +83,7 @@ mod tests {
             detailed(
                 "native/gpu-amd",
                 true,
-                AotUse::Off,
+                AotUse::Never,
                 Some(("av-null", "native"))
             ),
             "native/gpu-amd/open.std.av-null.native"
@@ -86,8 +93,12 @@ mod tests {
             "native/other/play.rec.other.other"
         );
         assert_eq!(
-            detailed("exit/hung", false, AotUse::Off, None),
+            detailed("exit/hung", false, AotUse::Never, None),
             "exit/hung/play.std"
+        );
+        assert_eq!(
+            detailed("exit/hung", false, AotUse::Off, None),
+            "exit/hung/play.off"
         );
         assert_eq!(
             detailed("exit/2", true, AotUse::Use, None),
@@ -117,7 +128,7 @@ mod tests {
                 AotUse::Off,
                 Some(("KorAtesi", "Render thread"))
             ),
-            "native/jvm/play.std.other.other"
+            "native/jvm/play.off.other.other"
         );
     }
 
@@ -125,7 +136,7 @@ mod tests {
     fn every_detail_passes_the_trace_shape() {
         for error in ERRORS {
             for thread in THREADS {
-                for aot in [AotUse::Off, AotUse::Use, AotUse::Train] {
+                for aot in [AotUse::Never, AotUse::Off, AotUse::Use, AotUse::Train] {
                     for opening in [false, true] {
                         let sig = detailed(
                             "native/overlay-overwolf",

@@ -22,7 +22,7 @@ pub const CRASHES_SENT: usize = 3;
 pub const SETUP_SAMPLES: usize = 16;
 /// Distinct game crash traces the file keeps (a batch sends the most frequent [`GAMES_SENT`]).
 pub const GAMES_KEPT: usize = 6;
-pub const GAMES_SENT: usize = 2;
+pub const GAMES_SENT: usize = 3;
 
 /// What a crash summary is about.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -140,8 +140,11 @@ pub struct Counts {
     pub shown: u32,
     /// Games that crashed (any time).
     pub game_crashes: u32,
-    /// Games that started with Java's AOT cache (TELEM-JVM).
+    /// Games that started with Java's AOT cache, that could have one and went without, that
+    /// recorded one (TELEM-JVM).
     pub aot_games: u32,
+    pub aot_off_games: u32,
+    pub aot_rec_games: u32,
     /// The launcher's own panics, and the page's uncaught errors.
     pub panics: u32,
     pub page_errors: u32,
@@ -180,6 +183,8 @@ impl Counts {
         self.shown = self.shown.saturating_sub(sent.shown);
         self.game_crashes = self.game_crashes.saturating_sub(sent.game_crashes);
         self.aot_games = self.aot_games.saturating_sub(sent.aot_games);
+        self.aot_off_games = self.aot_off_games.saturating_sub(sent.aot_off_games);
+        self.aot_rec_games = self.aot_rec_games.saturating_sub(sent.aot_rec_games);
         self.panics = self.panics.saturating_sub(sent.panics);
         self.page_errors = self.page_errors.saturating_sub(sent.page_errors);
         subtract_map(&mut self.fail, &sent.fail);

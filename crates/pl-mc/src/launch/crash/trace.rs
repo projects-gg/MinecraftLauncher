@@ -37,9 +37,11 @@ pub struct CrashTrace {
 
 impl CrashTrace {
     /// The JVM itself or the code it compiled failed (`native/jvm`, `native/java-code`), not a
-    /// driver, a library or another program: what Java's AOT cache could be behind.
+    /// driver, a library or another program, nor memory the computer could not give: what Java's
+    /// AOT cache could be behind.
     pub fn in_jvm(&self) -> bool {
         matches!(self.sig.as_str(), "native/jvm" | "native/java-code")
+            && self.fault.is_none_or(|fault| fault.error() != "oom")
     }
 }
 
@@ -135,6 +137,16 @@ static FRAME_CLASS: LazyLock<Regex> = LazyLock::new(|| {
 /// `#  Out of Memory Error (os_windows.cpp:3600), pid=…`).
 static FATAL_ERROR: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)^#\s+(EXCEPTION_[A-Z_]+|SIG[A-Z]+|Internal Error|Out of Memory Error)\b")
+        .expect("valid regex")
+});
+/// The header of a JVM fatal error, and of one where it could not get memory (that log has no
+/// problematic frame).
+static FATAL_HEADER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^#\s*A fatal error has been detected by the Java Runtime Environment")
+        .expect("valid regex")
+});
+static NATIVE_OOM: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^#\s*There is insufficient memory for the Java Runtime Environment")
         .expect("valid regex")
 });
 /// The address an access violation touched: `siginfo: EXCEPTION_ACCESS_VIOLATION (0xc0000005),
@@ -542,6 +554,21 @@ fn native_family(frame: char, module: Option<&str>) -> &'static str {
         .map_or("other", |&(_, family)| family)
 }
 
+/// The family of the module a JVM fatal error happened in (its problematic frame's). Without that
+/// frame: the JVM's own (`jvm`) when it could not get memory, `other` for a log cut short; `None`
+/// when the JVM did not die of a fatal error.
+fn fatal_family(text: &str) -> Option<&'static str> {
+    if let Some((frame, module)) = problematic_frame(text) {
+        Some(native_family(frame, module))
+    } else if NATIVE_OOM.is_match(text) {
+        Some("jvm")
+    } else if FATAL_HEADER.is_match(text) {
+        Some("other")
+    } else {
+        None
+    }
+}
+
 /// The program drawing over the game whose hook crashed it (`overlay-rtss`), from the JVM's
 /// fatal error log.
 pub(super) fn overlay_crash(text: &str) -> Option<&'static str> {
@@ -552,7 +579,11 @@ pub(super) fn overlay_crash(text: &str) -> Option<&'static str> {
 /// What a JVM fatal error log reports, as one of [`FAULT_ERRORS`].
 fn fault_error(log: &str) -> &'static str {
     let Some(error) = FATAL_ERROR.captures(log) else {
-        return "other";
+        return if NATIVE_OOM.is_match(log) {
+            "oom"
+        } else {
+            "other"
+        };
     };
     match &error[1] {
         "EXCEPTION_ACCESS_VIOLATION" | "SIGSEGV" => {
@@ -767,11 +798,11 @@ pub(super) fn trace(
 ) -> CrashTrace {
     let game_report = report.filter(|report| report.contains(REPORT_HEADER));
     if game_report.is_none()
-        && let Some((frame, module)) = problematic_frame(text)
+        && let Some(family) = fatal_family(text)
     {
         let log = report.unwrap_or(text);
         return CrashTrace {
-            sig: format!("native/{}", native_family(frame, module)),
+            sig: format!("native/{family}"),
             phase: None,
             opening,
             fault: Some(NativeFault::new(fault_error(log), fault_thread(log))),
@@ -1190,6 +1221,24 @@ mod tests {
         assert!(!d.trace.in_jvm());
         // Only a fatal error has a fault.
         assert_eq!(shown(PLAYING, None, Some(1)).trace.fault, None);
+    }
+
+    #[test]
+    fn a_fatal_error_without_a_frame_is_still_the_jvms() {
+        // The JVM could not get memory: its log has no problematic frame.
+        let oom = "#\n# There is insufficient memory for the Java Runtime Environment to continue.\n# Native memory allocation (mmap) failed to map 65536 bytes. Error detail: committing reserved memory.\n# An error report file with more information is saved as:\n# C:\\Users\\KorAtesi\\hs_err_pid4242.log\n#\n#  Out of Memory Error (os_windows.cpp:3825), pid=4242, tid=1717\n#\n# JRE version: OpenJDK Runtime Environment (25.0.1+8) (build 25.0.1+8-LTS)\n";
+        let d = shown(PLAYING, Some(oom), Some(1));
+        assert_eq!(d.trace.sig, "native/jvm");
+        assert_eq!(d.trace.fault.map(NativeFault::error), Some("oom"));
+        // Memory the computer could not give is no reason to suspect an AOT cache.
+        assert!(!d.trace.in_jvm());
+        // A log cut short before its frame names no module.
+        let cut = "#\n# A fatal error has been detected by the Java Runtime Environment:\n#\n#  EXCEPTION_ACCESS_VIOLATION (0xc0000005) at pc=0x00007ffe1b2c3d4e, pid=4242, tid=1717\n#\n";
+        let d = shown(PLAYING, Some(cut), Some(1));
+        assert_eq!(d.trace.sig, "native/other");
+        assert_eq!(d.trace.fault.map(NativeFault::error), Some("av"));
+        // Nothing fatal: the exit code.
+        assert_eq!(shown(PLAYING, None, Some(1)).trace.sig, "exit/1");
     }
 
     #[test]

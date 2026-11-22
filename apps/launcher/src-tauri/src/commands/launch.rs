@@ -1816,7 +1816,7 @@ async fn prepare_and_spawn(
         }
         // AOT-CACHE: a training's recording waits for its create step (or the key is given up),
         // a cache that crashed its game while it opened, or whose JVM died, is dropped.
-        let aot_use = aot.as_ref().map_or(pl_telemetry::AotUse::Off, |aot| {
+        let aot_use = aot.as_ref().map_or(pl_telemetry::AotUse::Never, |aot| {
             crate::aot::usage(&aot.plan)
         });
         if let Some(aot) = aot {

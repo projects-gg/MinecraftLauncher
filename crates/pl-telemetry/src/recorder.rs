@@ -285,15 +285,20 @@ impl Recorder {
         });
     }
 
-    /// A game ended that started with Java's AOT cache (`aot`: its start): the share of games a
-    /// cache sped up, and what crashes with one are measured against (TELEM-JVM).
+    /// A game ended; `aot`: Java's AOT cache in its start. The games that could have a cache, by
+    /// what they did with it, are what crashes with each are measured against (TELEM-JVM).
     pub fn game_ran(&self, aot: AotUse, now_ms: i64) {
-        if aot != AotUse::Use {
+        if aot == AotUse::Never {
             return;
         }
         self.count(now_ms, true, |inner| {
             let counts = &mut inner.stored.ledger.counts;
-            counts.aot_games = counts.aot_games.saturating_add(1);
+            let count = match aot {
+                AotUse::Use => &mut counts.aot_games,
+                AotUse::Off => &mut counts.aot_off_games,
+                AotUse::Train | AotUse::Never => &mut counts.aot_rec_games,
+            };
+            *count = count.saturating_add(1);
         });
     }
 
@@ -657,8 +662,8 @@ mod tests {
         assert!(recorder.ledger().games.is_empty());
     }
 
-    /// TELEM-JVM: the games an AOT cache started count (no others), as `day.aot`, and come off
-    /// once the batch is taken.
+    /// TELEM-JVM: the games that could have an AOT cache count by what they did with it
+    /// (`day.aot`, `aotOff`, `aotRec`; the others not), and come off once the batch is taken.
     #[test]
     fn games_an_aot_cache_started_go_with_the_daily_batch() {
         let dir = tempfile::tempdir().unwrap();
@@ -669,15 +674,26 @@ mod tests {
             (AotUse::Off, 2_000),
             (AotUse::Train, 3_000),
             (AotUse::Use, 4_000),
+            (AotUse::Never, 5_000),
         ] {
             recorder.game_ran(aot, at);
         }
-        assert_eq!(recorder.ledger().counts.aot_games, 2);
+        let counts = recorder.ledger().counts;
+        assert_eq!(
+            (counts.aot_games, counts.aot_off_games, counts.aot_rec_games),
+            (2, 1, 1)
+        );
         let out = recorder.take_daily(&facts(), 21 * HOUR_MS).unwrap();
         let value: serde_json::Value = serde_json::from_slice(&out.json).unwrap();
         assert_eq!(value["day"]["aot"], 2);
+        assert_eq!(value["day"]["aotOff"], 1);
+        assert_eq!(value["day"]["aotRec"], 1);
         recorder.answered(&out.carried, Answer::Taken, 21 * HOUR_MS + 1);
-        assert_eq!(recorder.ledger().counts.aot_games, 0);
+        let counts = recorder.ledger().counts;
+        assert_eq!(
+            (counts.aot_games, counts.aot_off_games, counts.aot_rec_games),
+            (0, 0, 0)
+        );
     }
 
     #[test]

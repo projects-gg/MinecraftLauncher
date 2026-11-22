@@ -56,9 +56,14 @@ struct WireDay {
     crashes: u32,
     panics: u32,
     perr: u32,
-    /// Games that started with Java's AOT cache (TELEM-JVM; left out at 0, as before it).
+    /// Games that started with Java's AOT cache, that could have one and went without, that
+    /// recorded one (TELEM-JVM; each left out at 0, as before it).
     #[serde(skip_serializing_if = "is_zero")]
     aot: u32,
+    #[serde(skip_serializing_if = "is_zero")]
+    aot_off: u32,
+    #[serde(skip_serializing_if = "is_zero")]
+    aot_rec: u32,
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -169,6 +174,8 @@ pub fn daily(ledger: &Ledger, facts: &AppFacts) -> Outgoing {
             panics: counts.panics,
             perr: counts.page_errors,
             aot: counts.aot_games,
+            aot_off: counts.aot_off_games,
+            aot_rec: counts.aot_rec_games,
         }),
         fail: counts.fail.clone(),
         feat: counts.feat.clone(),
