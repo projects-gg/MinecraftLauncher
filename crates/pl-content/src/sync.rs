@@ -771,6 +771,20 @@ pub async fn plan_sync(
     let disk = observe_records(game_dir, ext, prev).await;
     let reset = looks_wiped(game_dir, ext, prev, &disk, &stand_ins).await;
     let mut adoption = adopt(ext, prev, selection, &disk, reset, &stand_ins);
+    // A jar of the player's standing in for an item means they run that mod, so the item counts
+    // as switched on, whatever was recorded (an item added after the player's first sync, or a
+    // pack copy turned off beside theirs, left it off). Otherwise a version switch, where the
+    // jar stays behind, would carry the off choice over and drop a mod the player was using.
+    // The selection still wins for its own apply.
+    for id in stand_ins.keys() {
+        let named = selection.is_some_and(|s| s.items.contains_key(id));
+        let choice = ext
+            .item(id)
+            .is_some_and(|item| !item.library && !LauncherItems::owns(id));
+        if choice && !named && prev.items.get(id) != Some(&true) {
+            adoption.choices.entry(id.clone()).or_insert(true);
+        }
+    }
 
     let resolution = resolve_with(
         manifest,
@@ -3998,6 +4012,49 @@ mod tests {
             paths(&blind.downloads),
             [("mods/fabric-api.jar", DownloadAction::Add)]
         );
+    }
+
+    #[tokio::test]
+    async fn an_off_item_the_players_jar_stands_in_for_counts_as_on_and_follows_a_switch() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        let (m, mut state) = installed_with_zoom(game).await;
+        // Zoom was recorded off (an item added later, say) while the player runs their own copy.
+        std::fs::remove_file(game.join("mods/zoom.jar")).unwrap();
+        state.files.remove("mods/zoom.jar");
+        state.items.insert("zoom".into(), false);
+        state.item_mods.insert("zoom".into(), vec!["zoom".into()]);
+        write(game, "mods/my-zoom.jar", b"my-zoom");
+        let disk = vec![
+            disk_jar("mods/fabric-api.jar", "fabric-api"),
+            disk_jar("mods/sodium.jar", "sodium"),
+            disk_jar("mods/minimap.jar", "minimap"),
+            disk_jar("mods/my-zoom.jar", "zoom"),
+        ];
+        let plan = plan_sync(&m, game, Some(&state), None, &seeing(disk.clone()))
+            .await
+            .unwrap();
+        assert!(plan.downloads.is_empty() && plan.deletes.is_empty());
+        assert!(plan.adopted.is_empty() && plan.next_state.manual.is_empty());
+        assert_eq!(plan.next_state.items.get("zoom"), Some(&true));
+        let zoom = status(&plan, "zoom");
+        assert_eq!(zoom.stand_in.as_deref(), Some("my-zoom.jar"));
+        assert!(zoom.effectively_enabled);
+
+        // The mod center's explicit choice still wins for its apply.
+        let off = PackSelection {
+            items: BTreeMap::from([("zoom".to_owned(), false)]),
+            ..PackSelection::default()
+        };
+        let plan_off = plan_sync(&m, game, Some(&state), Some(&off), &seeing(disk))
+            .await
+            .unwrap();
+        assert_eq!(plan_off.next_state.items.get("zoom"), Some(&false));
+
+        // On a first visit of another version the player's jar stays behind: the pack's copy
+        // takes its place instead of the mod disappearing.
+        let switch = plan.next_state.switch_version("26.1.2", "26.3", None);
+        assert_eq!(switch.active.items.get("zoom"), Some(&true));
     }
 
     #[tokio::test]
