@@ -657,6 +657,29 @@ mod tests {
         assert!(recorder.ledger().games.is_empty());
     }
 
+    /// TELEM-JVM: the games an AOT cache started count (no others), as `day.aot`, and come off
+    /// once the batch is taken.
+    #[test]
+    fn games_an_aot_cache_started_go_with_the_daily_batch() {
+        let dir = tempfile::tempdir().unwrap();
+        let recorder = on(dir.path());
+        recorder.launched(Launch::Started, 500);
+        for (aot, at) in [
+            (AotUse::Use, 1_000),
+            (AotUse::Off, 2_000),
+            (AotUse::Train, 3_000),
+            (AotUse::Use, 4_000),
+        ] {
+            recorder.game_ran(aot, at);
+        }
+        assert_eq!(recorder.ledger().counts.aot_games, 2);
+        let out = recorder.take_daily(&facts(), 21 * HOUR_MS).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&out.json).unwrap();
+        assert_eq!(value["day"]["aot"], 2);
+        recorder.answered(&out.carried, Answer::Taken, 21 * HOUR_MS + 1);
+        assert_eq!(recorder.ledger().counts.aot_games, 0);
+    }
+
     #[test]
     fn a_test_run_may_send_at_once_but_never_while_off() {
         let dir = tempfile::tempdir().unwrap();
