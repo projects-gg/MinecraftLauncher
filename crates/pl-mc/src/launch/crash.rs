@@ -26,7 +26,7 @@ use crate::mods::version::{Mismatch, VersionReq, minimum_java};
 
 mod trace;
 
-pub use trace::{CrashTrace, NOT_RESPONDING_EXIT};
+pub use trace::{CrashTrace, FAULT_ERRORS, FAULT_THREADS, NOT_RESPONDING_EXIT, NativeFault};
 
 /// Exits sooner than this count as failed when a crash report was written, even with code 0.
 pub const SHORT_RUN: Duration = Duration::from_secs(20);
@@ -664,14 +664,39 @@ const PLATFORM_CLASSES: [&str; 11] = [
     "cpw.mods.",
 ];
 
+/// The start of a JVM fatal error log's process part.
+const FATAL_PROCESS_PART: &str = "\n---------------  P R O C E S S";
+
+/// A JVM fatal error log's own part: its header, its summary and the thread it hit (TELEM-JVM).
+/// Its process part quotes everything around the failure (every thread, the exceptions the game
+/// caught before, the libraries, the environment): an `AccessDeniedException` the game caught an
+/// hour earlier is no reason for the crash. A game crash report stays whole.
+fn fatal_error_head(report: &str) -> &str {
+    if report.contains(trace::REPORT_HEADER) {
+        return report;
+    }
+    report
+        .find(FATAL_PROCESS_PART)
+        .map_or(report, |at| &report[..at])
+}
+
+/// The game wrote its own crash report for a failure this run, not its server's watchdog for a
+/// freeze ("Watching Server"): a hang after it is the game not closing, the report says what
+/// happened.
+fn reported_failure(report: Option<&str>) -> bool {
+    report.is_some_and(|report| {
+        report.contains(trace::REPORT_HEADER) && !report.contains("\nDescription: Watching Server")
+    })
+}
+
 /// Classify a failed run.
 pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
-    let mut text = String::with_capacity(
-        input.output.len() + input.crash_report.map(str::len).unwrap_or_default() + 1,
-    );
+    let report = input.crash_report.map(fatal_error_head);
+    let mut text =
+        String::with_capacity(input.output.len() + report.map(str::len).unwrap_or_default() + 1);
     text.push_str(input.output);
     text.push('\n');
-    if let Some(report) = input.crash_report {
+    if let Some(report) = report {
         text.push_str(report);
     }
     if text.contains('§') {
@@ -852,9 +877,11 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
         "could not create the java virtual machine",
     ]) {
         (CrashKind::MemoryReserve, Vec::new(), None)
-    } else if input.exit_code == Some(NOT_RESPONDING_EXIT) {
+    } else if input.exit_code == Some(NOT_RESPONDING_EXIT) && !reported_failure(input.crash_report)
+    {
         // Windows closed it after it stopped responding (the player chose "Close the program"):
-        // a freeze, not a crash with a report.
+        // a freeze, not a crash with a report (a report the game wrote before it hung says what
+        // happened).
         (CrashKind::NotResponding, Vec::new(), None)
     } else if input.output.trim().is_empty() && input.crash_report.is_none() {
         (CrashKind::NoOutput, Vec::new(), None)
@@ -884,7 +911,14 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
         mods
     };
     let mods = dedup_names(mods);
-    let trace = trace::trace(&text, input.crash_report, input.exit_code, kind, &suspects);
+    let trace = trace::trace(
+        &text,
+        report,
+        input.exit_code,
+        kind,
+        &suspects,
+        !input.window_shown,
+    );
     let (title_tr, hint_tr, mut suggested_actions) = describe(kind, &mods, required, input);
     if input.crash_report.is_some() {
         suggested_actions.push(SuggestedAction::OpenCrashReport);

@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use parking_lot::Mutex;
 
 use crate::batch::{self, Carried, Outgoing};
+use crate::detail::{self, AotUse};
 use crate::facts::AppFacts;
 use crate::feature::Feature;
 use crate::ledger::{CrashKind, CrashNote, GameCrash, Ledger, START_SAMPLES, Stored, push_sample};
@@ -38,11 +39,17 @@ pub enum Launch<'a> {
 
 /// A game crash's coarse trace as the crash analysis made it (`pl_mc`'s `CrashTrace`):
 /// `native/gpu-amd`, `java/NullPointerException/sodium`, `exit/hung`; the phase from a closed
-/// list (`Rendering overlay`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// list (`Rendering overlay`); its detail ([`crate::detail`], TELEM-JVM).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct GameTrace<'a> {
     pub sig: &'a str,
     pub phase: Option<&'a str>,
+    /// The game's window had not shown yet.
+    pub opening: bool,
+    /// Java's AOT cache in the game's start.
+    pub aot: AotUse,
+    /// A JVM fatal error's error and kind of thread.
+    pub fault: Option<(&'a str, &'a str)>,
 }
 
 /// How the service answered a request.
@@ -252,7 +259,12 @@ impl Recorder {
         now_ms: i64,
     ) {
         let game = trace.and_then(|trace| {
-            let sig = scrub::trace(trace.sig)?;
+            let sig = scrub::trace(&detail::detailed(
+                trace.sig,
+                trace.opening,
+                trace.aot,
+                trace.fault,
+            ))?;
             Some(GameCrash {
                 kind: scrub::category(kind),
                 sig,
@@ -270,6 +282,23 @@ impl Recorder {
             if let Some(game) = game {
                 ledger.add_game(game, secs(now_ms));
             }
+        });
+    }
+
+    /// A game ended; `aot`: Java's AOT cache in its start. The games that could have a cache, by
+    /// what they did with it, are what crashes with each are measured against (TELEM-JVM).
+    pub fn game_ran(&self, aot: AotUse, now_ms: i64) {
+        if aot == AotUse::Never {
+            return;
+        }
+        self.count(now_ms, true, |inner| {
+            let counts = &mut inner.stored.ledger.counts;
+            let count = match aot {
+                AotUse::Use => &mut counts.aot_games,
+                AotUse::Off => &mut counts.aot_off_games,
+                AotUse::Train | AotUse::Never => &mut counts.aot_rec_games,
+            };
+            *count = count.saturating_add(1);
         });
     }
 
@@ -574,6 +603,7 @@ mod tests {
         let sodium = GameTrace {
             sig: "java/NullPointerException/sodium",
             phase: Some("Rendering overlay"),
+            ..GameTrace::default()
         };
         recorder.game_crashed("modCrash", Some(sodium), "2.2.1+telem", 1_000);
         recorder.game_crashed("modCrash", Some(sodium), "2.2.1", 2_000);
@@ -581,7 +611,8 @@ mod tests {
             "notResponding",
             Some(GameTrace {
                 sig: "exit/hung",
-                phase: None,
+                aot: AotUse::Use,
+                ..GameTrace::default()
             }),
             "2.2.1",
             3_000,
@@ -595,7 +626,10 @@ mod tests {
         ] {
             recorder.game_crashed(
                 "unknown",
-                Some(GameTrace { sig, phase: None }),
+                Some(GameTrace {
+                    sig,
+                    ..GameTrace::default()
+                }),
                 "2.2.1",
                 4_000,
             );
@@ -615,7 +649,7 @@ mod tests {
         assert_eq!(crash[1]["msg"], "modCrash, Rendering overlay");
         assert_eq!(crash[1]["ver"], "2.2.1");
         assert_eq!(crash[1]["n"], 2);
-        assert_eq!(crash[2]["at"], "exit/hung");
+        assert_eq!(crash[2]["at"], "exit/hung/play.aot");
         assert_eq!(crash[2]["msg"], "notResponding");
         recorder.answered(&out.carried, Answer::Taken, 21 * HOUR_MS + 1);
         let ledger = recorder.ledger();
@@ -626,6 +660,40 @@ mod tests {
         recorder.set_choice(false, 22 * HOUR_MS + 1);
         recorder.game_crashed("unknown", Some(sodium), "2.2.1", 22 * HOUR_MS + 2);
         assert!(recorder.ledger().games.is_empty());
+    }
+
+    /// TELEM-JVM: the games that could have an AOT cache count by what they did with it
+    /// (`day.aot`, `aotOff`, `aotRec`; the others not), and come off once the batch is taken.
+    #[test]
+    fn games_an_aot_cache_started_go_with_the_daily_batch() {
+        let dir = tempfile::tempdir().unwrap();
+        let recorder = on(dir.path());
+        recorder.launched(Launch::Started, 500);
+        for (aot, at) in [
+            (AotUse::Use, 1_000),
+            (AotUse::Off, 2_000),
+            (AotUse::Train, 3_000),
+            (AotUse::Use, 4_000),
+            (AotUse::Never, 5_000),
+        ] {
+            recorder.game_ran(aot, at);
+        }
+        let counts = recorder.ledger().counts;
+        assert_eq!(
+            (counts.aot_games, counts.aot_off_games, counts.aot_rec_games),
+            (2, 1, 1)
+        );
+        let out = recorder.take_daily(&facts(), 21 * HOUR_MS).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&out.json).unwrap();
+        assert_eq!(value["day"]["aot"], 2);
+        assert_eq!(value["day"]["aotOff"], 1);
+        assert_eq!(value["day"]["aotRec"], 1);
+        recorder.answered(&out.carried, Answer::Taken, 21 * HOUR_MS + 1);
+        let counts = recorder.ledger().counts;
+        assert_eq!(
+            (counts.aot_games, counts.aot_off_games, counts.aot_rec_games),
+            (0, 0, 0)
+        );
     }
 
     #[test]

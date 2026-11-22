@@ -23,8 +23,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use pl_telemetry::{
-    Answer, AppFacts, CrashKind, CrashNote, Feature, GameTrace, Launch, Outgoing, Phase, Recorder,
-    VoiceSeen,
+    Answer, AotUse, AppFacts, CrashKind, CrashNote, Feature, GameTrace, Launch, Outgoing, Phase,
+    Recorder, VoiceSeen,
 };
 use pl_voice::view::{VoicePhase, VoiceRoomKind, VoiceState};
 use serde::Serialize;
@@ -159,9 +159,18 @@ pub fn game_shown() {
     }
 }
 
+/// A game ended (TELEM-JVM): one that started with Java's AOT cache counts toward the games a
+/// cache sped up, what its crashes are measured against.
+pub fn game_ran(aot: AotUse) {
+    if let Some(recorder) = recorder() {
+        recorder.game_ran(aot, now_ms());
+    }
+}
+
 /// A game crashed: its kind as the crash analysis names it (`modError`) and its coarse trace
-/// (`pl_mc::launch::crash::CrashTrace`: closed lists only, TELEM-FIX).
-pub fn game_crashed(diagnosis: &pl_mc::launch::crash::CrashDiagnosis) {
+/// (`pl_mc::launch::crash::CrashTrace`: closed lists only, TELEM-FIX), with whether it opened or
+/// was played, its start's AOT cache and a JVM fatal error's error and thread (TELEM-JVM).
+pub fn game_crashed(diagnosis: &pl_mc::launch::crash::CrashDiagnosis, aot: AotUse) {
     let Some(recorder) = recorder() else {
         return;
     };
@@ -173,6 +182,9 @@ pub fn game_crashed(diagnosis: &pl_mc::launch::crash::CrashDiagnosis) {
     let trace = (!trace.sig.is_empty()).then_some(GameTrace {
         sig: &trace.sig,
         phase: trace.phase,
+        opening: trace.opening,
+        aot,
+        fault: trace.fault.map(|fault| (fault.error(), fault.thread())),
     });
     let version = VERSION.get().map_or("", String::as_str);
     recorder.game_crashed(&name, trace, version, now_ms());

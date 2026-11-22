@@ -1815,13 +1815,18 @@ async fn prepare_and_spawn(
             crate::prepare::game_exited(&app);
         }
         // AOT-CACHE: a training's recording waits for its create step (or the key is given up),
-        // a cache that crashed its game while it opened is dropped.
+        // a cache that crashed its game while it opened, or whose JVM died, is dropped.
+        let aot_use = aot.as_ref().map_or(pl_telemetry::AotUse::Never, |aot| {
+            crate::aot::usage(&aot.plan)
+        });
         if let Some(aot) = aot {
-            crate::aot::game_ended(&app, aot, exit.crash.is_some(), exit.play_time().is_some());
+            crate::aot::game_ended(&app, aot, exit.crash.as_ref(), exit.play_time().is_some());
         }
+        // Usage data: the games a cache sped up (TELEM-JVM).
+        crate::telemetry::game_ran(aot_use);
         if let Some(diagnosis) = exit.crash.clone() {
-            // Usage data: the crash's kind and its coarse trace (TELEMETRY, TELEM-FIX).
-            crate::telemetry::game_crashed(&diagnosis);
+            // Usage data: the crash's kind and its coarse trace (TELEMETRY, TELEM-FIX, TELEM-JVM).
+            crate::telemetry::game_crashed(&diagnosis, aot_use);
             let view = modhealth::crash_view(
                 &app,
                 &state,
