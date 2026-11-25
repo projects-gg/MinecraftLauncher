@@ -17,12 +17,24 @@
 //! The game's exit wakes a suspended page at once ([`wake`]): the page brings the window back and
 //! tells about a crash. Debug builds take `PROJECTS_WEBVIEW_REST` (`off`, or a comma list of
 //! `hide`, `low`, `suspend`; default all three) to measure each step.
+//!
+//! A suspended page runs no script: what Rust sends it waits inside WebView2, every event of it,
+//! for as long as the game runs. The friends feature (and world sharing) send through
+//! [`emit_to_page`] instead, which keeps their events here while the page sleeps (a state only as
+//! its newest, a stream in order, a passing one not at all) and wakes the page for a moment worth
+//! telling (an invite, a message, a friend coming online), which then rests again shortly. So the
+//! page sleeps with friends signed in too (LIGHT; before, it never did while they were: 2.2.9's
+//! log said "not suspended reason=friends are signed in" all game long).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(windows)]
 use std::time::Duration;
 
-use tauri::{AppHandle, Listener, Manager};
+use parking_lot::Mutex;
+pub use pl_desktop::page_hold::Delivery;
+use pl_desktop::page_hold::{Offer, PageHold};
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Listener, Manager};
 
 /// How long the window is out of sight before the page rests: a quick minimize and restore, or
 /// the tray hint after "Kapat", never pay for it.
@@ -32,6 +44,60 @@ const REST_AFTER: Duration = Duration::from_secs(10);
 /// suspended now is asked again this often.
 #[cfg(windows)]
 const CHECK_AGAIN: Duration = Duration::from_secs(5 * 60);
+/// A page woken for a moment ([`Delivery::Moment`]) may be suspended again this long after the
+/// last one: time for its own gathering (a crewmate's arrival waits 5 s for others) and the
+/// notification it shows.
+#[cfg(windows)]
+const MOMENT_REST: Duration = Duration::from_secs(20);
+/// Events kept for a suspended page (a state counts once); past this many it wakes to take them.
+const HELD_MAX: usize = 200;
+
+/// What a suspended page will be told once it wakes, in order (`pl_desktop::page_hold`).
+static HELD: Mutex<PageHold<serde_json::Value>> = Mutex::new(PageHold::new(HELD_MAX));
+
+/// Sends `event` to the page now, or, while the page is suspended, the way `delivery` says.
+pub fn emit_to_page<S: Serialize + Clone>(
+    app: &AppHandle,
+    event: &'static str,
+    payload: &S,
+    delivery: Delivery,
+) {
+    let offer = HELD
+        .lock()
+        .offer(event, delivery, || serde_json::to_value(payload).ok());
+    match offer {
+        // A page waking hands over what was kept before it counts as awake: this comes after.
+        Offer::Send => {
+            let _ = app.emit(event, payload);
+        }
+        Offer::Wake => {
+            #[cfg(windows)]
+            platform::wake_for(app, "an event to tell", MOMENT_REST);
+        }
+        Offer::Kept | Offer::Dropped => {}
+    }
+}
+
+/// The page woke: what was kept for it goes now, in order, and what comes meanwhile after it
+/// (main thread, after the resume). Nothing is sent under the lock.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn hand_over(app: &AppHandle) {
+    loop {
+        let Some(events) = HELD.lock().take() else {
+            return;
+        };
+        tracing::debug!(events = events.len(), "webview woke: kept events go");
+        for (event, payload) in events {
+            let _ = app.emit(event, payload);
+        }
+    }
+}
+
+/// The page was suspended: events wait here from now on (main thread).
+#[cfg_attr(not(windows), allow(dead_code))]
+fn held_from_now() {
+    HELD.lock().fell_asleep();
+}
 
 /// Background work the page reports itself (`page-duties` event, `src/lib/page-duties.ts`): a
 /// reminder waiting to ring. A suspended page would miss it.
@@ -125,7 +191,7 @@ pub fn wake(app: &AppHandle, why: &'static str) {
 /// button of a window that rested minimized (`shell::close_requested`).
 pub fn wake_if_suspended(app: &AppHandle, why: &'static str) {
     #[cfg(windows)]
-    platform::wake_now(app, why, true);
+    platform::wake_now(app, why, true, CHECK_AGAIN);
     #[cfg(not(windows))]
     let _ = (app, why);
 }
@@ -167,9 +233,10 @@ fn may_suspend(app: &AppHandle) -> Result<(), &'static str> {
     {
         return Err("a job is running");
     }
-    if state.social.view().auth != pl_social::AuthPhase::SignedOut {
-        // Invites and friends coming online are told by the page.
-        return Err("friends are signed in");
+    if state.voice.in_room() {
+        // A call's page: its state, speakers and room chat (the call itself is the voice
+        // window's, which never rests).
+        return Err("a voice call is on");
     }
     if app.state::<PageDuties>().0.load(Ordering::Relaxed) {
         return Err("the page has a reminder to ring");
@@ -196,7 +263,7 @@ mod platform {
     };
     use windows::core::Interface;
 
-    use super::{CHECK_AGAIN, REST_AFTER, Steps, may_suspend};
+    use super::{CHECK_AGAIN, REST_AFTER, Steps, hand_over, held_from_now, may_suspend};
 
     const SUBCLASS_ID: usize = 0x504C_5257;
 
@@ -335,10 +402,10 @@ mod platform {
             rest.suspended = false;
             rest.low = false;
             rest.hidden = false;
-            Some((rest.controller.clone(), undo))
+            Some((rest.controller.clone(), undo, rest.app.clone()))
         })
         .flatten();
-        let Some((controller, (suspended, low, hidden))) = page else {
+        let Some((controller, (suspended, low, hidden), app)) = page else {
             return;
         };
         let started = std::time::Instant::now();
@@ -355,12 +422,17 @@ mod platform {
         if hidden && let Err(error) = unsafe { controller.SetIsVisible(true) } {
             tracing::warn!(%error, "webview not made visible");
         }
+        if suspended {
+            hand_over(&app);
+        }
         tracing::debug!(
             why,
             suspended,
             micros = started.elapsed().as_micros() as u64,
             "webview awake"
         );
+        // The player is back, likely to play: a session about to expire is refreshed now.
+        crate::session_warm::warm(&app, "back");
     }
 
     /// Rests the page `after` from now if the window is still out of sight from the same absence.
@@ -433,6 +505,9 @@ mod platform {
                 current
             })
             .unwrap_or(false);
+            if suspended && current {
+                held_from_now();
+            }
             if suspended && !current {
                 // The window came back, or the page was woken, while the request went out.
                 let _ = unsafe { resume.Resume() };
@@ -462,12 +537,22 @@ mod platform {
     }
 
     pub fn wake(app: &AppHandle, why: &'static str) {
+        wake_for(app, why, CHECK_AGAIN);
+    }
+
+    /// Wakes the page; out of sight, it may rest again `rest_again` from now.
+    pub fn wake_for(app: &AppHandle, why: &'static str, rest_again: std::time::Duration) {
         let main = app.clone();
-        let _ = app.run_on_main_thread(move || wake_now(&main, why, false));
+        let _ = app.run_on_main_thread(move || wake_now(&main, why, false, rest_again));
     }
 
     /// Wakes the page (main thread). `only_if_suspended`: an awake page is left alone.
-    pub fn wake_now(app: &AppHandle, why: &'static str, only_if_suspended: bool) {
+    pub fn wake_now(
+        app: &AppHandle,
+        why: &'static str,
+        only_if_suspended: bool,
+        rest_again: std::time::Duration,
+    ) {
         let page = with_rest(|rest| {
             if only_if_suspended && !rest.suspended {
                 return None;
@@ -490,9 +575,12 @@ mod platform {
         {
             tracing::debug!(%error, "webview did not resume");
         }
+        if suspended {
+            hand_over(app);
+        }
         tracing::debug!(why, suspended, "webview woken");
         if away {
-            schedule(app, epoch, CHECK_AGAIN);
+            schedule(app, epoch, rest_again);
         }
     }
 

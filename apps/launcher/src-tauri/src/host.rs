@@ -24,9 +24,10 @@ use pl_worlds::{
     Account, Bridge, HostInstall, Launcher, PlayTogether, Progress, Service, UiEvent, Worlds,
     WorldsConfig,
 };
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
 use crate::state::AppState;
+use crate::webview_rest::{Delivery, emit_to_page};
 
 /// Every change of the view, whole (`HostView`).
 pub const CHANGED_EVENT: &str = "host-changed";
@@ -104,11 +105,13 @@ pub fn create(
     overlay: Overlay,
 ) -> Worlds {
     let emitter = app.clone();
-    let ui: pl_worlds::UiSink = Arc::new(move |event| {
-        let _ = match event {
-            UiEvent::Changed(view) => emitter.emit(CHANGED_EVENT, view),
-            UiEvent::Notice(notice) => emitter.emit(NOTICE_EVENT, notice),
-        };
+    // A sleeping page (webview_rest) gets the newest view when it wakes; a notice (a friend's
+    // world invite) wakes it.
+    let ui: pl_worlds::UiSink = Arc::new(move |event| match event {
+        UiEvent::Changed(view) => emit_to_page(&emitter, CHANGED_EVENT, &view, Delivery::Latest),
+        UiEvent::Notice(notice) => {
+            emit_to_page(&emitter, NOTICE_EVENT, &notice, Delivery::Moment);
+        }
     });
     let mut config = WorldsConfig::new(version, root.to_path_buf());
     // Synchronous commands ("Katıl", "Vazgeç") run on the main thread, outside any runtime: world

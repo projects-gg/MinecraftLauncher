@@ -32,6 +32,9 @@ pub trait Publisher: Send + Sync + 'static {
     /// called off the main thread.
     fn sources(&self, game_pid: Option<u32>) -> ShareSources;
     fn command(&self, cmd: ShareCmd, game_pid: Option<u32>);
+    /// A call starts: what this computer can share is looked at now, if it was not yet. The look
+    /// loads the graphics driver and Media Foundation, so no launcher start pays for it.
+    fn warm(&self) {}
 }
 
 /// Where the publisher cannot start: nothing can be shared here (watching works all the same).
@@ -100,6 +103,14 @@ pub fn install(app: &AppHandle, voice: &Voice) {
         channels: Mutex::new([None, None]),
     }));
     voice.set_share_publisher(available, audio, high);
+}
+
+/// A call starts (the voice window opens): the publisher learns what this computer can share,
+/// once a run, before the player opens the share menu.
+pub(crate) fn warm() {
+    if let Some(parts) = PARTS.get() {
+        parts.publisher.warm();
+    }
 }
 
 /// What the service allows of screen sharing (`hello.voice.share`, SHARE-S): none while Studio's

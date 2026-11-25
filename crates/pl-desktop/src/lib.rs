@@ -23,6 +23,8 @@
 //!   takes only the game's).
 //! - [`taskbar`]: the taskbar button's overlay badge (Windows), e.g. the live mark while the
 //!   player shares their screen.
+//! - [`page_hold`]: the events kept for the launcher's page while it sleeps (a game runs, the
+//!   window is out of sight), and when it must wake for one.
 
 pub mod close;
 #[cfg(windows)]
@@ -34,6 +36,7 @@ pub mod game_window;
 pub mod ico;
 pub mod identity;
 pub mod link;
+pub mod page_hold;
 pub mod process;
 pub mod shortcut;
 pub mod taskbar;
