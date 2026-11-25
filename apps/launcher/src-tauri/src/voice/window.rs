@@ -25,6 +25,8 @@ static CLOSING: AtomicBool = AtomicBool::new(false);
 /// Opens the window (`again`: after a crash, the old one is gone first). Blocking: off the main
 /// thread and off the async runtime's workers.
 pub fn open(app: &AppHandle, again: bool) -> Result<(), String> {
+    // A call: what this computer can share is learned now (LIGHT: not at every start).
+    super::share::warm();
     if let Some(old) = app.get_webview_window(VOICE_WINDOW) {
         if !again {
             return Ok(());
