@@ -7,6 +7,7 @@
 //!
 //! Typical flow: `install::install_version` → [`build_launch_command`] → [`GameProcess::spawn`].
 
+pub mod ansi;
 pub mod aot;
 pub mod command;
 pub mod crash;

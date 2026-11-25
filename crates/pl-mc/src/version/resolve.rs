@@ -19,7 +19,7 @@ use pl_net::{DownloadItem, DownloadOptions};
 
 use crate::error::{Error, Result};
 use crate::install::McContext;
-use crate::version::manifest::{ManifestVersion, VersionManifest};
+use crate::version::manifest::{ManifestVersion, VersionManifest, fetch_manifest};
 use crate::version::model::{
     Argument, Artifact, AssetIndexInfo, JavaVersionInfo, Library, LoggingConfig, VersionJson,
     parse_timestamp,
@@ -319,13 +319,51 @@ pub async fn resolve_version(
     id: &str,
     manifest: Option<&VersionManifest>,
 ) -> Result<ResolvedVersion> {
+    resolve_refreshing(ctx, id, manifest, || fetch_manifest(ctx)).await
+}
+
+/// [`resolve_version`], with `refresh` asking Mojang for its list again: once, when a version is
+/// neither in `manifest` nor on disk. The manifest may be the cached copy, older than the version
+/// (Mojang was out of reach a moment ago, or the version came out since) (CRASH-DIAG).
+async fn resolve_refreshing<F, Fut>(
+    ctx: &McContext,
+    id: &str,
+    manifest: Option<&VersionManifest>,
+    refresh: F,
+) -> Result<ResolvedVersion>
+where
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<VersionManifest>>,
+{
+    let mut refresh = manifest.map(|_| refresh);
+    let mut fresh: Option<VersionManifest> = None;
     let mut chain: Vec<VersionJson> = Vec::new();
     let mut next = Some(id.to_owned());
     while let Some(current) = next {
         if chain.iter().any(|v| v.id == current) || chain.len() >= MAX_CHAIN {
             return Err(Error::Invalid(format!("inheritsFrom loop at {current}")));
         }
-        let json = load_version_json(ctx, &current, manifest).await?;
+        let json = match load_version_json(ctx, &current, fresh.as_ref().or(manifest)).await {
+            Err(Error::VersionNotFound(missing)) if refresh.is_some() => {
+                tracing::warn!(id = %missing, "version not in the manifest; asking Mojang again");
+                let refreshed = match refresh.take().map(|refresh| refresh()) {
+                    Some(fetching) => fetching.await,
+                    None => return Err(Error::VersionNotFound(missing)),
+                };
+                let refreshed = match refreshed {
+                    Ok(refreshed) => refreshed,
+                    Err(error) if error.is_offline() => return Err(error),
+                    Err(error) => {
+                        tracing::warn!(%error, "the version manifest could not be fetched again");
+                        return Err(Error::VersionNotFound(missing));
+                    }
+                };
+                let json = load_version_json(ctx, &current, Some(&refreshed)).await;
+                fresh = Some(refreshed);
+                json?
+            }
+            other => other?,
+        };
         next = json.inherits_from.clone().filter(|p| !p.trim().is_empty());
         chain.push(json);
     }
@@ -543,6 +581,86 @@ mod tests {
             resolve_with("b", lookup(map)),
             Err(Error::VersionNotFound(_))
         ));
+    }
+
+    /// CRASH-DIAG: a version newer than the manifest at hand (the cached copy, kept while Mojang was
+    /// out of reach) is looked up once more in Mojang's list before "not found".
+    #[tokio::test]
+    async fn a_version_missing_from_a_stale_manifest_is_looked_up_again() {
+        use sha1::{Digest, Sha1};
+
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = McContext::new(
+            pl_net::Http::new(pl_net::HttpConfig::new("pl-mc-test")).unwrap(),
+            crate::paths::DataDirs::new(tmp.path()),
+        );
+        // 26.3's JSON: not on disk while only the stale list is known.
+        let mut newest = vanilla();
+        newest.id = "26.3".to_owned();
+        let bytes = serde_json::to_vec(&newest).unwrap();
+        let path = ctx.dirs.version_json("26.3").unwrap();
+        let sha1 = hex::encode(Sha1::digest(&bytes));
+        let manifest = |ids: &[(&str, &str)]| {
+            let versions: Vec<String> = ids
+                .iter()
+                .map(|(id, sha1)| {
+                    format!(
+                        r#"{{"id": "{id}", "type": "release", "url": "https://example.invalid/{id}.json", "time": "t", "releaseTime": "2026-11-01T10:00:00+00:00", "sha1": "{sha1}"}}"#
+                    )
+                })
+                .collect();
+            VersionManifest::from_slice(
+                format!(
+                    r#"{{"latest": {{"release": "26.2", "snapshot": "26.2"}}, "versions": [{}]}}"#,
+                    versions.join(",")
+                )
+                .as_bytes(),
+            )
+            .unwrap()
+        };
+        let stale = manifest(&[("26.2", "aa")]);
+        let fresh = manifest(&[("26.2", "aa"), ("26.3", sha1.as_str())]);
+
+        let asked = std::sync::atomic::AtomicUsize::new(0);
+        let r = resolve_refreshing(&ctx, "26.3", Some(&stale), || async {
+            asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            // As if its download had finished already: its hash checks, nothing is fetched.
+            crate::paths::write_atomic(&path, &bytes).await.unwrap();
+            Ok(fresh.clone())
+        })
+        .await
+        .unwrap();
+        assert_eq!(r.id, "26.3");
+        assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+        // Still missing from Mojang's list: not found, after one more look only.
+        let asked = std::sync::atomic::AtomicUsize::new(0);
+        let missing = resolve_refreshing(&ctx, "26.9", Some(&stale), || async {
+            asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(fresh.clone())
+        })
+        .await;
+        assert!(matches!(missing, Err(Error::VersionNotFound(id)) if id == "26.9"));
+        assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 1);
+        // Mojang out of reach: the connection is the problem, not the version.
+        let offline =
+            resolve_refreshing(&ctx, "26.9", Some(&stale), || async { Err(Error::Offline) }).await;
+        assert!(matches!(offline, Err(Error::Offline)));
+        // Any other failure of that look: not found, as before.
+        let broken = resolve_refreshing(&ctx, "26.9", Some(&stale), || async {
+            Err(Error::Invalid("not a manifest".into()))
+        })
+        .await;
+        assert!(matches!(broken, Err(Error::VersionNotFound(_))));
+        // Offline launches (no manifest) never ask Mojang.
+        let asked = std::sync::atomic::AtomicUsize::new(0);
+        let unasked = resolve_refreshing(&ctx, "26.9", None, || async {
+            asked.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(fresh.clone())
+        })
+        .await;
+        assert!(matches!(unasked, Err(Error::Offline)));
+        assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
     #[tokio::test]

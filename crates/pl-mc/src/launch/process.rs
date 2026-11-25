@@ -26,7 +26,7 @@ use crate::error::{Error, Result};
 use crate::launch::command::{LaunchCommand, java_argfile};
 use crate::launch::crash::{
     CrashDiagnosis, CrashInput, SHORT_RUN, analyze_crash, crash_report_for, failed_after_quit,
-    is_failure, jvm_error_log_for,
+    is_failure, jvm_error_log_for, window_refused,
 };
 use crate::launch::log::{Log4jParser, LogLine};
 use crate::launch::window::{GIVE_UP_AFTER, ShownBy, WindowProbe, log_marker, probe_interval};
@@ -355,7 +355,23 @@ impl GameProcess {
         tokio::fs::create_dir_all(&command.cwd)
             .await
             .map_err(|e| Error::io(&command.cwd, e))?;
+        // Windows' Java launcher reads its command line in the system's ANSI code page: paths with
+        // letters it lacks go in their short form (CRASH-DIAG).
+        let (java, safe_args) = super::ansi::ansi_safe(&command.program, &command.args)?;
+        let safe;
+        let command = if java != command.program || safe_args != command.args {
+            tracing::info!("paths with letters the system code page lacks go in their short form");
+            let mut short = command.clone();
+            short.program = java;
+            short.args = safe_args;
+            safe = short;
+            &safe
+        } else {
+            command
+        };
         let (args, argfile) = prepare_args(command, &options).await?;
+        // The argument file sits in the logs folder, which may need a short form as well.
+        let (_, args) = super::ansi::ansi_safe(&command.program, &args)?;
         let program = launch_program(&command.program);
         let mut cmd = tokio::process::Command::new(&program);
         cmd.args(&args)
@@ -884,7 +900,9 @@ async fn supervise(mut s: Supervision) {
     // This run's own report: the one its output names; another game of the same folder may have
     // written the newest one (PLAY-AGAIN). Read only when the run may have failed (a clean exit
     // after a full session never is one).
-    let may_have_failed = !killed && (code != Some(0) || runtime < SHORT_RUN);
+    // A game whose window never showed may also have given up opening it (CRASH-DIAG).
+    let opened = on_screen.is_some();
+    let may_have_failed = !killed && (code != Some(0) || runtime < SHORT_RUN || !opened);
     let output = if may_have_failed {
         s.shared.tail_text()
     } else {
@@ -897,7 +915,9 @@ async fn supervise(mut s: Supervision) {
     let jvm_log = may_have_failed
         .then(|| jvm_error_log_for(&s.game_dir, s.started_at, pid, shared_folder))
         .flatten();
-    let failed = may_have_failed && is_failure(code, runtime, crash_report.is_some());
+    let failed = may_have_failed
+        && (is_failure(code, runtime, crash_report.is_some())
+            || (!opened && window_refused(&output)));
     let crash = if failed && quit_before_failing(&output, on_screen) {
         // The player quit and the game failed only while closing (CRASH-EXIT): nothing to show.
         // Its log and the JVM's error log stay.
@@ -996,6 +1016,65 @@ mod tests {
         );
         let unix = tmp.path().join("bin").join("java");
         assert_eq!(launch_program(&unix), unix);
+    }
+
+    /// CRASH-DIAG: a path with a letter the system's ANSI code page lacks reaches the program in its
+    /// 8.3 short form, through the real spawn (where the code page has the letter, as it was).
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn paths_the_code_page_lacks_reach_the_game_short() {
+        let tmp = tempfile::tempdir().unwrap();
+        let folder = tmp.path().join("Ayşe");
+        std::fs::create_dir_all(&folder).unwrap();
+        let jar = folder.join("a.jar");
+        std::fs::write(&jar, b"").unwrap();
+        let script = tmp.path().join("echo-path.cmd");
+        std::fs::write(&script, "@echo %~1\r\n@exit /b 0\r\n").unwrap();
+        let command = LaunchCommand::for_tests(
+            PathBuf::from("cmd"),
+            vec![
+                "/C".to_owned(),
+                script.display().to_string(),
+                jar.display().to_string(),
+            ],
+            tmp.path().join("game"),
+        );
+        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+        let seen = Arc::clone(&lines);
+        let spawned = GameProcess::spawn_draining(
+            &command,
+            SpawnOptions {
+                instance_id: "ansi".into(),
+                logs_dir: tmp.path().join("logs"),
+                ..SpawnOptions::default()
+            },
+            SLOW_DRAIN,
+            Arc::new(move |event| {
+                if let GameEvent::Line(line) = event {
+                    seen.lock().push(line.message);
+                }
+            }),
+        )
+        .await;
+        let process = match spawned {
+            Ok(process) => process,
+            // 8.3 names are off on this disk: the launch stops with its own error instead.
+            Err(Error::UnreadablePath(_)) => return,
+            Err(error) => panic!("{error}"),
+        };
+        tokio::time::timeout(DEADLINE, process.wait())
+            .await
+            .unwrap();
+        let lines = lines.lock().clone();
+        let echoed = lines
+            .iter()
+            .map(|line| line.trim())
+            .find(|line| line.ends_with("a.jar"))
+            .unwrap_or_else(|| panic!("{lines:?}"));
+        if super::super::ansi::foreign("ş") {
+            assert!(echoed.is_ascii(), "{echoed}");
+            assert!(Path::new(echoed).is_file(), "{echoed}");
+        }
     }
 
     /// A JVM that refuses one of the player's arguments exits at once; the run is reported with

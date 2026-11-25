@@ -1,0 +1,36 @@
+# source: https://github.com/IrisShaders/Iris/issues/3237 (crash report, trimmed)
+# loader: Fabric, Minecraft 1.21.11 (intermediary names), Java 21
+# note: the stack runs through Minecraft.tick, runTick and run (class_310's method_1574, method_1523, method_1514)
+---- Minecraft Crash Report ----
+// This doesn't make any sense!
+
+Time: 2026-07-15 18:42:43
+Description: Unexpected error
+
+java.lang.NullPointerException: Cannot invoke "net.minecraft.class_746.method_31548()" because "this.field_3712.field_1724" is null
+	at knot//net.minecraft.class_636.method_2911(class_636.java:308)
+	at knot//net.minecraft.class_636.method_2927(class_636.java:291)
+	at knot//net.minecraft.class_310.method_1574(class_310.java:1888)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1354)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:966)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:514)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Stacktrace:
+	at knot//net.minecraft.class_636.method_2911(class_636.java:308)
+	at knot//net.minecraft.class_636.method_2927(class_636.java:291)
+
+-- System Details --
+Details:
+	Minecraft Version: 1.21.11
+	Minecraft Version ID: 1.21.11
+	Operating System: Windows 10 (amd64) version 10.0
+	Java Version: 21.0.7, Microsoft
