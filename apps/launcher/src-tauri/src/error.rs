@@ -187,8 +187,8 @@ impl From<pl_mc::Error> for CmdError {
             E::UnreadablePath(_) => (
                 "YOL-HARF",
                 pick(
-                    "Java, veri klasörünün yolundaki bazı harfleri (ş, ğ gibi) bu bilgisayarda okuyamıyor. Ayarlar → Veri ve Depolama'dan veri klasörünü yalnız İngilizce harfli bir yere taşı (örneğin C:\\Projects), sonra tekrar dene.",
-                    "Java can't read some letters (such as ş or ğ) in the data folder's path on this computer. Move the data folder to a place with only English letters (for example C:\\Projects) in Settings → Data and Storage, then try again.",
+                    "Java, veri klasörünün yolundaki bazı harfleri (ş, ğ gibi) bu bilgisayarda okuyamıyor. Ayarlar'daki Veri ve Depolama bölümünden veri klasörünü yolunda yalnız İngilizce harfler olan bir yere taşı (örneğin C:\\Projects), sonra tekrar dene.",
+                    "Java can't read some letters (such as ş or ğ) in the data folder's path on this computer. In Settings, under Data and Storage, move the data folder to a place whose path has only English letters (for example C:\\Projects), then try again.",
                 ),
             ),
             E::Java(_) => (

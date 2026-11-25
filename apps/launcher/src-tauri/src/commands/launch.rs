@@ -1065,7 +1065,8 @@ pub(crate) async fn ready_game_files(
             loader_version: instance.loader.version.clone(),
         },
     );
-    if check_files {
+    // Offline only checks that the files exist: the full check waits for a launch online.
+    if check_files && !offline {
         let _ = std::fs::remove_file(file_check_path(instance_dir));
     }
 
@@ -1838,8 +1839,15 @@ async fn prepare_and_spawn(
         if let Some(diagnosis) = exit.crash.clone() {
             // Usage data: the crash's kind and its coarse trace (TELEMETRY, TELEM-FIX, TELEM-JVM).
             crate::telemetry::game_crashed(&diagnosis, aot_use);
-            // Damaged files: the next launch checks every file by its hash (CRASH-DIAG).
-            if diagnosis.kind == pl_mc::launch::crash::CrashKind::CorruptedFiles {
+            // Damaged game or Java files: the next launch checks every file by its hash
+            // (CRASH-DIAG). Not for a damaged mod jar: that check does not reach the mods folder,
+            // the crash dialog names the mod.
+            if diagnosis.kind == pl_mc::launch::crash::CrashKind::CorruptedFiles
+                && !diagnosis
+                    .suspects
+                    .iter()
+                    .any(|s| s.reason == pl_mc::launch::crash::SuspectReason::CorruptFile)
+            {
                 request_file_check(&files_dir);
             }
             let view = modhealth::crash_view(
