@@ -551,6 +551,25 @@ news feed, the launcher's built-in recommended Minecraft version.
   pack item's mod id stands in for the item, and a mod installed twice keeps one copy before a
   launch. Writers omit it while it is `false`; launchers that do not know the field ignore it.
   Publishing it needs a Studio that knows the field (PACK-EDIT).
+- `features.aotCache`: "Hızlı oyun açılışı" (AOT-CACHE): desktop launchers give Fabric starts on
+  Mojang's Java 25+ runtime Java's AOT cache (`pl_mc::launch::aot`): the player's next start of the
+  install records what the JVM loads, the launcher makes the cache below normal priority while no
+  game runs, and later starts use it (about 30% faster for the official pack). Java's full cache:
+  classes loaded and linked, method profiles and the adapters' machine code. A training whose game
+  crashed, a cache whose game crashed while opening or whose JVM crashed, is not used again for
+  that setup. Off by default: while it is `false` (or missing) nothing new is recorded or used;
+  files made earlier stay until Settings → Veri cleans them. Keep it off while launchers up to
+  2.2.9 are in use: games with the full cache crashed in the JVM on Mojang's 25.0.1 (TELEM-JVM,
+  AOT-LITE), and those launchers follow this field alone. Writers omit it while it is `false`;
+  launchers that do not know the field ignore it. Publishing it needs a Studio that knows the field
+  (AOT-CACHE).
+- `features.aotLite`: the same fast start with a lite cache (AOT-LITE): the classes only, trained
+  and made with `-XX:-AOTClassLinking` (on Java 25 that also leaves the method profiles and the
+  machine code out of the cache), the same steps and the same rules as `features.aotCache`. When
+  both are on, launchers that know this field make and use lite caches; a cache of one kind is never
+  used for the other. Off by default: while it is `false` (or missing) it changes nothing. Writers
+  omit it while it is `false`; launchers that do not know the field ignore it. Publishing it needs
+  a Studio that knows the field (AOT-LITE).
 - `features.serverAccounts`: "Sunucu Hesapları" (SRV-ACC): while the player is signed in to the
   friends feature, the account center asks the friends service for the player names of the
   player's accounts on the Projects server's site (`GET /v1/me/server-accounts`: the site accounts

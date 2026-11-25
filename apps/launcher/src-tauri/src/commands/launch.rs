@@ -1538,9 +1538,12 @@ async fn prepare_and_spawn(
             let mut trained = installed.clone();
             trained.classpath.pop();
             let mut training = options.clone();
-            training
-                .launcher_jvm_args
-                .extend(aot::training_jvm_args(config, &installed.client_jar));
+            let mode = aot.as_ref().map_or(aot::AotMode::Full, |aot| aot.mode);
+            training.launcher_jvm_args.extend(aot::training_jvm_args(
+                config,
+                &installed.client_jar,
+                mode,
+            ));
             let recorded =
                 build_launch_command(&state.mc.dirs, &resolved, &trained, &identity, &training)
                     .map_err(CmdError::from)?;

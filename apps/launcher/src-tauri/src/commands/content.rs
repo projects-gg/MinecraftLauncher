@@ -299,7 +299,10 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
     // "Sürümü Değiştir" (PACK-EDIT): the upgrades before a launch and in repairs follow it.
     crate::commands::packedit::apply_flag(snapshot.config.features.pack_edit);
     // "Hızlı oyun açılışı" (AOT-CACHE): the next launches follow it.
-    crate::aot::apply_flag(snapshot.config.features.aot_cache);
+    crate::aot::apply_flags(
+        snapshot.config.features.aot_cache,
+        snapshot.config.features.aot_lite,
+    );
     // SRV-ACC: the friends service is asked for server accounts only while "Sunucu Hesapları" is
     // on, and the next launches add to the In-Game Account Switcher's list only while "Oyun İçi
     // Hesap Eşitleme" is.
