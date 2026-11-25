@@ -12,7 +12,7 @@ export const trRepairRb = {
     working: "Kuruluyor",
     /** After it went back. */
     done: "{{name}} önceki sürümüne döndü.",
-    held: "Sen güncelleyene kadar bu sürümde kalacak.",
+    held: "Daha yeni bir sürüm çıkana kadar bu sürümde kalacak.",
     undo: "Geri Al",
     /** Toast after "Geri Al": the version that crashed is back. */
     undone: "{{name}} yeni sürümüne geri döndü.",
@@ -30,4 +30,6 @@ export const trRepairRb = {
   updateAnyway: "Yine de Güncelle",
   /** Note on an official pack mod held at its version (Önerilenler). */
   packHeld: "Yeni sürümü çöktüğü için {{version}} sürümünde kalıyor.",
+  /** Toast: the pack moved past the version that crashed, so its held mods follow it again. */
+  packMovedOn: "{{name}} için yeni sürüm geldi.",
 };

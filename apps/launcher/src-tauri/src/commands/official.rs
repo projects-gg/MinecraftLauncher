@@ -814,10 +814,16 @@ pub(crate) async fn sync_pack_files(
     }: PackSync<'_>,
     cancel: &CancellationToken,
 ) -> CmdResult<()> {
+    // REPAIR-RB: a pack mod's rollback override goes with its hold (going back did not help).
+    crate::commands::rollback::end_unheld_rollbacks(state, instance, game_dir).await;
     // The player's versions of pack mods follow the pack again once it caught up (PACK-EDIT;
-    // asks Modrinth only when the pack changed such a mod, never offline).
+    // asks Modrinth only when the pack changed such a mod, never offline). A mod held after a
+    // crash follows a pack that moved past the version that crashed; the player is told once.
     if !offline {
-        crate::commands::packedit::follow_pack(state, manifest, game_dir).await;
+        let moved_on = crate::commands::packedit::follow_pack(state, manifest, game_dir).await;
+        if !moved_on.is_empty() {
+            on_event(LaunchEventView::PackRollbackEnded { names: moved_on });
+        }
     }
     let previous = PackState::load(game_dir).await.map_err(pack_error)?;
     let first_install = previous.is_none();

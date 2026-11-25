@@ -998,25 +998,87 @@ fn repairs_do_not_move_held_jars_to_another_version() {
 #[test]
 fn bulk_updates_skip_held_jars_but_one_named_alone_goes() {
     let holds = [hold("a", "Mod-1.0.jar")];
+    let crashed = update_to("v2", "2.0", "2026-11-01T00:00:00Z");
     assert!(
-        left_out_of_update(&holds, "mod-1.0.jar.disabled", 0),
+        left_out_of_update(&holds, "mod-1.0.jar.disabled", 0, &crashed),
         "every update"
     );
     assert!(
-        left_out_of_update(&holds, "Mod-1.0.jar", 2),
+        left_out_of_update(&holds, "Mod-1.0.jar", 2, &crashed),
         "a list: Tümünü Güncelle"
     );
     assert!(
-        !left_out_of_update(&holds, "Mod-1.0.jar", 1),
+        !left_out_of_update(&holds, "Mod-1.0.jar", 1, &crashed),
         "named on its own: the way out"
     );
-    assert!(!left_out_of_update(&holds, "Other-2.0.jar", 0));
+    assert!(!left_out_of_update(&holds, "Other-2.0.jar", 0, &crashed));
     let mut failed = hold("a", "Mod-1.0.jar");
     failed.failed = true;
     assert!(
-        !left_out_of_update(&[failed], "Mod-1.0.jar", 0),
+        !left_out_of_update(&[failed], "Mod-1.0.jar", 0, &crashed),
         "a hold that did not help holds nothing"
     );
+}
+
+fn update_to(id: &str, number: &str, published: &str) -> AddonUpdate {
+    AddonUpdate {
+        version_id: id.into(),
+        version_number: number.into(),
+        version_type: crate::modrinth::ModrinthVersionType::Release,
+        date_published: published.into(),
+    }
+}
+
+/// A hold protects against the version that crashed, not against the fix: a newer version is
+/// offered by the usual update prompts again.
+#[test]
+fn a_hold_hides_the_crashed_version_and_older_ones_only() {
+    let mut held = hold("a", "Mod-1.0.jar");
+    held.from_version_id = Some("v2".into());
+    held.from_published = Some("2026-11-01T00:00:00Z".into());
+    let holds = [held.clone()];
+    // The version that crashed, and an older one Modrinth offers instead: still held.
+    let crashed = update_to("v2", "2.0", "2026-11-01T00:00:00Z");
+    assert!(held.hides(&crashed));
+    assert!(held.hides(&update_to("v1b", "1.5", "2026-10-01T00:00:00Z")));
+    assert_eq!(
+        hold_hiding(&holds, "Mod-1.0.jar", &crashed).map(|h| h.from_version.as_str()),
+        Some("2.0")
+    );
+    // A newer version: offered as usual, also by "Tümünü Güncelle".
+    let fix = update_to("v3", "3.0", "2026-12-01T00:00:00Z");
+    assert!(!held.hides(&fix));
+    assert!(hold_hiding(&holds, "Mod-1.0.jar", &fix).is_none());
+    assert!(!left_out_of_update(&holds, "Mod-1.0.jar", 0, &fix));
+    assert!(!left_out_of_update(&holds, "Mod-1.0.jar", 3, &fix));
+    // Without dates only the crashed version itself, by its number.
+    let undated = hold("b", "Other-1.0.jar");
+    assert!(undated.hides(&update_to("x", "2.0", "")));
+    assert!(!undated.hides(&update_to("y", "2.1", "")));
+    // A hold that did not help hides nothing.
+    held.failed = true;
+    assert!(!held.hides(&crashed));
+}
+
+#[test]
+fn a_failed_pack_hold_lets_its_override_go_but_stays_to_say_so() {
+    let mut history = ModHistory::default();
+    let mut sodium = hold("sodium", "sodium-0.7.jar");
+    sodium.pack_item = Some("sodium".into());
+    history.hold(MC, sodium);
+    let mut iris = hold("iris", "iris-1.jar");
+    iris.pack_item = Some("iris".into());
+    history.hold(MC, iris);
+    let both: HashSet<String> = ["sodium".to_owned(), "iris".to_owned()].into();
+    assert_eq!(history.held_pack_items(MC), both);
+    assert!(history.mark_failed(MC, "sodium"));
+    // Its override ends (the sync puts the pack's file back)...
+    let iris_only: HashSet<String> = ["iris".to_owned()].into();
+    assert_eq!(history.held_pack_items(MC), iris_only);
+    // ...and the hold stays, failed, until a clean game says the mods work.
+    assert!(!history.reconcile(MC, &snapshot(&[]), &iris_only));
+    assert_eq!(history.holds_of(MC).len(), 2);
+    assert!(history.held_pack_items("1.20.1").is_empty());
 }
 
 #[test]

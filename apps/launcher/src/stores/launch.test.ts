@@ -38,6 +38,7 @@ vi.mock("@/features/java/prompt-store", () => ({
 vi.mock("@/features/modcenter/notices", () => ({
   announceModsNotice: vi.fn(),
   announceVersionDropped: vi.fn(),
+  announceRollbackEnded: vi.fn(),
 }));
 vi.mock("@/features/modhealth/flow", () => ({
   announceModWarnings: vi.fn(),

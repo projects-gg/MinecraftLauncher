@@ -149,6 +149,12 @@ pub enum LaunchEventView {
         minecraft: String,
         recommended: Option<String>,
     },
+    /// REPAIR-RB: the pack moved past the version of a mod that crashed the game, which the
+    /// player had gone back from: the hold ended and the pack's new version is installed (told
+    /// once). `names` are the mods' titles.
+    PackRollbackEnded {
+        names: Vec<String>,
+    },
     /// "Devam et" into a world while a mod breaks the game's quick play into worlds and no overlay
     /// of this launcher opens it instead (`pl_mc::launch::world_entry`): the game starts on its
     /// title screen, where the player opens the world. `mods` names those mods.
@@ -1913,6 +1919,7 @@ async fn prepare_and_spawn(
             }
             // REPAIR-RB: a mod that went back and crashed again is no longer held.
             crate::commands::rollback::crash_seen(
+                &app,
                 &state,
                 &crashed_instance,
                 &diagnosis,

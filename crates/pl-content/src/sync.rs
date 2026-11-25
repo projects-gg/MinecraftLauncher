@@ -3935,6 +3935,7 @@ mod tests {
             pack_sha1: sha1_hex(b"fabric"),
             reason: crate::overrides::OverrideReason::Chosen,
             needed_by: Vec::new(),
+            crashed_sha1: None,
         }
     }
 
@@ -4124,6 +4125,94 @@ mod tests {
         assert_eq!(deleted(&back), ["mods/fabric-api-0.141.jar"]);
         assert!(back.next_state.overrides.is_empty());
         assert!(status(&back, "fabric-api").version_override.is_none());
+    }
+
+    /// REPAIR-RB: the pack's fabric-api crashed the game and the player went back to an older one;
+    /// the held file is on disk. Returns the manifest and the state after that sync.
+    async fn rolled_back_fabric(game: &Path) -> (PackManifest, PackState) {
+        let (m, mut state) = installed_with_zoom(game).await;
+        let mut held = newer_fabric();
+        held.path = "mods/fabric-api-0.130.jar".into();
+        held.sha1 = sha1_hex(b"fabric-old");
+        held.url =
+            "https://cdn.modrinth.com/data/P7dR8mSH/versions/old/fabric-api-0.130.jar".into();
+        held.reason = crate::overrides::OverrideReason::Rollback;
+        state.overrides.insert("fabric-api".into(), held);
+        let plan = plan_sync(&m, game, Some(&state), None, &SyncPolicy::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            paths(&plan.downloads),
+            [("mods/fabric-api-0.130.jar", DownloadAction::Update)]
+        );
+        std::fs::remove_file(game.join("mods/fabric-api.jar")).unwrap();
+        write(game, "mods/fabric-api-0.130.jar", b"fabric-old");
+        (m, plan.next_state)
+    }
+
+    #[tokio::test]
+    async fn a_rollback_hold_ends_when_the_pack_ships_past_the_crashed_file() {
+        use crate::overrides::{FollowOutcome, follow_pack, pending_comparisons};
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        let (m, mut state) = rolled_back_fabric(game).await;
+
+        // A new pack version that still ships the fabric-api that crashed: the hold stays.
+        assert!(pending_comparisons(&m, &state).is_empty());
+        let again = plan_sync(&m, game, Some(&state), None, &SyncPolicy::default())
+            .await
+            .unwrap();
+        assert!(again.downloads.is_empty() && again.deletes.is_empty());
+        assert_eq!(again.next_state.overrides.len(), 1);
+
+        // The pack ships a newer fabric-api: the hold ends and the pack's file is installed.
+        let mut fixed = m.clone();
+        let file = fixed
+            .files
+            .iter_mut()
+            .find(|f| f.path == "mods/fabric-api.jar")
+            .unwrap();
+        file.hashes.sha1 = sha1_hex(b"fabric-fixed");
+        file.file_size = 12;
+        let pending = pending_comparisons(&fixed, &state);
+        assert_eq!(pending.len(), 1);
+        assert_eq!(
+            follow_pack(&mut state, "fabric-api", &pending[0].pack_sha1, None),
+            FollowOutcome::MovedOn
+        );
+        let moved = plan_sync(&fixed, game, Some(&state), None, &SyncPolicy::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            paths(&moved.downloads),
+            [("mods/fabric-api.jar", DownloadAction::Update)]
+        );
+        assert_eq!(deleted(&moved), ["mods/fabric-api-0.130.jar"]);
+        assert!(moved.next_state.overrides.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_rollback_without_a_hold_gives_the_pack_file_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        let (m, mut state) = rolled_back_fabric(game).await;
+        let held = std::collections::HashSet::from(["fabric-api".to_owned()]);
+        assert!(crate::overrides::end_rollbacks(&mut state, &held).is_empty());
+        // Going back did not help (the hold failed): the override goes, the pack's file returns.
+        let none = std::collections::HashSet::new();
+        assert_eq!(
+            crate::overrides::end_rollbacks(&mut state, &none),
+            ["fabric-api"]
+        );
+        let back = plan_sync(&m, game, Some(&state), None, &SyncPolicy::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            paths(&back.downloads),
+            [("mods/fabric-api.jar", DownloadAction::Update)]
+        );
+        assert_eq!(deleted(&back), ["mods/fabric-api-0.130.jar"]);
+        assert!(back.next_state.overrides.is_empty());
     }
 
     #[tokio::test]

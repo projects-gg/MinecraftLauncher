@@ -12,6 +12,7 @@ import { announceShotNotCopied } from "@/features/library/shot-copy";
 import {
   announceAutoFixed,
   announceModsNotice,
+  announceRollbackEnded,
   announceVersionDropped,
 } from "@/features/modcenter/notices";
 import { announceModWarnings, useModFlow } from "@/features/modhealth/flow";
@@ -728,6 +729,9 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
           break;
         case "packVersionDropped":
           announceVersionDropped(instanceId, event.minecraft, event.recommended);
+          break;
+        case "packRollbackEnded":
+          announceRollbackEnded(event.names);
           break;
         case "worldFromTitle":
           // The game opens on its main menu instead of the world (OVL-FIX): what to do, and why

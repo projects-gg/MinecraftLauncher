@@ -535,7 +535,14 @@ pub async fn content_scan(
                 .as_ref()
                 .and_then(|s| cached_icon(&icons, &s.project_id))
                 .map(|p| p.to_string_lossy().into_owned());
-            let held_from = pl_mc::mods::rollback::hold_of(&holds, &entry.file_name)
+            // REPAIR-RB: held from the version that crashed and older ones only; a newer
+            // version is a usual update.
+            let held_from = entry
+                .update
+                .as_ref()
+                .and_then(|update| {
+                    pl_mc::mods::rollback::hold_hiding(&holds, &entry.file_name, update)
+                })
                 .map(|hold| hold.from_version.clone());
             ContentEntryView {
                 entry,
@@ -681,21 +688,28 @@ pub async fn content_update(
     }
     let owned = pack_owned(addons.game_dir());
     let wanted: HashSet<&str> = file_names.iter().map(String::as_str).collect();
-    // REPAIR-RB: a mod held after a crash updates only as the one file named ("Yine de
-    // Güncelle"), which ends its hold; every update and a list ("Tümünü Güncelle") leave it.
+    // REPAIR-RB: a mod held after a crash takes the version that crashed (or an older one) only
+    // as the one file named ("Yine de Güncelle"); every update and a list ("Tümünü Güncelle")
+    // leave it. A newer version updates it as usual. Either way its hold ends.
     let holds = match kind {
-        ImportKind::Mod if wanted.len() != 1 => {
-            crate::commands::rollback::recorded_holds(&state, &instance).await
-        }
+        ImportKind::Mod => crate::commands::rollback::recorded_holds(&state, &instance).await,
         _ => Vec::new(),
     };
+    let mut updated: Vec<String> = Vec::new();
     let mut ids: Vec<String> = scan
         .entries
         .iter()
         .filter(|e| wanted.is_empty() || wanted.contains(e.file_name.as_str()))
         .filter(|e| !owned.contains(&index_key(kind.folder(), &e.file_name)))
-        .filter(|e| !pl_mc::mods::rollback::left_out_of_update(&holds, &e.file_name, wanted.len()))
-        .filter_map(|e| e.update.as_ref().map(|u| u.version_id.clone()))
+        .filter_map(|e| {
+            let update = e.update.as_ref()?;
+            if pl_mc::mods::rollback::left_out_of_update(&holds, &e.file_name, wanted.len(), update)
+            {
+                return None;
+            }
+            updated.push(e.file_name.clone());
+            Some(update.version_id.clone())
+        })
         .collect();
     ids.sort();
     ids.dedup();
@@ -722,8 +736,8 @@ pub async fn content_update(
         )
         .await
         .map_err(content_error)?;
-    if kind == ImportKind::Mod && wanted.len() == 1 {
-        crate::commands::rollback::release_updated(&state, &instance, &file_names).await;
+    if !holds.is_empty() {
+        crate::commands::rollback::release_updated(&state, &instance, &updated).await;
     }
     Ok(report)
 }

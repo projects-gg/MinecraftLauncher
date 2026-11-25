@@ -533,7 +533,8 @@ fn sink(app: &AppHandle, instance_id: &str) -> EventSink {
         LaunchEventView::Progress(progress) => show_progress(&app, &instance_id, progress.percent),
         LaunchEventView::PackUpdated { .. }
         | LaunchEventView::ModsNotice(_)
-        | LaunchEventView::PackVersionDropped { .. } => keep_notice(&app, &instance_id, event),
+        | LaunchEventView::PackVersionDropped { .. }
+        | LaunchEventView::PackRollbackEnded { .. } => keep_notice(&app, &instance_id, event),
         _ => {}
     })
 }

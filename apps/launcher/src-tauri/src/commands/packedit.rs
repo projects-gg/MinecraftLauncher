@@ -10,9 +10,10 @@
 //!   the player's that declares a pack item's mod stands in for the item (not a feature: the
 //!   loader would refuse the mod twice).
 //! - [`follow_pack`]: before a launch's sync, an override whose item's file the pack changed ends
-//!   when the pack's version is at least as new (one Modrinth request, only then).
+//!   when the pack's version is at least as new (one Modrinth request, only then); a rollback
+//!   hold (REPAIR-RB) ends with any file other than the one that crashed.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -97,48 +98,79 @@ pub(crate) async fn disk_mods(game_dir: &Path) -> Vec<DiskJar> {
 
 /// Overrides whose item got another file in `manifest` follow the pack again once its version
 /// is at least as new as theirs (Modrinth's publish dates). Offline, or when Modrinth does not
-/// answer, they stay and are compared on the next launch.
-pub(crate) async fn follow_pack(state: &AppState, manifest: &PackManifest, game_dir: &Path) {
+/// answer, they stay and are compared on the next launch. A rollback hold (REPAIR-RB) needs no
+/// date: it ends with any file but the one that crashed. Returns the titles of the mods whose
+/// hold ended so (the launch tells the player once).
+pub(crate) async fn follow_pack(
+    state: &AppState,
+    manifest: &PackManifest,
+    game_dir: &Path,
+) -> Vec<String> {
     let Ok(Some(mut pack_state)) = PackState::load(game_dir).await else {
-        return;
+        return Vec::new();
     };
     let pending = pending_comparisons(manifest, &pack_state);
     if pending.is_empty() {
-        return;
+        return Vec::new();
     }
+    let rollbacks: HashSet<String> = pack_state
+        .overrides
+        .iter()
+        .filter(|(_, choice)| choice.reason == OverrideReason::Rollback)
+        .map(|(item, _)| item.clone())
+        .collect();
     let ids: Vec<String> = pending
         .iter()
+        .filter(|p| !rollbacks.contains(&p.item))
         .filter_map(|p| p.pack_version_id.clone())
         .collect();
-    let published: HashMap<String, String> = if ids.is_empty() {
-        HashMap::new()
+    let published: Option<HashMap<String, String>> = if ids.is_empty() {
+        Some(HashMap::new())
     } else {
         match modrinth_client(state).versions(&ids).await {
-            Ok(list) => list
-                .into_iter()
-                .map(|version| (version.id, version.date_published))
-                .collect(),
+            Ok(list) => Some(
+                list.into_iter()
+                    .map(|version| (version.id, version.date_published))
+                    .collect(),
+            ),
             Err(error) => {
                 tracing::info!(%error, "pack versions not compared with the player's ones yet");
-                return;
+                None
             }
         }
     };
+    let mut moved_on = Vec::new();
     for pending in &pending {
-        let date = pending
-            .pack_version_id
-            .as_ref()
-            .and_then(|id| published.get(id))
-            .map(String::as_str);
-        let outcome =
-            pl_content::follow_pack(&mut pack_state, &pending.item, &pending.pack_sha1, date);
-        if outcome == FollowOutcome::Following {
-            tracing::info!(item = %pending.item, "the pack caught up with the player's version");
+        let date = match (&published, rollbacks.contains(&pending.item)) {
+            (_, true) => None,
+            (Some(published), false) => pending
+                .pack_version_id
+                .as_ref()
+                .and_then(|id| published.get(id))
+                .map(String::as_str),
+            // Compared on the next launch.
+            (None, false) => continue,
+        };
+        match pl_content::follow_pack(&mut pack_state, &pending.item, &pending.pack_sha1, date) {
+            FollowOutcome::Following => {
+                tracing::info!(item = %pending.item, "the pack caught up with the player's version");
+            }
+            FollowOutcome::MovedOn => {
+                tracing::info!(item = %pending.item, "the pack moved past a version that crashed");
+                moved_on.push(
+                    manifest
+                        .projects
+                        .item(&pending.item)
+                        .map_or_else(|| pending.item.clone(), |item| item.title.clone()),
+                );
+            }
+            FollowOutcome::Kept | FollowOutcome::None => {}
         }
     }
     if let Err(error) = pack_state.save(game_dir).await {
         tracing::warn!(%error, "pack state not saved after comparing versions");
     }
+    moved_on
 }
 
 // --- upgrades a mod needs ----------------------------------------------------------------------
@@ -254,23 +286,30 @@ fn override_from(
         pack_sha1,
         reason,
         needed_by,
+        crashed_sha1: None,
     };
     choice.usable().then_some(choice)
 }
 
 /// The player's version of a pack item after a crash (REPAIR-RB, "Önceki Sürüme Dön"): `version`
-/// held as an override the sync keeps when the pack moves on.
+/// held as an override until the pack ships a file other than the one that crashed
+/// (`crashed_sha1`, the crashing jar's: kept only when it was not the pack's file).
 pub(crate) fn rollback_override(
     manifest: &PackManifest,
     item_id: &str,
     version: &ModrinthVersion,
+    crashed_sha1: Option<&str>,
 ) -> Option<ItemOverride> {
-    override_from(
+    let mut choice = override_from(
         version,
         pack_sha1(manifest, item_id),
         OverrideReason::Rollback,
         Vec::new(),
-    )
+    )?;
+    choice.crashed_sha1 = crashed_sha1
+        .map(str::to_ascii_lowercase)
+        .filter(|sha1| !sha1.is_empty() && *sha1 != choice.pack_sha1);
+    Some(choice)
 }
 
 /// Writes overrides into `pack_state` for every upgrade a fitting Modrinth version exists for.

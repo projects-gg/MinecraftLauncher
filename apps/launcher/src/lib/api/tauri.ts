@@ -368,6 +368,8 @@ function launchEvent(e: LaunchEventView): LaunchEvent {
         minecraft: e.minecraft,
         recommended: e.recommended ?? undefined,
       };
+    case "packRollbackEnded":
+      return { type: "packRollbackEnded", names: e.names };
     case "worldFromTitle":
       return { type: "worldFromTitle", mods: e.mods };
     case "newScreenshots":
