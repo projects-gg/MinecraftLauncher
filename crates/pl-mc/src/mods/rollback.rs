@@ -431,10 +431,11 @@ impl HeldFiles {
     }
 }
 
-/// Whether an update leaves `file` where it is: "every update" (`every`, nothing named) skips a
-/// held jar; naming the jar on its own is the player's way out of its hold.
-pub fn left_out_of_update(holds: &[ModHold], file: &str, every: bool) -> bool {
-    every && hold_of(holds, file).is_some()
+/// Whether an update of `named` files (0: every update) leaves `file` where it is: a held jar
+/// updates only as the one file named ("Yine de Güncelle", the player's way out of its hold);
+/// every update and a list ("Tümünü Güncelle") skip it.
+pub fn left_out_of_update(holds: &[ModHold], file: &str, named: usize) -> bool {
+    named != 1 && hold_of(holds, file).is_some()
 }
 
 /// The hold that keeps `file` (a jar of `mods/`) at its version, if any.

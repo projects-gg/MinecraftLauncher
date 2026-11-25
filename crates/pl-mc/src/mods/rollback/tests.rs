@@ -996,18 +996,25 @@ fn repairs_do_not_move_held_jars_to_another_version() {
 }
 
 #[test]
-fn every_update_skips_held_jars_but_a_named_one_goes() {
+fn bulk_updates_skip_held_jars_but_one_named_alone_goes() {
     let holds = [hold("a", "Mod-1.0.jar")];
-    assert!(left_out_of_update(&holds, "mod-1.0.jar.disabled", true));
     assert!(
-        !left_out_of_update(&holds, "Mod-1.0.jar", false),
+        left_out_of_update(&holds, "mod-1.0.jar.disabled", 0),
+        "every update"
+    );
+    assert!(
+        left_out_of_update(&holds, "Mod-1.0.jar", 2),
+        "a list: Tümünü Güncelle"
+    );
+    assert!(
+        !left_out_of_update(&holds, "Mod-1.0.jar", 1),
         "named on its own: the way out"
     );
-    assert!(!left_out_of_update(&holds, "Other-2.0.jar", true));
+    assert!(!left_out_of_update(&holds, "Other-2.0.jar", 0));
     let mut failed = hold("a", "Mod-1.0.jar");
     failed.failed = true;
     assert!(
-        !left_out_of_update(&[failed], "Mod-1.0.jar", true),
+        !left_out_of_update(&[failed], "Mod-1.0.jar", 0),
         "a hold that did not help holds nothing"
     );
 }
