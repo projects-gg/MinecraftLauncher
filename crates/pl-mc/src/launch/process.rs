@@ -26,7 +26,7 @@ use crate::error::{Error, Result};
 use crate::launch::command::{LaunchCommand, java_argfile};
 use crate::launch::crash::{
     CrashDiagnosis, CrashInput, SHORT_RUN, analyze_crash, crash_report_for, failed_after_quit,
-    is_failure, jvm_error_log_for,
+    is_failure, jvm_error_log_for, window_refused,
 };
 use crate::launch::log::{Log4jParser, LogLine};
 use crate::launch::window::{GIVE_UP_AFTER, ShownBy, WindowProbe, log_marker, probe_interval};
@@ -355,7 +355,23 @@ impl GameProcess {
         tokio::fs::create_dir_all(&command.cwd)
             .await
             .map_err(|e| Error::io(&command.cwd, e))?;
+        // Windows' Java launcher reads its command line in the system's ANSI code page: paths with
+        // letters it lacks go in their short form (CRASH-DIAG).
+        let (java, safe_args) = super::ansi::ansi_safe(&command.program, &command.args)?;
+        let safe;
+        let command = if java != command.program || safe_args != command.args {
+            tracing::info!("paths with letters the system code page lacks go in their short form");
+            let mut short = command.clone();
+            short.program = java;
+            short.args = safe_args;
+            safe = short;
+            &safe
+        } else {
+            command
+        };
         let (args, argfile) = prepare_args(command, &options).await?;
+        // The argument file sits in the logs folder, which may need a short form as well.
+        let (_, args) = super::ansi::ansi_safe(&command.program, &args)?;
         let program = launch_program(&command.program);
         let mut cmd = tokio::process::Command::new(&program);
         cmd.args(&args)
@@ -884,7 +900,9 @@ async fn supervise(mut s: Supervision) {
     // This run's own report: the one its output names; another game of the same folder may have
     // written the newest one (PLAY-AGAIN). Read only when the run may have failed (a clean exit
     // after a full session never is one).
-    let may_have_failed = !killed && (code != Some(0) || runtime < SHORT_RUN);
+    // A game whose window never showed may also have given up opening it (CRASH-DIAG).
+    let opened = on_screen.is_some();
+    let may_have_failed = !killed && (code != Some(0) || runtime < SHORT_RUN || !opened);
     let output = if may_have_failed {
         s.shared.tail_text()
     } else {
@@ -897,7 +915,9 @@ async fn supervise(mut s: Supervision) {
     let jvm_log = may_have_failed
         .then(|| jvm_error_log_for(&s.game_dir, s.started_at, pid, shared_folder))
         .flatten();
-    let failed = may_have_failed && is_failure(code, runtime, crash_report.is_some());
+    let failed = may_have_failed
+        && (is_failure(code, runtime, crash_report.is_some())
+            || (!opened && window_refused(&output)));
     let crash = if failed && quit_before_failing(&output, on_screen) {
         // The player quit and the game failed only while closing (CRASH-EXIT): nothing to show.
         // Its log and the JVM's error log stay.
