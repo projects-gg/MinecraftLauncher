@@ -2604,7 +2604,8 @@ export const en: DeepPartial<Strings> = {
         missingDependency: "Some mods need other mods to work.",
         duplicateMods: "The mods folder has more than one copy of the same mod.",
         modError: "A mod failed while the game was starting.",
-        corruptedFiles: "Some game files are missing or broken.",
+        corruptedFiles:
+          "Some files are missing or broken. If it's a mod's file, its name is below; if not, play again and the launcher checks the files and downloads the broken ones again.",
         accessDenied: "Security software may be blocking the launcher or Java.",
         noOutput: "Security software may be blocking Java.",
         notResponding:
@@ -2612,7 +2613,7 @@ export const en: DeepPartial<Strings> = {
         otherProgram:
           "A program like an FPS counter, a screen recorder or a chat overlay crashed the game. Close it and try again.",
         modCrash: "A mod failed while you were playing.",
-        unknown: "The details are in the game log.",
+        unknown: "Try again. If it keeps happening, open the Troubleshooter.",
       },
       memory: "Maximum memory will change from {{from}} to {{to}}.",
       suspects: "Mods That May Be Responsible",

@@ -20,7 +20,9 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::{CrashKind, CrashSuspect, PLATFORM_CLASSES, SuspectReason};
+use super::{
+    CrashKind, CrashSuspect, PLATFORM_CLASSES, PLATFORM_IDS, SuspectReason, config_mod_name,
+};
 
 /// The coarse trace of one crash (see the module).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -123,14 +125,32 @@ static EARLIER_INIT_FAILURE: LazyLock<Regex> = LazyLock::new(|| {
 });
 static DESCRIPTION: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?m)^Description: ([^\r\n]{1,80})\r?$").expect("valid regex"));
-/// A Java stack frame: `at net.caffeinemc.mods.sodium.client.X.method(X.java:12)` (the module
-/// prefixes of FML, `TRANSFORMER/sodium@0.6/`, are skipped).
+/// A Java stack frame: `at net.caffeinemc.mods.sodium.client.X.method(X.java:12)`, its class and
+/// method. Class loader and module prefixes are skipped: FML's `TRANSFORMER/sodium@0.6/`,
+/// `java.base/` and Fabric's `knot//` (its class loader, in no module), which every frame of a
+/// Fabric game's code carries.
 static FRAME_CLASS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
-        r"^\s*at (?:[\w.\-]+(?:@[^/\s]*)?/)*((?:[a-z_][\w$]*\.)+[A-Za-z_$][\w$]*)\.[\w$<>]+\(",
+        r"^\s*at (?:[\w.\-]*(?:@[^/\s]*)?/)*((?:[a-z_][\w$]*\.)+[A-Za-z_$][\w$]*)\.([\w$<>]+)\(",
     )
     .expect("valid regex")
 });
+/// A Mixin handler merged into the game's code is named after its mod:
+/// `handler$zza000$sodium$onRender`, `wrapMethod$bkn000$dynamic_fps_common$renderFrame`.
+static HANDLER_METHOD: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^[A-Za-z]+\$[a-z]{3}\d{3}\$([a-z][a-z0-9_\-]{1,63})\$").expect("valid regex")
+});
+/// FML names the mod of a frame's module: `at TRANSFORMER/create@0.5.1.f/com.simibubi...`.
+static FML_MODULE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^\s*at TRANSFORMER/([a-z][a-z0-9_]{1,63})@[^/\s]+/").expect("valid regex")
+});
+/// The lines of a crash report's "Mixins in Stacktrace" section (a mod adds one): a class of the
+/// stack (`\tnet.minecraft.client.renderer.LevelRenderer:`) and each mixin mods applied to it, with
+/// its config (`\t\tnet.irisshaders.iris.mixin.MixinLevelRenderer (mixins.iris.json)`).
+static MIXINS_CLASS: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s+([\w.$]+):\s*$").expect("valid regex"));
+static MIXINS_ENTRY: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^\s+([\w.$]+) \(([\w\-.]+\.json)\)\s*$").expect("valid regex"));
 
 /// The error line of a JVM fatal error log's header (`#  EXCEPTION_ACCESS_VIOLATION (0xc0000005)
 /// at pc=…`, `#  SIGSEGV (0xb) at pc=…`, `#  Internal Error (g1…cpp:12), pid=…`,
@@ -477,7 +497,11 @@ const KNOWN_MODS: &[(&str, &[&str], &[&str])] = &[
         &["entity_sound_features"],
         &["traben.entity_sound_features."],
     ),
-    ("fabric-language-kotlin", &["fabric-language-kotlin"], &[]),
+    (
+        "fabric-language-kotlin",
+        &["fabric-language-kotlin"],
+        &["net.fabricmc.language.kotlin."],
+    ),
     (
         "language-reload",
         &["languagereload"],
@@ -743,36 +767,213 @@ fn is_platform_class(class: &str) -> bool {
         .any(|package| class.starts_with(package))
 }
 
-/// The top frames of the crash report's stack that belong to a mod's own code (not the game's,
-/// Java's, a loader's or a library's), the first ones first.
-pub(super) fn mod_frames(report: &str) -> Vec<String> {
-    let start = report.find("\nDescription: ").map_or(0, |at| at + 1);
-    report[start..]
-        .lines()
-        .filter(|line| line.trim_start().starts_with("at "))
-        .take(8)
-        .filter_map(|line| FRAME_CLASS.captures(line).map(|c| c[1].to_owned()))
-        .filter(|class| !is_platform_class(class))
-        .collect()
+/// Frames looked at from the top of each exception of the crash report's stack.
+const TOP_FRAMES: usize = 12;
+
+/// The game's main loops (Mojang's names, and Fabric's intermediary names of the client's):
+/// every crash of a thread passes through them, and so do the mods that wrap them (a frame rate
+/// limiter wraps `renderFrame`). Their frames and the ones below say nothing about the failure.
+const MAIN_LOOP: &[(&str, &[&str])] = &[
+    (
+        "net.minecraft.client.Minecraft",
+        &["run", "runTick", "renderFrame", "tick"],
+    ),
+    (
+        "net.minecraft.class_310",
+        &["method_1514", "method_1523", "method_1574"],
+    ),
+    ("net.minecraft.client.renderer.GameRenderer", &["render"]),
+    (
+        "net.minecraft.server.MinecraftServer",
+        &["runServer", "tickServer", "tickChildren"],
+    ),
+    (
+        "net.minecraft.client.server.IntegratedServer",
+        &["tickServer"],
+    ),
+    ("net.minecraft.client.main.Main", &["main"]),
+];
+
+/// A frame of a main loop (`renderFrame$mixinextras$wrapped$426` is the original `renderFrame`
+/// a mod wrapped).
+fn main_loop(class: &str, method: &str) -> bool {
+    let method = method.split('$').next().unwrap_or(method);
+    MAIN_LOOP
+        .iter()
+        .any(|(owner, methods)| *owner == class && methods.contains(&method))
 }
 
-/// The mod the crash points at, for the trace: a known one by name, `mod` for another, `none`.
-fn culprit(suspects: &[CrashSuspect], frames: &[String]) -> &'static str {
-    let known = suspects.iter().find_map(|suspect| {
-        suspect
-            .mod_id
-            .as_deref()
-            .and_then(known_mod_by_id)
-            .or_else(|| suspect.class_name.as_deref().and_then(known_mod_by_class))
-    });
-    if let Some(key) = known.or_else(|| frames.iter().find_map(|class| known_mod_by_class(class))) {
-        return key;
+/// Mods that carry other mods' code: Fabric API's events and hooks, the Kotlin language adapter,
+/// config screen libraries and multi-loader layers. A failure in their frames is mostly the code
+/// of the mod they called; they are the culprit only when no other mod is named.
+const CARRIERS: &[&str] = &[
+    "fabric-api",
+    "fabric-language-kotlin",
+    "cloth-config",
+    "yacl",
+    "architectury",
+    "owo",
+];
+
+/// One of [`CARRIERS`] (by its name in a trace).
+fn is_carrier(key: &str) -> bool {
+    CARRIERS.contains(&key)
+}
+
+/// A mod a frame of the crash report's stack points at: a class of its own code, or its id (a
+/// Mixin handler it merged into the game's code, FML's module of the frame).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum StackMod {
+    Class(String),
+    Id(String),
+}
+
+impl StackMod {
+    /// The mod's name in a trace, when it is one of [`KNOWN_MODS`].
+    fn known(&self) -> Option<&'static str> {
+        match self {
+            Self::Class(class) => known_mod_by_class(class),
+            Self::Id(id) => known_mod_by_id(id),
+        }
     }
-    if suspects.is_empty() && frames.is_empty() {
-        "none"
-    } else {
-        "mod"
+
+    /// A mod that carries other mods' code ([`CARRIERS`]).
+    pub(super) fn carrier(&self) -> bool {
+        self.known().is_some_and(is_carrier)
     }
+
+    /// What tells two frames of one mod apart from two mods: its name, its id, else the first
+    /// three parts of its package.
+    fn owner(&self) -> String {
+        if let Some(key) = self.known() {
+            return key.to_owned();
+        }
+        match self {
+            Self::Id(id) => id.clone(),
+            Self::Class(class) => class.split('.').take(3).collect::<Vec<_>>().join("."),
+        }
+    }
+}
+
+/// The mod a stack frame points at: FML's module of a mod, a Mixin handler's mod, else the class of
+/// a mod's own code (not the game's, Java's, a loader's or a library's).
+fn frame_mod(line: &str) -> Option<StackMod> {
+    let platform = |id: &str| PLATFORM_IDS.iter().any(|p| p.eq_ignore_ascii_case(id));
+    if let Some(module) = FML_MODULE.captures(line)
+        && !platform(&module[1])
+    {
+        return Some(StackMod::Id(module[1].to_owned()));
+    }
+    let frame = FRAME_CLASS.captures(line)?;
+    if let Some(handler) = HANDLER_METHOD.captures(&frame[2]) {
+        let id = &handler[1];
+        return (!platform(id)).then(|| StackMod::Id(id.to_owned()));
+    }
+    let class = &frame[1];
+    (!is_platform_class(class)).then(|| StackMod::Class(class.to_owned()))
+}
+
+/// The mods in the top frames of the crash report's own stack, one entry per mod: the exception
+/// that caused the others first (where the failure began), then the ones it caused.
+pub(super) fn stack_mods(report: &str) -> Vec<StackMod> {
+    let start = report.find("\nDescription: ").map_or(0, |at| at + 1);
+    let head = &report[start..];
+    let end = head
+        .find("\nA detailed walkthrough of the error")
+        .unwrap_or(head.len());
+    // The thrown exception, then each `Caused by:`.
+    let mut blocks: Vec<Vec<&str>> = vec![Vec::new()];
+    for line in head[..end].lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("Caused by:") {
+            blocks.push(Vec::new());
+        } else if trimmed.starts_with("at ")
+            && let Some(block) = blocks.last_mut()
+        {
+            block.push(line);
+        }
+    }
+    let mut mods: Vec<StackMod> = Vec::new();
+    for block in blocks.iter().rev() {
+        for line in block.iter().take(TOP_FRAMES) {
+            if FRAME_CLASS
+                .captures(line)
+                .is_some_and(|frame| main_loop(&frame[1], &frame[2]))
+            {
+                break;
+            }
+            if let Some(found) = frame_mod(line)
+                && !mods.iter().any(|m| m.owner() == found.owner())
+            {
+                mods.push(found);
+            }
+        }
+    }
+    mods
+}
+
+/// The mixins mods applied to the class the crash report's exception was thrown in (its top
+/// frame's), from the report's "Mixins in Stacktrace" section: `(mixin class, mixin config)`.
+/// Empty without that section.
+pub(super) fn thrower_mixins(report: &str) -> Vec<(String, String)> {
+    let start = report.find("\nDescription: ").map_or(0, |at| at + 1);
+    let Some(thrower) = report[start..]
+        .lines()
+        .find(|line| line.trim_start().starts_with("at "))
+        .and_then(|line| FRAME_CLASS.captures(line))
+        .map(|frame| frame[1].to_owned())
+    else {
+        return Vec::new();
+    };
+    let Some(at) = report.find("Mixins in Stacktrace:") else {
+        return Vec::new();
+    };
+    let mut mixins = Vec::new();
+    let mut thrower_listed = false;
+    for line in report[at..].lines().skip(1) {
+        if let Some(class) = MIXINS_CLASS.captures(line) {
+            if thrower_listed {
+                break;
+            }
+            thrower_listed = class[1] == thrower;
+        } else if let Some(mixin) = MIXINS_ENTRY.captures(line) {
+            if thrower_listed {
+                mixins.push((mixin[1].to_owned(), mixin[2].to_owned()));
+            }
+        } else {
+            break;
+        }
+    }
+    mixins
+}
+
+/// The mod the crash points at, for the trace: the first suspect, else the first frame, that is
+/// not a carrier ([`CARRIERS`]: one is named only when nothing else is), by name when it is a
+/// known one, `mod` for another; `none` for none.
+fn culprit(suspects: &[CrashSuspect], frames: &[StackMod]) -> &'static str {
+    let named: Vec<Option<&'static str>> = suspects
+        .iter()
+        .map(|suspect| {
+            suspect
+                .mod_id
+                .as_deref()
+                .and_then(known_mod_by_id)
+                .or_else(|| suspect.class_name.as_deref().and_then(known_mod_by_class))
+                .or_else(|| {
+                    suspect
+                        .mixin_config
+                        .as_deref()
+                        .and_then(config_mod_name)
+                        .and_then(|id| known_mod_by_id(&id))
+                })
+        })
+        .chain(frames.iter().map(StackMod::known))
+        .collect();
+    named
+        .iter()
+        .find(|key| !key.is_some_and(is_carrier))
+        .or_else(|| named.first())
+        .map_or("none", |key| key.unwrap_or("mod"))
 }
 
 /// Where the game was: the crash report's description, when it is one the game writes.
@@ -813,7 +1014,7 @@ pub(super) fn trace(
         // A mod failing the loader's checks names the mods it broke: the trace names the mod
         // whose code failed (the analyzer's suspects), never the frames of a healthy one.
         let frames = if matches!(kind, CrashKind::ModCrash | CrashKind::Unknown) {
-            mod_frames(report)
+            stack_mods(report)
         } else {
             Vec::new()
         };
