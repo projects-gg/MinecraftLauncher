@@ -74,7 +74,8 @@ pub use modsets::{
 pub use needs::{HIDDEN_NEEDS, HiddenNeed, hidden_needs};
 pub use overrides::{
     DiskJar, FABRIC_API_MOD_ID, FollowOutcome, ItemOverride, OVERRIDE_DOWNLOAD_PREFIX,
-    OverrideReason, PendingComparison, follow_pack, own_stand_ins, pending_comparisons,
+    OverrideReason, PendingComparison, end_rollbacks, follow_pack, own_stand_ins,
+    pending_comparisons,
 };
 pub use sets::{ParkedSet, SetInfo, SwitchJournal, SwitchRequest, SwitchStep, VersionSets};
 pub use signing::{

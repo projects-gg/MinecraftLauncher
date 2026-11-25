@@ -116,6 +116,12 @@ export function announceAutoFixed(instanceId: string, fixed: AutoFixed) {
   }
 }
 
+/** REPAIR-RB: the pack moved past the version that crashed: its held mods follow it again. */
+export function announceRollbackEnded(names: string[]) {
+  if (names.length === 0) return;
+  toast(i18n.t("repairRb.packMovedOn", { name: names.join(", ") }), { duration: 9000 });
+}
+
 export function announceVersionDropped(
   instanceId: string,
   minecraft: string,

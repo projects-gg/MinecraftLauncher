@@ -6,7 +6,7 @@ export const enRepairRb = {
     action: "Use the Earlier Version",
     working: "Installing",
     done: "{{name}} is back on its earlier version.",
-    held: "It will stay on this version until you update it.",
+    held: "It will stay on this version until a newer one comes out.",
     undo: "Undo",
     undone: "{{name}} is back on its newer version.",
     repeated: "{{name}} crashed on the earlier version too.",
@@ -17,4 +17,5 @@ export const enRepairRb = {
   ownHeld: "Staying on this version because the newer one crashed.",
   updateAnyway: "Update Anyway",
   packHeld: "Staying on {{version}} because the newer version crashed.",
+  packMovedOn: "A new version of {{name}} is here.",
 };

@@ -396,6 +396,11 @@ export type LaunchEvent =
       minecraft: string;
       recommended?: string;
     }
+  | {
+      /** REPAIR-RB: the pack moved past the version that crashed; its held mods follow it again. */
+      type: "packRollbackEnded";
+      names: string[];
+    }
   /**
    * "Devam et" into a world while `mods` break the game's direct entry into worlds and no overlay
    * opens it instead: the game starts on its main menu (OVL-FIX).

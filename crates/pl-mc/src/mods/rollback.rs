@@ -29,7 +29,7 @@ use pl_net::{CancellationToken, Downloader};
 use serde::{Deserialize, Serialize};
 
 use super::scan::{ModSnapshot, ScannedJar, strip_disabled};
-use crate::addons::{AddonInstallOptions, Addons};
+use crate::addons::{AddonInstallOptions, AddonUpdate, Addons};
 use crate::error::{Error, Result};
 use crate::gamefiles::{ImportKind, LauncherTrash, TrashKind};
 use crate::launch::crash::{CrashDiagnosis, CrashKind, SuspectReason};
@@ -121,6 +121,12 @@ pub struct ModHold {
     /// The held version and the one that crashed, as players read them.
     pub version: String,
     pub from_version: String,
+    /// The crashed version's Modrinth id and publish time (RFC 3339), when Modrinth knows it:
+    /// the hold hides that version and older ones, never a newer one ([`ModHold::hides`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_version_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_published: Option<String>,
     pub at_ms: i64,
     /// The crashing jar in the launcher trash (a mod of the player's): "Geri Al" puts it back.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -138,6 +144,26 @@ impl ModHold {
     /// Updates, repairs and pack upgrades leave the jar alone.
     pub fn holds(&self) -> bool {
         !self.failed
+    }
+
+    /// Whether the hold keeps `update` from the player's jar: the version that crashed and older
+    /// ones stay hidden, a newer one is offered as usual (a hold protects against the crash, not
+    /// against a fix). Without publish dates only the crashed version itself is hidden.
+    pub fn hides(&self, update: &AddonUpdate) -> bool {
+        if !self.holds() {
+            return false;
+        }
+        if self.from_version_id.as_deref() == Some(update.version_id.as_str()) {
+            return true;
+        }
+        let at = |text: &str| text.parse::<jiff::Timestamp>().ok();
+        match (
+            at(&update.date_published),
+            self.from_published.as_deref().and_then(at),
+        ) {
+            (Some(offered), Some(crashed)) => offered <= crashed,
+            _ => update.version_number == self.from_version,
+        }
     }
 }
 
@@ -263,6 +289,16 @@ impl ModHistory {
         changed
     }
 
+    /// The pack items `minecraft` still holds (a hold that did not help holds nothing): their
+    /// rollback overrides stay, any other ends (`pl_content::end_rollbacks`).
+    pub fn held_pack_items(&self, minecraft: &str) -> HashSet<String> {
+        self.holds_of(minecraft)
+            .iter()
+            .filter(|hold| hold.holds())
+            .filter_map(|hold| hold.pack_item.clone())
+            .collect()
+    }
+
     /// Marks the hold of `mod_id` as one that did not help (the game crashed with it again).
     pub fn mark_failed(&mut self, minecraft: &str, mod_id: &str) -> bool {
         match self
@@ -280,7 +316,8 @@ impl ModHistory {
 
     /// Drops the holds of `minecraft` that no longer describe the mods folder: a jar of the
     /// player's that is gone (updated or removed: their choice), a pack mod whose rollback override
-    /// is gone ("Paketin Sürümüne Dön"). `rollback_items` are the pack items with such an override.
+    /// is gone ("Paketin Sürümüne Dön", the pack moved on). `rollback_items` are the pack items
+    /// with such an override. A hold that did not help stays until a clean game, to say so.
     /// Returns whether anything went.
     pub fn reconcile(
         &mut self,
@@ -293,7 +330,7 @@ impl ModHistory {
         };
         let before = list.len();
         list.retain(|hold| match &hold.pack_item {
-            Some(item) => rollback_items.contains(item),
+            Some(item) => hold.failed || rollback_items.contains(item),
             None => snapshot.by_file(&hold.file).is_some(),
         });
         let changed = list.len() != before;
@@ -431,11 +468,27 @@ impl HeldFiles {
     }
 }
 
-/// Whether an update of `named` files (0: every update) leaves `file` where it is: a held jar
-/// updates only as the one file named ("Yine de Güncelle", the player's way out of its hold);
-/// every update and a list ("Tümünü Güncelle") skip it.
-pub fn left_out_of_update(holds: &[ModHold], file: &str, named: usize) -> bool {
-    named != 1 && hold_of(holds, file).is_some()
+/// The hold of `file` that keeps `update` from it ([`ModHold::hides`]): the update prompts show
+/// it as held ("Yine de Güncelle"), a newer version as a usual update.
+pub fn hold_hiding<'a>(
+    holds: &'a [ModHold],
+    file: &str,
+    update: &AddonUpdate,
+) -> Option<&'a ModHold> {
+    hold_of(holds, file).filter(|hold| hold.hides(update))
+}
+
+/// Whether an update of `named` files (0: every update) to `update` leaves `file` where it is:
+/// a held jar takes a version its hold hides only as the one file named ("Yine de Güncelle", the
+/// player's way out of the hold); every update and a list ("Tümünü Güncelle") skip it. A version
+/// newer than the one that crashed updates as usual.
+pub fn left_out_of_update(
+    holds: &[ModHold],
+    file: &str,
+    named: usize,
+    update: &AddonUpdate,
+) -> bool {
+    named != 1 && hold_hiding(holds, file, update).is_some()
 }
 
 /// The hold that keeps `file` (a jar of `mods/`) at its version, if any.
@@ -811,6 +864,8 @@ pub async fn roll_back_own(
         pack_item: None,
         version: plan.target.version_number.clone(),
         from_version,
+        from_version_id: plan.current.as_ref().map(|v| v.id.clone()),
+        from_published: plan.current.as_ref().map(|v| v.date_published.clone()),
         at_ms,
         trash_id: Some(trashed.id),
         proven: false,

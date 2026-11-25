@@ -6953,7 +6953,7 @@ export type LaunchEventView = {
 	type: "progress",
 } & ProgressView | 
 /**  The network is unreachable: continuing with installed files only. */
-({ type: "offline" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "launching" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+({ type: "offline" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; names?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "launching" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; names?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
 /**  The game process started; its window is not on screen yet ("Açılıyor"). */
 ({ type: "started"; pid: number | null; 
 /**
@@ -6967,9 +6967,9 @@ game: number;
  */
 firstStart: boolean; 
 /**  The account it plays with: "Oyunda" for that account alone (PLAY-ACCT). */
-account: GameAccount }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; mods?: never; name?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+account: GameAccount }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; mods?: never; name?: never; names?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
 /**  The game's window is on screen ("Oyunda"); sent once, never after the exit. */
-({ type: "windowShown" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "exited"; code: number | null; runtimeSecs: number }) & { account?: never; changedFiles?: never; changelog?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; version?: never } | {
+({ type: "windowShown" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; names?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "exited"; code: number | null; runtimeSecs: number }) & { account?: never; changedFiles?: never; changelog?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; names?: never; pid?: never; recent?: never; recommended?: never; version?: never } | {
 	type: "crashed",
 } & CrashView | {
 	type: "error",
@@ -6978,9 +6978,9 @@ account: GameAccount }) & { changedFiles?: never; changelog?: never; code?: neve
  *  `launch_cancel` stopped the launch before the game started (downloads and installs end,
  *  partial files go); the command bar simply returns to idle.
  */
-({ type: "cancelled" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+({ type: "cancelled" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; names?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
 /**  The official pack moved to a new version during this launch. */
-({ type: "packUpdated"; name: string; version: string; changelog: string | null; changedFiles: number }) & { account?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never } | 
+({ type: "packUpdated"; name: string; version: string; changelog: string | null; changedFiles: number }) & { account?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; names?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never } | 
 /**
  *  Changes the player made in the mods folder were adopted, files could not be read, or the
  *  mods folder was installed again (a non-blocking notice; details in the mod center).
@@ -6992,13 +6992,19 @@ account: GameAccount }) & { changedFiles?: never; changelog?: never; code?: neve
  *  The pack no longer offers this Minecraft version: the installed set was launched as it
  *  is. `recommended` is the version the pack recommends now.
  */
-({ type: "packVersionDropped"; minecraft: string; recommended: string | null }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; mods?: never; name?: never; pid?: never; recent?: never; runtimeSecs?: never; version?: never } | 
+({ type: "packVersionDropped"; minecraft: string; recommended: string | null }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; mods?: never; name?: never; names?: never; pid?: never; recent?: never; runtimeSecs?: never; version?: never } | 
+/**
+ *  REPAIR-RB: the pack moved past the version of a mod that crashed the game, which the
+ *  player had gone back from: the hold ended and the pack's new version is installed (told
+ *  once). `names` are the mods' titles.
+ */
+({ type: "packRollbackEnded"; names: string[] }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
 /**
  *  "Devam et" into a world while a mod breaks the game's quick play into worlds and no overlay
  *  of this launcher opens it instead (`pl_mc::launch::world_entry`): the game starts on its
  *  title screen, where the player opens the world. `mods` names those mods.
  */
-({ type: "worldFromTitle"; mods: string[] }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+({ type: "worldFromTitle"; mods: string[] }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; name?: never; names?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
 /**
  *  The mods would certainly stop the game: it was not started (the player chooses
  *  "Onar", "Yine de başlat" or "İptal").
@@ -7038,12 +7044,12 @@ account: GameAccount }) & { changedFiles?: never; changelog?: never; code?: neve
  *  files (at most three, newest first) for thumbnails; their folder is allowed in the asset
  *  protocol.
  */
-({ type: "newScreenshots"; count: number; recent: string[] }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+({ type: "newScreenshots"; count: number; recent: string[] }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; names?: never; pid?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
 /**
  *  "Ekran görüntülerini panoya kopyala" could not put a new screenshot on the clipboard
  *  (sent once per session, during the game; the page shows a quiet notice).
  */
-({ type: "screenshotNotCopied" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never };
+({ type: "screenshotNotCopied" }) & { account?: never; changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; game?: never; minecraft?: never; mods?: never; name?: never; names?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never };
 
 /**  Download preferences from Settings → İndirmeler, and how this launch starts. */
 export type LaunchSettings = {
