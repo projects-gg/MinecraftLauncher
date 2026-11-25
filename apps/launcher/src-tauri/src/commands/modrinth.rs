@@ -681,9 +681,10 @@ pub async fn content_update(
     }
     let owned = pack_owned(addons.game_dir());
     let wanted: HashSet<&str> = file_names.iter().map(String::as_str).collect();
-    // REPAIR-RB: "every update" leaves mods held after a crash; naming one updates it.
+    // REPAIR-RB: a mod held after a crash updates only as the one file named ("Yine de
+    // Güncelle"), which ends its hold; every update and a list ("Tümünü Güncelle") leave it.
     let holds = match kind {
-        ImportKind::Mod if wanted.is_empty() => {
+        ImportKind::Mod if wanted.len() != 1 => {
             crate::commands::rollback::recorded_holds(&state, &instance).await
         }
         _ => Vec::new(),
@@ -693,9 +694,7 @@ pub async fn content_update(
         .iter()
         .filter(|e| wanted.is_empty() || wanted.contains(e.file_name.as_str()))
         .filter(|e| !owned.contains(&index_key(kind.folder(), &e.file_name)))
-        .filter(|e| {
-            !pl_mc::mods::rollback::left_out_of_update(&holds, &e.file_name, wanted.is_empty())
-        })
+        .filter(|e| !pl_mc::mods::rollback::left_out_of_update(&holds, &e.file_name, wanted.len()))
         .filter_map(|e| e.update.as_ref().map(|u| u.version_id.clone()))
         .collect();
     ids.sort();
@@ -723,7 +722,7 @@ pub async fn content_update(
         )
         .await
         .map_err(content_error)?;
-    if kind == ImportKind::Mod && !file_names.is_empty() {
+    if kind == ImportKind::Mod && wanted.len() == 1 {
         crate::commands::rollback::release_updated(&state, &instance, &file_names).await;
     }
     Ok(report)
