@@ -893,3 +893,72 @@ pub async fn mods_rollback_undo(
     tracing::info!(instance = %instance_id, %mod_id, "going back was undone");
     Ok(())
 }
+
+/// Settings → Veri (or the instance's trash): a jar "Önceki Sürüme Dön" put in the launcher trash
+/// comes back to the mods folder. While its hold lasts that is "Geri Al": the held jar goes to the
+/// trash and the hold ends. Refused while the instance's game runs. Returns the jar's file name.
+pub(crate) async fn restore_trashed_mod(
+    app: &AppHandle,
+    state: &AppState,
+    instance_id: &str,
+    trash_id: &str,
+) -> CmdResult<String> {
+    refuse_while_running(state, instance_id)?;
+    let lock = instance_lock(app, instance_id);
+    let _guard = lock.lock().await;
+    refuse_while_running(state, instance_id)?;
+    let mut instance = state
+        .instances
+        .get(instance_id)
+        .await
+        .map_err(CmdError::from)?;
+    ensure_switch_finished(state, &mut instance).await?;
+    let game_dir = state
+        .instances
+        .game_dir(instance_id)
+        .map_err(CmdError::from)?;
+    let instance_dir = state
+        .instances
+        .instance_dir(instance_id)
+        .map_err(CmdError::from)?;
+    let history_file = history_path(&instance_dir);
+    let holds = ModHistory::load(&history_file)
+        .await
+        .holds_of(&instance.mc_version)
+        .to_vec();
+    let trash = LauncherTrash::new(state.root.join("trash"));
+    let back = pl_mc::mods::rollback::restore_trashed_mod(
+        &game_dir.join("mods"),
+        &trash,
+        instance_id,
+        &holds,
+        trash_id,
+    )
+    .await
+    .map_err(|error| {
+        CmdError::new(
+            "COP-GERI",
+            pick(
+                "Geri alınamadı. Tekrar dene.",
+                "Couldn't bring it back. Try again.",
+            ),
+            error.to_string(),
+        )
+    })?;
+    let restored = match back {
+        pl_mc::mods::rollback::TrashedModBack::HoldEnded { mod_id, path } => {
+            let _writing = HISTORY.lock().await;
+            let mut history = ModHistory::load(&history_file).await;
+            if history.release(&instance.mc_version, &mod_id).is_some() {
+                history.save(&history_file).await.map_err(content_error)?;
+            }
+            tracing::info!(instance = %instance_id, %mod_id, "a held mod's jar came back from the trash");
+            path
+        }
+        pl_mc::mods::rollback::TrashedModBack::Restored(path) => path,
+    };
+    Ok(restored
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default())
+}

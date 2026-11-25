@@ -874,13 +874,14 @@ pub async fn roll_back_own(
 }
 
 /// "Geri Al" after a player's mod went back: the held jar goes to the launcher trash and the jar
-/// that crashed comes back from it (checked first: nothing moves when it is gone).
+/// that crashed comes back from it (checked first: nothing moves when it is gone). Returns where
+/// it came back.
 pub async fn undo_own(
     mods_dir: &Path,
     trash: &LauncherTrash,
     instance_id: &str,
     hold: &ModHold,
-) -> Result<()> {
+) -> Result<PathBuf> {
     let trash_id = hold
         .trash_id
         .as_deref()
@@ -895,8 +896,43 @@ pub async fn undo_own(
                 .await?;
         }
     }
-    trash.restore(trash_id).await?;
-    Ok(())
+    trash.restore(trash_id).await
+}
+
+/// What [`restore_trashed_mod`] did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TrashedModBack {
+    /// A hold was made with the jar: it came back as "Geri Al" does (the held jar went to the
+    /// trash); the caller ends the hold of `mod_id`.
+    HoldEnded { mod_id: String, path: PathBuf },
+    /// No hold uses it: it went back where it was (under a free name when taken).
+    Restored(PathBuf),
+}
+
+/// A jar "Önceki Sürüme Dön" put in the launcher trash comes back from it (Settings → Veri). While
+/// a hold of `holds` (the active set's) was made with it, that is "Geri Al": the held jar goes to
+/// the trash, so the mod is never there twice, and the hold ends. Otherwise the jar returns like
+/// any trashed file.
+pub async fn restore_trashed_mod(
+    mods_dir: &Path,
+    trash: &LauncherTrash,
+    instance_id: &str,
+    holds: &[ModHold],
+    trash_id: &str,
+) -> Result<TrashedModBack> {
+    match holds
+        .iter()
+        .find(|hold| hold.trash_id.as_deref() == Some(trash_id))
+    {
+        Some(hold) => {
+            let path = undo_own(mods_dir, trash, instance_id, hold).await?;
+            Ok(TrashedModBack::HoldEnded {
+                mod_id: hold.mod_id.clone(),
+                path,
+            })
+        }
+        None => Ok(TrashedModBack::Restored(trash.restore(trash_id).await?)),
+    }
 }
 
 #[cfg(test)]

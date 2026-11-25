@@ -793,6 +793,16 @@ pub async fn trash_restore(
     if entry.instance_id != instance_id || entry.kind == TrashKind::Instance {
         return Err(not_found(format!("{id} belongs to another instance")));
     }
+    // REPAIR-RB: a mod's jar "Önceki Sürüme Dön" put here ends its hold when it comes back.
+    if entry.kind == TrashKind::Mod {
+        return crate::commands::rollback::restore_trashed_mod(
+            &app,
+            &state,
+            &instance_id,
+            &entry.id,
+        )
+        .await;
+    }
     let lock = world_lock(&app, &instance_id);
     let _guard = lock.lock().await;
     if entry.kind == TrashKind::World {

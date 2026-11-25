@@ -1090,7 +1090,10 @@ pub async fn cleanup_trash(state: State<'_, AppState>) -> CmdResult<TrashSummary
                 restorable: live_name.is_some()
                     && matches!(
                         kind,
-                        TrashKind::World | TrashKind::Backup | TrashKind::Screenshot
+                        TrashKind::World
+                            | TrashKind::Backup
+                            | TrashKind::Screenshot
+                            | TrashKind::Mod
                     ),
                 instance_name: live_name.or_else(|| trashed_names.get(&entry.instance_id).cloned()),
                 deleted_at: iso_ms(entry.deleted_at_ms),
