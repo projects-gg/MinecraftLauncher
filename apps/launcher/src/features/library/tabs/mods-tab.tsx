@@ -140,14 +140,11 @@ function ModRow({
             </Chip>
           ) : null}
         </div>
-        {/* Held after a crash (REPAIR-RB): "Güncelle" stays as the way out. */}
+        <p className="truncate text-[12.5px] text-ash-400">{mod.description}</p>
+        {/* Held after a crash (REPAIR-RB): "Yine de Güncelle" is the way out. */}
         {entry?.heldFrom ? (
-          <p className="truncate text-[12.5px] text-ash-300">
-            {t("repairRb.ownHeld", { version: entry.heldFrom })}
-          </p>
-        ) : (
-          <p className="truncate text-[12.5px] text-ash-400">{mod.description}</p>
-        )}
+          <p className="truncate text-[12.5px] text-ash-300">{t("repairRb.ownHeld")}</p>
+        ) : null}
       </div>
       {shownJob ? (
         <JobStatus job={shownJob} onCancel={onCancel} />
@@ -161,7 +158,7 @@ function ModRow({
           // Pressed in until its bar comes (see InstallControl).
           className={job ? "scale-[0.97]" : undefined}
         >
-          {t("content.actions.update")}
+          {entry.heldFrom ? t("repairRb.updateAnyway") : t("content.actions.update")}
         </Button>
       ) : null}
       <span className="hidden w-20 shrink-0 text-right text-[12px] text-ash-300 tabular-nums lg:block">

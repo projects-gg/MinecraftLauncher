@@ -4,18 +4,18 @@
 export const trRepairRb = {
   crash: {
     /** Why going back is offered: the suspect changed since the last game that worked. */
-    changed: "{{name}} en son çökmeyen oyundan sonra güncellendi.",
-    added: "{{name}} en son çökmeyen oyundan sonra eklendi.",
+    changed: "{{name}} güncellendikten sonra oyun çöktü.",
+    added: "{{name}} eklendikten sonra oyun çöktü.",
     /** The crash dialog's action. */
     action: "Önceki Sürüme Dön",
     /** The same button while the earlier version is put in place. */
     working: "Kuruluyor",
     /** After it went back. */
-    done: "{{name}} {{version}} sürümüne döndü.",
-    held: "Sen güncelleyene kadar bu sürümde kalır.",
+    done: "{{name}} önceki sürümüne döndü.",
+    held: "Sen güncelleyene kadar bu sürümde kalacak.",
     undo: "Geri Al",
     /** Toast after "Geri Al": the version that crashed is back. */
-    undone: "{{name}} {{version}} sürümüne geri döndü.",
+    undone: "{{name}} yeni sürümüne geri döndü.",
     /** Going back is not offered: it went back already and crashed again. */
     repeated: "{{name}} önceki sürümde de çöktü.",
     /** Going back is not offered: nothing older runs on this Minecraft version. */
@@ -24,8 +24,10 @@ export const trRepairRb = {
     openReport: "Çökme Raporunu Aç",
     openLog: "Oyun Kaydını Aç",
   },
-  /** Note on a mod of the player's held at its version (Modlar → Kendi modların). */
-  ownHeld: "{{version}} çöktüğü için bu sürümde kalıyor.",
+  /** Note on a mod of the player's held at its version (Modlar, Kendi modların): its version shows. */
+  ownHeld: "Yeni sürümü çöktüğü için bu sürümde kalıyor.",
+  /** That row's update: the way out of the hold. */
+  updateAnyway: "Yine de Güncelle",
   /** Note on an official pack mod held at its version (Önerilenler). */
   packHeld: "Yeni sürümü çöktüğü için {{version}} sürümünde kalıyor.",
 };

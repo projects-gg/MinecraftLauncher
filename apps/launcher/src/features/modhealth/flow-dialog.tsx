@@ -7,6 +7,7 @@ import {
   DownloadSimple,
   FileText,
   FolderSimple,
+  Info,
   Lifebuoy,
   Package,
   SlidersHorizontal,
@@ -409,9 +410,7 @@ export function ModFlowDialog() {
         await api.modHealth.undoRollback(instanceId, done.modId, newJobId());
         void queryClient.invalidateQueries({ queryKey: ["content-scan", instanceId] });
         void queryClient.invalidateQueries({ queryKey: ["mod-center", instanceId] });
-        toast.success(
-          t("repairRb.crash.undone", { name: done.name, version: crash.rollback?.from ?? "" }),
-        );
+        toast.success(t("repairRb.crash.undone", { name: done.name }));
         close();
       } catch (error) {
         showError(error);
@@ -438,14 +437,6 @@ export function ModFlowDialog() {
               <CheckCircle size={19} weight="fill" className="shrink-0 text-jade-400" />
               {t("modHealth.crash.turnedOff", { name: turnedOff })}
             </motion.p>
-          ) : rolledBack ? (
-            <motion.div key="back" {...rise(prefs.reduce, 4, 0.24)} className="space-y-1">
-              <p className="flex items-center gap-2.5 text-[14px] font-medium text-bone-50">
-                <CheckCircle size={19} weight="fill" className="shrink-0 text-jade-400" />
-                {t("repairRb.crash.done", { name: rolledBack.name, version: rolledBack.version })}
-              </p>
-              <p className="pl-[29.5px] text-[13px] text-ash-300">{t("repairRb.crash.held")}</p>
-            </motion.div>
           ) : null}
         </AnimatePresence>
         <p className="text-[14.5px] leading-relaxed text-bone-100">
@@ -485,26 +476,37 @@ export function ModFlowDialog() {
             </ul>
           </section>
         ) : null}
-        <AnimatePresence initial={false}>
-          {rollback || (rollbackNote && !rolledBack) ? (
+        {/* REPAIR-RB: why going back is offered, why it is not, or (in the same place) that it
+            went back. */}
+        <AnimatePresence mode="popLayout" initial={false}>
+          {rolledBack ? (
+            <motion.div key="done" {...rise(prefs.reduce, 4, 0.24)} className="space-y-1">
+              <p className="flex items-start gap-2.5 text-[14px] font-medium text-bone-50">
+                <CheckCircle
+                  size={18}
+                  weight="fill"
+                  className="mt-[2px] shrink-0 text-jade-400"
+                  aria-hidden
+                />
+                {t("repairRb.crash.done", { name: rolledBack.name })}
+              </p>
+              <p className="pl-[28px] text-[13px] text-ash-300">{t("repairRb.crash.held")}</p>
+            </motion.div>
+          ) : rollback || rollbackNote ? (
             <motion.p
               key={rollback ? "rollback" : `note-${rollbackNote?.kind}`}
               {...rise(prefs.reduce, 4, 0.24)}
               className="flex items-start gap-2.5 text-[13.5px] leading-relaxed text-bone-100"
             >
-              {rollback ? (
-                <ArrowCounterClockwise
-                  size={17}
-                  className="mt-[3px] shrink-0 text-ash-300"
-                  aria-hidden
-                />
-              ) : (
+              {rollbackNote?.kind === "repeated" && !rollback ? (
                 <Warning
                   size={17}
                   weight="fill"
                   className="mt-[3px] shrink-0 text-gold-300"
                   aria-hidden
                 />
+              ) : (
+                <Info size={17} className="mt-[3px] shrink-0 text-ash-300" aria-hidden />
               )}
               <span className="min-w-0">
                 {rollback
