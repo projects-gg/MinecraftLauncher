@@ -233,6 +233,7 @@ impl Downloader {
         items: Vec<DownloadItem>,
         options: &DownloadOptions,
     ) -> Result<DownloadSummary> {
+        let started = Instant::now();
         let mut seen = HashSet::new();
         let items: Vec<DownloadItem> = items
             .into_iter()
@@ -343,6 +344,19 @@ impl Downloader {
                 cause: first.cause(),
                 origin,
             });
+        }
+        if summary.downloaded > 0 {
+            // How fast a batch came (LIGHT): one line a batch, so a slow install says where.
+            let elapsed_ms = started.elapsed().as_millis() as u64;
+            tracing::debug!(
+                files = summary.downloaded,
+                skipped = summary.skipped,
+                bytes = summary.bytes,
+                elapsed_ms,
+                concurrency = options.concurrency,
+                kib_per_s = summary.bytes * 1000 / 1024 / elapsed_ms.max(1),
+                "downloads done"
+            );
         }
         Ok(summary)
     }
@@ -598,7 +612,7 @@ impl Downloader {
         url: &str,
         from: u64,
     ) -> std::result::Result<reqwest::Response, reqwest::Error> {
-        let mut request = self.http.client().get(url);
+        let mut request = self.http.files_client().get(url);
         if from > 0 {
             request = request
                 .header(reqwest::header::RANGE, format!("bytes={from}-"))

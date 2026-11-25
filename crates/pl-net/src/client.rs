@@ -31,39 +31,66 @@ impl HttpConfig {
 #[derive(Debug, Clone)]
 pub struct Http {
     client: reqwest::Client,
+    /// Whole files ([`crate::Downloader`]): HTTP/1.1 only, so a batch of N downloads runs on N
+    /// connections. Every download host (Mojang, Fabric, Modrinth, our CDN) negotiates HTTP/2,
+    /// which put a whole batch on one connection: where one connection gets little (loss on the
+    /// way, a CDN's pace per connection; the official pack once came at 0.2 MB/s), the batch got
+    /// only that. Measured (LIGHT, 25 Nov): the pack's 48 Modrinth files 1.3–2.1 s on 8
+    /// connections, 2.2–2.5 s on one; 1188 Mojang assets 2.0–3.5 s on 32, 3.7–5.3 s on one.
+    files: reqwest::Client,
     retries: u32,
 }
 
 impl Http {
     pub fn new(config: HttpConfig) -> Result<Self> {
-        Self::build(config, reqwest::redirect::Policy::default())
+        Self::build(config, true)
     }
 
     /// Like [`Self::new`], but no redirect is followed (it comes back as an error status): for
     /// addresses that must stay on the host they name (OVL-AVATARS: the overlay's pictures stay on
     /// the launcher's picture hosts, as the page's CSP keeps its own).
     pub fn new_without_redirects(config: HttpConfig) -> Result<Self> {
-        Self::build(config, reqwest::redirect::Policy::none())
+        Self::build(config, false)
     }
 
-    fn build(config: HttpConfig, redirects: reqwest::redirect::Policy) -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .user_agent(config.user_agent)
-            .connect_timeout(config.connect_timeout)
-            .read_timeout(config.read_timeout)
-            .pool_idle_timeout(Duration::from_secs(60))
-            .redirect(redirects)
+    fn build(config: HttpConfig, follow_redirects: bool) -> Result<Self> {
+        let client = Self::builder(&config, follow_redirects)
+            .build()
+            .map_err(|e| NetError::Setup(e.to_string()))?;
+        let files = Self::builder(&config, follow_redirects)
+            .http1_only()
             .build()
             .map_err(|e| NetError::Setup(e.to_string()))?;
         Ok(Self {
             client,
+            files,
             retries: config.retries,
         })
+    }
+
+    fn builder(config: &HttpConfig, follow_redirects: bool) -> reqwest::ClientBuilder {
+        let redirects = if follow_redirects {
+            reqwest::redirect::Policy::default()
+        } else {
+            reqwest::redirect::Policy::none()
+        };
+        reqwest::Client::builder()
+            .user_agent(config.user_agent.clone())
+            .connect_timeout(config.connect_timeout)
+            .read_timeout(config.read_timeout)
+            .pool_idle_timeout(Duration::from_secs(60))
+            .redirect(redirects)
     }
 
     /// The underlying client, for requests that need custom headers or methods.
     pub fn client(&self) -> &reqwest::Client {
         &self.client
+    }
+
+    /// The client for whole files ([`crate::Downloader`]): HTTP/1.1, a connection for each
+    /// download running at once.
+    pub fn files_client(&self) -> &reqwest::Client {
+        &self.files
     }
 
     pub fn retries(&self) -> u32 {
