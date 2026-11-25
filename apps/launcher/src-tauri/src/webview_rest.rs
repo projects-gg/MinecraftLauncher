@@ -45,10 +45,11 @@ const REST_AFTER: Duration = Duration::from_secs(10);
 #[cfg(windows)]
 const CHECK_AGAIN: Duration = Duration::from_secs(5 * 60);
 /// A page woken for a moment ([`Delivery::Moment`]) may be suspended again this long after the
-/// last one: time for its own gathering (a crewmate's arrival waits 5 s for others) and the
-/// notification it shows.
+/// last one: time for its own gathering (a crewmate's arrival waits 5 s for others, a chat's 4 s),
+/// the notification it shows, and its toasts' own time (a crew call's is 20 s), so none is left
+/// frozen on screen for the player's return.
 #[cfg(windows)]
-const MOMENT_REST: Duration = Duration::from_secs(20);
+const MOMENT_REST: Duration = Duration::from_secs(30);
 /// Events kept for a suspended page (a state counts once); past this many it wakes to take them.
 const HELD_MAX: usize = 200;
 

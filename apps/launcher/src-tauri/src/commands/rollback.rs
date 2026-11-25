@@ -286,6 +286,22 @@ pub(crate) async fn recorded_holds(state: &AppState, instance: &Instance) -> Vec
         .to_vec()
 }
 
+/// The player updated mods by name: their holds end (the jar may keep its file name).
+pub(crate) async fn release_updated(state: &AppState, instance: &Instance, files: &[String]) {
+    let Ok(instance_dir) = state.instances.instance_dir(&instance.id) else {
+        return;
+    };
+    let path = history_path(&instance_dir);
+    let _writing = HISTORY.lock().await;
+    let mut history = ModHistory::load(&path).await;
+    if history.release_files(&instance.mc_version, files) {
+        tracing::info!(instance = %instance.id, "holds ended by an update the player chose");
+        if let Err(error) = history.save(&path).await {
+            tracing::warn!(%error, "the mod history was not saved");
+        }
+    }
+}
+
 // --- crashes -----------------------------------------------------------------------------------
 
 /// A game crashed (a fresh crash, not a dialog built again): when it crashed with a mod held

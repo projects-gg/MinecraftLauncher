@@ -167,12 +167,14 @@ export function JobStatus({
   );
 }
 
-export type InstallState = "none" | "installed" | "update" | "pack";
+/** `heldUpdate`: an update of a mod kept on its earlier version after a crash (REPAIR-RB). */
+export type InstallState = "none" | "installed" | "update" | "heldUpdate" | "pack";
 
 export function installState(entry: InstalledContent | undefined): InstallState {
   if (!entry) return "none";
   if (entry.fromPack) return "pack";
-  return entry.update ? "update" : "installed";
+  if (!entry.update) return "installed";
+  return entry.heldFrom ? "heldUpdate" : "update";
 }
 
 /** Install / installed / update / remove control for a project in an instance. */
@@ -232,7 +234,7 @@ export function InstallControl({
   }
   return (
     <div className="flex items-center gap-1.5">
-      {state === "update" ? (
+      {state === "update" || state === "heldUpdate" ? (
         <Button
           size="sm"
           variant="secondary"
@@ -240,7 +242,7 @@ export function InstallControl({
           onClick={onUpdate}
           className={held}
         >
-          {t("content.actions.update")}
+          {state === "heldUpdate" ? t("repairRb.updateAnyway") : t("content.actions.update")}
         </Button>
       ) : (
         <Chip tone="jade">{t("content.actions.installed")}</Chip>
