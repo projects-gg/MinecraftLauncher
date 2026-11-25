@@ -6,7 +6,9 @@
 //! moment: no timer, no polling. What is known of each token's expiry stays in memory, so a window
 //! coming back with nothing due costs no keychain read. A launch during a warm-up waits for it
 //! (they share pl-auth's lock) and asks Microsoft nothing itself. Without a network it stays
-//! quiet; the next moment tries again, and the launch decides as before.
+//! quiet; the next moment tries again, and the launch decides as before. Any other failure (a
+//! refresh token Microsoft no longer takes) is left to the launch, with the token it still has:
+//! the warm-up neither marks the account nor asks again this run.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -21,8 +23,9 @@ use uuid::Uuid;
 
 use crate::state::AppState;
 
-/// When each account's Minecraft token expires, as last seen.
-static EXPIRY: Mutex<Option<HashMap<Uuid, Timestamp>>> = Mutex::new(None);
+/// When each account's Minecraft token expires, as last seen; `None`: the warm-up failed for it
+/// (other than offline) and leaves it to the launch for this run.
+static EXPIRY: Mutex<Option<HashMap<Uuid, Option<Timestamp>>>> = Mutex::new(None);
 /// A warm-up is on its way.
 static RUNNING: AtomicBool = AtomicBool::new(false);
 
@@ -54,29 +57,39 @@ pub fn warm(app: &AppHandle, why: &'static str) {
         let elapsed_ms = started.elapsed().as_millis() as u64;
         match result {
             Ok(warmed) => {
-                remember(account.id, warmed.expires_at());
+                remember(account.id, Some(warmed.expires_at()));
                 if matches!(warmed, WarmSession::Refreshed { .. }) {
                     tracing::info!(why, elapsed_ms, "session refreshed ahead of play");
                 }
             }
-            Err(error) => tracing::debug!(
-                why,
-                elapsed_ms,
-                code = %error.code(),
-                class = ?error.class(),
-                "session not refreshed ahead of play"
-            ),
+            Err(error) => {
+                if error.class() != pl_auth::FailureClass::Offline {
+                    remember(account.id, None);
+                }
+                tracing::debug!(
+                    why,
+                    elapsed_ms,
+                    code = %error.code(),
+                    class = ?error.class(),
+                    "session not refreshed ahead of play"
+                );
+            }
         }
     });
 }
 
-/// Whether the account's token may expire within the margin: unknown counts as due.
+/// Whether the account's token may expire within the margin: unknown counts as due, a failed
+/// warm-up never.
 fn due(id: Uuid, now: Timestamp) -> bool {
     let known = EXPIRY
         .lock()
         .ok()
         .and_then(|map| map.as_ref().and_then(|map| map.get(&id).copied()));
-    known.is_none_or(|expires_at| expires_within(expires_at, now))
+    match known {
+        None => true,
+        Some(None) => false,
+        Some(Some(expires_at)) => expires_within(expires_at, now),
+    }
 }
 
 fn expires_within(expires_at: Timestamp, now: Timestamp) -> bool {
@@ -86,7 +99,7 @@ fn expires_within(expires_at: Timestamp, now: Timestamp) -> bool {
         .map_or(true, |deadline| expires_at <= deadline)
 }
 
-fn remember(id: Uuid, expires_at: Timestamp) {
+fn remember(id: Uuid, expires_at: Option<Timestamp>) {
     if let Ok(mut map) = EXPIRY.lock() {
         map.get_or_insert_with(HashMap::new).insert(id, expires_at);
     }
