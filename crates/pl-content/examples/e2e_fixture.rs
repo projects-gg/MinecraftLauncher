@@ -33,6 +33,12 @@
 //! `--feature <name>` (repeatable) turns a feature flag of the config on by its JSON name
 //! (`--feature modRollback`).
 //!
+//! `--item-file <slug>=pick:<n>` (repeatable) makes a catalog item of the 1.21.1 member use the
+//! n-th newest Modrinth build (0: the newest); `--item-file <slug>=jar:<path>` ships a local jar
+//! for it instead, served like the config file. With releases 3 and on (pack versions `1.2.0`,
+//! ...) this plays a pack update that brings a crashing jar and a later one that fixes it
+//! (REPAIR-RB).
+//!
 //! `--afk <zip>` publishes an AFK client build for this computer's platform (the zip as the
 //! client's CI makes it: `Projects-Konsol-Hesap(.exe)` at its root) as version `--afk-version`
 //! (default `9.9.9-e2e`), served from `<out-dir>/v1/afk/<version>/<platform>.zip`. A run without it
@@ -51,6 +57,8 @@ const FABRIC_LOADER: &str = "0.19.5";
 /// Where the test server serves `<out-dir>/v1/files/` (`--files-url` replaces it).
 const LOCAL_FILES: &str = "http://127.0.0.1:8787/v1/files";
 static FILES_URL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+/// `--item-file`: slug → `pick:<n>` or `jar:<path>` for the 1.21.1 member.
+static ITEM_FILES: std::sync::OnceLock<HashMap<String, String>> = std::sync::OnceLock::new();
 const FAMILY: &str = "projects";
 
 /// A mod of the catalog.
@@ -183,6 +191,23 @@ fn config_file(v1: &Path, minecraft: &str, release: u32) -> Value {
     })
 }
 
+/// A pack file for a local jar (`--item-file <slug>=jar:<path>`), served like the config file.
+fn jar_file(v1: &Path, jar: &Path) -> Value {
+    let bytes = std::fs::read(jar).expect("read the item's jar");
+    let sha1 = pl_net::hash_bytes(&bytes, HashAlgo::Sha1);
+    let sha512 = pl_net::hash_bytes(&bytes, HashAlgo::Sha512);
+    write(v1, &format!("files/{sha1}"), &bytes);
+    let files_url = FILES_URL.get().map_or(LOCAL_FILES, String::as_str);
+    let name = jar.file_name().expect("jar file name").to_string_lossy();
+    json!({
+        "path": format!("mods/{name}"),
+        "hashes": { "sha1": sha1, "sha512": sha512 },
+        "env": { "client": "required", "server": "optional" },
+        "downloads": [format!("{files_url}/{sha1}")],
+        "fileSize": bytes.len(),
+    })
+}
+
 fn write(base: &Path, relative: &str, bytes: &[u8]) {
     let path = base.join(relative);
     std::fs::create_dir_all(path.parent().expect("parent")).expect("create folder");
@@ -207,12 +232,22 @@ async fn member(
     let mut version_ids: HashMap<&str, String> = HashMap::new();
     for entry in catalog {
         let versions = modrinth_versions(http, entry.slug, minecraft).await;
-        let pick = if older.contains(&entry.slug) && versions.len() > 1 {
-            1
-        } else {
-            0
+        let wanted = ITEM_FILES
+            .get()
+            .filter(|_| minecraft == "1.21.1")
+            .and_then(|files| files.get(entry.slug));
+        let pick = match wanted.and_then(|spec| spec.strip_prefix("pick:")) {
+            Some(n) => n
+                .parse::<usize>()
+                .expect("pick:<n>")
+                .min(versions.len() - 1),
+            None if older.contains(&entry.slug) && versions.len() > 1 => 1,
+            None => 0,
         };
-        let (file, project, version_id) = file_entry(&versions[pick]);
+        let (mut file, project, version_id) = file_entry(&versions[pick]);
+        if let Some(jar) = wanted.and_then(|spec| spec.strip_prefix("jar:")) {
+            file = jar_file(v1, Path::new(jar));
+        }
         let path = file["path"].as_str().expect("path").to_owned();
         paths.insert(entry.slug, (project, path));
         version_ids.insert(entry.slug, version_id);
@@ -387,13 +422,16 @@ async fn main() {
     let mut args = std::env::args().skip(1);
     let Some(out) = args.next().map(PathBuf::from) else {
         eprintln!(
-            "usage: e2e_fixture <out-dir> [1|2] [--feed-key <public key> [--feed-mirror <url>]] \
-             [--overrides <feed.json>] [--files-url <url>] [--join-event] \
+            "usage: e2e_fixture <out-dir> [release] [--feed-key <public key> [--feed-mirror <url>]] \
+             [--overrides <feed.json>] [--files-url <url>] [--join-event] [--feature <name>] \
+             [--item-file <slug>=pick:<n>|jar:<path>] \
              [--afk <client zip> [--afk-version <version>] | --no-afk]"
         );
         std::process::exit(2);
     };
-    let release: u32 = args.next().map_or(1, |v| v.parse().expect("1 or 2"));
+    let release: u32 = args
+        .next()
+        .map_or(1, |v| v.parse().expect("a release number"));
     // Optional news feed (`feed_fixture` prints its throwaway key). The launcher reads it from
     // `PROJECTS_FEED_MIRRORS` in debug builds; the mirror here only has to be a valid one.
     let mut feed_key = None;
@@ -407,6 +445,7 @@ async fn main() {
     let mut no_afk = false;
     // Feature flags to turn on, by their JSON names.
     let mut features: Vec<String> = Vec::new();
+    let mut item_files: HashMap<String, String> = HashMap::new();
     while let Some(flag) = args.next() {
         match flag.as_str() {
             "--feed-key" => feed_key = args.next(),
@@ -417,6 +456,11 @@ async fn main() {
             "--afk-version" => afk_version = args.next().expect("--afk-version <version>"),
             "--no-afk" => no_afk = true,
             "--feature" => features.push(args.next().expect("--feature <name>")),
+            "--item-file" => {
+                let spec = args.next().expect("--item-file <slug>=<spec>");
+                let (slug, spec) = spec.split_once('=').expect("<slug>=pick:<n>|jar:<path>");
+                item_files.insert(slug.to_owned(), spec.to_owned());
+            }
             "--files-url" => {
                 let url = args.next().expect("--files-url <url>");
                 FILES_URL
@@ -426,6 +470,7 @@ async fn main() {
             other => panic!("unknown argument {other}"),
         }
     }
+    ITEM_FILES.set(item_files).expect("item files once");
     let v1 = out.join("v1");
     std::fs::create_dir_all(&v1).expect("create output");
 
