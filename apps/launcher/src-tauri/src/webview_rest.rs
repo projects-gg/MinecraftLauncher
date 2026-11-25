@@ -423,9 +423,8 @@ mod platform {
         if hidden && let Err(error) = unsafe { controller.SetIsVisible(true) } {
             tracing::warn!(%error, "webview not made visible");
         }
-        if suspended {
-            hand_over(&app);
-        }
+        // Also what waits for a suspend still on its way (it no longer applies).
+        hand_over(&app);
         tracing::debug!(
             why,
             suspended,
@@ -496,6 +495,11 @@ mod platform {
             return;
         };
         let resume = core.clone();
+        // Events wait from the moment the suspend is asked for: one sent while the request is on
+        // its way would reach a page that freezes before running it. A suspend that does not
+        // happen, or no longer applies, hands them over at once.
+        held_from_now();
+        let main = app.clone();
         let handler = TrySuspendCompletedHandler::create(Box::new(move |result, done| {
             let suspended = result.is_ok() && done;
             let current = with_rest(|rest| {
@@ -506,18 +510,19 @@ mod platform {
                 current
             })
             .unwrap_or(false);
-            if suspended && current {
-                held_from_now();
-            }
             if suspended && !current {
                 // The window came back, or the page was woken, while the request went out.
                 let _ = unsafe { resume.Resume() };
+            }
+            if !(suspended && current) {
+                hand_over(&main);
             }
             tracing::debug!(suspended, current, "webview rests, suspend answered");
             Ok(())
         }));
         if let Err(error) = unsafe { core.TrySuspend(&handler) } {
             tracing::debug!(%error, "webview not suspended");
+            hand_over(app);
         }
     }
 
@@ -576,9 +581,8 @@ mod platform {
         {
             tracing::debug!(%error, "webview did not resume");
         }
-        if suspended {
-            hand_over(app);
-        }
+        // Also what waits for a suspend still on its way (it no longer applies).
+        hand_over(app);
         tracing::debug!(why, suspended, "webview woken");
         if away {
             schedule(app, epoch, rest_again);

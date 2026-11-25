@@ -1170,6 +1170,8 @@ async fn account_ready(
     if !account.is_microsoft() {
         return Ok(EarlySession::Ready);
     }
+    // A background refresh of this account that stalled stops; the launch refreshes itself (LIGHT).
+    crate::session_warm::launch_starts(account.id);
     match state.auth.ensure_fresh(account.id, cancel).await {
         Ok(_) => Ok(EarlySession::Ready),
         Err(_) if cancel.is_cancelled() => Err(cancelled()),
@@ -1670,13 +1672,17 @@ async fn prepare_and_spawn(
             GameEvent::Crashed(_) => None,
             GameEvent::Line(line) => {
                 log_worlds.game_log(&line.message);
-                // The instance page's log tab follows the game live.
-                let _ = log_app.emit(
+                // The instance page's log tab follows the game live. A sleeping page drops the
+                // lines instead of keeping a whole session inside WebView2; its log tab reads the
+                // log again when the window comes back (LIGHT).
+                crate::webview_rest::emit_to_page(
+                    &log_app,
                     "game-log",
-                    GameLogEvent {
+                    &GameLogEvent {
                         instance_id: log_instance.clone(),
                         line,
                     },
+                    crate::webview_rest::Delivery::Passing,
                 );
                 None
             }
