@@ -26,6 +26,16 @@
 //! after [`MAX_TRAININGS`] starts without a recording; a cached start that crashed before it got
 //! to play, or whose JVM itself died later (TELEM-JVM), drops its cache for good
 //! ([`AotStore::give_up`]).
+//!
+//! Two kinds of cache ([`AotMode`]). `Full` is Java's default: classes loaded and linked, the
+//! methods' profiles and the adapters' machine code. `Lite` (AOT-LITE) is made with
+//! `-XX:-AOTClassLinking`, a product option, and on Java 25 that also leaves the profiles and the
+//! machine code out ("AOT Code Cache is not used"): what stays is the classes, read as Java's
+//! default CDS archive has done since JDK 12. Games with full caches crashed in the JVM's JIT and
+//! GC threads on Mojang's 25.0.1 (TELEM-JVM; a full cache also crashed C1 locally, AOT-LITE). Open
+//! JDK bugs of that kind are in the profiles (JDK-8397398, JDK-8369857, fixed in no 25 update) and
+//! the cached machine code (JDK-8388703, 25.0.5); the lite cache leaves out linking, profiles and
+//! cached code. The mode is part of the key, so one mode never uses the other's files.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -57,6 +67,10 @@ pub const CREATE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 /// The JVM's cache and CDS messages are not the player's business (a refused cache is a normal
 /// start).
 pub const QUIET_LOG: &str = "-Xlog:aot*=off,cds*=off";
+/// The JVM option of a lite cache's training start, kept for its create step (which repeats the
+/// training's options). A product option: no `-XX:+UnlockDiagnosticVMOptions`, so a runtime that
+/// renames a diagnostic option cannot fail the start.
+pub const LITE_OPTION: &str = "-XX:-AOTClassLinking";
 
 const CACHE_EXT: &str = "aot";
 const CONFIG_EXT: &str = "aotconf";
@@ -66,6 +80,16 @@ const JAVA_EXT: &str = "java";
 const TRIES_EXT: &str = "tries";
 /// A key given up for good (its training crashed, or its cache did).
 const GIVEN_UP: &str = "x";
+
+/// What a cache holds (AOT-LITE).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AotMode {
+    /// Java's defaults (`features.aotCache`): classes loaded and linked, method profiles, the
+    /// adapters' machine code.
+    Full,
+    /// Classes only (`features.aotLite`): trained and made with [`LITE_OPTION`].
+    Lite,
+}
 
 /// What one launch does about the cache.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,12 +105,13 @@ pub enum AotPlan {
 /// A launch's cache key, or `None` when this launch cannot have a cache: Java older than
 /// [`MIN_JAVA_MAJOR`], not a Fabric start, a wrapper command, a client jar that is not the class
 /// path's last entry, a Java agent or the player's own CDS/AOT options. `java_home` is the runtime's folder (its
-/// `release` file and module image are part of the key).
+/// `release` file and module image are part of the key), `mode` the kind of cache.
 pub fn launch_key(
     command: &LaunchCommand,
     java_major: u32,
     java_home: &Path,
     client_jar: &Path,
+    mode: AotMode,
 ) -> Option<String> {
     if java_major < MIN_JAVA_MAJOR {
         return None;
@@ -111,6 +136,11 @@ pub fn launch_key(
         hasher.update(b"\n");
     };
     line(&command.program.to_string_lossy());
+    // A lite cache never stands in for a full one, nor the other way round; full keys stay as they
+    // were before AOT-LITE.
+    if mode == AotMode::Lite {
+        line("aot-mode lite");
+    }
     let release = std::fs::read_to_string(java_home.join("release")).unwrap_or_default();
     line(&release);
     line(&stamp(&java_home.join("lib").join("modules")));
@@ -190,15 +220,19 @@ pub fn use_jvm_args(cache: &Path) -> Vec<String> {
     ]
 }
 
-/// JVM options of a training start that records into `config`; the client jar goes to Fabric by
-/// [`GAME_JAR_PROPERTY`] (the caller takes it off the class path).
-pub fn training_jvm_args(config: &Path, client_jar: &Path) -> Vec<String> {
-    vec![
+/// JVM options of a training start that records into `config` for a `mode` cache; the client jar
+/// goes to Fabric by [`GAME_JAR_PROPERTY`] (the caller takes it off the class path).
+pub fn training_jvm_args(config: &Path, client_jar: &Path, mode: AotMode) -> Vec<String> {
+    let mut args = vec![
         "-XX:AOTMode=record".to_owned(),
         format!("-XX:AOTConfiguration={}", config.display()),
-        QUIET_LOG.to_owned(),
-        format!("-D{GAME_JAR_PROPERTY}={}", client_jar.display()),
-    ]
+    ];
+    if mode == AotMode::Lite {
+        args.push(LITE_OPTION.to_owned());
+    }
+    args.push(QUIET_LOG.to_owned());
+    args.push(format!("-D{GAME_JAR_PROPERTY}={}", client_jar.display()));
+    args
 }
 
 /// The JVM options the create step repeats from a training start: everything but the recording's
@@ -557,6 +591,7 @@ mod tests {
             25,
             &home,
             &client,
+            AotMode::Full,
         )
         .unwrap();
         assert_eq!(key.len(), 16);
@@ -566,14 +601,28 @@ mod tests {
         other[4] = "-Dprojects.overlay.token=zzzzzz".to_owned();
         other.push("-Dminecraft.launcher.version=2.1.4".to_owned());
         assert_eq!(
-            launch_key(&command(dir.path(), other, FABRIC_MAIN), 25, &home, &client).as_deref(),
+            launch_key(
+                &command(dir.path(), other, FABRIC_MAIN),
+                25,
+                &home,
+                &client,
+                AotMode::Full
+            )
+            .as_deref(),
             Some(key.as_str())
         );
         // A player's option, a changed jar, another runtime: another key.
         let mut typed = jvm.clone();
         typed.push("-XX:+UseZGC".to_owned());
         assert_ne!(
-            launch_key(&command(dir.path(), typed, FABRIC_MAIN), 25, &home, &client).unwrap(),
+            launch_key(
+                &command(dir.path(), typed, FABRIC_MAIN),
+                25,
+                &home,
+                &client,
+                AotMode::Full
+            )
+            .unwrap(),
             key
         );
         std::fs::write(dir.path().join("lib.jar"), b"lib, newer").unwrap();
@@ -582,12 +631,20 @@ mod tests {
             25,
             &home,
             &client,
+            AotMode::Full,
         )
         .unwrap();
         assert_ne!(changed, key);
         std::fs::write(home.join("release"), "JAVA_VERSION=\"25.0.2\"").unwrap();
         assert_ne!(
-            launch_key(&command(dir.path(), jvm, FABRIC_MAIN), 25, &home, &client).unwrap(),
+            launch_key(
+                &command(dir.path(), jvm, FABRIC_MAIN),
+                25,
+                &home,
+                &client,
+                AotMode::Full
+            )
+            .unwrap(),
             changed
         );
     }
@@ -596,7 +653,14 @@ mod tests {
     fn only_fabric_on_java_25_with_the_client_jar_last_and_no_agents() {
         let (dir, home, client, jvm) = setup();
         let ok = |jvm: Vec<String>, main: &str, major: u32| {
-            launch_key(&command(dir.path(), jvm, main), major, &home, &client).is_some()
+            launch_key(
+                &command(dir.path(), jvm, main),
+                major,
+                &home,
+                &client,
+                AotMode::Full,
+            )
+            .is_some()
         };
         assert!(ok(jvm.clone(), FABRIC_MAIN, 25));
         assert!(ok(jvm.clone(), FABRIC_MAIN, 26));
@@ -627,7 +691,7 @@ mod tests {
         let config = Path::new("x.aotconf");
         let client = Path::new("client.jar");
         let mut training = vec!["-Xms1024M".to_owned(), "-Xmx4096M".to_owned()];
-        training.extend(training_jvm_args(config, client));
+        training.extend(training_jvm_args(config, client, AotMode::Full));
         training.push("-Dprojects.overlay.token=secret".to_owned());
         training.extend(["-cp".to_owned(), "lib.jar".to_owned()]);
         let options = create_jvm_options(&training);
@@ -646,6 +710,43 @@ mod tests {
                 .iter()
                 .any(|a| a == QUIET_LOG)
         );
+    }
+
+    #[test]
+    fn a_lite_cache_has_its_own_key_and_is_made_without_class_linking() {
+        let (dir, home, client, jvm) = setup();
+        let launch = command(dir.path(), jvm, FABRIC_MAIN);
+        let full = launch_key(&launch, 25, &home, &client, AotMode::Full).unwrap();
+        let lite = launch_key(&launch, 25, &home, &client, AotMode::Lite).unwrap();
+        assert_eq!(lite.len(), 16);
+        assert_ne!(full, lite, "one mode never uses the other's files");
+        let config = Path::new("x.aotconf");
+        assert!(
+            !training_jvm_args(config, &client, AotMode::Full)
+                .iter()
+                .any(|a| a == LITE_OPTION),
+            "a full cache keeps Java's defaults"
+        );
+        // The option reaches the create step through the training's argument file.
+        let store = AotStore::new(dir.path().join("aot"));
+        std::fs::create_dir_all(store.dir()).unwrap();
+        let java = dir.path().join("java.exe");
+        std::fs::write(&java, b"").unwrap();
+        let AotPlan::Train { config } = store.plan("projects", &lite, true) else {
+            panic!("a new lite key trains")
+        };
+        let mut training = vec!["-Xmx4096M".to_owned()];
+        training.extend(training_jvm_args(&config, &client, AotMode::Lite));
+        assert!(training.iter().any(|a| a == LITE_OPTION));
+        store
+            .begin_training("projects", &lite, &java, &training)
+            .unwrap();
+        std::fs::write(&config, b"recorded").unwrap();
+        let pending = store.pending();
+        assert_eq!(pending.len(), 1);
+        let args = std::fs::read_to_string(&pending[0].args).unwrap();
+        assert!(args.contains(LITE_OPTION), "{args}");
+        assert!(!args.contains("AOTMode"), "{args}");
     }
 
     #[test]

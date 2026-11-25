@@ -494,8 +494,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
 
 /// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
 /// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk`, `voice`, `socNext`,
-/// `telemetry`, `packEdit`, `aotCache`, `serverAccounts`, `iasSync` and `modRollback`, which stay
-/// off until Studio turns them on.
+/// `telemetry`, `packEdit`, `aotCache`, `aotLite`, `serverAccounts`, `iasSync` and `modRollback`,
+/// which stay off until Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -578,6 +578,13 @@ pub struct Features {
     /// nothing new is recorded or used; caches already made stay until the cleanup.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub aot_cache: bool,
+    /// "Hızlı oyun açılışı" with a lite cache (AOT-LITE): like `aot_cache`, but the cache holds the
+    /// classes only (made with `-XX:-AOTClassLinking`, it leaves out linking, method profiles and
+    /// cached machine code; `pl_mc::launch::aot::AotMode::Lite`). Wins over `aot_cache` when both
+    /// are on; launchers before it ignore it and follow `aot_cache` alone. Off by default; written
+    /// only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub aot_lite: bool,
     /// "Sunucu Hesapları" (SRV-ACC): the account center offers the player's accounts on the
     /// Projects server's site as username accounts, in one press (inside the friends feature: the
     /// friends service asks the site for the signed-in player). Off by default until the site's
@@ -620,6 +627,7 @@ impl Default for Features {
             telemetry: false,
             pack_edit: false,
             aot_cache: false,
+            aot_lite: false,
             server_accounts: false,
             ias_sync: false,
             mod_rollback: false,
@@ -910,6 +918,21 @@ mod tests {
         let older: LauncherConfig =
             serde_json::from_str(r#"{"features": {"afk": true, "socNext": true}}"#).unwrap();
         assert!(!older.features.telemetry);
+    }
+
+    #[test]
+    fn aot_lite_is_off_until_turned_on() {
+        let config: LauncherConfig = serde_json::from_str("{}").unwrap();
+        assert!(!config.features.aot_lite);
+        let written = serde_json::to_value(&config).unwrap();
+        assert!(written["features"].get("aotLite").is_none());
+        let on: LauncherConfig =
+            serde_json::from_str(r#"{"features": {"aotLite": true}}"#).unwrap();
+        assert!(on.features.aot_lite && !on.features.aot_cache);
+        assert_eq!(
+            serde_json::to_value(&on).unwrap()["features"]["aotLite"],
+            true
+        );
     }
 
     #[test]

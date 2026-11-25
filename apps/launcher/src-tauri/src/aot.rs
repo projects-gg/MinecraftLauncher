@@ -1,5 +1,6 @@
 //! "Hızlı oyun açılışı" (AOT-CACHE): Java's AOT cache for Fabric starts on Java 25+, behind the
-//! signed config's `features.aotCache` (off until Studio turns it on). How a cache is keyed,
+//! signed config's `features.aotCache` (full caches) and `features.aotLite` (AOT-LITE: classes
+//! only; it wins when both are on), both off until Studio turns them on. How a cache is keyed,
 //! trained, made and dropped lives in `pl_mc::launch::aot` (tested there); this module wires it to
 //! launches:
 //!
@@ -23,7 +24,7 @@ use parking_lot::Mutex;
 use pl_mc::install::InstalledVersion;
 use pl_mc::java::JavaSource;
 use pl_mc::launch::LaunchCommand;
-use pl_mc::launch::aot::{AotPlan, AotStore, CreateOutcome, TRAINING_ROOM, launch_key};
+use pl_mc::launch::aot::{AotMode, AotPlan, AotStore, CreateOutcome, TRAINING_ROOM, launch_key};
 use pl_mc::launch::crash::CrashDiagnosis;
 use pl_net::CancellationToken;
 use pl_telemetry::AotUse;
@@ -31,32 +32,51 @@ use tauri::{AppHandle, Manager};
 
 use crate::state::AppState;
 
-/// The applied content's `features.aotCache`.
-static FLAG: AtomicBool = AtomicBool::new(false);
+/// The applied content's `features.aotCache` (full caches).
+static FULL: AtomicBool = AtomicBool::new(false);
+/// The applied content's `features.aotLite` (lite caches).
+static LITE: AtomicBool = AtomicBool::new(false);
 /// The create run going now (one at a time) with its number, to stop it when a game starts.
 static CREATING: Mutex<Option<(u64, CancellationToken)>> = Mutex::new(None);
 static RUNS: AtomicU64 = AtomicU64::new(0);
 /// After the launcher starts, recordings left from before wait this long for their create step.
 const FIRST_CREATE: Duration = Duration::from_secs(90);
 
-/// The signed config's `features.aotCache`, from every applied content snapshot.
-pub(crate) fn apply_flag(on: bool) {
-    FLAG.store(on, Ordering::Relaxed);
+/// The signed config's `features.aotCache` and `features.aotLite`, from every applied content
+/// snapshot.
+pub(crate) fn apply_flags(full: bool, lite: bool) {
+    FULL.store(full, Ordering::Relaxed);
+    LITE.store(lite, Ordering::Relaxed);
 }
 
-/// Whether launches get the cache: the flag, or `PROJECTS_AOT_CACHE=1` in debug builds.
+/// The kind of cache launches get: lite while `features.aotLite` is on (with `aotCache` too: the
+/// lite cache leaves out the parts full-cache games crashed with), full while only
+/// `features.aotCache` is; in debug builds
+/// `PROJECTS_AOT_LITE=1` or `PROJECTS_AOT_CACHE=1` whatever the config says. `None`: no cache.
+fn mode() -> Option<AotMode> {
+    if LITE.load(Ordering::Relaxed) || debug_env("PROJECTS_AOT_LITE") {
+        Some(AotMode::Lite)
+    } else if FULL.load(Ordering::Relaxed) || debug_env("PROJECTS_AOT_CACHE") {
+        Some(AotMode::Full)
+    } else {
+        None
+    }
+}
+
+/// Whether launches get a cache of either kind.
 fn on() -> bool {
-    FLAG.load(Ordering::Relaxed) || debug_on()
+    mode().is_some()
 }
 
-/// `PROJECTS_AOT_CACHE=1` (debug builds only): the cache on whatever the config says, for tests.
-fn debug_on() -> bool {
+/// `<name>=1` in a debug build's environment (tests); always false in release builds.
+fn debug_env(name: &str) -> bool {
     #[cfg(debug_assertions)]
     {
-        std::env::var("PROJECTS_AOT_CACHE").is_ok_and(|value| value == "1")
+        std::env::var(name).is_ok_and(|value| value == "1")
     }
     #[cfg(not(debug_assertions))]
     {
+        let _ = name;
         false
     }
 }
@@ -76,12 +96,14 @@ pub(crate) struct AotLaunch {
     pub instance: String,
     pub key: String,
     pub plan: AotPlan,
+    /// The kind of cache (its training start's options depend on it).
+    pub mode: AotMode,
     store: AotStore,
 }
 
 /// The cache plan of a launch about to start with `command` (built without any cache option).
-/// `None`: the feature is off or this launch cannot have a cache (not Fabric, Java older than 25,
-/// a Java the player chose, a wrapper, an agent).
+/// `None`: both features are off or this launch cannot have a cache (not Fabric, Java older than
+/// 25, a Java the player chose, a wrapper, an agent).
 pub(crate) async fn for_launch(
     state: &AppState,
     instance_id: &str,
@@ -89,7 +111,8 @@ pub(crate) async fn for_launch(
     command: &LaunchCommand,
     wrapped: bool,
 ) -> Option<AotLaunch> {
-    if !on() || wrapped || !matches!(installed.java.source, JavaSource::Mojang { .. }) {
+    let mode = mode()?;
+    if wrapped || !matches!(installed.java.source, JavaSource::Mojang { .. }) {
         return None;
     }
     // `<home>/bin/javaw.exe`
@@ -99,16 +122,17 @@ pub(crate) async fn for_launch(
     let (major, client) = (installed.java.info.major, installed.client_jar.clone());
     let instance = instance_id.to_owned();
     tauri::async_runtime::spawn_blocking(move || {
-        let key = launch_key(&command, major, &home, &client)?;
+        let key = launch_key(&command, major, &home, &client, mode)?;
         let _ = std::fs::create_dir_all(store.dir());
         let room = crate::commands::launch::free_space(store.dir())
             .is_some_and(|free| free >= TRAINING_ROOM);
         let plan = store.plan(&instance, &key, room);
-        tracing::info!(%key, plan = plan_name(&plan), "AOT cache plan");
+        tracing::info!(%key, mode = mode_name(mode), plan = plan_name(&plan), "AOT cache plan");
         Some(AotLaunch {
             instance,
             key,
             plan,
+            mode,
             store,
         })
     })
@@ -123,6 +147,13 @@ pub(crate) fn usage(plan: &AotPlan) -> AotUse {
         AotPlan::Off => AotUse::Off,
         AotPlan::Use { .. } => AotUse::Use,
         AotPlan::Train { .. } => AotUse::Train,
+    }
+}
+
+fn mode_name(mode: AotMode) -> &'static str {
+    match mode {
+        AotMode::Full => "full",
+        AotMode::Lite => "lite",
     }
 }
 
@@ -206,7 +237,8 @@ pub(crate) fn start(app: &AppHandle) {
 }
 
 /// Makes the caches whose recordings wait, one after the other, while no game runs (a game that
-/// starts stops it, [`pause`]). Nothing while the feature is off.
+/// starts stops it, [`pause`]). Nothing while both features are off. A recording repeats its own
+/// training's options (a lite one's `-XX:-AOTClassLinking` among them), whatever the mode now.
 pub(crate) fn run_pending(app: &AppHandle) {
     if !on() {
         return;

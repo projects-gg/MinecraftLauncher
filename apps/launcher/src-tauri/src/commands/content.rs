@@ -299,7 +299,10 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
     // "Sürümü Değiştir" (PACK-EDIT): the upgrades before a launch and in repairs follow it.
     crate::commands::packedit::apply_flag(snapshot.config.features.pack_edit);
     // "Hızlı oyun açılışı" (AOT-CACHE): the next launches follow it.
-    crate::aot::apply_flag(snapshot.config.features.aot_cache);
+    crate::aot::apply_flags(
+        snapshot.config.features.aot_cache,
+        snapshot.config.features.aot_lite,
+    );
     // "Önceki Sürüme Dön" (REPAIR-RB): clean games are recorded and crashes offer it while on.
     crate::commands::rollback::apply_flag(snapshot.config.features.mod_rollback);
     // SRV-ACC: the friends service is asked for server accounts only while "Sunucu Hesapları" is
