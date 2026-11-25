@@ -23,6 +23,11 @@ pub const BROWSER_LOGIN_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 /// with a token that dies a minute later gets the player kicked with "invalid session".
 pub const REFRESH_MARGIN: Duration = Duration::from_secs(10 * 60);
 
+/// A Minecraft access token (24 hours) that expires within this margin is refreshed ahead of play
+/// (`AuthManager::warm_session`), when the player is about to press OYNA: the launcher's start,
+/// its window coming back. The launch then finds it fresh instead of waiting for Microsoft.
+pub const WARM_MARGIN: Duration = Duration::from_secs(6 * 60 * 60);
+
 /// URLs of every service the account flows talk to. Production values by default; tests point
 /// them at a local mock server with [`Endpoints::with_base`].
 #[derive(Debug, Clone, PartialEq, Eq)]

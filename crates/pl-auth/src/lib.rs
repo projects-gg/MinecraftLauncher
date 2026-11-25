@@ -49,7 +49,8 @@ pub use avatar::{
     head_png, read_default_skin, texture_id,
 };
 pub use config::{
-    AuthConfig, BROWSER_LOGIN_TIMEOUT, CLIENT_ID, Endpoints, KEYRING_SERVICE, REFRESH_MARGIN, SCOPE,
+    AuthConfig, BROWSER_LOGIN_TIMEOUT, CLIENT_ID, Endpoints, KEYRING_SERVICE, REFRESH_MARGIN,
+    SCOPE, WARM_MARGIN,
 };
 pub use error::{
     AuthError, AuthErrorInfo, AuthStep, FailureClass, OfflineNameProblem, Result, SkinFileProblem,
@@ -61,7 +62,7 @@ pub use history::{
 #[cfg(windows)]
 pub use legacy::{LegacyImport, legacy_premium_path};
 pub use manager::{
-    Appearance, AuthManager, PROFILE_SYNC_EVERY, SignIn, SkinHistoryList, UNDO_WINDOW,
+    Appearance, AuthManager, PROFILE_SYNC_EVERY, SignIn, SkinHistoryList, UNDO_WINDOW, WarmSession,
 };
 pub use microsoft::{
     DeviceCodeLogin, LoginProgressFn, MicrosoftAuth, MicrosoftLogin, OpenUrlFn, RefreshedSession,
