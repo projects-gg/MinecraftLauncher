@@ -680,6 +680,58 @@ async fn a_players_mod_swaps_jars_through_the_trash_and_back() {
     assert_eq!(left[0].name, "Euphoria Patches 1.10.5-r5.9.3");
 }
 
+/// Settings → Veri: the jar a rollback put in the trash comes back. While its hold lasts that is
+/// "Geri Al" (the held jar goes to the trash, the hold ends); without a hold it returns like any
+/// trashed file.
+#[tokio::test]
+async fn a_trashed_crashing_jar_comes_back_from_the_trash() {
+    let dir = tempfile::tempdir().unwrap();
+    let mods = dir.path().join("game").join("mods");
+    std::fs::create_dir_all(&mods).unwrap();
+    let trash = LauncherTrash::new(dir.path().join("trash"));
+    let new = euphoria("1.11.2-r5.10", "");
+    let old = euphoria("1.10.5-r5.9.3", "");
+    // After "Önceki Sürüme Dön": the crashing jar in the trash, the held one in mods/.
+    std::fs::write(mods.join(NEW_FILE), &new).unwrap();
+    let trashed = trash
+        .put(
+            &mods.join(NEW_FILE),
+            TrashKind::Mod,
+            "test",
+            "Euphoria Patches 1.11.2-r5.10",
+        )
+        .await
+        .unwrap();
+    std::fs::write(mods.join(OLD_FILE), &old).unwrap();
+    let mut held = hold("euphoria_patcher", OLD_FILE);
+    held.trash_id = Some(trashed.id.clone());
+    let mut history = ModHistory::default();
+    history.hold(MC, held);
+
+    let back = restore_trashed_mod(&mods, &trash, "test", history.holds_of(MC), &trashed.id)
+        .await
+        .unwrap();
+    let TrashedModBack::HoldEnded { mod_id, path } = back else {
+        panic!("the hold's jar: {back:?}");
+    };
+    assert_eq!(mod_id, "euphoria_patcher");
+    assert_eq!(path.file_name(), Some(std::ffi::OsStr::new(NEW_FILE)));
+    assert_eq!(std::fs::read(mods.join(NEW_FILE)).unwrap(), new);
+    assert!(!mods.join(OLD_FILE).exists(), "never the same mod twice");
+    assert!(history.release(MC, &mod_id).is_some());
+
+    // The held jar is in the trash now, and restorable too: no hold uses it, it simply returns.
+    let left = trash.list(Some("test")).await.unwrap();
+    assert_eq!(left.len(), 1);
+    assert_eq!(left[0].kind, TrashKind::Mod);
+    let back = restore_trashed_mod(&mods, &trash, "test", history.holds_of(MC), &left[0].id)
+        .await
+        .unwrap();
+    assert!(matches!(back, TrashedModBack::Restored(_)), "{back:?}");
+    assert_eq!(std::fs::read(mods.join(OLD_FILE)).unwrap(), old);
+    assert!(trash.list(Some("test")).await.unwrap().is_empty());
+}
+
 #[tokio::test]
 async fn a_failed_download_puts_the_crashing_jar_back() {
     let new = euphoria("1.11.2-r5.10", "");
