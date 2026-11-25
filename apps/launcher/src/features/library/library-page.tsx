@@ -24,11 +24,18 @@ import { api, type InstanceSummary } from "@/lib/api";
 import { matchesQuery } from "@/lib/search";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
+import { CreateOwnCard } from "./create-card";
 import { CreateInstanceDialog } from "./create-instance-dialog";
 import { GroupDialog } from "./group-dialog";
 import { type InstanceActions, InstanceCard } from "./instance-card";
 import { type LibrarySort, sortInstances, useLibraryView } from "./library-view";
-import { deletesLastOfficial, libraryOffer, officialStatusQuery, playTarget } from "./official";
+import {
+  deletesLastOfficial,
+  invitesOwnInstance,
+  libraryOffer,
+  officialStatusQuery,
+  playTarget,
+} from "./official";
 import { LibraryEmpty, NotInstalledCard } from "./official-ui";
 import { createDesktopShortcut } from "./shortcut";
 
@@ -309,6 +316,9 @@ export function LibraryPage() {
   const ungrouped = mine.filter((i) => !i.group);
   // No instance left: the empty state. Only the official pack gone: its quiet card where it was.
   const offer = libraryOffer(instances, officialStatus, searching);
+  // INST-ADD: official packs only (a new player's library): "Kurulumlarım" shows with a card that
+  // makes the first instance of their own. A folded section stays folded (the player's choice).
+  const inviteOwn = invitesOwnInstance(instances, searching);
   const sections: { key: string; title: string; items: InstanceSummary[]; extra?: ReactNode }[] = [
     {
       key: "official",
@@ -324,6 +334,13 @@ export function LibraryPage() {
       key: "ungrouped",
       title: groupNames.length > 0 ? t("library.groups.none") : t("library.mine"),
       items: ungrouped,
+      extra: inviteOwn ? (
+        <CreateOwnCard
+          key="create-own"
+          index={official.length}
+          onCreate={() => setCreateOpen(true)}
+        />
+      ) : null,
     },
   ];
   let offset = 0;

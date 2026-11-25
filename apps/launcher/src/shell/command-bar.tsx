@@ -232,8 +232,9 @@ function InstancePicker({
               {t(lock === "preparing" ? "qol.picker.lockedPreparing" : "qol.picker.lockedOpening")}
             </DropdownMenu.Label>
           ) : null}
-          {/* A long library scrolls here; the two actions below always stay in view. */}
-          <div className="max-h-[min(392px,calc(var(--radix-dropdown-menu-content-available-height)-88px))] overflow-y-auto">
+          {/* A long library scrolls here; "Yeni Kurulum" and "Kütüphaneyi Aç" below always stay in
+              view (their 86 px and the menu's padding are kept free). */}
+          <div className="max-h-[min(392px,calc(var(--radix-dropdown-menu-content-available-height)-100px))] overflow-y-auto">
             {ordered.map((i) => (
               <PickerItem
                 key={i.id}
@@ -244,6 +245,24 @@ function InstancePicker({
               />
             ))}
           </div>
+          {/* INST-ADD: adding an instance is a row of this list, shaped like the ones above (a tile,
+              the name's type), where the list ends: the menu opens upwards, so it sits next to the
+              picker. It was a quiet text action under a line, and the owner did not see it. Bone,
+              never gold: the gold is OYNA's (§2). */}
+          <DropdownMenu.Item
+            onSelect={() => void navigate({ to: "/library", search: { create: true } })}
+            className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 outline-none data-[highlighted]:bg-white/8"
+          >
+            <span
+              aria-hidden
+              className="chamfer flex size-[32px] shrink-0 items-center justify-center bg-white/10 [--cut:7px]"
+            >
+              <Plus size={16} weight="bold" className="text-bone-100" />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-bone-50">
+              {t("instances.create")}
+            </span>
+          </DropdownMenu.Item>
           <DropdownMenu.Separator className="my-1 h-px bg-white/8" />
           <DropdownMenu.Item
             onSelect={() => void navigate({ to: "/library" })}
@@ -251,12 +270,6 @@ function InstancePicker({
           >
             {/* The rail's Library mark: a folder would promise the files on disk ("Klasörü aç"). */}
             <SquaresFour size={16} /> {t("instances.openLibrary")}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() => void navigate({ to: "/library", search: { create: true } })}
-            className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] text-ash-300 outline-none data-[highlighted]:bg-white/8 data-[highlighted]:text-bone-50"
-          >
-            <Plus size={16} /> {t("instances.create")}
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>

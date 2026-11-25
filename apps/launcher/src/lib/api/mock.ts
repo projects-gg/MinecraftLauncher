@@ -695,10 +695,15 @@ const projectsIndex = instances.findIndex((i) => i.managed);
 if (joinOffline && projectsIndex >= 0) instances.splice(projectsIndex, 1);
 // LIB1: `?library=empty` has no instance left, `?library=noOfficial` only lost the official one
 // (the player deleted it: nothing makes it again by itself, the library offers it).
+// INST-ADD: `?library=official` has the official pack alone, as a new player's library.
 const libraryFlag = mockFlag("library");
 if (libraryFlag === "empty") instances.splice(0, instances.length);
 if (libraryFlag === "noOfficial") {
   for (let i = instances.length - 1; i >= 0; i--) if (instances[i]?.managed) instances.splice(i, 1);
+}
+if (libraryFlag === "official") {
+  for (let i = instances.length - 1; i >= 0; i--)
+    if (!instances[i]?.managed) instances.splice(i, 1);
 }
 /** The player deleted the last official instance (the backend's `official.json`). */
 let officialRemoved = libraryFlag === "empty" || libraryFlag === "noOfficial";

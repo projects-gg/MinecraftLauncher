@@ -634,9 +634,12 @@ export const tauriApi: LauncherApi = {
           mcVersion: spec.mcVersion,
           loader: spec.loader,
           loaderVersion: spec.loaderVersion ?? null,
-          // Settings → Oyun defaults for new instances.
-          maxMemoryMb: storedPrefs().defaultMaxMemoryMb ?? null,
-          jvmArgs: storedPrefs().defaultJvmArgs || null,
+          // The dialog's "Daha Fazla Seçenek", else Settings → Oyun defaults for new instances.
+          maxMemoryMb:
+            spec.maxMemoryMb !== undefined
+              ? spec.maxMemoryMb
+              : (storedPrefs().defaultMaxMemoryMb ?? null),
+          jvmArgs: (spec.jvmArgs ?? storedPrefs().defaultJvmArgs) || null,
         }),
       ),
     );
