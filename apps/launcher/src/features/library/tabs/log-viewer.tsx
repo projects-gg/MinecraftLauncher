@@ -28,6 +28,7 @@ import { copyErrorDetails, showError } from "@/features/content/jobs";
 import { api, type GameLogSession, type LogLevel, type LogLine } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import { formatBytes, formatCount } from "@/lib/format";
+import { onWindowAwayChange } from "@/lib/window-away";
 import { InlineNotice, ToggleChip } from "../parts";
 import { formatWhen, logFileWhen } from "../when";
 import {
@@ -328,6 +329,15 @@ export function LogViewer({
   useEffect(() => {
     if (wasLive.current && !session.live) void refetch();
     wasLive.current = session.live;
+  }, [session.live, refetch]);
+
+  // While the window is away the page may sleep and drop the running game's lines (the backend
+  // keeps none for a sleeping page): the window coming back reads the log again (LIGHT).
+  useEffect(() => {
+    if (!session.live) return;
+    return onWindowAwayChange((away) => {
+      if (!away) void refetch();
+    });
   }, [session.live, refetch]);
 
   // --- filters, rows and search --------------------------------------------------------------
