@@ -28,6 +28,12 @@ pub fn ansi_safe(program: &Path, args: &[String]) -> Result<(PathBuf, Vec<String
     Ok((program, args))
 }
 
+/// [`ansi_safe`] where a run may still try without it (probing a Java, making a cache): what
+/// has no short form goes as it is.
+pub fn ansi_safe_or_same(program: &Path, args: &[String]) -> (PathBuf, Vec<String>) {
+    ansi_safe(program, args).unwrap_or_else(|_| (program.to_path_buf(), args.to_vec()))
+}
+
 /// Whether the system's ANSI code page lacks a character of `text` (never elsewhere than on
 /// Windows, nor with UTF-8 as that code page).
 pub fn foreign(text: &str) -> bool {
