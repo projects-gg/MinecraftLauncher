@@ -463,6 +463,14 @@ static MAIN_THREAD_CLASS_MISSING: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"Exception in thread "main" java\.lang\.(?:NoClassDefFoundError|ClassNotFoundException): (?:org[/.]objectweb|org[/.]spongepowered|net[/.]fabricmc|org[/.]quiltmc|joptsimple|com[/.]mojang|org[/.]lwjgl|org[/.]apache|com[/.]google|io[/.]netty|it[/.]unimi|cpw[/.]mods|net[/.]neoforged|net[/.]minecraftforge|org[/.]slf4j|net[/.]minecraft[/.])"#)
         .expect("valid regex")
 });
+/// Java could not load a native library because its path reached it with a letter replaced by
+/// `?` (the system's code page lacks it; a Windows path never holds one): "UnsatisfiedLinkError:
+/// C:\...\veri-?-uzun-klasor\runtimes\...\net.dll: Can't find dependent libraries" (REL-SMOKE,
+/// 25 Nov), "Can't load library: C:\Users\Ay?e\...".
+static MANGLED_NATIVE_PATH: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:UnsatisfiedLinkError|Can't load library|Could not load library|Unable to load library)[^\r\n]*?[A-Za-z]:\\[^\r\n?]*\?")
+        .expect("valid regex")
+});
 /// "Could not reserve enough space for object heap" (old JVMs) and "... for 2097152KB object
 /// heap".
 static HEAP_RESERVE: LazyLock<Regex> = LazyLock::new(|| {
@@ -734,7 +742,12 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
     let has = |needle: &str| lower.contains(needle);
     let any = |needles: &[&str]| needles.iter().any(|n| lower.contains(n));
 
-    let (kind, mods, required) = if player_argument_failed(&text, &lower, input.player_jvm_args) {
+    // Java read a path of ours with a letter the system's code page lacks: no crash of the game's,
+    // the data folder has to move (YOL-HARF; before the start failures it looks like).
+    let path_letters = MANGLED_NATIVE_PATH.is_match(&text);
+    let (kind, mods, required) = if path_letters {
+        (CrashKind::Unknown, Vec::new(), None)
+    } else if player_argument_failed(&text, &lower, input.player_jvm_args) {
         (CrashKind::InvalidJvmArgument, Vec::new(), None)
     } else if any(&[
         "unsupportedclassversionerror",
@@ -940,7 +953,7 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
     // The game wrote its crash report while it was on screen, and the report's own stack names
     // mods (their mixins, their classes at its top): a mod failed in game (TELEM-FIX). Only the
     // report counts: the output's earlier stacks are of errors the game lived through.
-    let (kind, suspects) = match in_game_mod_suspects(kind, input) {
+    let (kind, mut suspects) = match in_game_mod_suspects(kind, input).filter(|_| !path_letters) {
         Some(found) => (CrashKind::ModCrash, found),
         None => (kind, suspects),
     };
@@ -950,7 +963,10 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
         mods
     };
     let mods = dedup_names(mods);
-    let trace = trace::trace(
+    if path_letters {
+        suspects.clear();
+    }
+    let mut trace = trace::trace(
         &text,
         report,
         input.exit_code,
@@ -958,7 +974,14 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
         &suspects,
         !input.window_shown,
     );
-    let (title_tr, hint_tr, mut suggested_actions) = describe(kind, &mods, required, input);
+    trace.path_letters = path_letters;
+    let (mut title_tr, mut hint_tr, mut suggested_actions) = describe(kind, &mods, required, input);
+    if path_letters {
+        title_tr = "Java klasör yolunu okuyamadı".to_owned();
+        hint_tr = "Java bu bilgisayarda veri klasörünün yolundaki bazı harfleri (ş, ğ gibi) \
+                   okuyamıyor, klasörü başka bir yere taşı."
+            .to_owned();
+    }
     if input.crash_report.is_some() {
         suggested_actions.push(SuggestedAction::OpenCrashReport);
     }
@@ -4647,6 +4670,36 @@ Stacktrace:\n\tat TRANSFORMER/create@0.5.1.f/com.simibubi.create.content.Foo.tic
         );
         assert_eq!(d.kind, CrashKind::CorruptedFiles);
         assert!(d.suspects.is_empty() && d.mods.is_empty());
+    }
+
+    #[test]
+    fn a_native_library_path_java_misread_is_the_data_folders_letters() {
+        // REL-SMOKE (25 Nov): a data folder named with "ş" on an English Windows, after the short
+        // form of the command; the JVM loads its own net.dll by the long path in the code page.
+        let output = "Error: LinkageError occurred while loading main class net.fabricmc.loader.impl.launch.knot.KnotClient\n\tjava.lang.UnsatisfiedLinkError: C:\\ProLauncher-build\\e2e-rel2210\\veri-?-uzun-klasor\\runtimes\\java-runtime-epsilon\\windows-x64\\bin\\net.dll: Can't find dependent libraries\r\nRuntime.exit(1) logging failed: Could not initialize class jdk.internal.module.SystemModuleFinders$SystemImage\r\n";
+        let d = analyze(output);
+        assert!(d.trace.path_letters);
+        assert_eq!(
+            d.kind,
+            CrashKind::Unknown,
+            "never damaged files: no file check"
+        );
+        assert!(d.suspects.is_empty() && d.mods.is_empty());
+        assert_eq!(d.trace.sig, "exit/1");
+        assert!(d.hint_tr.contains("taşı"), "{}", d.hint_tr);
+        // A mod's library unpacked into a temp folder with such a letter.
+        let d = analyze(
+            "[12:00:01] [Render thread/ERROR]: java.lang.UnsatisfiedLinkError: Can't load library: C:\\Users\\Ay?e\\AppData\\Local\\Temp\\voicechat\\opus4j.dll",
+        );
+        assert!(d.trace.path_letters);
+        // A library missing for another reason, or a long path prefix, is not this.
+        for other in [
+            "java.lang.UnsatisfiedLinkError: C:\\Games\\natives\\lwjgl.dll: Can't find dependent libraries",
+            "java.lang.UnsatisfiedLinkError: no lwjgl in java.library.path",
+            "java.lang.UnsatisfiedLinkError: \\\\?\\C:\\Games\\natives\\lwjgl.dll: Access is denied",
+        ] {
+            assert!(!analyze(other).trace.path_letters, "{other}");
+        }
     }
 
     #[test]

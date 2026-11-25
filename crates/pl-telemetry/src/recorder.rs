@@ -285,6 +285,17 @@ impl Recorder {
         });
     }
 
+    /// A game that failed only because of where its files are, counted with the launch failure's
+    /// category instead of a crash kind and with no trace (`YOL-HARF`: Java misread a path of the
+    /// data folder, CRASH-DIAG).
+    pub fn game_failed(&self, category: &str, now_ms: i64) {
+        self.count(now_ms, true, |inner| {
+            let counts = &mut inner.stored.ledger.counts;
+            counts.game_crashes = counts.game_crashes.saturating_add(1);
+            counts.add_fail(scrub::category(category));
+        });
+    }
+
     /// A game ended; `aot`: Java's AOT cache in its start. The games that could have a cache, by
     /// what they did with it, are what crashes with each are measured against (TELEM-JVM).
     pub fn game_ran(&self, aot: AotUse, now_ms: i64) {
@@ -552,6 +563,27 @@ mod tests {
         // And it stays off after a restart.
         let again = Recorder::open(dir.path(), "2.0.8", 5_000);
         assert!(!again.choice() && !again.active());
+    }
+
+    /// CRASH-DIAG: a game that failed only because Java misread the data folder's path counts as a
+    /// crash under the launch failure's code, with no trace and no second launch.
+    #[test]
+    fn a_game_failed_by_its_folder_counts_under_the_launch_code() {
+        let dir = tempfile::tempdir().unwrap();
+        let recorder = on(dir.path());
+        recorder.launched(Launch::Started, 2_000);
+        recorder.game_failed("YOL-HARF", 3_000);
+        let out = recorder.take_daily(&facts(), 21 * HOUR_MS).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&out.json).unwrap();
+        assert_eq!(value["day"]["launches"], 1);
+        assert_eq!(value["day"]["crashes"], 1);
+        assert_eq!(value["fail"]["YOL-HARF"], 1);
+        assert!(value["fail"].get("crash.unknown").is_none());
+        assert!(value.get("crash").is_none_or(|crash| {
+            crash
+                .as_array()
+                .is_none_or(|items| items.iter().all(|item| item["k"] != "game"))
+        }));
     }
 
     #[test]
