@@ -2605,7 +2605,7 @@ export const en: DeepPartial<Strings> = {
         duplicateMods: "The mods folder has more than one copy of the same mod.",
         modError: "A mod failed while the game was starting.",
         corruptedFiles:
-          "Some files are missing or broken. If it's a mod's file, its name is below; if not, play again and the launcher checks the files and downloads the broken ones again.",
+          "Some files are missing or broken. If it's a mod's file, its name is below. If not, play again and the launcher checks the files and downloads the broken ones again.",
         accessDenied: "Security software may be blocking the launcher or Java.",
         noOutput: "Security software may be blocking Java.",
         notResponding:

@@ -2296,7 +2296,7 @@ export const tr = {
         duplicateMods: "Mod klasöründe aynı modun birden fazla kopyası var.",
         modError: "Oyun açılırken bir mod hata verdi.",
         corruptedFiles:
-          "Bazı dosyalar eksik ya da bozuk. Bir modun dosyasıysa adı aşağıda; değilse tekrar oyna, launcher dosyaları denetleyip bozuk olanları yeniden indirir.",
+          "Bazı dosyalar eksik ya da bozuk. Bir modun dosyasıysa adı aşağıda. Değilse tekrar oyna, launcher dosyaları denetleyip bozuk olanları yeniden indirir.",
         accessDenied: "Güvenlik yazılımın launcher'ı ya da Java'yı engelliyor olabilir.",
         noOutput: "Güvenlik yazılımın Java'yı engelliyor olabilir.",
         notResponding:
