@@ -2293,7 +2293,8 @@ export const tr = {
         missingDependency: "Bazı modların çalışması için başka modlar gerekiyor.",
         duplicateMods: "Mod klasöründe aynı modun birden fazla kopyası var.",
         modError: "Oyun açılırken bir mod hata verdi.",
-        corruptedFiles: "Oyunun bazı dosyaları eksik ya da bozuk.",
+        corruptedFiles:
+          "Bazı dosyalar eksik ya da bozuk. Bir modun dosyasıysa adı aşağıda; değilse tekrar oyna, launcher dosyaları denetleyip bozuk olanları yeniden indirir.",
         accessDenied: "Güvenlik yazılımın launcher'ı ya da Java'yı engelliyor olabilir.",
         noOutput: "Güvenlik yazılımın Java'yı engelliyor olabilir.",
         notResponding:
@@ -2301,7 +2302,7 @@ export const tr = {
         otherProgram:
           "FPS göstergesi, ekran kaydı ya da sohbet katmanı gibi bir program oyunu çökertti. Onu kapatıp tekrar dene.",
         modCrash: "Oyun açıkken bir mod hata verdi.",
-        unknown: "Ayrıntılar oyun kaydında.",
+        unknown: "Tekrar dene. Sorun sürerse Sorun Yardımcısı'nı aç.",
       },
       memory: "En yüksek bellek {{from}} yerine {{to}} olacak.",
       suspects: "Sorumlu Olabilecek Modlar",
