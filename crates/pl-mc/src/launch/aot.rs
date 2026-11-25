@@ -341,7 +341,9 @@ impl AotStore {
             &self.file(instance, key, JAVA_EXT),
             java.to_string_lossy().as_bytes(),
         )?;
-        let options = create_jvm_options(training_jvm);
+        // Java reads the argument file in the system's code page (CRASH-DIAG).
+        let (_, options) =
+            crate::launch::ansi::ansi_safe_or_same(java, &create_jvm_options(training_jvm));
         write_atomic_blocking(
             &self.file(instance, key, ARGS_EXT),
             java_argfile(&options).as_bytes(),
@@ -440,12 +442,19 @@ pub async fn create(
     let part = pending.cache.with_extension("aot.part");
     let _ = tokio::fs::remove_file(&part).await;
     let started = std::time::Instant::now();
-    let mut command = tokio::process::Command::new(crate::launch::process::launch_program(java));
+    // Paths Java cannot read on this system go in their short form (CRASH-DIAG).
+    let (program, args) = crate::launch::ansi::ansi_safe_or_same(
+        &crate::launch::process::launch_program(java),
+        &[
+            "-XX:AOTMode=create".to_owned(),
+            format!("-XX:AOTConfiguration={}", pending.config.display()),
+            format!("-XX:AOTCache={}", part.display()),
+            format!("@{}", pending.args.display()),
+        ],
+    );
+    let mut command = tokio::process::Command::new(program);
     command
-        .arg("-XX:AOTMode=create")
-        .arg(format!("-XX:AOTConfiguration={}", pending.config.display()))
-        .arg(format!("-XX:AOTCache={}", part.display()))
-        .arg(format!("@{}", pending.args.display()))
+        .args(args)
         .current_dir(store.dir())
         .stdin(Stdio::null())
         .stdout(Stdio::null())

@@ -241,6 +241,28 @@ pub(crate) fn output_tail(stderr: &[u8], stdout: &[u8]) -> String {
     }
 }
 
+/// The program and arguments of one processor run, `java -cp <classpath> <main class> <args>`,
+/// with every path Java cannot read on this system in its 8.3 short form (CRASH-DIAG,
+/// [`crate::launch::ansi`]): the libraries and the files the installer steps read and write live
+/// in the data folder, under the Windows account's name. [`Error::UnreadablePath`] for a path
+/// with no short form.
+pub(crate) fn invocation_command(
+    java: &Path,
+    main_class: &str,
+    invocation: &Invocation,
+    separator: &str,
+) -> Result<(PathBuf, Vec<String>)> {
+    let classpath = invocation
+        .classpath
+        .iter()
+        .map(|p| path_string(p))
+        .collect::<Vec<_>>()
+        .join(separator);
+    let mut args = vec!["-cp".to_owned(), classpath, main_class.to_owned()];
+    args.extend(invocation.args.iter().cloned());
+    crate::launch::ansi::ansi_safe(java, &args)
+}
+
 /// Windows' `BELOW_NORMAL_PRIORITY_CLASS`: installer steps of a background preparation leave the
 /// processor to whatever the player is doing.
 #[cfg(windows)]
@@ -258,18 +280,10 @@ pub(crate) async fn run_invocation(
     low_priority: bool,
     cancel: &CancellationToken,
 ) -> Result<()> {
-    let classpath = invocation
-        .classpath
-        .iter()
-        .map(|p| path_string(p))
-        .collect::<Vec<_>>()
-        .join(separator);
-    let mut command = tokio::process::Command::new(java);
+    let (program, args) = invocation_command(java, main_class, invocation, separator)?;
+    let mut command = tokio::process::Command::new(program);
     command
-        .arg("-cp")
-        .arg(&classpath)
-        .arg(main_class)
-        .args(&invocation.args)
+        .args(&args)
         .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -339,6 +353,63 @@ pub(crate) async fn run_invocation(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// CRASH-DIAG: a processor's Java, class path and file arguments in a data folder under a
+    /// Windows account named with a letter the system's code page lacks go in their short form;
+    /// with no short names on the disk the install stops with its own error.
+    #[test]
+    fn processor_paths_the_code_page_cannot_carry_go_short() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("Ayşe");
+        let libraries = data.join("libraries");
+        std::fs::create_dir_all(libraries.join("bin")).unwrap();
+        let java = data.join("java.exe");
+        let jar = libraries.join("installertools.jar");
+        let input = libraries.join("client.jar");
+        for file in [&java, &jar, &input] {
+            std::fs::write(file, b"").unwrap();
+        }
+        let invocation = Invocation {
+            name: "installertools".to_owned(),
+            jar: jar.clone(),
+            classpath: vec![jar.clone(), PathBuf::from("C:\\plain\\asm.jar")],
+            args: vec![
+                "--task".to_owned(),
+                "MCP_DATA".to_owned(),
+                "--input".to_owned(),
+                path_string(&input),
+                "--output".to_owned(),
+                path_string(&libraries.join("bin").join("srg.txt")),
+                format!("--cfg={}", path_string(&input)),
+            ],
+            outputs: Vec::new(),
+        };
+        let built = invocation_command(&java, "net.minecraftforge.Main", &invocation, ";");
+        if !crate::launch::ansi::foreign("ş") {
+            let (program, args) = built.unwrap();
+            assert_eq!(program, java);
+            assert_eq!(args[1], format!("{};C:\\plain\\asm.jar", path_string(&jar)));
+            assert_eq!(args[2], "net.minecraftforge.Main");
+            assert_eq!(&args[3..], &invocation.args[..]);
+            return;
+        }
+        let Ok((program, args)) = built else {
+            assert!(matches!(built, Err(Error::UnreadablePath(_))));
+            return;
+        };
+        assert!(program.to_str().is_some_and(str::is_ascii));
+        assert_eq!(args[0], "-cp");
+        assert!(args[1].ends_with(";C:\\plain\\asm.jar"), "{}", args[1]);
+        assert_eq!(args[2], "net.minecraftforge.Main");
+        assert_eq!(&args[3..5], ["--task", "MCP_DATA"]);
+        for arg in &args {
+            assert!(arg.is_ascii(), "{arg}");
+        }
+        // The same files, by their short names; the output, still to be written, in a short folder.
+        assert!(Path::new(&args[6]).is_file());
+        assert!(args[8].ends_with("srg.txt") && Path::new(&args[8]).parent().unwrap().is_dir());
+        assert!(args[9].starts_with("--cfg=") && Path::new(&args[9]["--cfg=".len()..]).is_file());
+    }
 
     fn tokens() -> HashMap<String, String> {
         HashMap::from([
