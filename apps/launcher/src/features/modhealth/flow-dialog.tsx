@@ -307,7 +307,8 @@ export function ModFlowDialog() {
   let dismissible = true;
 
   if (step?.kind === "crash" && crash) {
-    dismissible = !holding;
+    // Not while a mod goes back or comes back: its result shows here.
+    dismissible = !holding && busy !== "rollback" && busy !== "undo";
     const strong = crash.suspects.slice(0, 5);
     const kind = crash.kind;
     const turnOffLabel = crash.turnOff
@@ -617,7 +618,11 @@ export function ModFlowDialog() {
             ) : (
               <motion.div key="actions" {...swap(0.2)} className="flex items-center gap-2.5">
                 {crash.reinstall ? (
-                  <Button variant="ghost" onClick={() => go({ kind: "reinstall" })}>
+                  <Button
+                    variant="ghost"
+                    disabled={busy !== null}
+                    onClick={() => go({ kind: "reinstall" })}
+                  >
                     {t("modHealth.crash.reinstall")}
                   </Button>
                 ) : null}
