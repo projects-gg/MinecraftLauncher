@@ -63,6 +63,7 @@ import { trProjectsSkin } from "./tr-projects-skin";
 import { trQaFix } from "./tr-qa-fix";
 import { trQol } from "./tr-qol";
 import { trReminders } from "./tr-reminders";
+import { trRepairRb } from "./tr-repair-rb";
 import { trReports } from "./tr-reports";
 import { trRoomChat } from "./tr-room-chat";
 import { trSafety } from "./tr-safety";
@@ -140,6 +141,7 @@ export const tr = {
   fastPack: trFastPack,
   packEdit: trPackEdit,
   packOffer: trPackOffer,
+  repairRb: trRepairRb,
   lib1: trLib1,
   fix2: trFix2,
   chat2: trChat2,
