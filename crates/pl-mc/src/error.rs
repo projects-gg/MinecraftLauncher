@@ -77,6 +77,11 @@ pub enum Error {
         .0.free
     )]
     NoRoom(crate::install::space::Shortfall),
+
+    /// A path of the game's command line has letters the system's ANSI code page lacks and no
+    /// 8.3 short form to go by: Java could not read it ([`crate::launch::ansi`], CRASH-DIAG).
+    #[error("{} has letters Java cannot read on this system", .0.display())]
+    UnreadablePath(PathBuf),
 }
 
 impl Error {
