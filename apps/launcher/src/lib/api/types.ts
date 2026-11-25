@@ -580,6 +580,13 @@ export interface NewInstance {
   mcVersion: string;
   loader: LoaderKind;
   loaderVersion?: string;
+  /**
+   * "Daha Fazla Seçenek" (INST-ADD): the maximum memory, `null` for "Otomatik". Left out, Settings →
+   * Oyun's default for new instances applies.
+   */
+  maxMemoryMb?: number | null;
+  /** "Daha Fazla Seçenek": the JVM arguments. Left out, Settings → Oyun's default applies. */
+  jvmArgs?: string;
 }
 
 export interface ModEntry {

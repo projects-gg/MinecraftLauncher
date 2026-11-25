@@ -30,7 +30,9 @@ import {
 } from "@/lib/api";
 import { InstanceIcon, instanceIcons } from "@/shell/instance-icon";
 import { usePrefs } from "@/stores/prefs";
+import { landingTab } from "./create-more";
 import { defaultInstanceName } from "./default-name";
+import { MoreOptions } from "./more-options";
 import { officialFamilyQuery, packOffer } from "./pack-offer";
 import { OfferPresence, PackOfferNotice, SetsHint } from "./pack-offer-ui";
 import { ConfirmDialog } from "./parts";
@@ -57,10 +59,25 @@ export function CreateInstanceDialog({
   const [source, setSource] = useState<Source>(initialSource ?? "new");
   // Set while rendering, not in an effect: the panel opens at the right size, no first frame of
   // "Sıfırdan" that the morph would then glide away from.
+  // "Daha Fazla Seçenek" (INST-ADD): folded, and starting from Settings → Oyun's defaults for new
+  // instances each time the dialog opens.
+  // The dialog often mounts open (`?create` from Home, the palette or an offer): the first values come
+  // from the defaults too, not only a later opening.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [memoryMb, setMemoryMb] = useState<number | null>(
+    () => usePrefs.getState().defaultMaxMemoryMb,
+  );
+  const [jvmArgs, setJvmArgs] = useState(() => usePrefs.getState().defaultJvmArgs);
   const [shownFor, setShownFor] = useState(open);
   if (open !== shownFor) {
     setShownFor(open);
     if (open && initialSource) setSource(initialSource);
+    if (open) {
+      const prefs = usePrefs.getState();
+      setMoreOpen(false);
+      setMemoryMb(prefs.defaultMaxMemoryMb);
+      setJvmArgs(prefs.defaultJvmArgs);
+    }
   }
   const [name, setName] = useState("");
   const [icon, setIcon] = useState<IconKey>("grass");
@@ -210,6 +227,8 @@ export function CreateInstanceDialog({
         mcVersion,
         loader,
         loaderVersion: loader === "vanilla" ? undefined : loaderVersion,
+        maxMemoryMb: memoryMb,
+        jvmArgs,
       }),
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: ["instances"] });
@@ -217,7 +236,12 @@ export function CreateInstanceDialog({
       onOpenChange(false);
       // The new instance is the one on screen: OYNA plays it, not the previous choice.
       usePrefs.getState().selectInstance(created.id);
-      void navigate({ to: "/library/$instanceId", params: { instanceId: created.id } });
+      // With "Daha Fazla Seçenek" open it lands on its settings (Java and the window are there).
+      void navigate({
+        to: "/library/$instanceId",
+        params: { instanceId: created.id },
+        search: { tab: landingTab(moreOpen) },
+      });
     },
     onError: (error) => showError(error),
   });
@@ -442,6 +466,14 @@ export function CreateInstanceDialog({
             <OfferPresence show={setCount > 0}>
               <SetsHint onOpen={() => setSource("sets")} />
             </OfferPresence>
+            <MoreOptions
+              open={moreOpen}
+              onOpenChange={setMoreOpen}
+              memoryMb={memoryMb}
+              onMemoryChange={setMemoryMb}
+              jvmArgs={jvmArgs}
+              onJvmArgsChange={setJvmArgs}
+            />
           </div>
         ) : source === "sets" ? (
           setFlow.body

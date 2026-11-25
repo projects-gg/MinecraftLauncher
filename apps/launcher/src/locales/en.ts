@@ -39,6 +39,7 @@ import { enHost } from "./en-host";
 import { enIasSync } from "./en-ias-sync";
 import { enIdentity } from "./en-identity";
 import { enImport } from "./en-import";
+import { enInstAdd } from "./en-inst-add";
 import { enKeyClash } from "./en-key-clash";
 import { enLauncherReset } from "./en-launcher-reset";
 import { enLib1 } from "./en-lib1";
@@ -349,6 +350,7 @@ export const en: DeepPartial<Strings> = {
   packEdit: enPackEdit,
   packOffer: enPackOffer,
   repairRb: enRepairRb,
+  instAdd: enInstAdd,
   lib1: enLib1,
   fix2: enFix2,
   chat2: enChat2,

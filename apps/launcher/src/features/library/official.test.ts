@@ -26,6 +26,7 @@ vi.mock("@/lib/i18n", () => ({ default: { t: (key: string) => key } }));
 const {
   deletesLastOfficial,
   hasOfficial,
+  invitesOwnInstance,
   libraryOffer,
   officialOrOffer,
   playTarget,
@@ -90,6 +91,23 @@ describe("the library's offer", () => {
       libraryOffer([vanillaProjects], { removed: false, instanceId: "projects" }, false),
     ).toBeNull();
     expect(hasOfficial([vanilla], status())).toBe(false);
+  });
+});
+
+describe("the invite to an instance of one's own", () => {
+  it("shows while the library holds official packs only", () => {
+    expect(invitesOwnInstance([projects], false)).toBe(true);
+    // A copy of the pack is still the pack's.
+    expect(invitesOwnInstance([projects, copy], false)).toBe(true);
+  });
+
+  it("leaves once the player has one, while searching, and with nothing loaded or left", () => {
+    expect(invitesOwnInstance([projects, vanilla], false)).toBe(false);
+    expect(invitesOwnInstance([vanilla], false)).toBe(false);
+    expect(invitesOwnInstance([projects], true)).toBe(false);
+    expect(invitesOwnInstance(undefined, false)).toBe(false);
+    // The empty library's own state already has "Yeni kurulum".
+    expect(invitesOwnInstance([], false)).toBe(false);
   });
 });
 

@@ -74,6 +74,19 @@ export function libraryOffer(
 }
 
 /**
+ * Whether "Kurulumlarım" invites the player to make an instance of their own (INST-ADD): the
+ * library has instances and every one is an official pack's (a new player's library), and no
+ * search is on. The empty library says nothing here: its empty state has "Yeni kurulum" itself.
+ */
+export function invitesOwnInstance(
+  instances: readonly InstanceSummary[] | undefined,
+  searching: boolean,
+): boolean {
+  if (!instances || instances.length === 0 || searching) return false;
+  return instances.every((i) => i.managed);
+}
+
+/**
  * Whether deleting `id` leaves no official instance: the confirmation then says the pack can be
  * installed again. A copy left behind keeps the pack, so the usual sentence stays.
  */

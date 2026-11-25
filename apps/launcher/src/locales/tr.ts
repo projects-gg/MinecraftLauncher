@@ -41,6 +41,7 @@ import { trHost } from "./tr-host";
 import { trIasSync } from "./tr-ias-sync";
 import { trIdentity } from "./tr-identity";
 import { trImport } from "./tr-import";
+import { trInstAdd } from "./tr-inst-add";
 import { trKeyClash } from "./tr-key-clash";
 import { trLauncherReset } from "./tr-launcher-reset";
 import { trLib1 } from "./tr-lib1";
@@ -142,6 +143,7 @@ export const tr = {
   packEdit: trPackEdit,
   packOffer: trPackOffer,
   repairRb: trRepairRb,
+  instAdd: trInstAdd,
   lib1: trLib1,
   fix2: trFix2,
   chat2: trChat2,
