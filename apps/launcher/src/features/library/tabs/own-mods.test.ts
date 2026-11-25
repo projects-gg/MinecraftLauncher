@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ModEntry } from "@/lib/api";
-import { baseName, ownMods } from "./own-mods";
+import type { InstalledContent, ModEntry } from "@/lib/api";
+import { baseName, bulkUpdates, ownMods } from "./own-mods";
 
 const mod = (fileName: string, extra: Partial<ModEntry> = {}): ModEntry => ({
   fileName,
@@ -15,6 +15,39 @@ const mod = (fileName: string, extra: Partial<ModEntry> = {}): ModEntry => ({
 });
 
 const names = (mods: ModEntry[]) => mods.map((m) => m.fileName);
+
+describe("Tümünü Güncelle", () => {
+  const entry = (fileName: string, extra: Partial<InstalledContent> = {}): InstalledContent => ({
+    fileName,
+    enabled: true,
+    sizeBytes: 1,
+    fromPack: false,
+    update: { versionId: "v2", versionNumber: "2.0", versionType: "release", datePublished: "" },
+    ...extra,
+  });
+
+  it("leaves out held mods (REPAIR-RB), the pack's files and files no longer listed", () => {
+    const entries = [
+      entry("sodium.jar"),
+      entry("lithium.jar", { heldFrom: "0.16.0" }),
+      entry("fabric-api.jar", { fromPack: true }),
+      entry("gone.jar"),
+      entry("zoomify.jar.disabled"),
+      entry("iris.jar", { update: undefined }),
+    ];
+    const present = new Set([
+      "sodium.jar",
+      "lithium.jar",
+      "fabric-api.jar",
+      "zoomify.jar",
+      "iris.jar",
+    ]);
+    expect(bulkUpdates(entries, present).map((e) => e.fileName)).toEqual([
+      "sodium.jar",
+      "zoomify.jar.disabled",
+    ]);
+  });
+});
 
 describe("the player's own mods (Kendi modların)", () => {
   const folder = [

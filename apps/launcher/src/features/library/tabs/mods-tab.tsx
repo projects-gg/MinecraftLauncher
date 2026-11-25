@@ -42,7 +42,7 @@ import { formatBytes } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
 import { TabEmpty } from "../parts";
 import { modRowKeys } from "./mod-keys";
-import { ownMods } from "./own-mods";
+import { baseName, bulkUpdates, ownMods } from "./own-mods";
 
 /** A vanilla instance's Modlar tab: it cannot load mods; a new instance with a loader can. */
 export function VanillaModsEmpty() {
@@ -256,7 +256,9 @@ export function ModsTab({
       showError(result.error);
     } else if (result.data?.offline) {
       toast(t("content.toasts.updatesOffline"));
-    } else if (!result.data?.entries.some((e) => e.update && !e.fromPack && !e.heldFrom)) {
+    } else {
+      const found = result.data?.entries ?? [];
+      if (bulkUpdates(found, new Set(found.map((e) => baseName(e.fileName)))).length > 0) return;
       toast(t("content.toasts.noUpdates"));
     }
   };
@@ -281,13 +283,7 @@ export function ModsTab({
   // removed mod (also one waiting for its "Geri al" toast) has nothing left to update.
   const updates = useMemo(() => {
     const present = new Set(listed.map((m) => m.fileName.replace(/\.disabled$/, "")));
-    return (scan.data?.entries ?? []).filter(
-      (e) =>
-        e.update &&
-        !e.fromPack &&
-        !e.heldFrom &&
-        present.has(e.fileName.replace(/\.disabled$/, "")),
-    );
+    return bulkUpdates(scan.data?.entries ?? [], present);
   }, [scan.data, listed]);
   // The list that takes the empty zone's place (mods were just dropped or added) rises in.
   const wasEmpty = useRef(listed.length === 0);
