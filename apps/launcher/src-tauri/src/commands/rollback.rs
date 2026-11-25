@@ -286,7 +286,8 @@ pub(crate) async fn recorded_holds(state: &AppState, instance: &Instance) -> Vec
         .to_vec()
 }
 
-/// The player updated mods by name: their holds end (the jar may keep its file name).
+/// An update moved these jars of the player's: their holds end (also when a jar kept its file
+/// name).
 pub(crate) async fn release_updated(state: &AppState, instance: &Instance, files: &[String]) {
     let Ok(instance_dir) = state.instances.instance_dir(&instance.id) else {
         return;
@@ -306,8 +307,9 @@ pub(crate) async fn release_updated(state: &AppState, instance: &Instance, files
 
 /// A game crashed (a fresh crash, not a dialog built again): when it crashed with a mod held
 /// after an earlier crash before any game ended cleanly, going back did not help: the hold is
-/// marked so (no longer held, not offered again).
+/// marked so (no longer held, not offered again) and a pack mod's override ends with it.
 pub(crate) async fn crash_seen(
+    app: &AppHandle,
     state: &AppState,
     instance: &Instance,
     diagnosis: &CrashDiagnosis,
@@ -336,18 +338,59 @@ pub(crate) async fn crash_seen(
         &snapshot,
         &crate::commands::modhealth::environment(instance, java),
     );
-    let _writing = HISTORY.lock().await;
-    let mut history = ModHistory::load(&path).await;
-    let Some(mod_id) =
-        repeated_hold(history.holds_of(minecraft), &attributed).map(|hold| hold.mod_id.clone())
-    else {
-        return;
-    };
-    if history.mark_failed(minecraft, &mod_id) {
-        tracing::info!(instance = %instance.id, mod_id, "the game crashed again with a mod that went back");
+    let pack_mod = {
+        let _writing = HISTORY.lock().await;
+        let mut history = ModHistory::load(&path).await;
+        let Some(hold) = repeated_hold(history.holds_of(minecraft), &attributed).cloned() else {
+            return;
+        };
+        if !history.mark_failed(minecraft, &hold.mod_id) {
+            return;
+        }
+        tracing::info!(instance = %instance.id, mod_id = %hold.mod_id, "the game crashed again with a mod that went back");
         if let Err(error) = history.save(&path).await {
             tracing::warn!(%error, "the mod history was not saved");
+            return;
         }
+        hold.pack_item.is_some()
+    };
+    // A pack mod's override goes with its hold: the pack's file comes back with the next sync
+    // (which ends the override itself when the instance is busy now).
+    if pack_mod {
+        let lock = instance_lock(app, &instance.id);
+        if let Ok(_guard) = lock.try_lock() {
+            end_unheld_rollbacks(state, instance, &game_dir).await;
+        }
+    }
+}
+
+/// A pack mod's rollback override lives only while its hold does: one whose hold did not help,
+/// or that the mod history no longer has, ends and the sync puts the pack's file back. Before
+/// every pack sync; one small file read without such an override.
+pub(crate) async fn end_unheld_rollbacks(state: &AppState, instance: &Instance, game_dir: &Path) {
+    let Ok(Some(mut pack_state)) = PackState::load(game_dir).await else {
+        return;
+    };
+    if !pack_state
+        .overrides
+        .values()
+        .any(|choice| choice.reason == OverrideReason::Rollback)
+    {
+        return;
+    }
+    let Ok(instance_dir) = state.instances.instance_dir(&instance.id) else {
+        return;
+    };
+    let held = ModHistory::load(&history_path(&instance_dir))
+        .await
+        .held_pack_items(&instance.mc_version);
+    let ended = pl_content::end_rollbacks(&mut pack_state, &held);
+    if ended.is_empty() {
+        return;
+    }
+    tracing::info!(instance = %instance.id, ?ended, "rollback overrides without a hold ended");
+    if let Err(error) = pack_state.save(game_dir).await {
+        tracing::warn!(%error, "pack state not saved after ending rollback overrides");
     }
 }
 
@@ -676,9 +719,13 @@ pub async fn mods_rollback(
             else {
                 return Err(not_available());
             };
-            let choice =
-                crate::commands::packedit::rollback_override(&manifest, item, &plan.target)
-                    .ok_or_else(not_offered)?;
+            let choice = crate::commands::packedit::rollback_override(
+                &manifest,
+                item,
+                &plan.target,
+                plan.candidate.sha1.as_deref(),
+            )
+            .ok_or_else(not_offered)?;
             let file = choice
                 .path
                 .strip_prefix("mods/")
@@ -714,6 +761,8 @@ pub async fn mods_rollback(
                 pack_item: Some(item.clone()),
                 version: plan.target.version_number.clone(),
                 from_version: plan.from_version(),
+                from_version_id: plan.current.as_ref().map(|v| v.id.clone()),
+                from_published: plan.current.as_ref().map(|v| v.date_published.clone()),
                 at_ms,
                 ..ModHold::default()
             }

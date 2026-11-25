@@ -7,7 +7,9 @@
 //!   its file instead of the pack's and never puts the pack's back. A selection's `revert`
 //!   ("Paketin Sürümüne Dön") drops it. When the pack's own file for the item changes, the
 //!   launcher asks Modrinth when the pack's version was published ([`pending_comparisons`]) and
-//!   [`follow_pack`] ends the override once the pack's version is at least as new.
+//!   [`follow_pack`] ends the override once the pack's version is at least as new. A rollback
+//!   hold (REPAIR-RB) ends as soon as the pack ships a file other than the one that crashed, and
+//!   with its hold ([`end_rollbacks`]).
 //! - [`DiskJar`] and [`own_stand_ins`]: a jar the player put into `mods/` that declares (or
 //!   provides) the mod id of a pack item stands in for that item. The pack's copy is not
 //!   installed and a copy the pack installed goes, so the loader never sees the mod twice. A pack
@@ -42,8 +44,10 @@ pub enum OverrideReason {
     /// The launcher picked it: a mod of the player's needs a newer version than the pack's.
     Needed,
     /// The player went back to the version of the last game that ended without a crash, after
-    /// the pack's newer one crashed the game (REPAIR-RB, "Önceki Sürüme Dön"). A hold: the pack's
-    /// later files do not end it ([`follow_pack`]), "Paketin Sürümüne Dön" does.
+    /// the pack's newer one crashed the game (REPAIR-RB, "Önceki Sürüme Dön"). A hold against the
+    /// version that crashed, not against later ones: it ends when the pack ships another file
+    /// ([`follow_pack`]), when going back did not help ([`end_rollbacks`]) and with "Paketin
+    /// Sürümüne Dön".
     Rollback,
     /// A reason a newer launcher wrote.
     #[serde(other)]
@@ -77,6 +81,11 @@ pub struct ItemOverride {
     /// For [`OverrideReason::Needed`]: the mods that needed it, by name.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub needed_by: Vec<String>,
+    /// For [`OverrideReason::Rollback`]: SHA-1 of the jar that crashed when it was not the
+    /// pack's file (`pack_sha1`), such as a version the player had chosen. The pack shipping it
+    /// later does not end the hold.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crashed_sha1: Option<String>,
 }
 
 impl ItemOverride {
@@ -290,14 +299,19 @@ pub enum FollowOutcome {
     /// The player's version is newer (or the two cannot be compared): it stays, and the pack's
     /// current file is remembered so the question is not asked again.
     Kept,
+    /// A [`OverrideReason::Rollback`] hold ended: the pack ships a file other than the one that
+    /// crashed (a fix, or what its servers need). Its file is installed; the player is told once.
+    MovedOn,
     /// No override for the item.
     None,
 }
 
 /// The pack's file for `item` is now `pack_sha1`, published at `pack_published` (RFC 3339, from
 /// Modrinth). The override ends when that is no earlier than the override's own version. A
-/// [`OverrideReason::Rollback`] hold ends only when the pack's file becomes the held one: a newer
-/// pack version is what crashed, and the player decides when to try it again.
+/// [`OverrideReason::Rollback`] hold protects against the file that crashed, not against the
+/// pack's later ones: it stays while the pack ships that file and ends with any other
+/// ([`FollowOutcome::MovedOn`]; [`FollowOutcome::Following`] when the pack went back to the
+/// held one).
 pub fn follow_pack(
     state: &mut PackState,
     item: &str,
@@ -308,12 +322,18 @@ pub fn follow_pack(
         return FollowOutcome::None;
     };
     if choice.reason == OverrideReason::Rollback {
-        if choice.sha1.eq_ignore_ascii_case(pack_sha1) {
-            state.overrides.remove(item);
-            return FollowOutcome::Following;
+        let crashed = choice.crashed_sha1.as_deref().unwrap_or(&choice.pack_sha1);
+        if crashed.eq_ignore_ascii_case(pack_sha1) {
+            choice.pack_sha1 = pack_sha1.to_ascii_lowercase();
+            return FollowOutcome::Kept;
         }
-        choice.pack_sha1 = pack_sha1.to_ascii_lowercase();
-        return FollowOutcome::Kept;
+        let back = choice.sha1.eq_ignore_ascii_case(pack_sha1);
+        state.overrides.remove(item);
+        return if back {
+            FollowOutcome::Following
+        } else {
+            FollowOutcome::MovedOn
+        };
     }
     let parse = |text: &str| text.parse::<jiff::Timestamp>().ok();
     let newer = match (
@@ -330,6 +350,24 @@ pub fn follow_pack(
         choice.pack_sha1 = pack_sha1.to_ascii_lowercase();
         FollowOutcome::Kept
     }
+}
+
+/// Ends the [`OverrideReason::Rollback`] holds whose item is not in `held` (the pack items the
+/// mod history still holds): one that did not help, or one the history no longer has. The sync
+/// then puts the pack's file back. Returns the items whose hold ended.
+pub fn end_rollbacks(state: &mut PackState, held: &HashSet<String>) -> Vec<String> {
+    let ended: Vec<String> = state
+        .overrides
+        .iter()
+        .filter(|(item, choice)| {
+            choice.reason == OverrideReason::Rollback && !held.contains(item.as_str())
+        })
+        .map(|(item, _)| item.clone())
+        .collect();
+    for item in &ended {
+        state.overrides.remove(item);
+    }
+    ended
 }
 
 #[cfg(test)]
@@ -352,6 +390,7 @@ mod tests {
             pack_sha1: sha1_hex(b"fabric"),
             reason: OverrideReason::Chosen,
             needed_by: Vec::new(),
+            crashed_sha1: None,
         }
     }
 
@@ -622,32 +661,53 @@ mod tests {
         );
     }
 
-    /// REPAIR-RB: a version held after a crash stays when the pack moves on, even to a newer
-    /// version; only the pack's file becoming the held one ends it.
+    /// REPAIR-RB: a version held after a crash protects against the pack's file that crashed,
+    /// not against later ones.
     #[test]
-    fn a_rollback_hold_outlives_newer_pack_files() {
-        let m = manifest(
+    fn a_rollback_hold_ends_when_the_pack_ships_past_the_crashed_file() {
+        let crashed = manifest(
             vec![item("euphoria", "mods/euphoria-new.jar")],
-            vec![file("mods/euphoria-new.jar", b"euphoria-new")],
+            vec![file("mods/euphoria-new.jar", b"euphoria-crashed")],
         );
         let mut state = PackState::default();
         let mut held = choice("mods/euphoria-old.jar", b"euphoria-old");
         held.reason = OverrideReason::Rollback;
-        state.overrides.insert("euphoria".into(), held);
-        let sha = sha1_hex(b"euphoria-new");
-        assert_eq!(pending_comparisons(&m, &state).len(), 1);
-        // A newer pack version: kept, and not asked again for that file.
+        held.pack_sha1 = sha1_hex(b"euphoria-crashed");
+        state.overrides.insert("euphoria".into(), held.clone());
+        // The pack ships the file that crashed (again): the hold stays, nothing is asked.
+        assert!(pending_comparisons(&crashed, &state).is_empty());
+        assert!(effective_overrides(&crashed, &state, &|_| false).contains_key("euphoria"));
+        // The pack ships a newer file: the hold ends and the pack's file is installed again.
+        let fixed = sha1_hex(b"euphoria-fixed");
         assert_eq!(
-            follow_pack(&mut state, "euphoria", &sha, Some("2027-01-01T00:00:00Z")),
+            follow_pack(&mut state, "euphoria", &fixed, Some("2027-01-01T00:00:00Z")),
+            FollowOutcome::MovedOn
+        );
+        assert!(state.overrides.is_empty());
+        // The pack went back to the held file: followed, nothing to tell.
+        state.overrides.insert("euphoria".into(), held.clone());
+        assert_eq!(
+            follow_pack(&mut state, "euphoria", &sha1_hex(b"euphoria-old"), None),
+            FollowOutcome::Following
+        );
+        assert!(state.overrides.is_empty());
+        // The jar that crashed was a version the player had chosen, not the pack's file: the
+        // pack shipping that version later keeps the hold, anything else ends it.
+        held.pack_sha1 = sha1_hex(b"euphoria-pack");
+        held.crashed_sha1 = Some(sha1_hex(b"euphoria-crashed"));
+        state.overrides.insert("euphoria".into(), held);
+        let again = sha1_hex(b"euphoria-crashed");
+        assert_eq!(
+            follow_pack(&mut state, "euphoria", &again, None),
             FollowOutcome::Kept
         );
-        assert!(pending_comparisons(&m, &state).is_empty());
-        assert!(effective_overrides(&m, &state, &|_| false).contains_key("euphoria"));
-        // The pack's file becomes the held one: the pack is followed again.
-        let held_sha = sha1_hex(b"euphoria-old");
+        assert!(
+            pending_comparisons(&crashed, &state).is_empty(),
+            "not asked again"
+        );
         assert_eq!(
-            follow_pack(&mut state, "euphoria", &held_sha, None),
-            FollowOutcome::Following
+            follow_pack(&mut state, "euphoria", &fixed, None),
+            FollowOutcome::MovedOn
         );
         assert!(state.overrides.is_empty());
         // Older launchers read the reason as one they do not know (`Other`).
@@ -655,5 +715,25 @@ mod tests {
             serde_json::to_value(OverrideReason::Rollback).unwrap(),
             "rollback"
         );
+    }
+
+    /// REPAIR-RB: a rollback override lives only while the mod history holds its item; the
+    /// player's other overrides stay.
+    #[test]
+    fn rollback_overrides_end_with_their_hold() {
+        let mut state = PackState::default();
+        let mut gone = choice("mods/a-old.jar", b"a-old");
+        gone.reason = OverrideReason::Rollback;
+        let mut kept = choice("mods/b-old.jar", b"b-old");
+        kept.reason = OverrideReason::Rollback;
+        state.overrides.insert("a".into(), gone);
+        state.overrides.insert("b".into(), kept);
+        state
+            .overrides
+            .insert("c".into(), choice("mods/c-2.jar", b"c-2"));
+        let held: HashSet<String> = ["b".to_owned()].into();
+        assert_eq!(end_rollbacks(&mut state, &held), ["a"]);
+        assert_eq!(state.overrides.keys().collect::<Vec<_>>(), ["b", "c"]);
+        assert!(end_rollbacks(&mut state, &held).is_empty());
     }
 }
