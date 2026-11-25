@@ -30,6 +30,9 @@
 //! `--join-event` adds a Studio event on the server (`join`) that runs now, so the event card offers
 //! "Katıl".
 //!
+//! `--feature <name>` (repeatable) turns a feature flag of the config on by its JSON name
+//! (`--feature modRollback`).
+//!
 //! `--afk <zip>` publishes an AFK client build for this computer's platform (the zip as the
 //! client's CI makes it: `Projects-Konsol-Hesap(.exe)` at its root) as version `--afk-version`
 //! (default `9.9.9-e2e`), served from `<out-dir>/v1/afk/<version>/<platform>.zip`. A run without it
@@ -402,6 +405,8 @@ async fn main() {
     let mut afk_zip: Option<PathBuf> = None;
     let mut afk_version = "9.9.9-e2e".to_owned();
     let mut no_afk = false;
+    // Feature flags to turn on, by their JSON names.
+    let mut features: Vec<String> = Vec::new();
     while let Some(flag) = args.next() {
         match flag.as_str() {
             "--feed-key" => feed_key = args.next(),
@@ -411,6 +416,7 @@ async fn main() {
             "--afk" => afk_zip = Some(PathBuf::from(args.next().expect("--afk <zip>"))),
             "--afk-version" => afk_version = args.next().expect("--afk-version <version>"),
             "--no-afk" => no_afk = true,
+            "--feature" => features.push(args.next().expect("--feature <name>")),
             "--files-url" => {
                 let url = args.next().expect("--files-url <url>");
                 FILES_URL
@@ -567,6 +573,21 @@ async fn main() {
     .expect("news feed");
     if let Some(path) = &overrides {
         add_overrides(path, &mut config, &mut news);
+    }
+    if !features.is_empty() {
+        let mut flags = serde_json::to_value(config.features).expect("features");
+        for name in &features {
+            flags[name.as_str()] = Value::Bool(true);
+        }
+        config.features = serde_json::from_value(flags).expect("features");
+        let set = serde_json::to_value(config.features).expect("features");
+        for name in &features {
+            assert_eq!(
+                set[name.as_str()],
+                Value::Bool(true),
+                "unknown feature {name}"
+            );
+        }
     }
 
     let mut builder = match std::fs::read(v1.join("index.json")) {
