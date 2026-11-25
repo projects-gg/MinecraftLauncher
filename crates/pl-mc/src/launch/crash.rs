@@ -275,6 +275,15 @@ pub struct CrashInput<'a> {
     pub window_shown: bool,
 }
 
+/// The game gave up opening its window and ended itself with no error code: Minecraft logs "Failed
+/// to create window" (the graphics driver refused the window it asked for), shows its own message
+/// box and exits normally. A failure all the same, the driver's (CRASH-DIAG).
+pub fn window_refused(output: &str) -> bool {
+    output
+        .lines()
+        .any(|line| line.contains("Failed to create window"))
+}
+
 /// The legacy rule: a non-zero exit, or a short run that left a crash report.
 pub fn is_failure(exit_code: Option<i32>, runtime: Duration, has_crash_report: bool) -> bool {
     exit_code != Some(0) || (runtime < SHORT_RUN && has_crash_report)
@@ -442,6 +451,18 @@ static OPTION_QUOTED: LazyLock<Regex> = LazyLock::new(|| {
 /// 2G" (a value typed without its option, an unquoted path with a space).
 static MAIN_CLASS_MISSING: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"Could not find or load main class (\S+)").expect("valid regex"));
+/// The Java launcher could not read the argument file the launcher writes for a long command line
+/// ("Error: could not open" and its path, `launch-1a2b.args`): something removed or locked it.
+static ARGUMENT_FILE_UNREAD: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^Error: could not open `[^'\r\n]*\.args'").expect("valid regex")
+});
+/// A class of the game, a mod loader or a library the first thread could not load: a library jar
+/// is missing or damaged (`Exception in thread "main" java.lang.NoClassDefFoundError:
+/// org/objectweb/asm/ClassVisitor`).
+static MAIN_THREAD_CLASS_MISSING: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"Exception in thread "main" java\.lang\.(?:NoClassDefFoundError|ClassNotFoundException): (?:org[/.]objectweb|org[/.]spongepowered|net[/.]fabricmc|org[/.]quiltmc|joptsimple|com[/.]mojang|org[/.]lwjgl|org[/.]apache|com[/.]google|io[/.]netty|it[/.]unimi|cpw[/.]mods|net[/.]neoforged|net[/.]minecraftforge|org[/.]slf4j|net[/.]minecraft[/.])"#)
+        .expect("valid regex")
+});
 /// "Could not reserve enough space for object heap" (old JVMs) and "... for 2097152KB object
 /// heap".
 static HEAP_RESERVE: LazyLock<Regex> = LazyLock::new(|| {
@@ -740,12 +761,18 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
     ]) || JAVA_CLASS_TOO_NEW.is_match(&text)
     {
         (CrashKind::JavaTooNew, Vec::new(), input.required_java)
+    } else if startup_files_broken(&text, &lower) {
+        // Java or the game's own files are missing or damaged: the JVM, a library or the game's
+        // jar could not be loaded before anything ran (CRASH-DIAG).
+        (CrashKind::CorruptedFiles, Vec::new(), None)
     } else if any(&[
         "unrecognized vm option",
         "unrecognized option:",
         "improperly specified vm option",
         "invalid initial heap size",
         "could not find agent library",
+        "multiple garbage collectors selected",
+        "conflicting collector combinations",
     ]) {
         (CrashKind::InvalidJvmArgument, Vec::new(), None)
     } else if HEAP_RESERVE.is_match(&text)
@@ -870,7 +897,8 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
         "unauthorizedaccessexception",
         "erişim engellendi",
         "operation not permitted",
-    ]) {
+    ]) || ARGUMENT_FILE_UNREAD.is_match(&text)
+    {
         (CrashKind::AccessDenied, Vec::new(), None)
     } else if any(&[
         "error occurred during initialization of vm",
@@ -941,8 +969,9 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
 }
 
 /// The mods an unexplained crash's own crash report names, when the game was on screen: Mixin
-/// failures, mod frames and the report's "Suspected Mods", else the mod classes at the top of its
-/// stack ([`trace::mod_frames`]). `None` when the crash is explained, or no mod is named.
+/// failures, mod loading failures and the report's "Suspected Mods", else the mods of its stack
+/// (their classes and Mixin handlers above the game's main loop, mods that carry other mods' code
+/// last: [`trace::stack_mods`]). `None` when the crash is explained, or no mod is named.
 fn in_game_mod_suspects(kind: CrashKind, input: &CrashInput<'_>) -> Option<Vec<CrashSuspect>> {
     if kind != CrashKind::Unknown || !input.window_shown {
         return None;
@@ -950,15 +979,8 @@ fn in_game_mod_suspects(kind: CrashKind, input: &CrashInput<'_>) -> Option<Vec<C
     let report = input
         .crash_report
         .filter(|report| report.contains(trace::REPORT_HEADER))?;
-    let mut found = collect_suspects(report, CrashKind::Unknown);
-    if found.is_empty()
-        && let Some(class) = trace::mod_frames(report).into_iter().next()
-    {
-        found.push(CrashSuspect {
-            class_name: Some(class),
-            ..CrashSuspect::new(SuspectReason::InStackTrace)
-        });
-    }
+    // The loader's and the report's own words, else the mods of the report's stack.
+    let found = collect_suspects(report, CrashKind::Unknown);
     (!found.is_empty()).then_some(found)
 }
 
@@ -1021,14 +1043,40 @@ fn player_argument_failed(text: &str, lower: &str, player: &[String]) -> bool {
             ]))
         || (sets(&["-javaagent:", "-agentlib:", "-agentpath:"])
             && any(&[
-                "agent library failed to init",
+                "agent library failed",
                 "could not find agent library",
                 "error opening zip file or jar manifest missing",
             ]))
         || (player
             .iter()
             .any(|arg| arg.starts_with("-XX:+Use") && arg.ends_with("GC"))
-            && any(&["conflicting collector combinations"]))
+            && any(&[
+                "conflicting collector combinations",
+                "multiple garbage collectors selected",
+            ]))
+}
+
+/// Java or the game's own files are missing or damaged, as the Java launcher, the JVM or the mod
+/// loader says before the game runs: Java's own files (`could not find java.dll`, a missing
+/// `jvm.dll` or `jvm.cfg`, `java/lang/Object` not found), a library the main class needs
+/// (`Unable to initialize main class`, a library class the first thread could not load), the
+/// module path of Forge and NeoForge (`initialization of boot layer`), the libraries or the game
+/// jar Fabric looks for. Repairing the installation (every file checked) is the fix.
+fn startup_files_broken(text: &str, lower: &str) -> bool {
+    let any = |needles: &[&str]| needles.iter().any(|n| lower.contains(n));
+    any(&[
+        "could not find java se runtime environment",
+        "error: could not find java.dll",
+        "java/lang/noclassdeffounderror: java/lang/object",
+        "error: unable to initialize main class",
+        "error: linkageerror occurred while loading main class",
+        "error occurred during initialization of boot layer",
+        "not detected on the classpath",
+        "could not locate minecraft",
+    ]) || (lower.contains("error: missing `") && lower.contains(" jvm at `"))
+        || (lower.contains("could not open `") && lower.contains("jvm.cfg"))
+        || (lower.contains("error: loading: ") && lower.contains("jvm.dll"))
+        || MAIN_THREAD_CLASS_MISSING.is_match(text)
 }
 
 /// Fabric's startup warnings ("recommends", "conflicts with"): the game keeps loading after them.
@@ -1368,7 +1416,10 @@ fn describe(
         }
         CrashKind::CorruptedFiles => (
             s("Oyun dosyaları bozuk görünüyor"),
-            s("Oyunun bazı dosyaları eksik ya da bozuk. Kurulumu onarıp tekrar dene."),
+            s(
+                "Oyunun ya da Java'nın bazı dosyaları eksik ya da bozuk. Tekrar oyna: launcher bu kez \
+               bütün dosyaları denetleyip bozuk olanları yeniden indirir.",
+            ),
             vec![SuggestedAction::RepairInstallation],
         ),
         CrashKind::AccessDenied => (
@@ -1432,8 +1483,8 @@ fn describe(
         CrashKind::Unknown => (
             s("Oyun beklenmedik şekilde kapandı"),
             s(
-                "Oyun bir hata yüzünden kapandı. Ayrıntılar çökme raporunda ve oyun kaydında. \
-               Sorun sürerse kaydı destek ekibiyle paylaşabilirsin.",
+                "Oyun bir hata yüzünden kapandı. Tekrar dene; sorun sürerse Sorun Yardımcısı'nı aç \
+               ya da oyun kaydını destek ekibiyle paylaş.",
             ),
             Vec::new(),
         ),
@@ -2099,23 +2150,67 @@ fn suspected_section(text: &str, found: &mut Suspects) {
     }
 }
 
-/// Mod frames among the first lines of the stack trace (FML module names, Fabric mixin
-/// handler names). Weak evidence: only used when nothing else was found.
+/// Mods in the stack: weak evidence, used only when nothing else was found, at most three, mods
+/// that carry other mods' code last ([`trace::StackMod::carrier`]). With the game's crash report,
+/// the mods of its own stack ([`trace::stack_mods`]), else the mixins of the first class its
+/// "Mixins in Stacktrace" section lists (a mod adds it); in the output alone, FML module names and
+/// Mixin handler names among the first lines of its stacks (the report's stack, not the earlier
+/// errors the output also quotes, is the crash's).
 fn stack_frames(text: &str, found: &mut Suspects) {
-    let frames = text
-        .lines()
-        .filter(|l| l.trim_start().starts_with("at "))
-        .take(60);
-    for line in frames {
-        for c in FML_FRAME
-            .captures_iter(line)
-            .chain(MIXIN_HANDLER.captures_iter(line))
-        {
-            if found.0.len() >= 3 {
+    let mods = match text.find(trace::REPORT_HEADER) {
+        Some(at) => {
+            let report = &text[at..];
+            let mods = trace::stack_mods(report);
+            if mods.is_empty() {
+                thrower_mixins(report, found);
                 return;
             }
-            found.push(CrashSuspect::new(SuspectReason::InStackTrace).id(&c[1]));
+            mods
         }
+        None => text
+            .lines()
+            .filter(|l| l.trim_start().starts_with("at "))
+            .take(60)
+            .flat_map(|line| {
+                FML_FRAME
+                    .captures_iter(line)
+                    .chain(MIXIN_HANDLER.captures_iter(line))
+                    .map(|c| trace::StackMod::Id(c[1].to_owned()))
+                    .collect::<Vec<_>>()
+            })
+            .collect(),
+    };
+    let (carriers, others): (Vec<_>, Vec<_>) = mods.into_iter().partition(|m| m.carrier());
+    for stack_mod in others.into_iter().chain(carriers) {
+        if found.0.len() >= 3 {
+            return;
+        }
+        found.push(match stack_mod {
+            trace::StackMod::Id(id) => CrashSuspect::new(SuspectReason::InStackTrace).id(&id),
+            trace::StackMod::Class(class) => CrashSuspect {
+                class_name: Some(class),
+                ..CrashSuspect::new(SuspectReason::InStackTrace)
+            },
+        });
+    }
+}
+
+/// The mixins mods applied to the class the exception was thrown in, from the report's "Mixins in
+/// Stacktrace" section ([`trace::thrower_mixins`]), at most three, mods that carry other mods'
+/// code last.
+fn thrower_mixins(report: &str, found: &mut Suspects) {
+    let (carriers, others): (Vec<_>, Vec<_>) = trace::thrower_mixins(report)
+        .into_iter()
+        .partition(|(class, _)| trace::StackMod::Class(class.clone()).carrier());
+    for (class, config) in others.into_iter().chain(carriers) {
+        if found.0.len() >= 3 {
+            return;
+        }
+        found.push(CrashSuspect {
+            class_name: Some(class),
+            mixin_config: Some(config),
+            ..CrashSuspect::new(SuspectReason::InStackTrace)
+        });
     }
 }
 
@@ -4166,5 +4261,304 @@ Stacktrace:\n\tat TRANSFORMER/create@0.5.1.f/com.simibubi.create.content.Foo.tic
         }
         assert_eq!(exact_maven_range("[21.1.132,21.1.132]"), "[21.1.132]");
         assert_eq!(exact_maven_range("[1.0,2.0)"), "[1.0,2.0)");
+    }
+
+    // --- CRASH-DIAG: launch failures as Java prints them, mods in real 26.1 stacks ---
+    // The JVM texts below were printed here (25 Nov 2026) by Mojang's runtimes (Microsoft's
+    // OpenJDK 25.0.1, Java 21, 17 and 8) with dummy or partial class paths and damaged copies of
+    // a runtime; paths are made up.
+
+    #[test]
+    fn missing_or_damaged_files_before_the_game_runs() {
+        let damaged = |output: &str| {
+            let d = analyze(output);
+            assert_eq!(d.kind, CrashKind::CorruptedFiles, "{output}");
+            assert!(d.suspects.is_empty() && d.mods.is_empty(), "{output}");
+            assert_eq!(d.trace.sig, "exit/1", "{output}");
+        };
+        // A library of the main class is gone.
+        damaged(
+            "Error: Unable to initialize main class net.minecraft.client.main.Main\nCaused by: java.lang.NoClassDefFoundError: joptsimple/ValueConverter",
+        );
+        // Fabric's loader without its libraries.
+        damaged(
+            "Exception in thread \"main\" java.lang.ExceptionInInitializerError\n\tat net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)\nCaused by: java.lang.IllegalStateException: ASM not detected on the classpath (or perhaps org/objectweb/asm/ClassReader.class was renamed?)\n\tat net.fabricmc.loader.impl.util.LoaderUtil.verifyClasspath(LoaderUtil.java:85)\n\tat net.fabricmc.loader.impl.launch.knot.Knot.<clinit>(Knot.java:345)\n\t... 1 more",
+        );
+        damaged(
+            "Exception in thread \"main\" java.lang.NoClassDefFoundError: org/objectweb/asm/ClassVisitor\n\tat net.fabricmc.loader.impl.launch.knot.Knot.init(Knot.java:1)",
+        );
+        // Fabric could not find the game's jar.
+        damaged(
+            "Exception in thread \"main\" java.lang.RuntimeException: Could not locate Minecraft: provider locate failed",
+        );
+        // The module path of Forge and NeoForge.
+        damaged(
+            "Error occurred during initialization of boot layer\njava.lang.module.FindException: Module cpw.mods.securejarhandler not found",
+        );
+        damaged(
+            "Error occurred during initialization of boot layer\njava.lang.module.FindException: Two versions of module net.fabricmc.loader found in libraries (b-1.0.jar and a-1.0.jar)",
+        );
+        // Java's own image (lib/modules) is damaged: no memory problem.
+        damaged(
+            "Error occurred during initialization of VM\njava/lang/NoClassDefFoundError: java/lang/Object",
+        );
+        // The game's jar is missing (as before).
+        damaged(
+            "Error: Could not find or load main class net.minecraft.client.main.Main\nCaused by: java.lang.ClassNotFoundException: net.minecraft.client.main.Main",
+        );
+        // The Java launcher could not load Java at all (exit codes 2 and 4).
+        for (output, code, sig) in [
+            (
+                "Error: could not find java.dll\nError: Could not find Java SE Runtime Environment.",
+                2,
+                "exit/2",
+            ),
+            (
+                "Error: missing `server' JVM at `C:\\Users\\KorAtesi\\AppData\\Roaming\\x\\runtimes\\java-runtime-epsilon\\windows-x64\\bin\\server\\jvm.dll'.\nPlease install a JDK that contains these missing components.",
+                4,
+                "exit/other",
+            ),
+        ] {
+            let d = analyze_crash(&CrashInput {
+                output,
+                exit_code: Some(code),
+                ..CrashInput::default()
+            });
+            assert_eq!(d.kind, CrashKind::CorruptedFiles, "{output}");
+            assert_eq!(d.trace.sig, sig);
+            assert!(!d.trace.sig.contains("KorAtesi"));
+        }
+        // A class compiled for a newer Java stays a Java version problem.
+        let d = analyze(
+            "Error: LinkageError occurred while loading main class net.minecraft.client.main.Main\n\tjava.lang.UnsupportedClassVersionError: net/minecraft/client/main/Main has been compiled by a more recent version of the Java Runtime (class file version 69.0), this version of the Java Runtime only recognizes class file versions up to 65.0",
+        );
+        assert_eq!(d.kind, CrashKind::JavaTooOld);
+        assert_eq!(
+            d.suggested_actions[0],
+            SuggestedAction::UseAutomaticJava {
+                required_major: Some(25)
+            }
+        );
+        // A class a mod needs is a mod's problem, not the launcher's files.
+        let d = analyze(
+            "[12:00:01] [main/ERROR]: Failed to start the client\njava.lang.NoClassDefFoundError: me/shedaniel/clothconfig2/api/ConfigBuilder\n\tat com.korates.secretmod.Config.screen(Config.java:3)",
+        );
+        assert_ne!(d.kind, CrashKind::CorruptedFiles);
+    }
+
+    #[test]
+    fn java_25_wordings_of_option_failures() {
+        // Two collectors: Java 25 says "Multiple garbage collectors selected".
+        let d = analyze_with(
+            "Error occurred during initialization of VM\nMultiple garbage collectors selected",
+            &["-XX:+UseZGC"],
+            25,
+        );
+        assert_eq!(d.kind, CrashKind::InvalidJvmArgument);
+        assert_eq!(d.suggested_actions[0], SuggestedAction::ResetJvmArguments);
+        // Without arguments of the player's it is still an option problem, not memory.
+        let d = analyze(
+            "Error occurred during initialization of VM\nMultiple garbage collectors selected",
+        );
+        assert_eq!(d.kind, CrashKind::InvalidJvmArgument);
+        // A Java agent that cannot load (Java 25: "agent library failed Agent_OnLoad").
+        let d = analyze_with(
+            "Error opening zip file or JAR manifest missing : missing.jar\nError occurred during initialization of VM\nagent library failed Agent_OnLoad: instrument",
+            &["-javaagent:missing.jar"],
+            25,
+        );
+        assert_eq!(d.kind, CrashKind::InvalidJvmArgument);
+        // The launcher's own argument file could not be read: something removed or locked it.
+        let d = analyze(
+            "Error: could not open `C:\\Users\\KorAtesi\\AppData\\Roaming\\ProjectsLauncher\\logs\\launch-3f2a9c41.args'",
+        );
+        assert_eq!(d.kind, CrashKind::AccessDenied);
+        assert_eq!(
+            d.suggested_actions[0],
+            SuggestedAction::AddAntivirusException
+        );
+    }
+
+    #[test]
+    fn a_window_the_driver_refused_is_a_failure() {
+        // Minecraft logs it, shows its own message box and exits with code 0.
+        let output = "[12:00:01] [Render thread/WARN]: Failed to create window: \ncom.mojang.blaze3d.platform.Window$WindowInitFailed: GLFW error collected during initialization: GLFW error 65542: WGL: The driver does not appear to support OpenGL";
+        assert!(window_refused(output));
+        assert!(!window_refused(
+            "[12:00:01] [Render thread/INFO]: Backend library: LWJGL version 3.3.3"
+        ));
+        let d = analyze_crash(&CrashInput {
+            output,
+            exit_code: Some(0),
+            runtime: Duration::from_secs(4),
+            ..CrashInput::default()
+        });
+        assert_eq!(d.kind, CrashKind::GraphicsDriver);
+        assert_eq!(d.trace.sig, "exit/0");
+        assert!(d.trace.opening);
+    }
+
+    /// A crash report the game wrote while it was on screen.
+    fn shown_report(report: &str) -> CrashDiagnosis {
+        analyze_crash(&CrashInput {
+            output: "[18:02:11] [Render thread/INFO]: Loaded 1290 advancements\n",
+            crash_report: Some(report),
+            exit_code: Some(-1),
+            runtime: Duration::from_secs(1800),
+            java_major: Some(25),
+            required_java: Some(25),
+            window_shown: true,
+            ..CrashInput::default()
+        })
+    }
+
+    /// A report of the game's own, around `stack`.
+    fn game_report(description: &str, stack: &str) -> String {
+        format!(
+            "---- Minecraft Crash Report ----\n// Oops.\n\nTime: 2026-11-25 07:57:28\nDescription: {description}\n\n{stack}\n\n\nA detailed walkthrough of the error, its code path and all known details is as follows:\n---------------------------------------------------------------------------------------\n\n-- System Details --\nDetails:\n\tMinecraft Version: 26.1.2\n"
+        )
+    }
+
+    #[test]
+    fn real_fabric_26_reports_are_read_frame_by_frame() {
+        // Every frame of a Fabric game carries its class loader (`knot//`). A vanilla stack names
+        // no mod (Iris and Sodium of mismatched versions: nothing in the report says so).
+        let report = sample!("fabric-26.1.2-vanilla-npe-crash-report.txt");
+        let d = shown_report(&report);
+        assert_eq!(d.kind, CrashKind::Unknown);
+        assert!(d.suspects.is_empty(), "{:?}", d.suspects);
+        assert_eq!(d.trace.sig, "java/NullPointerException/none");
+        assert_eq!(d.trace.phase, Some("Unexpected error"));
+        // A frame rate mod wraps `renderFrame` below the failure, in the game's main loop: it is
+        // in every crash of the render thread and is not named.
+        let report = sample!("fabric-26.1.2-wrapped-render-frame-npe-crash-report.txt");
+        let d = shown_report(&report);
+        assert_eq!(d.kind, CrashKind::Unknown);
+        assert!(d.suspects.is_empty(), "{:?}", d.suspects);
+        assert_eq!(d.trace.sig, "java/NullPointerException/none");
+        // A mod's class in the same report is found.
+        let top =
+            "\tat knot//net.minecraft.client.renderer.LevelRenderer.update(LevelRenderer.java:477)";
+        let report = report.replacen(
+            top,
+            &format!("\tat knot//net.irisshaders.iris.pipeline.IrisRenderingPipeline.beginLevelRendering(IrisRenderingPipeline.java:1012)\n{top}"),
+            1,
+        );
+        let d = shown_report(&report);
+        assert_eq!(d.kind, CrashKind::ModCrash);
+        assert_eq!(d.trace.sig, "java/NullPointerException/iris");
+        assert_eq!(
+            d.suspects[0].class_name.as_deref(),
+            Some("net.irisshaders.iris.pipeline.IrisRenderingPipeline")
+        );
+        // ... and a Mixin handler a mod merged into the game's code above the main loop.
+        let report = game_report(
+            "Rendering overlay",
+            "java.lang.NullPointerException: boom\n\tat knot//net.minecraft.client.gui.Gui.handler$zza000$xaerominimap$onRender(Gui.java:412)\n\tat knot//net.minecraft.client.gui.Gui.render(Gui.java:200)\n\tat knot//net.minecraft.client.renderer.GameRenderer.render(GameRenderer.java:999)",
+        );
+        assert_eq!(
+            shown_report(&report).trace.sig,
+            "java/NullPointerException/xaero"
+        );
+    }
+
+    #[test]
+    fn mods_that_carry_other_mods_code_come_last() {
+        // Fabric API's screen event called a mod's screen: the mod is named, Fabric API after it.
+        let stack = "java.lang.UnsupportedOperationException: null\n\tat knot//net.fabricmc.fabric.impl.client.screen.ScreenEventFactory.lambda$createAfterRenderEvent$0(ScreenEventFactory.java:63)\n\tat knot//net.minecraft.client.gui.screens.Screen.handler$zfd000$fabric-screen-api-v1$afterRender(Screen.java:1234)\n\tat knot//dev.isxander.zoomify.gui.ZoomifyScreen.render(ZoomifyScreen.java:40)\n\tat knot//net.minecraft.client.renderer.GameRenderer.render(GameRenderer.java:1100)\n\tat knot//net.minecraft.client.Minecraft.runTick(Minecraft.java:1378)";
+        let d = shown_report(&game_report("Rendering screen", stack));
+        assert_eq!(d.kind, CrashKind::ModCrash);
+        assert_eq!(d.trace.sig, "java/UnsupportedOperationException/zoomify");
+        assert_eq!(d.trace.phase, Some("Rendering screen"));
+        assert_eq!(
+            d.suspects
+                .iter()
+                .map(|s| s.class_name.as_deref())
+                .collect::<Vec<_>>(),
+            [
+                Some("dev.isxander.zoomify.gui.ZoomifyScreen"),
+                Some("net.fabricmc.fabric.impl.client.screen.ScreenEventFactory"),
+            ]
+        );
+        // A mod outside the known ones is `mod`, never Fabric API.
+        let other = stack.replace(
+            "dev.isxander.zoomify.gui.ZoomifyScreen",
+            "com.korates.secretmod.SecretScreen",
+        );
+        let d = shown_report(&game_report("Rendering screen", &other));
+        assert_eq!(d.trace.sig, "java/UnsupportedOperationException/mod");
+        // Cloth Config's screen and Kotlin's adapter carry too.
+        let carried = "java.lang.IllegalStateException: boom\n\tat knot//me.shedaniel.clothconfig2.gui.ClothConfigScreen.render(ClothConfigScreen.java:5)\n\tat knot//net.fabricmc.language.kotlin.KotlinAdapter.create(KotlinAdapter.kt:2)\n\tat knot//xaero.map.WorldMap.config(WorldMap.java:9)\n\tat knot//net.minecraft.client.Minecraft.tick(Minecraft.java:40)";
+        let d = shown_report(&game_report("Unexpected error", carried));
+        assert_eq!(d.trace.sig, "java/IllegalStateException/xaero");
+        // Fabric API alone in the stack is named.
+        let alone = "java.lang.UnsupportedOperationException: null\n\tat knot//net.fabricmc.fabric.impl.client.screen.ScreenEventFactory.lambda$createAfterRenderEvent$0(ScreenEventFactory.java:63)\n\tat knot//net.minecraft.client.gui.screens.Screen.handler$zfd000$fabric-screen-api-v1$afterRender(Screen.java:1234)\n\tat knot//net.minecraft.client.renderer.GameRenderer.render(GameRenderer.java:1100)";
+        let d = shown_report(&game_report("Rendering screen", alone));
+        assert_eq!(d.kind, CrashKind::ModCrash);
+        assert_eq!(d.trace.sig, "java/UnsupportedOperationException/fabric-api");
+    }
+
+    #[test]
+    fn the_mixins_of_the_throwing_class_are_the_last_resort() {
+        // The section a mod adds (as in LopyMine/PatPat#67), for the class that threw.
+        let report = "---- Minecraft Crash Report ----\n// Oops.\n\nTime: 2026-11-25 07:57:28\nDescription: Unexpected error\n\njava.lang.NullPointerException: boom\n\tat knot//net.minecraft.client.renderer.LevelRenderer.update(LevelRenderer.java:477)\n\tat knot//net.minecraft.client.renderer.GameRenderer.update(GameRenderer.java:394)\n\n\nA detailed walkthrough of the error, its code path and all known details is as follows:\n---------------------------------------------------------------------------------------\n\n-- Head --\nThread: Render thread\nStacktrace:\n\tat knot//net.minecraft.client.renderer.LevelRenderer.update(LevelRenderer.java:477)\nMixins in Stacktrace:\n\tnet.minecraft.client.renderer.LevelRenderer:\n\t\tnet.fabricmc.fabric.mixin.client.rendering.LevelRendererMixin (fabric-rendering-v1.mixins.json)\n\t\tnet.irisshaders.iris.mixin.MixinLevelRenderer (mixins.iris.json)\n\t\tnet.caffeinemc.mods.sodium.mixin.core.render.world.LevelRendererMixin (sodium-common.mixins.json)\n\tnet.minecraft.client.renderer.GameRenderer:\n\t\tnet.irisshaders.iris.mixin.MixinGameRenderer (mixins.iris.json)\n\n-- System Details --\n";
+        let d = shown_report(report);
+        assert_eq!(d.kind, CrashKind::ModCrash);
+        assert_eq!(
+            d.suspects
+                .iter()
+                .map(|s| (s.reason, s.mixin_config.as_deref()))
+                .collect::<Vec<_>>(),
+            [
+                (SuspectReason::InStackTrace, Some("mixins.iris.json")),
+                (
+                    SuspectReason::InStackTrace,
+                    Some("sodium-common.mixins.json")
+                ),
+                (
+                    SuspectReason::InStackTrace,
+                    Some("fabric-rendering-v1.mixins.json")
+                ),
+            ]
+        );
+        assert_eq!(d.trace.sig, "java/NullPointerException/iris");
+        // Mixins of another class than the one that threw say nothing.
+        let elsewhere = report.replace(
+            "\tnet.minecraft.client.renderer.LevelRenderer:\n",
+            "\tnet.minecraft.client.renderer.ItemRenderer:\n",
+        );
+        let d = shown_report(&elsewhere);
+        assert_eq!(d.kind, CrashKind::Unknown);
+        assert_eq!(d.trace.sig, "java/NullPointerException/none");
+    }
+
+    #[test]
+    fn earlier_errors_in_the_output_do_not_name_a_reported_crashs_mods() {
+        // A mod's handler in a stack the game logged and lived through, then a vanilla crash.
+        let output = "[18:00:00] [Render thread/WARN]: Error in tick\njava.lang.IllegalStateException: harmless\n\tat net.minecraft.client.Minecraft.handler$zzb000$chesttracker$onTick(Minecraft.java:9)\n";
+        let report = sample!("fabric-26.1.2-vanilla-npe-crash-report.txt");
+        let d = analyze_crash(&CrashInput {
+            output,
+            crash_report: Some(&report),
+            exit_code: Some(-1),
+            window_shown: true,
+            ..CrashInput::default()
+        });
+        assert_eq!(d.kind, CrashKind::Unknown);
+        assert!(d.suspects.is_empty(), "{:?}", d.suspects);
+        assert_eq!(d.trace.sig, "java/NullPointerException/none");
+    }
+
+    #[test]
+    fn texts_say_what_to_do() {
+        let d = analyze(
+            "Error: Unable to initialize main class net.minecraft.client.main.Main\nCaused by: java.lang.NoClassDefFoundError: joptsimple/ValueConverter",
+        );
+        assert!(d.hint_tr.contains("Tekrar oyna"), "{}", d.hint_tr);
+        let d = analyze(
+            "[12:00:00] [main/INFO]: something odd\nException in thread \"main\" java.lang.IllegalStateException: odd",
+        );
+        assert_eq!(d.kind, CrashKind::Unknown);
+        assert!(d.hint_tr.contains("Sorun Yardımcısı"), "{}", d.hint_tr);
     }
 }
