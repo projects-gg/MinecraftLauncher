@@ -693,7 +693,9 @@ pub async fn content_update(
         .iter()
         .filter(|e| wanted.is_empty() || wanted.contains(e.file_name.as_str()))
         .filter(|e| !owned.contains(&index_key(kind.folder(), &e.file_name)))
-        .filter(|e| pl_mc::mods::rollback::hold_of(&holds, &e.file_name).is_none())
+        .filter(|e| {
+            !pl_mc::mods::rollback::left_out_of_update(&holds, &e.file_name, wanted.is_empty())
+        })
         .filter_map(|e| e.update.as_ref().map(|u| u.version_id.clone()))
         .collect();
     ids.sort();
@@ -703,7 +705,7 @@ pub async fn content_update(
     }
     let roots = client.versions(&ids).await.map_err(content_error)?;
     let events = on_progress.clone();
-    addons
+    let report = addons
         .install(
             &client,
             &state.mc.downloader,
@@ -720,7 +722,11 @@ pub async fn content_update(
             },
         )
         .await
-        .map_err(content_error)
+        .map_err(content_error)?;
+    if kind == ImportKind::Mod && !file_names.is_empty() {
+        crate::commands::rollback::release_updated(&state, &instance, &file_names).await;
+    }
+    Ok(report)
 }
 
 /// Remove an add-on file (to the OS trash when possible).

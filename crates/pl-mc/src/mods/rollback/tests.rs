@@ -996,6 +996,45 @@ fn repairs_do_not_move_held_jars_to_another_version() {
 }
 
 #[test]
+fn every_update_skips_held_jars_but_a_named_one_goes() {
+    let holds = [hold("a", "Mod-1.0.jar")];
+    assert!(left_out_of_update(&holds, "mod-1.0.jar.disabled", true));
+    assert!(
+        !left_out_of_update(&holds, "Mod-1.0.jar", false),
+        "named on its own: the way out"
+    );
+    assert!(!left_out_of_update(&holds, "Other-2.0.jar", true));
+    let mut failed = hold("a", "Mod-1.0.jar");
+    failed.failed = true;
+    assert!(
+        !left_out_of_update(&[failed], "Mod-1.0.jar", true),
+        "a hold that did not help holds nothing"
+    );
+}
+
+#[test]
+fn a_named_update_ends_the_hold_even_under_the_same_file_name() {
+    let mut history = ModHistory::default();
+    history.hold(MC, hold("a", "Mod.jar"));
+    let mut pack = hold("p", "Pack-1.0.jar");
+    pack.pack_item = Some("item-p".into());
+    history.hold(MC, pack);
+    assert!(!history.release_files(MC, &["Other.jar".to_owned()]));
+    assert!(history.release_files(MC, &["mod.jar.disabled".to_owned()]));
+    let left: Vec<&str> = history
+        .holds_of(MC)
+        .iter()
+        .map(|h| h.mod_id.as_str())
+        .collect();
+    assert_eq!(left, ["p"]);
+    assert!(
+        !history.release_files(MC, &["Pack-1.0.jar".to_owned()]),
+        "a pack hold ends with its override"
+    );
+    assert!(!history.release_files("1.20.1", &["Mod.jar".to_owned()]));
+}
+
+#[test]
 fn held_files_ignore_case_and_disabled_names() {
     let held = HeldFiles::of(&[hold("a", "Mod-1.0.jar")]);
     assert!(held.contains("mod-1.0.jar"));

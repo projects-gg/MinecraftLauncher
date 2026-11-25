@@ -247,6 +247,22 @@ impl ModHistory {
         Some(hold)
     }
 
+    /// Ends the holds of the player's mods in `files`, updated by name ("Yine de Güncelle"):
+    /// also when the new version kept the file name. A pack mod's hold ends with its override.
+    pub fn release_files(&mut self, minecraft: &str, files: &[String]) -> bool {
+        let Some(list) = self.holds.get_mut(minecraft) else {
+            return false;
+        };
+        let keys: HashSet<String> = files.iter().map(|file| file_key(file)).collect();
+        let before = list.len();
+        list.retain(|hold| hold.pack_item.is_some() || !keys.contains(&file_key(&hold.file)));
+        let changed = list.len() != before;
+        if list.is_empty() {
+            self.holds.remove(minecraft);
+        }
+        changed
+    }
+
     /// Marks the hold of `mod_id` as one that did not help (the game crashed with it again).
     pub fn mark_failed(&mut self, minecraft: &str, mod_id: &str) -> bool {
         match self
@@ -413,6 +429,12 @@ impl HeldFiles {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+}
+
+/// Whether an update leaves `file` where it is: "every update" (`every`, nothing named) skips a
+/// held jar; naming the jar on its own is the player's way out of its hold.
+pub fn left_out_of_update(holds: &[ModHold], file: &str, every: bool) -> bool {
+    every && hold_of(holds, file).is_some()
 }
 
 /// The hold that keeps `file` (a jar of `mods/`) at its version, if any.
