@@ -585,12 +585,22 @@ impl AuthManager {
         cancel: &CancellationToken,
     ) -> Result<(AccountSecrets, bool)> {
         self.require_microsoft(id)?;
+        // A token good past the margin goes without the refresh lock: a launch never waits for a
+        // refresh it does not need, such as a warm-up's hours ahead (LIGHT).
+        let stored = self
+            .load_secrets(id)
+            .await?
+            .ok_or(AuthError::MissingSecrets { id })?;
+        if !stored.expires_within(margin, Timestamp::now()) {
+            return Ok((stored, false));
+        }
         let lock = self.refresh_lock(id);
         let _guard = tokio::select! {
             biased;
             () = cancel.cancelled() => return Err(AuthError::Cancelled),
             guard = lock.lock() => guard,
         };
+        // Read again under the lock: the refresh that held it may have stored a fresh session.
         let stored = self
             .load_secrets(id)
             .await?
@@ -1930,6 +1940,90 @@ mod tests {
         );
         assert_eq!(launched.expires_at, warmed.expires_at());
         assert_eq!(server.hits("/consumers/oauth2/v2.0/token"), 1);
+    }
+
+    /// LIGHT review (P2-1): a warm-up refreshing hours ahead holds the refresh lock while Microsoft
+    /// answers slowly; a launch whose token is good past the launch margin does not wait for it.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_launch_does_not_wait_for_a_warm_up_it_does_not_need() {
+        let server = MockServer::start(|request: &Recorded| {
+            if request.path == "/consumers/oauth2/v2.0/token" {
+                std::thread::sleep(std::time::Duration::from_millis(1500));
+            }
+            testutil::happy_chain(request)
+        })
+        .await;
+        let f = fixture(server.base());
+        let account = seed(&f.manager, in_minutes(3 * 60)).await;
+        let manager = Arc::new(f.manager);
+        let warm = {
+            let manager = manager.clone();
+            tokio::spawn(async move {
+                manager
+                    .warm_session(account.id, crate::WARM_MARGIN, &CancellationToken::new())
+                    .await
+            })
+        };
+        // The warm-up holds the lock and waits for Microsoft.
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let started = std::time::Instant::now();
+        let secrets = manager
+            .ensure_fresh(account.id, &CancellationToken::new())
+            .await
+            .unwrap();
+        assert!(
+            started.elapsed() < std::time::Duration::from_millis(700),
+            "the launch waited {:?}",
+            started.elapsed()
+        );
+        assert_eq!(secrets.access_token, "old-access");
+        let warmed = warm.await.unwrap().unwrap();
+        assert!(
+            matches!(warmed, WarmSession::Refreshed { .. }),
+            "{warmed:?}"
+        );
+        // The launch after it plays with the fresh session, asking nothing.
+        let secrets = manager
+            .ensure_fresh(account.id, &CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(secrets.access_token, testutil::mc_token());
+        assert_eq!(server.hits("/consumers/oauth2/v2.0/token"), 1);
+    }
+
+    /// LIGHT review (P2-1): a warm-up the launch stops (it stalled) lets the launch refresh itself.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_stopped_warm_up_lets_the_launch_refresh() {
+        let server = MockServer::start(|request: &Recorded| {
+            if request.path == "/consumers/oauth2/v2.0/token" {
+                std::thread::sleep(std::time::Duration::from_millis(800));
+            }
+            testutil::happy_chain(request)
+        })
+        .await;
+        let f = fixture(server.base());
+        let account = seed(&f.manager, in_minutes(-5)).await;
+        let manager = Arc::new(f.manager);
+        let stop = CancellationToken::new();
+        let warm = {
+            let manager = manager.clone();
+            let stop = stop.clone();
+            tokio::spawn(async move {
+                manager
+                    .warm_session(account.id, crate::WARM_MARGIN, &stop)
+                    .await
+            })
+        };
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        stop.cancel();
+        let error = warm.await.unwrap().unwrap_err();
+        assert!(error.is_cancelled(), "{error:?}");
+        let secrets = manager
+            .ensure_fresh(account.id, &CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(secrets.access_token, testutil::mc_token());
+        assert!(!manager.account(account.id).unwrap().needs_relogin);
     }
 
     /// LIGHT: a warm-up without a network changes nothing: the session and the account stay as
