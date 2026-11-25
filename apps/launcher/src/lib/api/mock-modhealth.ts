@@ -2,11 +2,13 @@
 // - `localStorage["pl.mock.mods"]`: "blocked" (problems that stop the game), "warnings" (only
 //   warnings), "partial" (like "blocked", but one problem survives "Onar"); empty = healthy.
 // - `localStorage["pl.mock.crash"]`: the next launch crashes: "mod", "memory", "reserve",
-//   "graphics" or "java" (read by the mock launch in mock.ts).
+//   "graphics" or "java" (read by the mock launch in mock.ts); "rollback", "rollback-repeat" and
+//   "rollback-none" for REPAIR-RB's "Önceki Sürüme Dön".
 // - `localStorage["pl.mock.keys"]`: "clash": the official instance's options.txt still has the
 //   pack's clashing mod keys (KEYS2) and an unbound push to talk (KEYS3); the first launch of the
 //   preview asks about them.
 import type {
+  CrashFileKind,
   CrashKind,
   CrashSuspect,
   HealthIssue,
@@ -17,6 +19,8 @@ import type {
   ReinstallPhase,
   RepairStep,
   RepairStepKind,
+  RollbackNote,
+  RollbackOffer,
   StepNote,
 } from "./modhealth-types";
 
@@ -397,6 +401,14 @@ export const mockModHealth: ModHealthApi = {
     await delay(140);
     return true;
   },
+  async rollback() {
+    await delay(1400);
+    return { name: "Euphoria Patches", version: "1.10.5-r5.9.3", modId: "euphoria_patcher" };
+  },
+  async undoRollback() {
+    await delay(600);
+  },
+  async openCrashFile() {},
 };
 
 /** The crash a mock launch reports for `localStorage["pl.mock.crash"]`. */
@@ -412,6 +424,9 @@ export function mockCrash(instanceId: string, scenario: string) {
     turnOff: null as { file: string; name: string } | null,
     reinstall: false,
     memory: null as MemoryAdvice | null,
+    rollback: null as RollbackOffer | null,
+    rollbackNote: null as RollbackNote | null,
+    openFile: "gameLog" as CrashFileKind | null,
   };
   const kinds: Record<string, CrashKind> = {
     mod: "modError",
@@ -423,6 +438,11 @@ export function mockCrash(instanceId: string, scenario: string) {
     freeze: "notResponding",
     overlay: "otherProgram",
     modcrash: "modCrash",
+    // REPAIR-RB: a mod the version switch updated crashed in game (the player's report), going
+    // back again after the earlier version crashed too, and no earlier version for this game.
+    rollback: "modCrash",
+    "rollback-repeat": "modCrash",
+    "rollback-none": "modCrash",
   };
   const kind = kinds[scenario] ?? "unknown";
   switch (scenario) {
@@ -488,6 +508,31 @@ export function mockCrash(instanceId: string, scenario: string) {
         suspects: [{ name: "Xaero's Minimap", reason: "inStackTrace" as const, strong: false }],
         reinstall: true,
       };
+    case "rollback":
+    case "rollback-repeat":
+    case "rollback-none": {
+      const name = "Euphoria Patches";
+      const offer = scenario === "rollback";
+      return {
+        ...base,
+        kind,
+        title: "Bir mod oyunu çökertti",
+        hint: `Oyun açıkken şu mod hata verdi: ${name}.`,
+        mods: [name],
+        suspects: [{ name, reason: "inStackTrace" as const, strong: false }],
+        reinstall: true,
+        crashReport: "C:\\Oyunlar\\Projects\\crash-reports\\crash-2026-11-24_21.14.02-client.txt",
+        openFile: "crashReport" as CrashFileKind,
+        turnOff: offer ? null : { file: "EuphoriaPatcher-1.10.5-r5.9.3-fabric.jar", name },
+        rollback: offer ? { name, from: "1.11.2-r5.10", to: "1.10.5-r5.9.3", added: false } : null,
+        rollbackNote: offer
+          ? null
+          : {
+              kind: scenario === "rollback-repeat" ? ("repeated" as const) : ("noOlder" as const),
+              name,
+            },
+      };
+    }
     case "freeze":
     case "overlay":
       return { ...base, kind, title: "", hint: "" };

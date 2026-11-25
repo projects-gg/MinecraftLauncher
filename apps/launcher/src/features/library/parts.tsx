@@ -6,6 +6,7 @@ import {
   DotsThreeVertical,
   ImageSquare,
   Package,
+  PuzzlePiece,
   Trash,
 } from "@phosphor-icons/react";
 import {
@@ -33,6 +34,7 @@ export const trashIcons = {
   modSet: Package,
   versionSet: Package,
   instance: Package,
+  mod: PuzzlePiece,
 } as const;
 
 /**

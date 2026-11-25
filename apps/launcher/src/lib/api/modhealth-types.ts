@@ -216,6 +216,12 @@ export interface ModHealthApi {
    * game was starting or running).
    */
   undoDuplicates(instanceId: string, files: string[]): Promise<boolean>;
+  /** "Önceki Sürüme Dön": puts back the version the crash dialog offered (REPAIR-RB). */
+  rollback(instanceId: string, jobId: string): Promise<RollbackDone>;
+  /** "Geri Al" after `rollback`: the version that crashed comes back. */
+  undoRollback(instanceId: string, modId: string, jobId: string): Promise<void>;
+  /** Opens what explains the instance's last crash: its report, the JVM's log or the game's log. */
+  openCrashFile(instanceId: string): Promise<void>;
 }
 
 // --- crashes -----------------------------------------------------------------------------------
@@ -269,3 +275,35 @@ export interface MemoryAdvice {
   suggestedMb: number;
   increase: boolean;
 }
+
+/** "Önceki Sürüme Dön" (REPAIR-RB): a mod changed since the last game that worked. */
+export interface RollbackOffer {
+  /** The mod's name. */
+  name: string;
+  /** The version that crashed and the one it goes back to. */
+  from: string;
+  to: string;
+  /** The mod came after the last game that worked (else it was updated since). */
+  added: boolean;
+}
+
+/**
+ * Why a mod that changed since the last game that worked cannot go back: `repeated` (it went back
+ * and the game crashed with it again), `noOlder` (no older version runs on this Minecraft version).
+ */
+export interface RollbackNote {
+  kind: "repeated" | "noOlder";
+  name: string;
+}
+
+/** A mod went back (`api.modHealth.rollback`). */
+export interface RollbackDone {
+  name: string;
+  /** The version in place now. */
+  version: string;
+  /** What "Geri Al" names. */
+  modId: string;
+}
+
+/** What the crash dialog's file button opens. */
+export type CrashFileKind = "crashReport" | "jvmLog" | "gameLog";

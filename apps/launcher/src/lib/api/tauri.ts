@@ -327,6 +327,9 @@ function launchEvent(e: LaunchEventView): LaunchEvent {
         reinstall: e.reinstall,
         memory: e.memory,
         resetJvmArgs: e.resetJvmArgs,
+        rollback: e.rollback,
+        rollbackNote: e.rollbackNote,
+        openFile: e.openFile,
       };
     case "javaMismatch": {
       const { type, ...prompt } = e;
