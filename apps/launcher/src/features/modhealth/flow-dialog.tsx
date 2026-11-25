@@ -7,6 +7,7 @@ import {
   DownloadSimple,
   FileText,
   FolderSimple,
+  Info,
   Lifebuoy,
   Package,
   SlidersHorizontal,
@@ -15,13 +16,13 @@ import {
   WarningCircle,
   WifiSlash,
 } from "@phosphor-icons/react";
-import { Button, cn, Dialog, IconButton, Progress, Skeleton, toast } from "@pl/ui";
+import { Button, cn, Dialog, IconButton, Progress, Skeleton, SwapLabel, toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { showError } from "@/features/content/jobs";
+import { newJobId, showError } from "@/features/content/jobs";
 import { openHelp } from "@/features/help/store";
 import {
   type Direction,
@@ -42,6 +43,7 @@ import {
   type ReinstallPhase,
   type RepairScope,
   type RepairStep,
+  type RollbackDone,
 } from "@/lib/api";
 import { copyDetails as copySupportText } from "@/lib/clipboard";
 import { type CrashInfo, useLaunch } from "@/stores/launch";
@@ -159,7 +161,11 @@ export function ModFlowDialog() {
   const [direction, setDirection] = useState<Direction>(1);
   const [warningsOpen, setWarningsOpen] = useState(false);
   const [turnedOff, setTurnedOff] = useState<string | null>(null);
-  const [busy, setBusy] = useState<"turnOff" | "memory" | "args" | null>(null);
+  const [busy, setBusy] = useState<"turnOff" | "memory" | "args" | "rollback" | "undo" | null>(
+    null,
+  );
+  // "Önceki Sürüme Dön" went through (REPAIR-RB): the dialog says so and offers "Geri Al".
+  const [rolledBack, setRolledBack] = useState<RollbackDone | null>(null);
   // "Onar" pressed, waiting for the repair's plan (`startRepair`).
   const [holding, setHolding] = useState<{ scope: RepairScope; until: number } | null>(null);
 
@@ -180,6 +186,7 @@ export function ModFlowDialog() {
     repair.reset();
     reinstall.reset();
     setTurnedOff(null);
+    setRolledBack(null);
     setWarningsOpen(false);
     setBusy(null);
     setHolding(null);
@@ -243,6 +250,7 @@ export function ModFlowDialog() {
     repair.reset();
     reinstall.reset();
     setTurnedOff(null);
+    setRolledBack(null);
     setWarningsOpen(false);
     setBusy(null);
   };
@@ -300,7 +308,8 @@ export function ModFlowDialog() {
   let dismissible = true;
 
   if (step?.kind === "crash" && crash) {
-    dismissible = !holding;
+    // Not while a mod goes back or comes back: its result shows here.
+    dismissible = !holding && busy !== "rollback" && busy !== "undo";
     const strong = crash.suspects.slice(0, 5);
     const kind = crash.kind;
     const turnOffLabel = crash.turnOff
@@ -376,6 +385,38 @@ export function ModFlowDialog() {
         setBusy(null);
       }
     };
+    // "Önceki Sürüme Dön" (REPAIR-RB): a suspect changed since the last game that didn't crash.
+    const rollback = rolledBack ? null : (crash.rollback ?? null);
+    const rollbackNote = crash.rollbackNote ?? null;
+    const goBack = async () => {
+      if (!crash.rollback || !instanceId) return;
+      setBusy("rollback");
+      try {
+        setRolledBack(await api.modHealth.rollback(instanceId, newJobId()));
+        void queryClient.invalidateQueries({ queryKey: ["content-scan", instanceId] });
+        void queryClient.invalidateQueries({ queryKey: ["mod-center", instanceId] });
+      } catch (error) {
+        showError(error);
+      } finally {
+        setBusy(null);
+      }
+    };
+    // "Geri Al": the version that crashed comes back, and the dialog has nothing left to offer.
+    const undoGoBack = async () => {
+      if (!rolledBack || !instanceId) return;
+      const done = rolledBack;
+      setBusy("undo");
+      try {
+        await api.modHealth.undoRollback(instanceId, done.modId, newJobId());
+        void queryClient.invalidateQueries({ queryKey: ["content-scan", instanceId] });
+        void queryClient.invalidateQueries({ queryKey: ["mod-center", instanceId] });
+        toast.success(t("repairRb.crash.undone", { name: done.name }));
+        close();
+      } catch (error) {
+        showError(error);
+        setBusy(null);
+      }
+    };
     const shift = (px: number) => (prefs.reduce ? "none" : `translateY(${px}px)`);
     titleKey = `crash:${kind}`;
     title = (
@@ -435,6 +476,50 @@ export function ModFlowDialog() {
             </ul>
           </section>
         ) : null}
+        {/* REPAIR-RB: why going back is offered, why it is not, or (in the same place) that it
+            went back. */}
+        <AnimatePresence mode="popLayout" initial={false}>
+          {rolledBack ? (
+            <motion.div key="done" {...rise(prefs.reduce, 4, 0.24)} className="space-y-1">
+              <p className="flex items-start gap-2.5 text-[14px] font-medium text-bone-50">
+                <CheckCircle
+                  size={18}
+                  weight="fill"
+                  className="mt-[2px] shrink-0 text-jade-400"
+                  aria-hidden
+                />
+                {t("repairRb.crash.done", { name: rolledBack.name })}
+              </p>
+              <p className="pl-[28px] text-[13px] text-ash-300">{t("repairRb.crash.held")}</p>
+            </motion.div>
+          ) : rollback || rollbackNote ? (
+            <motion.p
+              key={rollback ? "rollback" : `note-${rollbackNote?.kind}`}
+              {...rise(prefs.reduce, 4, 0.24)}
+              className="flex items-start gap-2.5 text-[13.5px] leading-relaxed text-bone-100"
+            >
+              {rollbackNote?.kind === "repeated" && !rollback ? (
+                <Warning
+                  size={17}
+                  weight="fill"
+                  className="mt-[3px] shrink-0 text-gold-300"
+                  aria-hidden
+                />
+              ) : (
+                <Info size={17} className="mt-[3px] shrink-0 text-ash-300" aria-hidden />
+              )}
+              <span className="min-w-0">
+                {rollback
+                  ? t(rollback.added ? "repairRb.crash.added" : "repairRb.crash.changed", {
+                      name: rollback.name,
+                    })
+                  : rollbackNote?.kind === "repeated"
+                    ? t("repairRb.crash.repeated", { name: rollbackNote.name })
+                    : t("repairRb.crash.noOlder", { name: rollbackNote?.name ?? "" })}
+              </span>
+            </motion.p>
+          ) : null}
+        </AnimatePresence>
         <AnimatePresence initial={false}>
           {updateSet && instanceId ? (
             <motion.div
@@ -473,6 +558,20 @@ export function ModFlowDialog() {
     const javaFix = Boolean(settings && customJava && !crash.turnOff);
     footer = (
       <div className="flex w-full items-center gap-1.5">
+        {/* What explains this crash (its report, the JVM's log, else the game's own log of the
+            run), opened in the system's viewer; never the launcher's own log (REPAIR-RB). */}
+        {crash.openFile && instanceId ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<FileText size={15} />}
+            onClick={() => void api.modHealth.openCrashFile(instanceId).catch(showError)}
+          >
+            {crash.openFile === "gameLog"
+              ? t("repairRb.crash.openLog")
+              : t("repairRb.crash.openReport")}
+          </Button>
+        ) : null}
         <IconButton
           label={t("modHealth.crash.copy")}
           icon={<Copy size={17} />}
@@ -480,24 +579,6 @@ export function ModFlowDialog() {
           tooltipSide="top"
           onClick={copyDetails}
         />
-        {crash.logFile && instanceId ? (
-          <IconButton
-            label={t("modHealth.crash.openLog")}
-            icon={<FileText size={17} />}
-            size="sm"
-            tooltipSide="top"
-            onClick={() => {
-              const id = instanceId;
-              const log = crash.logFile?.split(/[\\/]/).pop();
-              close();
-              void navigate({
-                to: "/library/$instanceId",
-                params: { instanceId: id },
-                search: { tab: "logs", log },
-              });
-            }}
-          />
-        ) : null}
         {/* The troubleshooter (HELP1): the connection, the disk, Java and the mods beside the crash. */}
         <IconButton
           label={t("help.title")}
@@ -520,10 +601,30 @@ export function ModFlowDialog() {
                   {t("modHealth.crash.play")}
                 </Button>
               </motion.div>
+            ) : rolledBack ? (
+              <motion.div key="back" {...swap(0.2)} className="flex items-center gap-2.5">
+                <Button
+                  variant="ghost"
+                  icon={<ArrowCounterClockwise size={15} />}
+                  disabled={busy !== null}
+                  className={busy === "undo" ? "scale-[0.97]" : undefined}
+                  onClick={() => void undoGoBack()}
+                >
+                  {t("repairRb.crash.undo")}
+                </Button>
+                <Button variant="primary" disabled={busy !== null} onClick={() => playNow()}>
+                  {t("modHealth.crash.play")}
+                </Button>
+              </motion.div>
             ) : (
               <motion.div key="actions" {...swap(0.2)} className="flex items-center gap-2.5">
-                {crash.reinstall ? (
-                  <Button variant="ghost" onClick={() => go({ kind: "reinstall" })}>
+                {/* Beside going back, the last resort waits (the footer has no room for four). */}
+                {crash.reinstall && !rollback ? (
+                  <Button
+                    variant="ghost"
+                    disabled={busy !== null}
+                    onClick={() => go({ kind: "reinstall" })}
+                  >
                     {t("modHealth.crash.reinstall")}
                   </Button>
                 ) : null}
@@ -550,14 +651,30 @@ export function ModFlowDialog() {
                 ) : null}
                 {crash.turnOff ? (
                   <Button
-                    variant={crash.repairable ? "secondary" : "primary"}
+                    variant={crash.repairable || rollback ? "secondary" : "primary"}
                     disabled={busy !== null}
                     onClick={() => void turnOff()}
                   >
                     {turnOffLabel}
                   </Button>
                 ) : null}
-                {crash.repairable ? (
+                {/* Going back answers this crash; "Onar" would update the same mod again. */}
+                {rollback ? (
+                  <Button
+                    variant="primary"
+                    disabled={busy !== null && busy !== "rollback"}
+                    aria-busy={busy === "rollback"}
+                    className={busy === "rollback" ? "scale-[0.97]" : undefined}
+                    onClick={() => {
+                      if (busy === null) void goBack();
+                    }}
+                  >
+                    <SwapLabel
+                      labels={[t("repairRb.crash.action"), t("repairRb.crash.working")]}
+                      active={busy === "rollback" ? 1 : 0}
+                    />
+                  </Button>
+                ) : crash.repairable ? (
                   <Button
                     variant="primary"
                     disabled={busy !== null}

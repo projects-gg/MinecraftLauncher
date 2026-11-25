@@ -11,6 +11,7 @@ mod notify;
 mod overlay;
 mod prepare;
 mod reset;
+mod session_warm;
 mod shell;
 mod shot_copy;
 #[cfg(target_os = "macos")]
@@ -205,6 +206,9 @@ pub fn run() {
             commands::java::start_java_updates(app.handle());
             // The chosen instance's files, downloaded gently while the launcher is idle (prepare).
             prepare::start(app.handle());
+            // The selected account's Microsoft session, refreshed now when it expires within
+            // hours, so OYNA does not wait for Microsoft (LIGHT, session_warm).
+            session_warm::warm(app.handle(), "start");
             // Java AOT caches whose recordings wait from an earlier run get made (AOT-CACHE).
             aot::start(app.handle());
             // VOICE-0's probe of the voice window (debug builds asked for it); voice chat itself
@@ -636,6 +640,9 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::modhealth::mods_undo_duplicates,
             commands::packedit::pack_item_versions,
             commands::packedit::pack_item_use_version,
+            commands::rollback::mods_rollback,
+            commands::rollback::mods_rollback_undo,
+            commands::rollback::crash_open_file,
             // Java: Settings → Java, runtime updates (the pre-launch check is part of the launch)
             commands::java::java_overview,
             commands::java::java_runtime_update,

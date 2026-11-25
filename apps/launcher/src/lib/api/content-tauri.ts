@@ -186,6 +186,7 @@ function installed(e: ContentEntryView): InstalledContent {
           datePublished: e.update.datePublished,
         }
       : undefined,
+    heldFrom: e.heldFrom ?? undefined,
   };
 }
 

@@ -90,7 +90,15 @@ export interface BackupProgress {
  * `modSet`: a version set's `mods/` or `config/`, set aside by "Yeniden yükle"; `instance`: an
  * instance deleted from the library.
  */
-export type TrashKind = "world" | "backup" | "screenshot" | "modSet" | "versionSet" | "instance";
+export type TrashKind =
+  | "world"
+  | "backup"
+  | "screenshot"
+  | "modSet"
+  | "versionSet"
+  | "instance"
+  /** A mod's jar that "Önceki Sürüme Dön" set aside (REPAIR-RB); named by its name and version. */
+  | "mod";
 
 /** Something in the launcher's trash (kept for 30 days). */
 export interface TrashItem {

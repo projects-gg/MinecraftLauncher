@@ -18,10 +18,12 @@ use pl_social::{
     ReportTarget, SendOutcome, SessionInfo, SettingsMeta, SocialError, SocialService, SocialUpdate,
     SocialView, StatusMode, TeamEdit, TeamLook, TeamLookupView, TeamNotificationsEdit,
 };
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
 use crate::error::CmdResult;
 use crate::state::AppState;
+use crate::webview_rest::Delivery::{InOrder, Latest, Moment, Passing};
+use crate::webview_rest::emit_to_page;
 
 /// Builds the service; it stays off until [`apply_flag`] (or the debug override) turns it on.
 /// `data_root` keeps the invites the player closed over a restart, and the friend list with its
@@ -46,13 +48,19 @@ pub fn create(
             }
             other => other,
         };
-        let _ = match &update {
-            SocialUpdate::View(view) => emitter.emit("social-view", &**view),
-            SocialUpdate::Notice(notice) => emitter.emit("social-notice", notice),
-            SocialUpdate::Chat(change) => emitter.emit("social-chat", change),
-            SocialUpdate::Typing(typing) => emitter.emit("social-chat-typing", typing),
-            SocialUpdate::TagOff(tag_off) => emitter.emit("social-tag-off", tag_off),
-        };
+        // While a game runs the page may sleep (webview_rest): views wait as the newest, chat
+        // changes in order, someone typing not at all, and a notice wakes it.
+        match &update {
+            SocialUpdate::View(view) => emit_to_page(&emitter, "social-view", &**view, Latest),
+            SocialUpdate::Notice(notice) => emit_to_page(&emitter, "social-notice", notice, Moment),
+            SocialUpdate::Chat(change) => emit_to_page(&emitter, "social-chat", change, InOrder),
+            SocialUpdate::Typing(typing) => {
+                emit_to_page(&emitter, "social-chat-typing", typing, Passing);
+            }
+            SocialUpdate::TagOff(tag_off) => {
+                emit_to_page(&emitter, "social-tag-off", tag_off, Moment);
+            }
+        }
         // World sharing reads the friends' names and where the player is (HOST1).
         crate::host::on_social(&emitter, &update);
         // Voice chat reads who the player is and the names its notifications show (VOICE).

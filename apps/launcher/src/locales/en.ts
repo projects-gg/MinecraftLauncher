@@ -61,6 +61,7 @@ import { enProjectsSkin } from "./en-projects-skin";
 import { enQaFix } from "./en-qa-fix";
 import { enQol } from "./en-qol";
 import { enReminders } from "./en-reminders";
+import { enRepairRb } from "./en-repair-rb";
 import { enReports } from "./en-reports";
 import { enRoomChat } from "./en-room-chat";
 import { enSafety } from "./en-safety";
@@ -347,6 +348,7 @@ export const en: DeepPartial<Strings> = {
   fastPack: enFastPack,
   packEdit: enPackEdit,
   packOffer: enPackOffer,
+  repairRb: enRepairRb,
   lib1: enLib1,
   fix2: enFix2,
   chat2: enChat2,
@@ -2603,7 +2605,7 @@ export const en: DeepPartial<Strings> = {
         duplicateMods: "The mods folder has more than one copy of the same mod.",
         modError: "A mod failed while the game was starting.",
         corruptedFiles:
-          "Some files are missing or broken. If it's a mod's file, its name is below; if not, play again and the launcher checks the files and downloads the broken ones again.",
+          "Some files are missing or broken. If it's a mod's file, its name is below. If not, play again and the launcher checks the files and downloads the broken ones again.",
         accessDenied: "Security software may be blocking the launcher or Java.",
         noOutput: "Security software may be blocking Java.",
         notResponding:

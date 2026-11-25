@@ -38,6 +38,8 @@ pub(super) struct Native {
     app: AppHandle,
     /// The picker's request waiting for its list.
     waiting: Mutex<Option<mpsc::Sender<Listed>>>,
+    /// The quick look at what this computer can do went out ([`Publisher::warm`]).
+    looked: std::sync::atomic::AtomicBool,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -65,6 +67,7 @@ impl Native {
             voice: voice.clone(),
             app: app.clone(),
             waiting: Mutex::new(None),
+            looked: std::sync::atomic::AtomicBool::new(false),
         });
         let pump = native.clone();
         tauri::async_runtime::spawn(async move {
@@ -72,11 +75,9 @@ impl Native {
                 pump.on_event(event);
             }
         });
-        // What this computer can do (sound, a hardware encoder): one quick look, no pictures.
-        native.controller.send(pl_share::ShareCmd::Sources {
-            game_pid: None,
-            thumbs: false,
-        });
+        // What this computer can do is asked when a call starts ([`Publisher::warm`]), not at
+        // every start: the look loads the graphics driver and Media Foundation into the launcher
+        // (nvwgf2umx.dll alone maps 90 MB) for a feature only a call uses (LIGHT).
         native.learn_browser(app);
         Some(native)
     }
@@ -284,6 +285,17 @@ impl Publisher for Native {
     fn caps(&self) -> (bool, bool, bool) {
         // Until the first look answers: it can share, without sound or "Yüksek".
         (true, false, false)
+    }
+
+    fn warm(&self) {
+        // What this computer can do (sound, a hardware encoder): one quick look, no pictures,
+        // once a run.
+        if !self.looked.swap(true, std::sync::atomic::Ordering::AcqRel) {
+            self.controller.send(pl_share::ShareCmd::Sources {
+                game_pid: None,
+                thumbs: false,
+            });
+        }
     }
 
     fn sources(&self, game_pid: Option<u32>) -> ShareSources {

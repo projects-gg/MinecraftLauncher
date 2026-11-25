@@ -117,6 +117,11 @@ export interface InstalledContent {
   /** Installed by the official pack: updated with the pack, not removable here. */
   fromPack: boolean;
   update?: ContentUpdate;
+  /**
+   * Held at this version after the version it names crashed the game (REPAIR-RB): "Tümünü
+   * Güncelle" leaves it; updating it alone ends the hold.
+   */
+  heldFrom?: string;
 }
 
 export interface ContentScan {

@@ -612,6 +612,8 @@ function initialEntries(instanceId: string, kind: ContentKind): InstalledContent
     const hit = hitById(projectId);
     const outdated =
       instanceId === "yaratici" && (projectId === "AANobbMI" || projectId === "gvQqBUqZ");
+    // REPAIR-RB preview (`?repairRb=held`): Lithium went back after 0.15.2 crashed the game.
+    const held = instanceId === "yaratici" && projectId === "gvQqBUqZ" && repairRbHeld();
     return {
       fileName: fileNameOf(name, version),
       enabled: true,
@@ -630,8 +632,17 @@ function initialEntries(instanceId: string, kind: ContentKind): InstalledContent
             datePublished: daysAgo(3),
           }
         : undefined,
+      heldFrom: held ? "0.15.2" : undefined,
     };
   });
+}
+
+function repairRbHeld(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get("repairRb") === "held";
+  } catch {
+    return false;
+  }
 }
 
 function entries(instanceId: string, kind: ContentKind): InstalledContent[] {

@@ -17,10 +17,10 @@ use crate::mods::scan::test_jars::{fabric_jar, toml_jar};
 
 // --- a small HTTP server that serves bytes ---------------------------------------------------
 
-type Routes = Arc<dyn Fn(&str, &Url, &str) -> (u16, Vec<u8>) + Send + Sync>;
+pub(crate) type Routes = Arc<dyn Fn(&str, &Url, &str) -> (u16, Vec<u8>) + Send + Sync>;
 
 /// One request per connection, routed through `routes(method, url, host)`.
-async fn serve(routes: Routes) -> String {
+pub(crate) async fn serve(routes: Routes) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let host = format!("http://{}", listener.local_addr().unwrap());
     let base = host.clone();
@@ -78,18 +78,18 @@ async fn serve(routes: Routes) -> String {
     host
 }
 
-fn client(host: &str) -> ModrinthClient {
+pub(crate) fn client(host: &str) -> ModrinthClient {
     ModrinthClient::with_base_url(
         Http::new(HttpConfig::new("pl-mc-tests")).unwrap(),
         format!("{host}/v2"),
     )
 }
 
-fn downloader() -> Downloader {
+pub(crate) fn downloader() -> Downloader {
     Downloader::new(Http::new(HttpConfig::new("pl-mc-tests")).unwrap())
 }
 
-fn json_body(value: Value) -> (u16, Vec<u8>) {
+pub(crate) fn json_body(value: Value) -> (u16, Vec<u8>) {
     (200, value.to_string().into_bytes())
 }
 
@@ -246,6 +246,7 @@ impl Game {
             origins: &origins,
             has_pack: host.pack,
             pack_upgrades: false,
+            held: HeldFiles::none(),
         };
         plan_repair(&ctx, Some(&report), None)
     }
@@ -712,6 +713,7 @@ async fn an_update_without_a_fitting_version_turns_the_mod_off() {
         origins: &origins,
         has_pack: false,
         pack_upgrades: false,
+        held: HeldFiles::none(),
     };
     let plan = plan_repair(&ctx, Some(&report), None);
     let job = g.job(&host, env, client(&server), None);

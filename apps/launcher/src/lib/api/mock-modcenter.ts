@@ -224,11 +224,16 @@ const seeds: Seed[] = [
 
 /**
  * PACK-EDIT states: Fabric API upgraded for a mod of the player's, Entity Culling on the
- * player's own version. `?packEdit=plain` starts without them (every row on the pack's version).
+ * player's own version. `?packEdit=plain` starts without them (every row on the pack's version);
+ * `?packEdit=rollback` has Entity Culling held after its newer version crashed (REPAIR-RB).
  */
 const overrides: Record<string, VersionOverride | undefined> = (() => {
   try {
-    if (new URLSearchParams(window.location.search).get("packEdit") === "plain") return {};
+    const mode = new URLSearchParams(window.location.search).get("packEdit");
+    if (mode === "plain") return {};
+    if (mode === "rollback") {
+      return { NNAgCjsB: { versionNumber: "1.11.3", kind: "rollback", neededBy: [] } };
+    }
   } catch {
     // No window: the defaults below.
   }

@@ -41,6 +41,10 @@ pub enum OverrideReason {
     Chosen,
     /// The launcher picked it: a mod of the player's needs a newer version than the pack's.
     Needed,
+    /// The player went back to the version of the last game that ended without a crash, after
+    /// the pack's newer one crashed the game (REPAIR-RB, "Önceki Sürüme Dön"). A hold: the pack's
+    /// later files do not end it ([`follow_pack`]), "Paketin Sürümüne Dön" does.
+    Rollback,
     /// A reason a newer launcher wrote.
     #[serde(other)]
     Other,
@@ -291,7 +295,9 @@ pub enum FollowOutcome {
 }
 
 /// The pack's file for `item` is now `pack_sha1`, published at `pack_published` (RFC 3339, from
-/// Modrinth). The override ends when that is no earlier than the override's own version.
+/// Modrinth). The override ends when that is no earlier than the override's own version. A
+/// [`OverrideReason::Rollback`] hold ends only when the pack's file becomes the held one: a newer
+/// pack version is what crashed, and the player decides when to try it again.
 pub fn follow_pack(
     state: &mut PackState,
     item: &str,
@@ -301,6 +307,14 @@ pub fn follow_pack(
     let Some(choice) = state.overrides.get_mut(item) else {
         return FollowOutcome::None;
     };
+    if choice.reason == OverrideReason::Rollback {
+        if choice.sha1.eq_ignore_ascii_case(pack_sha1) {
+            state.overrides.remove(item);
+            return FollowOutcome::Following;
+        }
+        choice.pack_sha1 = pack_sha1.to_ascii_lowercase();
+        return FollowOutcome::Kept;
+    }
     let parse = |text: &str| text.parse::<jiff::Timestamp>().ok();
     let newer = match (
         pack_published.and_then(parse),
@@ -605,6 +619,41 @@ mod tests {
         assert_eq!(
             follow_pack(&mut state, "fabric", sha, None),
             FollowOutcome::None
+        );
+    }
+
+    /// REPAIR-RB: a version held after a crash stays when the pack moves on, even to a newer
+    /// version; only the pack's file becoming the held one ends it.
+    #[test]
+    fn a_rollback_hold_outlives_newer_pack_files() {
+        let m = manifest(
+            vec![item("euphoria", "mods/euphoria-new.jar")],
+            vec![file("mods/euphoria-new.jar", b"euphoria-new")],
+        );
+        let mut state = PackState::default();
+        let mut held = choice("mods/euphoria-old.jar", b"euphoria-old");
+        held.reason = OverrideReason::Rollback;
+        state.overrides.insert("euphoria".into(), held);
+        let sha = sha1_hex(b"euphoria-new");
+        assert_eq!(pending_comparisons(&m, &state).len(), 1);
+        // A newer pack version: kept, and not asked again for that file.
+        assert_eq!(
+            follow_pack(&mut state, "euphoria", &sha, Some("2027-01-01T00:00:00Z")),
+            FollowOutcome::Kept
+        );
+        assert!(pending_comparisons(&m, &state).is_empty());
+        assert!(effective_overrides(&m, &state, &|_| false).contains_key("euphoria"));
+        // The pack's file becomes the held one: the pack is followed again.
+        let held_sha = sha1_hex(b"euphoria-old");
+        assert_eq!(
+            follow_pack(&mut state, "euphoria", &held_sha, None),
+            FollowOutcome::Following
+        );
+        assert!(state.overrides.is_empty());
+        // Older launchers read the reason as one they do not know (`Other`).
+        assert_eq!(
+            serde_json::to_value(OverrideReason::Rollback).unwrap(),
+            "rollback"
         );
     }
 }

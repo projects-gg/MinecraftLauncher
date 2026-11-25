@@ -87,4 +87,11 @@ export const tauriModHealth: ModHealthApi = {
   },
   undoKeys: (instanceId, backup) => ok(commands.modsUndoKeys(instanceId, backup)),
   undoDuplicates: (instanceId, files) => ok(commands.modsUndoDuplicates(instanceId, files)),
+  rollback: (instanceId, jobId) => ok(commands.modsRollback(instanceId, jobId)),
+  async undoRollback(instanceId, modId, jobId) {
+    await ok(commands.modsRollbackUndo(instanceId, modId, jobId));
+  },
+  async openCrashFile(instanceId) {
+    await ok(commands.crashOpenFile(instanceId));
+  },
 };

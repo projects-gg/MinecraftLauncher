@@ -589,6 +589,23 @@ news feed, the launcher's built-in recommended Minecraft version.
   the friends feature: while it is `false` (or missing) nothing is added and the switch does not
   show. Writers omit it while it is `false`; launchers that do not know the field ignore it.
   Publishing it needs a Studio that knows the field (SRV-ACC).
+- `features.modRollback`: "Önceki Sürüme Dön" (REPAIR-RB): desktop launchers remember, per
+  instance and Minecraft version, the mods of the last game that ended without a crash
+  (`<instance>/.launcher/mod-history.json`, written only after such a game). When a game crashes
+  in a mod that changed since then (a version switch, a pack sync or the player updated or added
+  it), the crash dialog offers to put back the version that worked: the last clean game's when
+  Modrinth lists it for the instance's Minecraft version and loader, else the newest older one
+  that runs there (releases first); never by itself. A player's mod swaps its jar (the crashing
+  one goes to the launcher trash, "Geri Al" puts it back); an official pack mod becomes the
+  player's version of the pack item (an [override](#sync-semantics-and-pack-state) with reason
+  `rollback`, which a newer pack file does not end; "Paketin Sürümüne Dön" does). The held
+  version stays out of "Onar", update prompts and the launcher's own pack upgrades until the
+  player updates the mod or goes back to the pack's version; when the game crashes with it again
+  before a clean game, it is no longer held and going back is not offered again. Off by default:
+  while it is `false` (or missing) nothing is recorded or offered; versions held earlier stay held
+  and can be undone. Works without `features.packEdit`. Writers omit it while it is `false`;
+  launchers that do not know the field ignore it. Publishing it needs a Studio that knows the field
+  (REPAIR-RB).
 - `newsFeed`: the Discord bot's feed ([News feed (Discord bot)](#news-feed-discord-bot)).
   `mirrors`: 1–4 distinct `https://` bases with a host, ending in `/`, without credentials, query
   or fragment. `keys`: 1–4 distinct `{ keyId, publicKey }`, `publicKey` the base64 of a 32-byte

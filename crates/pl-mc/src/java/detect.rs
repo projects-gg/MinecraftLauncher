@@ -19,7 +19,7 @@ pub(crate) const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 /// Run `java -XshowSettings:properties -version` and parse version, major, `os.arch` and vendor.
 pub async fn probe_java(path: &Path) -> Result<JavaInfo> {
     let exe = console_java(path);
-    let mut command = tokio::process::Command::new(&exe);
+    let mut command = tokio::process::Command::new(probe_program(&exe));
     command
         .arg("-XshowSettings:properties")
         .arg("-version")
@@ -39,6 +39,13 @@ pub async fn probe_java(path: &Path) -> Result<JavaInfo> {
     text.push_str(&String::from_utf8_lossy(&output.stdout));
     parse_java_properties(&text)
         .ok_or_else(|| Error::Java(format!("{} is not a working Java", exe.display())))
+}
+
+/// The program a probe starts: Windows' Java launcher finds its own files by its path, read in
+/// the system's ANSI code page, so a path with letters that code page lacks goes in its 8.3 short
+/// form when it has one (CRASH-DIAG; [`crate::launch::ansi`]).
+fn probe_program(exe: &Path) -> PathBuf {
+    crate::launch::ansi::ansi_safe_or_same(exe, &[]).0
 }
 
 /// Parse the output of `java -XshowSettings:properties -version` (falls back to the
@@ -383,6 +390,36 @@ fn candidate_executables() -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// CRASH-DIAG: a Java under a folder with a letter the system's code page lacks is probed by
+    /// its short path (where the code page has the letter, or the disk has no short names, as it
+    /// is).
+    #[test]
+    fn a_java_the_code_page_cannot_name_is_probed_by_its_short_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bin = tmp.path().join("Ayşe").join("runtime").join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let java = bin.join("java.exe");
+        std::fs::write(&java, b"").unwrap();
+        let program = probe_program(&java);
+        assert!(program.ends_with("java.exe") || program.ends_with("JAVA.EXE"));
+        let short = crate::launch::ansi::ansi_safe(&java, &[]).ok();
+        match short {
+            Some((short, _)) if crate::launch::ansi::foreign("ş") => {
+                assert_eq!(program, short);
+                assert!(
+                    program.to_str().is_some_and(str::is_ascii),
+                    "{}",
+                    program.display()
+                );
+                assert!(program.is_file());
+            }
+            _ => assert_eq!(program, java),
+        }
+        // An ASCII path is never touched.
+        let plain = tmp.path().join("java.exe");
+        assert_eq!(probe_program(&plain), plain);
+    }
 
     #[test]
     fn parses_properties_output() {
