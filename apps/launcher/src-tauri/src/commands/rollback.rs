@@ -582,6 +582,22 @@ fn nothing_to_undo() -> CmdError {
     )
 }
 
+/// Removes the rollback override this command wrote for `item` (a sync that failed).
+async fn drop_rollback_override(game_dir: &Path, item: &str, version_id: &str) {
+    let Ok(Some(mut pack_state)) = PackState::load(game_dir).await else {
+        return;
+    };
+    let ours = pack_state.overrides.get(item).is_some_and(|choice| {
+        choice.reason == OverrideReason::Rollback && choice.version_id == version_id
+    });
+    if ours {
+        pack_state.overrides.remove(item);
+        if let Err(error) = pack_state.save(game_dir).await {
+            tracing::warn!(%error, "a rollback override was not removed after a failed sync");
+        }
+    }
+}
+
 /// Records `hold` for `minecraft` in the instance's mod history.
 async fn save_hold(instance_dir: &Path, minecraft: &str, hold: ModHold) -> CmdResult<()> {
     let path = history_path(instance_dir);
@@ -656,19 +672,25 @@ pub async fn mods_rollback(
                 .await
                 .map_err(crate::commands::official::pack_error)?
                 .unwrap_or_default();
+            let version_id = choice.version_id.clone();
             pack_state.overrides.insert(item.clone(), choice);
             pack_state
                 .save(&game_dir)
                 .await
                 .map_err(crate::commands::official::pack_error)?;
-            apply_selection(
+            if let Err(error) = apply_selection(
                 &state,
                 &instance_id,
                 PackSelection::default(),
                 None,
                 &job.token,
             )
-            .await?;
+            .await
+            {
+                // No half state: the override goes with the failed sync.
+                drop_rollback_override(&game_dir, item, &version_id).await;
+                return Err(error);
+            }
             ModHold {
                 mod_id: plan.candidate.mod_id.clone(),
                 name: planned.name.clone(),
@@ -706,7 +728,32 @@ pub async fn mods_rollback(
         version: hold.version.clone(),
         mod_id: hold.mod_id.clone(),
     };
-    save_hold(&instance_dir, &instance.mc_version, hold).await?;
+    if let Err(error) = save_hold(&instance_dir, &instance.mc_version, hold.clone()).await {
+        // No half state: without its hold the swap is undone.
+        match &hold.pack_item {
+            Some(item) => {
+                let mut selection = PackSelection::default();
+                selection.revert.insert(item.clone());
+                if let Err(back) =
+                    apply_selection(&state, &instance_id, selection, None, &job.token).await
+                {
+                    tracing::warn!(
+                        ?back,
+                        "a pack mod's rollback was not undone after a failed save"
+                    );
+                }
+            }
+            None => {
+                let trash = LauncherTrash::new(state.root.join("trash"));
+                if let Err(back) =
+                    undo_own(&game_dir.join("mods"), &trash, &instance_id, &hold).await
+                {
+                    tracing::warn!(%back, "a rollback was not undone after a failed save");
+                }
+            }
+        }
+        return Err(error);
+    }
     PLANS.lock().remove(&instance_id);
     tracing::info!(instance = %instance_id, mod_id = %done.mod_id, version = %done.version, pack = planned.pack_item.is_some(), "a crashed mod went back");
     Ok(done)
@@ -747,9 +794,9 @@ pub async fn mods_rollback_undo(
         .instance_dir(&instance_id)
         .map_err(CmdError::from)?;
     let path = history_path(&instance_dir);
-    let _writing = HISTORY.lock().await;
-    let mut history = ModHistory::load(&path).await;
-    let hold = history
+    // Read without holding the history: the sync below runs checks that may tidy the holds.
+    let hold = ModHistory::load(&path)
+        .await
         .holds_of(&instance.mc_version)
         .iter()
         .find(|hold| hold.mod_id == mod_id)
@@ -771,8 +818,13 @@ pub async fn mods_rollback_undo(
                 })?;
         }
     }
-    history.release(&instance.mc_version, &mod_id);
-    history.save(&path).await.map_err(content_error)?;
+    {
+        let _writing = HISTORY.lock().await;
+        let mut history = ModHistory::load(&path).await;
+        if history.release(&instance.mc_version, &mod_id).is_some() {
+            history.save(&path).await.map_err(content_error)?;
+        }
+    }
     tracing::info!(instance = %instance_id, %mod_id, "going back was undone");
     Ok(())
 }

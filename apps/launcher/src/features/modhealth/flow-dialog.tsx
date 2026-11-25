@@ -558,6 +558,20 @@ export function ModFlowDialog() {
     const javaFix = Boolean(settings && customJava && !crash.turnOff);
     footer = (
       <div className="flex w-full items-center gap-1.5">
+        {/* What explains this crash (its report, the JVM's log, else the game's own log of the
+            run), opened in the system's viewer; never the launcher's own log (REPAIR-RB). */}
+        {crash.openFile && instanceId ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<FileText size={15} />}
+            onClick={() => void api.modHealth.openCrashFile(instanceId).catch(showError)}
+          >
+            {crash.openFile === "gameLog"
+              ? t("repairRb.crash.openLog")
+              : t("repairRb.crash.openReport")}
+          </Button>
+        ) : null}
         <IconButton
           label={t("modHealth.crash.copy")}
           icon={<Copy size={17} />}
@@ -565,21 +579,6 @@ export function ModFlowDialog() {
           tooltipSide="top"
           onClick={copyDetails}
         />
-        {/* What explains this crash (its report, the JVM's log, else the game's own log of the
-            run), opened in the system's viewer; never the launcher's own log (REPAIR-RB). */}
-        {crash.openFile && instanceId ? (
-          <IconButton
-            label={
-              crash.openFile === "gameLog"
-                ? t("repairRb.crash.openLog")
-                : t("repairRb.crash.openReport")
-            }
-            icon={<FileText size={17} />}
-            size="sm"
-            tooltipSide="top"
-            onClick={() => void api.modHealth.openCrashFile(instanceId).catch(showError)}
-          />
-        ) : null}
         {/* The troubleshooter (HELP1): the connection, the disk, Java and the mods beside the crash. */}
         <IconButton
           label={t("help.title")}
