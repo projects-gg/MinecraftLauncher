@@ -40,6 +40,9 @@ pub enum TrashKind {
     /// A whole instance folder (settings and game files), deleted from the library; `instance_id`
     /// is its id, `name` its display name.
     Instance,
+    /// A mod's jar swapped for the version that worked before ("Önceki Sürüme Dön", REPAIR-RB);
+    /// `name` is the mod's name and version.
+    Mod,
 }
 
 /// What [`LauncherTrash::purge`] removes.

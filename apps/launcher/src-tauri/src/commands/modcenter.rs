@@ -165,6 +165,8 @@ pub enum OverrideKind {
     Chosen,
     /// The launcher picked it: a mod of the player's needs it newer.
     Needed,
+    /// The player went back to it after the pack's newer version crashed the game (REPAIR-RB).
+    Rollback,
 }
 
 /// The player's own version of a pack mod.
@@ -377,6 +379,7 @@ pub(crate) fn item_views(
                         version_number: choice.version_number.clone(),
                         kind: match choice.reason {
                             pl_content::OverrideReason::Needed => OverrideKind::Needed,
+                            pl_content::OverrideReason::Rollback => OverrideKind::Rollback,
                             _ => OverrideKind::Chosen,
                         },
                         needed_by: choice.needed_by.clone(),

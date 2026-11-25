@@ -32,6 +32,7 @@ pub mod official;
 pub mod packedit;
 pub mod projects_skin;
 pub mod resume;
+pub mod rollback;
 pub mod server;
 pub mod share;
 pub mod shortcut;

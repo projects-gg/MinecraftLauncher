@@ -748,6 +748,18 @@ export const commands = {
 	 *  "Argümanları sıfırla ve tekrar dene" (`instance_set_jvm_args`).
 	 */
 	resetJvmArgs: boolean,
+	/**
+	 *  "Önceki Sürüme Dön" (REPAIR-RB): a suspect changed since the last game that worked, and
+	 *  the version that worked runs here (`mods_rollback`).
+	 */
+	rollback: RollbackOfferView | null,
+	/**  Why a suspect that changed since the last game that worked cannot go back. */
+	rollbackNote: RollbackNoteView | null,
+	/**
+	 *  What `crash_open_file` opens: the crash report, the JVM's fatal error log or the game's
+	 *  own log of the run.
+	 */
+	openFile: CrashFileKind | null,
 } | null, CmdError>(__TAURI_INVOKE("troubleshoot_crash", { instanceId })),
 	/**
 	 *  The system's date and time settings (the clock row's fix): Windows' Settings page, macOS's
@@ -1504,6 +1516,24 @@ export const commands = {
 	 *  while the instance's game runs.
 	 */
 	packItemUseVersion: (instanceId: string, itemId: string, versionId: string | null, jobId: string, onProgress: Channel<JobProgressView>) => typedError<ModCenterApplyView, CmdError>(__TAURI_INVOKE("pack_item_use_version", { instanceId, itemId, versionId, jobId, onProgress })),
+	/**
+	 *  "Önceki Sürüme Dön": puts back the version the instance's last crash dialog offered. A
+	 *  player's mod swaps its jar (the crashing one to the launcher trash); a pack mod becomes the
+	 *  player's version of the pack item, which the sync keeps. Refused while the instance's game
+	 *  runs.
+	 */
+	modsRollback: (instanceId: string, jobId: string) => typedError<RollbackDoneView, CmdError>(__TAURI_INVOKE("mods_rollback", { instanceId, jobId })),
+	/**
+	 *  "Geri Al" after "Önceki Sürüme Dön": the version that crashed comes back (a player's mod from
+	 *  the launcher trash, a pack mod from the pack) and the hold ends. Refused while the instance's
+	 *  game runs.
+	 */
+	modsRollbackUndo: (instanceId: string, modId: string, jobId: string) => typedError<null, CmdError>(__TAURI_INVOKE("mods_rollback_undo", { instanceId, modId, jobId })),
+	/**
+	 *  Opens the file that explains the instance's last crash (its crash dialog's): the crash report,
+	 *  the JVM's fatal error log or the game's log of the run, in the system's text viewer.
+	 */
+	crashOpenFile: (instanceId: string) => typedError<null, CmdError>(__TAURI_INVOKE("crash_open_file", { instanceId })),
 	/**
 	 *  Settings → Java: the launcher's runtimes, then the Javas on the computer, then custom paths
 	 *  that are neither, each with the instances that use it. `rescan` looks for system Javas again.
@@ -5051,6 +5081,11 @@ export type ContentEntryView = {
 	iconPath: string | null,
 	/**  Installed by a ready-made set: it is updated with the set, not from here. */
 	modSet: SetBadgeView | null,
+	/**
+	 *  Held at its version after the version it names crashed the game (REPAIR-RB): "Tümünü
+	 *  Güncelle" leaves it; updating it alone is the player's way out.
+	 */
+	heldFrom: string | null,
 } & AddonEntry;
 
 export type ContentScanView = {
@@ -5103,6 +5138,15 @@ export type ConversationView = {
 	peerRead: number | null,
 };
 
+/**  What [`crash_file`] found. */
+export type CrashFileKind = 
+/**  The game's crash report. */
+"crashReport" | 
+/**  The JVM's fatal error log. */
+"jvmLog" | 
+/**  The game's own log of the run. */
+"gameLog";
+
 export type CrashKind = 
 /**  The JVM could not reserve the requested heap. */
 "memoryReserve" | "outOfMemory" | 
@@ -5153,6 +5197,18 @@ export type CrashView = {
 	 *  "Argümanları sıfırla ve tekrar dene" (`instance_set_jvm_args`).
 	 */
 	resetJvmArgs: boolean,
+	/**
+	 *  "Önceki Sürüme Dön" (REPAIR-RB): a suspect changed since the last game that worked, and
+	 *  the version that worked runs here (`mods_rollback`).
+	 */
+	rollback: RollbackOfferView | null,
+	/**  Why a suspect that changed since the last game that worked cannot go back. */
+	rollbackNote: RollbackNoteView | null,
+	/**
+	 *  What `crash_open_file` opens: the crash report, the JVM's fatal error log or the game's
+	 *  own log of the run.
+	 */
+	openFile: CrashFileKind | null,
 };
 
 export type CreatedInstance = {
@@ -8304,7 +8360,9 @@ export type OverrideKind =
 /**  The player picked it ("Sürümü Değiştir"). */
 "chosen" | 
 /**  The launcher picked it: a mod of the player's needs it newer. */
-"needed";
+"needed" | 
+/**  The player went back to it after the pack's newer version crashed the game (REPAIR-RB). */
+"rollback";
 
 /**  One file an update adds, changes, removes or leaves alone. */
 export type PackChangeView = {
@@ -10825,6 +10883,43 @@ export type ResumeView = {
 	quickPlay: QuickPlay,
 };
 
+/**  A mod went back. */
+export type RollbackDoneView = {
+	/**  The mod, by its catalog title. */
+	name: string,
+	/**  The version in place now. */
+	version: string,
+	/**  What "Geri Al" names (`mods_rollback_undo`). */
+	modId: string,
+};
+
+/**
+ *  Why the crash dialog offers no going back for a mod that changed since the last game that
+ *  worked.
+ */
+export type RollbackNoteKind = 
+/**  It went back already, and the game crashed with it again. */
+"repeated" | 
+/**  No older version of it runs on this Minecraft version and loader. */
+"noOlder";
+
+export type RollbackNoteView = {
+	kind: RollbackNoteKind,
+	/**  The mod, by its catalog title. */
+	name: string,
+};
+
+/**  "Önceki Sürüme Dön" in the crash dialog. */
+export type RollbackOfferView = {
+	/**  The mod, by its catalog title. */
+	name: string,
+	/**  The version that crashed and the one it goes back to, as players read them. */
+	from: string,
+	to: string,
+	/**  The mod came after the last clean game (else it was updated since). */
+	added: boolean,
+};
+
 /**
  *  Who deleted a message (`rchat_deleted.by`): its sender, the room's leader or a moderator, or
  *  Projects' moderators.
@@ -12775,7 +12870,12 @@ export type TrashKind = "world" | "backup" | "screenshot" |
  *  A whole instance folder (settings and game files), deleted from the library; `instance_id`
  *  is its id, `name` its display name.
  */
-"instance";
+"instance" | 
+/**
+ *  A mod's jar swapped for the version that worked before ("Önceki Sürüme Dön", REPAIR-RB);
+ *  `name` is the mod's name and version.
+ */
+"mod";
 
 export type TrashSummaryView = {
 	/**  Everything listed below (expired items about to go are left out). */

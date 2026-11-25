@@ -134,13 +134,17 @@ function ModRow({
           {/* A pack's file outside the official pack's instances (their pack mods are the
               recommended ones), kept by a copy or an older launcher: still listed, not removable. */}
           {fromPack ? <Chip className="shrink-0">{t("instance.mods.fromPack")}</Chip> : null}
-          {entry?.update && !fromPack ? (
+          {entry?.update && !fromPack && !entry.heldFrom ? (
             <Chip className="shrink-0">
               {t("content.updates.newVersion", { version: entry.update.versionNumber })}
             </Chip>
           ) : null}
         </div>
         <p className="truncate text-[12.5px] text-ash-400">{mod.description}</p>
+        {/* Held after a crash (REPAIR-RB): "Yine de Güncelle" is the way out. */}
+        {entry?.heldFrom ? (
+          <p className="truncate text-[12.5px] text-ash-300">{t("repairRb.ownHeld")}</p>
+        ) : null}
       </div>
       {shownJob ? (
         <JobStatus job={shownJob} onCancel={onCancel} />
@@ -154,7 +158,7 @@ function ModRow({
           // Pressed in until its bar comes (see InstallControl).
           className={job ? "scale-[0.97]" : undefined}
         >
-          {t("content.actions.update")}
+          {entry.heldFrom ? t("repairRb.updateAnyway") : t("content.actions.update")}
         </Button>
       ) : null}
       <span className="hidden w-20 shrink-0 text-right text-[12px] text-ash-300 tabular-nums lg:block">
@@ -252,7 +256,7 @@ export function ModsTab({
       showError(result.error);
     } else if (result.data?.offline) {
       toast(t("content.toasts.updatesOffline"));
-    } else if (!result.data?.entries.some((e) => e.update && !e.fromPack)) {
+    } else if (!result.data?.entries.some((e) => e.update && !e.fromPack && !e.heldFrom)) {
       toast(t("content.toasts.noUpdates"));
     }
   };
@@ -278,7 +282,11 @@ export function ModsTab({
   const updates = useMemo(() => {
     const present = new Set(listed.map((m) => m.fileName.replace(/\.disabled$/, "")));
     return (scan.data?.entries ?? []).filter(
-      (e) => e.update && !e.fromPack && present.has(e.fileName.replace(/\.disabled$/, "")),
+      (e) =>
+        e.update &&
+        !e.fromPack &&
+        !e.heldFrom &&
+        present.has(e.fileName.replace(/\.disabled$/, "")),
     );
   }, [scan.data, listed]);
   // The list that takes the empty zone's place (mods were just dropped or added) rises in.

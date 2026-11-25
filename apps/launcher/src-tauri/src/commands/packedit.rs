@@ -215,7 +215,7 @@ pub struct UpgradedView {
 }
 
 /// The Modrinth project a pack item installs.
-fn project_of(manifest: &PackManifest, item_id: &str) -> Option<String> {
+pub(crate) fn project_of(manifest: &PackManifest, item_id: &str) -> Option<String> {
     let item = manifest.projects.item(item_id)?;
     match &item.modrinth {
         Some(modrinth) => Some(modrinth.project_id.clone()),
@@ -256,6 +256,21 @@ fn override_from(
         needed_by,
     };
     choice.usable().then_some(choice)
+}
+
+/// The player's version of a pack item after a crash (REPAIR-RB, "Önceki Sürüme Dön"): `version`
+/// held as an override the sync keeps when the pack moves on.
+pub(crate) fn rollback_override(
+    manifest: &PackManifest,
+    item_id: &str,
+    version: &ModrinthVersion,
+) -> Option<ItemOverride> {
+    override_from(
+        version,
+        pack_sha1(manifest, item_id),
+        OverrideReason::Rollback,
+        Vec::new(),
+    )
 }
 
 /// Writes overrides into `pack_state` for every upgrade a fitting Modrinth version exists for.

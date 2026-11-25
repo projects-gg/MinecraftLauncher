@@ -464,6 +464,9 @@ pub struct ContentEntryView {
     pub icon_path: Option<String>,
     /// Installed by a ready-made set: it is updated with the set, not from here.
     pub mod_set: Option<crate::commands::modsets::SetBadgeView>,
+    /// Held at its version after the version it names crashed the game (REPAIR-RB): "Tümünü
+    /// Güncelle" leaves it; updating it alone is the player's way out.
+    pub held_from: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -505,6 +508,10 @@ pub async fn content_scan(
 
     let owned = pack_owned(addons.game_dir());
     let sets = pl_content::ModSetStates::load_blocking(addons.game_dir());
+    let holds = match kind {
+        ImportKind::Mod => crate::commands::rollback::recorded_holds(&state, &instance).await,
+        _ => Vec::new(),
+    };
     let icons = icon_dir(&state);
     // The in-game overlay's jar belongs to its switch in Settings, not to the player's mods.
     let overlay_jars = match kind {
@@ -528,11 +535,14 @@ pub async fn content_scan(
                 .as_ref()
                 .and_then(|s| cached_icon(&icons, &s.project_id))
                 .map(|p| p.to_string_lossy().into_owned());
+            let held_from = pl_mc::mods::rollback::hold_of(&holds, &entry.file_name)
+                .map(|hold| hold.from_version.clone());
             ContentEntryView {
                 entry,
                 from_pack,
                 icon_path,
                 mod_set,
+                held_from,
             }
         })
         .collect();
@@ -671,11 +681,19 @@ pub async fn content_update(
     }
     let owned = pack_owned(addons.game_dir());
     let wanted: HashSet<&str> = file_names.iter().map(String::as_str).collect();
+    // REPAIR-RB: "every update" leaves mods held after a crash; naming one updates it.
+    let holds = match kind {
+        ImportKind::Mod if wanted.is_empty() => {
+            crate::commands::rollback::recorded_holds(&state, &instance).await
+        }
+        _ => Vec::new(),
+    };
     let mut ids: Vec<String> = scan
         .entries
         .iter()
         .filter(|e| wanted.is_empty() || wanted.contains(e.file_name.as_str()))
         .filter(|e| !owned.contains(&index_key(kind.folder(), &e.file_name)))
+        .filter(|e| pl_mc::mods::rollback::hold_of(&holds, &e.file_name).is_none())
         .filter_map(|e| e.update.as_ref().map(|u| u.version_id.clone()))
         .collect();
     ids.sort();

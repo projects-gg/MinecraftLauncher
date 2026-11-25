@@ -55,8 +55,11 @@ export interface ModCenterItem {
 /** The player's own version of a recommended mod. */
 export interface VersionOverride {
   versionNumber: string;
-  /** `chosen`: the player picked it; `needed`: a mod of theirs needed it newer. */
-  kind: "chosen" | "needed";
+  /**
+   * `chosen`: the player picked it; `needed`: a mod of theirs needed it newer; `rollback`: it
+   * went back after the pack's newer version crashed the game (REPAIR-RB).
+   */
+  kind: "chosen" | "needed" | "rollback";
   /** For `needed`: the mods that needed it. */
   neededBy: string[];
 }

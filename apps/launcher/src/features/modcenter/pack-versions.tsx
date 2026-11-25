@@ -71,9 +71,11 @@ export function VersionLine({
   if (!own) return null;
   const version = shortVersion(own.versionNumber);
   const note =
-    own.kind === "needed" && own.neededBy.length > 0
-      ? t("packEdit.needed", { names: own.neededBy.join(", "), version })
-      : t("packEdit.chosen", { version });
+    own.kind === "rollback"
+      ? t("repairRb.packHeld", { version })
+      : own.kind === "needed" && own.neededBy.length > 0
+        ? t("packEdit.needed", { names: own.neededBy.join(", "), version })
+        : t("packEdit.chosen", { version });
   return (
     <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
       <p className="text-[12.5px] leading-snug text-ash-300">{note}</p>

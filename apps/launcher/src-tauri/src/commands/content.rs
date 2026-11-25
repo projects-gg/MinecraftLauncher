@@ -300,6 +300,8 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
     crate::commands::packedit::apply_flag(snapshot.config.features.pack_edit);
     // "Hızlı oyun açılışı" (AOT-CACHE): the next launches follow it.
     crate::aot::apply_flag(snapshot.config.features.aot_cache);
+    // "Önceki Sürüme Dön" (REPAIR-RB): clean games are recorded and crashes offer it while on.
+    crate::commands::rollback::apply_flag(snapshot.config.features.mod_rollback);
     // SRV-ACC: the friends service is asked for server accounts only while "Sunucu Hesapları" is
     // on, and the next launches add to the In-Game Account Switcher's list only while "Oyun İçi
     // Hesap Eşitleme" is.

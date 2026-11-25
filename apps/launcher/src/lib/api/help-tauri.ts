@@ -58,6 +58,9 @@ const crash = (view: CrashView): HelpCrash => ({
   reinstall: view.reinstall,
   memory: view.memory,
   resetJvmArgs: view.resetJvmArgs,
+  rollback: view.rollback,
+  rollbackNote: view.rollbackNote,
+  openFile: view.openFile,
 });
 
 export const tauriHelp: HelpApi = {

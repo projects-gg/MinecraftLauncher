@@ -11,6 +11,7 @@ pub mod ansi;
 pub mod aot;
 pub mod command;
 pub mod crash;
+pub mod crash_file;
 pub mod detached;
 pub mod identity;
 pub mod log;

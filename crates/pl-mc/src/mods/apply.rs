@@ -35,6 +35,7 @@ use super::repair::{
     KeptJar, ReinstallPlan, RepairAction, RepairContext, RepairPlan, RepairStep, action_for,
     pack_file_name, plan_repair, with_origin,
 };
+use super::rollback::HeldFiles;
 use super::scan::{ModScanner, ModSnapshot, strip_disabled};
 use super::version::requirement_matches;
 use crate::addons::{AddonIndex, AddonInstallOptions, AddonInstallReport, AddonProgress, Addons};
@@ -340,6 +341,10 @@ pub trait RepairHost: Send + Sync {
     /// ([`RepairContext::pack_upgrades`]).
     fn pack_upgrades(&self) -> bool {
         false
+    }
+    /// Jars held at an older version after a crash ([`RepairContext::held`]).
+    fn held_files(&self) -> HeldFiles {
+        HeldFiles::default()
     }
     /// Run the official pack sync with `request`; `progress` gets 0–100.
     fn sync_pack(
@@ -761,11 +766,13 @@ impl<H: RepairHost> Run<'_, '_, H> {
     /// Phase 4: After the local steps: plan the network steps again from a fresh check.
     async fn replan(&mut self, crash: Option<&CrashDiagnosis>) -> Result<()> {
         let (snapshot, origins, report) = self.check().await?;
+        let held = self.job.host.held_files();
         let ctx = RepairContext {
             env: &self.env,
             origins: &origins,
             has_pack: self.job.host.has_pack(),
             pack_upgrades: self.job.host.pack_upgrades(),
+            held: &held,
         };
         let fresh = plan_repair(&ctx, Some(&report), crash);
         let wanted: Vec<RepairStep> = fresh
@@ -1645,4 +1652,4 @@ pub async fn run_reinstall<H: RepairHost>(job: &ReinstallJob<'_, H>) -> Result<R
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

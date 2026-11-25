@@ -71,6 +71,14 @@ pub struct CrashView {
     /// The JVM did not start because of the instance's own JVM arguments, and it has some:
     /// "Argümanları sıfırla ve tekrar dene" (`instance_set_jvm_args`).
     pub reset_jvm_args: bool,
+    /// "Önceki Sürüme Dön" (REPAIR-RB): a suspect changed since the last game that worked, and
+    /// the version that worked runs here (`mods_rollback`).
+    pub rollback: Option<Box<crate::commands::rollback::RollbackOfferView>>,
+    /// Why a suspect that changed since the last game that worked cannot go back.
+    pub rollback_note: Option<Box<crate::commands::rollback::RollbackNoteView>>,
+    /// What `crash_open_file` opens: the crash report, the JVM's fatal error log or the game's
+    /// own log of the run.
+    pub open_file: Option<pl_mc::launch::crash_file::CrashFileKind>,
 }
 
 /// A mod the crash dialog can turn off.
@@ -1850,6 +1858,14 @@ async fn prepare_and_spawn(
             {
                 request_file_check(&files_dir);
             }
+            // REPAIR-RB: a mod that went back and crashed again is no longer held.
+            crate::commands::rollback::crash_seen(
+                &state,
+                &crashed_instance,
+                &diagnosis,
+                java_major,
+            )
+            .await;
             let view = modhealth::crash_view(
                 &app,
                 &state,
@@ -1874,6 +1890,8 @@ async fn prepare_and_spawn(
                 }
                 if exit.crash.is_none() {
                     crate::commands::troubleshoot::played_without_crash(&app, &id);
+                    // REPAIR-RB: the mods of a game that worked (in the background).
+                    crate::commands::rollback::game_ended_clean(&app, &id);
                 }
             }
             None => tracing::info!(
