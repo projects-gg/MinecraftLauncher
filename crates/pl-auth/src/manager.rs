@@ -34,6 +34,24 @@ pub const UNDO_WINDOW: Duration = Duration::from_secs(5 * 60);
 /// [`AuthManager::sync_profile`] reads a profile at most this often (any other read counts too).
 pub const PROFILE_SYNC_EVERY: Duration = Duration::from_secs(15 * 60);
 
+/// What [`AuthManager::warm_session`] did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WarmSession {
+    /// The Minecraft token is good for longer than the margin: nothing was asked.
+    Fresh { expires_at: Timestamp },
+    /// Refreshed just now.
+    Refreshed { expires_at: Timestamp },
+}
+
+impl WarmSession {
+    /// When the Minecraft token expires.
+    pub fn expires_at(self) -> Timestamp {
+        match self {
+            Self::Fresh { expires_at } | Self::Refreshed { expires_at } => expires_at,
+        }
+    }
+}
+
 /// A saved Microsoft sign-in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignIn {
@@ -489,7 +507,8 @@ impl AuthManager {
         id: Uuid,
         cancel: &CancellationToken,
     ) -> Result<AccountSecrets> {
-        let result = self.ensure_fresh_inner(id, cancel).await;
+        let margin = self.auth.config().refresh_margin;
+        let result = self.ensure_fresh_inner(id, margin, cancel).await;
         match &result {
             Ok(_) => self.note_session(id, false),
             Err(error) if error.class() == FailureClass::NeedsRelogin => {
@@ -497,7 +516,32 @@ impl AuthManager {
             }
             Err(_) => {}
         }
-        result
+        result.map(|(secrets, _)| secrets)
+    }
+
+    /// Refreshes a Microsoft account's session ahead of play when its Minecraft token expires
+    /// within `margin` ([`crate::WARM_MARGIN`]). A launch refreshes only within 10 minutes and
+    /// waits for Microsoft's five requests in a row (2.5–2.9 s on the player's first game of the
+    /// day, LIGHT); this is for the moments the player is about to press OYNA (the launcher's
+    /// start, its window coming back), once each, never on a timer. It shares the launch's lock:
+    /// a launch during a warm-up waits for it and asks nothing itself. Fails as
+    /// [`Self::ensure_fresh`] does, but a failure leaves the account's `needs_relogin` alone: the
+    /// token may still have hours to go, and the launch decides with it as before. A refresh that
+    /// worked clears the mark.
+    pub async fn warm_session(
+        &self,
+        id: Uuid,
+        margin: Duration,
+        cancel: &CancellationToken,
+    ) -> Result<WarmSession> {
+        let (secrets, refreshed) = self.ensure_fresh_inner(id, margin, cancel).await?;
+        self.note_session(id, false);
+        let expires_at = secrets.expires_at;
+        Ok(if refreshed {
+            WarmSession::Refreshed { expires_at }
+        } else {
+            WarmSession::Fresh { expires_at }
+        })
     }
 
     /// Whether the saved session of a Microsoft account still works. Talks to Microsoft only
@@ -537,8 +581,9 @@ impl AuthManager {
     async fn ensure_fresh_inner(
         &self,
         id: Uuid,
+        margin: Duration,
         cancel: &CancellationToken,
-    ) -> Result<AccountSecrets> {
+    ) -> Result<(AccountSecrets, bool)> {
         self.require_microsoft(id)?;
         let lock = self.refresh_lock(id);
         let _guard = tokio::select! {
@@ -550,8 +595,8 @@ impl AuthManager {
             .load_secrets(id)
             .await?
             .ok_or(AuthError::MissingSecrets { id })?;
-        if !stored.expires_within(self.auth.config().refresh_margin, Timestamp::now()) {
-            return Ok(stored);
+        if !stored.expires_within(margin, Timestamp::now()) {
+            return Ok((stored, false));
         }
         let Some(refresh_token) = stored
             .refresh_token
@@ -598,7 +643,7 @@ impl AuthManager {
         {
             tracing::warn!(account = %id, code = %error.code(), "profile update not saved");
         }
-        Ok(fresh)
+        Ok((fresh, true))
     }
 
     /// Launch identity for online play: refreshes the Microsoft session when needed and records
@@ -1806,6 +1851,138 @@ mod tests {
         assert_eq!(b, c);
         assert_eq!(server.hits("/consumers/oauth2/v2.0/token"), 1);
         assert_eq!(a.refresh_token.as_deref(), Some("ms-refresh-new"));
+    }
+
+    /// LIGHT: a token due within the warm-up's margin is refreshed ahead of play; the launch then
+    /// finds it fresh and asks Microsoft nothing.
+    #[tokio::test]
+    async fn a_warm_up_refreshes_a_token_due_within_its_margin() {
+        let server = MockServer::start(testutil::happy_chain).await;
+        let f = fixture(server.base());
+        let account = seed(&f.manager, in_minutes(3 * 60)).await;
+        let cancel = CancellationToken::new();
+        let warmed = f
+            .manager
+            .warm_session(account.id, crate::WARM_MARGIN, &cancel)
+            .await
+            .unwrap();
+        assert!(
+            matches!(warmed, WarmSession::Refreshed { .. }),
+            "{warmed:?}"
+        );
+        assert!(warmed.expires_at() > in_minutes(20 * 60));
+        assert_eq!(server.hits("/consumers/oauth2/v2.0/token"), 1);
+        assert_eq!(
+            f.secrets.load(account.id).unwrap().unwrap().access_token,
+            testutil::mc_token()
+        );
+        let secrets = f.manager.ensure_fresh(account.id, &cancel).await.unwrap();
+        assert_eq!(secrets.access_token, testutil::mc_token());
+        assert_eq!(server.hits("/consumers/oauth2/v2.0/token"), 1);
+    }
+
+    /// LIGHT: a token good past the margin costs no request (only the keychain is read).
+    #[tokio::test]
+    async fn a_warm_up_leaves_a_token_good_past_its_margin() {
+        let server = MockServer::start(testutil::happy_chain).await;
+        let f = fixture(server.base());
+        let expires = in_minutes(10 * 60);
+        let account = seed(&f.manager, expires).await;
+        let warmed = f
+            .manager
+            .warm_session(account.id, crate::WARM_MARGIN, &CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(
+            warmed,
+            WarmSession::Fresh {
+                expires_at: expires
+            }
+        );
+        assert!(server.requests().is_empty());
+    }
+
+    /// LIGHT: OYNA pressed while the warm-up waits for Microsoft: one refresh, both get it.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn a_launch_during_a_warm_up_shares_its_refresh() {
+        let server = MockServer::start(|request: &Recorded| {
+            if request.path == "/consumers/oauth2/v2.0/token" {
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            }
+            testutil::happy_chain(request)
+        })
+        .await;
+        let f = fixture(server.base());
+        let account = seed(&f.manager, in_minutes(-30)).await;
+        let cancel = CancellationToken::new();
+        let (warmed, launched) = tokio::join!(
+            f.manager
+                .warm_session(account.id, crate::WARM_MARGIN, &cancel),
+            async {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                f.manager.ensure_fresh(account.id, &cancel).await
+            },
+        );
+        let (warmed, launched) = (warmed.unwrap(), launched.unwrap());
+        assert!(
+            matches!(warmed, WarmSession::Refreshed { .. }),
+            "{warmed:?}"
+        );
+        assert_eq!(launched.expires_at, warmed.expires_at());
+        assert_eq!(server.hits("/consumers/oauth2/v2.0/token"), 1);
+    }
+
+    /// LIGHT: a warm-up without a network changes nothing: the session and the account stay as
+    /// they were (the launch decides later, as before).
+    #[tokio::test]
+    async fn a_warm_up_offline_leaves_the_session_alone() {
+        let closed = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let base = format!("http://{}", closed.local_addr().unwrap());
+        drop(closed);
+        let f = fixture(&base);
+        let expires = in_minutes(2 * 60);
+        let account = seed(&f.manager, expires).await;
+        let error = f
+            .manager
+            .warm_session(account.id, crate::WARM_MARGIN, &CancellationToken::new())
+            .await
+            .unwrap_err();
+        assert_eq!(error.class(), FailureClass::Offline, "{error:?}");
+        assert_eq!(
+            f.secrets.load(account.id).unwrap(),
+            Some(stored_secrets(expires))
+        );
+        assert!(!f.manager.account(account.id).unwrap().needs_relogin);
+    }
+
+    /// LIGHT: a refresh token Microsoft no longer takes, found by a warm-up hours before the token
+    /// runs out, leaves the account alone: the launch still plays with the token it has.
+    #[tokio::test]
+    async fn a_warm_up_with_a_dead_refresh_token_leaves_the_account_to_the_launch() {
+        let server = MockServer::start(|request: &Recorded| {
+            if request.path == "/consumers/oauth2/v2.0/token" {
+                MockReply::json(400, json!({"error": "invalid_grant"}))
+            } else {
+                testutil::happy_chain(request)
+            }
+        })
+        .await;
+        let f = fixture(server.base());
+        let account = seed(&f.manager, in_minutes(60)).await;
+        let error = f
+            .manager
+            .warm_session(account.id, crate::WARM_MARGIN, &CancellationToken::new())
+            .await
+            .unwrap_err();
+        assert_eq!(error.class(), FailureClass::NeedsRelogin);
+        assert!(!f.manager.account(account.id).unwrap().needs_relogin);
+        let secrets = f
+            .manager
+            .ensure_fresh(account.id, &CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!(secrets.access_token, "old-access");
+        assert!(!f.manager.account(account.id).unwrap().needs_relogin);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

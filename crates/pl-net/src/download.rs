@@ -233,6 +233,7 @@ impl Downloader {
         items: Vec<DownloadItem>,
         options: &DownloadOptions,
     ) -> Result<DownloadSummary> {
+        let started = Instant::now();
         let mut seen = HashSet::new();
         let items: Vec<DownloadItem> = items
             .into_iter()
@@ -286,7 +287,7 @@ impl Downloader {
             .collect();
         let mut results: Vec<(PathBuf, &'static str, Result<Outcome>)> =
             futures::stream::iter(jobs)
-                .buffer_unordered(options.concurrency.max(1))
+                .buffer_unordered(options.concurrency.clamp(1, MAX_AT_ONCE))
                 .collect()
                 .await;
 
@@ -343,6 +344,19 @@ impl Downloader {
                 cause: first.cause(),
                 origin,
             });
+        }
+        if summary.downloaded > 0 {
+            // How fast a batch came (LIGHT): one line a batch, so a slow install says where.
+            let elapsed_ms = started.elapsed().as_millis() as u64;
+            tracing::debug!(
+                files = summary.downloaded,
+                skipped = summary.skipped,
+                bytes = summary.bytes,
+                elapsed_ms,
+                at_once = options.concurrency.clamp(1, MAX_AT_ONCE),
+                kib_per_s = summary.bytes * 1000 / 1024 / elapsed_ms.max(1),
+                "downloads done"
+            );
         }
         Ok(summary)
     }
@@ -598,7 +612,7 @@ impl Downloader {
         url: &str,
         from: u64,
     ) -> std::result::Result<reqwest::Response, reqwest::Error> {
-        let mut request = self.http.client().get(url);
+        let mut request = self.http.files_client().get(url);
         if from > 0 {
             request = request
                 .header(reqwest::header::RANGE, format!("bytes={from}-"))
@@ -610,6 +624,11 @@ impl Downloader {
 
 /// How long a cancelled background download may take to write out what it already got.
 const KEEP_FLUSH: Duration = Duration::from_secs(2);
+
+/// Downloads of one batch at once, at most: each is a connection of its own (HTTP/1.1, the files
+/// client). Assets run at twice the player's setting, so its 48 would open 96 to Mojang; measured
+/// (LIGHT, 1188 assets): 8 at once 7.0 s, 16 3.2–4.3 s, 32 1.8–3.8 s, 64 1.7–3.4 s.
+const MAX_AT_ONCE: usize = 48;
 
 /// The bytes an interrupted download left in its part file: some, and fewer than the whole file.
 async fn partial_len(part: &Path, size: Option<u64>) -> u64 {

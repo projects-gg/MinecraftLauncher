@@ -1,13 +1,30 @@
 import { observeSkippedViewTransitions } from "@pl/ui";
-import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
-import { AfkPage } from "./features/afk/afk-page";
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  lazyRouteComponent,
+} from "@tanstack/react-router";
 import { HomePage } from "./features/home/home-page";
-import { InstancePage } from "./features/library/instance-page";
-import { LibraryPage } from "./features/library/library-page";
-import { NewsPage } from "./features/news/news-page";
-import { SettingsPage } from "./features/settings/settings-page";
 import { createHashRouteHistory } from "./lib/hash-history";
 import { AppShell } from "./shell/app-shell";
+
+// Pages other than Home load when first opened, or as the pointer heads for their link
+// (`defaultPreload: "intent"`): the start reads only what Home needs (LIGHT).
+const LibraryPage = lazyRouteComponent(
+  () => import("./features/library/library-page"),
+  "LibraryPage",
+);
+const InstancePage = lazyRouteComponent(
+  () => import("./features/library/instance-page"),
+  "InstancePage",
+);
+const NewsPage = lazyRouteComponent(() => import("./features/news/news-page"), "NewsPage");
+const AfkPage = lazyRouteComponent(() => import("./features/afk/afk-page"), "AfkPage");
+const SettingsPage = lazyRouteComponent(
+  () => import("./features/settings/settings-page"),
+  "SettingsPage",
+);
 
 interface RootSearch {
   /** Open news article overlay (works on every page, also for projects:// deep links). */

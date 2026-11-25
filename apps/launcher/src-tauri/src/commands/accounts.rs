@@ -261,8 +261,10 @@ pub fn account_cancel_login(state: State<'_, AppState>) {
 
 #[tauri::command]
 #[specta::specta]
-pub fn account_set_active(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+pub fn account_set_active(app: AppHandle, state: State<'_, AppState>, id: String) -> CmdResult<()> {
     state.auth.set_active(parse_id(&id)?)?;
+    // The player is about to play with it: its session, refreshed now if it expires soon (LIGHT).
+    crate::session_warm::warm(&app, "account");
     Ok(())
 }
 
