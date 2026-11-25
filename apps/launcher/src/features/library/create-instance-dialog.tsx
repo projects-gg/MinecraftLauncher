@@ -61,9 +61,13 @@ export function CreateInstanceDialog({
   // "Sıfırdan" that the morph would then glide away from.
   // "Daha Fazla Seçenek" (INST-ADD): folded, and starting from Settings → Oyun's defaults for new
   // instances each time the dialog opens.
+  // The dialog often mounts open (`?create` from Home, the palette or an offer): the first values come
+  // from the defaults too, not only a later opening.
   const [moreOpen, setMoreOpen] = useState(false);
-  const [memoryMb, setMemoryMb] = useState<number | null>(null);
-  const [jvmArgs, setJvmArgs] = useState("");
+  const [memoryMb, setMemoryMb] = useState<number | null>(
+    () => usePrefs.getState().defaultMaxMemoryMb,
+  );
+  const [jvmArgs, setJvmArgs] = useState(() => usePrefs.getState().defaultJvmArgs);
   const [shownFor, setShownFor] = useState(open);
   if (open !== shownFor) {
     setShownFor(open);
