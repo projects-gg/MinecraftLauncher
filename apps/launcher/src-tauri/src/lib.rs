@@ -669,6 +669,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::data::data_open_folder,
             commands::data::data_support_bundle,
             commands::data::data_move_plan,
+            commands::data::data_move_suggestion,
             commands::data::data_move_start,
             commands::data::data_move_cancel,
             commands::data::data_reset,

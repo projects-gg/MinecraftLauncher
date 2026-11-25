@@ -1612,6 +1612,13 @@ export const commands = {
 	 */
 	dataMovePlan: (picked: string) => typedError<MovePlanView, CmdError>(__TAURI_INVOKE("data_move_plan", { picked })),
 	/**
+	 *  Where "Veri Klasörünü Taşı" offers to move a data folder Java cannot read on this computer
+	 *  (YOL-HARF, CRASH-DIAG): `<system drive>:\ProjectsLauncher`, or `ProjectsLauncher2` when that
+	 *  one is taken. `None` when the folder has no such letters or cannot move from here (pinned by
+	 *  `PROJECTS_LAUNCHER_DATA_DIR`).
+	 */
+	dataMoveSuggestion: () => __TAURI_INVOKE<string | null>("data_move_suggestion"),
+	/**
 	 *  Copies the data folder into the picked place with progress, verifies the copy, points the
 	 *  launcher at it and restarts. Until the restart nothing in the old folder changes; on any
 	 *  failure (or `data_move_cancel`) the partial copy is removed.

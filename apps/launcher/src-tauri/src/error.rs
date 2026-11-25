@@ -103,6 +103,28 @@ impl CmdError {
         Self::new("SURUM-YOK", message, details)
     }
 
+    /// The code of [`Self::path_letters`].
+    pub const PATH_LETTERS: &str = "YOL-HARF";
+
+    /// YOL-HARF: the data folder's path has a letter Java cannot read on this computer, so the game
+    /// cannot run from it (CRASH-DIAG). OYNA's toast offers "Veri Klasörünü Taşı" with a place of
+    /// English letters picked; a folder `PROJECTS_LAUNCHER_DATA_DIR` pins cannot move from the
+    /// launcher and keeps the longer text.
+    pub fn path_letters(details: impl Into<String>) -> Self {
+        let message = if crate::commands::data::pinned_by_environment() {
+            pick(
+                "Java, veri klasörünün yolundaki bazı harfleri (ş, ğ gibi) bu bilgisayarda okuyamıyor. Ayarlar'daki Veri ve Depolama bölümünden veri klasörünü yolunda yalnız İngilizce harfler olan bir yere taşı (örneğin C:\\Projects), sonra tekrar dene.",
+                "Java can't read some letters (such as ş or ğ) in the data folder's path on this computer. In Settings, under Data and Storage, move the data folder to a place whose path has only English letters (for example C:\\Projects), then try again.",
+            )
+        } else {
+            pick(
+                "Java bu bilgisayarda veri klasörünün yolundaki bazı harfleri (ş, ğ gibi) okuyamıyor, klasörü başka bir yere taşı.",
+                "Java can't read some letters (such as ş or ğ) in the data folder's path on this computer, so move the folder.",
+            )
+        };
+        Self::new(Self::PATH_LETTERS, message, details)
+    }
+
     pub fn no_room(needed: u64, free: u64, details: impl Into<String>) -> Self {
         let lang = Lang::current();
         let (needed, free) = (toast_size(needed, lang), toast_size(free, lang));
@@ -184,11 +206,12 @@ impl From<pl_mc::Error> for CmdError {
                 ),
             ),
             E::VersionNotFound(id) => return Self::version_missing(id, details),
+            // A path outside the data folder (the launcher checks that one before a launch).
             E::UnreadablePath(_) => (
                 "YOL-HARF",
                 pick(
-                    "Java, veri klasörünün yolundaki bazı harfleri (ş, ğ gibi) bu bilgisayarda okuyamıyor. Ayarlar'daki Veri ve Depolama bölümünden veri klasörünü yolunda yalnız İngilizce harfler olan bir yere taşı (örneğin C:\\Projects), sonra tekrar dene.",
-                    "Java can't read some letters (such as ş or ğ) in the data folder's path on this computer. In Settings, under Data and Storage, move the data folder to a place whose path has only English letters (for example C:\\Projects), then try again.",
+                    "Java bu bilgisayarda bir klasör yolundaki bazı harfleri (ş, ğ gibi) okuyamıyor. O klasörü yalnız İngilizce harfli bir yere taşı.",
+                    "Java can't read some letters (such as ş or ğ) in a folder's path on this computer. Move that folder to a place with only English letters.",
                 ),
             ),
             E::Java(_) => (
