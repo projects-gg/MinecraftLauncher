@@ -6,6 +6,7 @@ pub mod check;
 pub(crate) mod lenient_json;
 mod metadata;
 pub mod repair;
+pub mod rollback;
 pub mod scan;
 pub mod version;
 

@@ -494,8 +494,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
 
 /// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
 /// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk`, `voice`, `socNext`,
-/// `telemetry`, `packEdit`, `aotCache`, `serverAccounts` and `iasSync`, which stay off until
-/// Studio turns them on.
+/// `telemetry`, `packEdit`, `aotCache`, `serverAccounts`, `iasSync` and `modRollback`, which stay
+/// off until Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -590,6 +590,13 @@ pub struct Features {
     /// written only when on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub ias_sync: bool,
+    /// "Önceki Sürüme Dön" (REPAIR-RB): desktop launchers remember the mods of each Minecraft
+    /// version's last game that ended without a crash, and when a mod that changed since then
+    /// crashes the game, the crash dialog offers to put back the version that worked (held until
+    /// the player updates it). Off by default; written only when on. Off, nothing is recorded or
+    /// offered; versions already held stay held and can be undone.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub mod_rollback: bool,
 }
 
 impl Default for Features {
@@ -615,6 +622,7 @@ impl Default for Features {
             aot_cache: false,
             server_accounts: false,
             ias_sync: false,
+            mod_rollback: false,
         }
     }
 }

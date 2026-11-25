@@ -45,6 +45,7 @@ use pl_mc::mods::repair::{
     ReinstallTarget, RepairAction, RepairContext, RepairPlan, dependency_project,
     display_name_for_file, display_name_for_id, loader_display_name, plan_reinstall, plan_repair,
 };
+use pl_mc::mods::rollback::{HeldFiles, ModHold};
 use pl_mc::mods::scan::{ModScanner, ModSnapshot, strip_disabled};
 use pl_net::CancellationToken;
 use serde::{Deserialize, Serialize};
@@ -157,14 +158,14 @@ impl Titles {
     }
 }
 
-/// Where the set's files came from, and their catalog titles.
+/// Where the set's files came from, their catalog titles, and the official pack's state.
 async fn sources_for(
     state: &AppState,
     instance: &Instance,
     instance_dir: &Path,
     game_dir: &Path,
     snapshot: &ModSnapshot,
-) -> (FileOrigins, Titles) {
+) -> (FileOrigins, Titles, Option<PackState>) {
     let pack_state = PackState::load(game_dir).await.ok().flatten();
     let pack: Vec<String> = pack_state
         .as_ref()
@@ -201,7 +202,7 @@ async fn sources_for(
             }
         }
     }
-    (origins, titles)
+    (origins, titles, pack_state)
 }
 
 pub(crate) async fn scan(mods_dir: PathBuf) -> ModSnapshot {
@@ -220,6 +221,11 @@ struct Checked {
     /// Official pack instances: what "Düzelt" would change in `options.txt` (the pack's mod keys
     /// that still clash and, along with them, an unbound push to talk).
     keys: KeyFixPlan,
+    /// The official pack's state of the set.
+    pack: Option<PackState>,
+    /// Mods held at an older version after a crash (REPAIR-RB), and their jars.
+    holds: Vec<ModHold>,
+    held: HeldFiles,
 }
 
 async fn check_instance(
@@ -237,8 +243,17 @@ async fn check_instance(
         .map_err(CmdError::from)?;
     let env = environment(instance, java);
     let snapshot = scan(game_dir.join("mods")).await;
-    let (origins, titles) = sources_for(state, instance, &instance_dir, &game_dir, &snapshot).await;
+    let (origins, titles, pack) =
+        sources_for(state, instance, &instance_dir, &game_dir, &snapshot).await;
     let report = check_mods(&snapshot, &env, &origins);
+    let holds = crate::commands::rollback::holds_for(
+        &instance_dir,
+        &instance.mc_version,
+        &snapshot,
+        pack.as_ref(),
+    )
+    .await;
+    let held = HeldFiles::of(&holds);
     // The pack's key table: the official pack's instances and those with ready-made sets.
     let keys =
         if instance.managed_pack.is_some() || crate::commands::modsets::has_sets(&game_dir).await {
@@ -253,6 +268,9 @@ async fn check_instance(
         titles,
         report,
         keys,
+        pack,
+        holds,
+        held,
     })
 }
 
@@ -588,6 +606,7 @@ fn check_view(
         origins: &checked.origins,
         has_pack,
         pack_upgrades: has_pack && crate::commands::packedit::on(),
+        held: &checked.held,
     };
     // One issue per cause: a dependency missing for several mods, asked for with different
     // requirements or by one of its parts' ids (Fabric API), is one line naming every mod. Its
@@ -674,6 +693,8 @@ struct LauncherHost<'a> {
     managed: bool,
     manifest: Option<PackManifest>,
     cancel: CancellationToken,
+    /// Jars held after a crash (REPAIR-RB): the repair's later planning leaves them alone.
+    held: HeldFiles,
 }
 
 impl<'a> LauncherHost<'a> {
@@ -696,6 +717,7 @@ impl<'a> LauncherHost<'a> {
             managed: instance.managed_pack.is_some(),
             manifest,
             cancel,
+            held: HeldFiles::default(),
         }
     }
 }
@@ -717,6 +739,10 @@ impl RepairHost for LauncherHost<'_> {
 
     fn pack_upgrades(&self) -> bool {
         self.manifest.is_some() && crate::commands::packedit::on()
+    }
+
+    fn held_files(&self) -> HeldFiles {
+        self.held.clone()
     }
 
     async fn pack_files(&self) -> Vec<String> {
@@ -1082,10 +1108,16 @@ pub(crate) async fn autofix(
     let mut view = AutoFixView::default();
 
     if crate::commands::packedit::on() && instance.managed_pack.is_some() {
-        let wants =
+        let mut wants =
             crate::commands::packedit::upgrades_wanted(&checked.report, &checked.origins, |m| {
                 checked.titles.name(m)
             });
+        // REPAIR-RB: a pack mod held after a crash does not move by itself.
+        wants.retain(|want| {
+            !checked
+                .held
+                .contains(want.path.rsplit('/').next().unwrap_or(&want.path))
+        });
         if !wants.is_empty()
             && let PackSource::Ready { manifest, .. } =
                 pack_source(state, instance, &game_dir).await
@@ -1420,6 +1452,7 @@ pub(crate) async fn crash_view(
     let mut repair = false;
     let mut reinstall = false;
     let mut suspects = Vec::new();
+    let mut rollback = crate::commands::rollback::CrashOffer::default();
     let modded = instance.loader.kind != LoaderKind::Vanilla;
     // Graphics drivers, memory, JVM options and security software: no mod actions, and no
     // suspects to find (the analyzer names none), so the mods folder is not read and a JVM
@@ -1461,6 +1494,7 @@ pub(crate) async fn crash_view(
             origins: &checked.origins,
             has_pack: instance.managed_pack.is_some(),
             pack_upgrades: instance.managed_pack.is_some() && crate::commands::packedit::on(),
+            held: &checked.held,
         };
         let plan = plan_repair(&ctx, Some(&checked.report), Some(&diagnosis));
         repair = repairable(&plan, &HashSet::new());
@@ -1476,6 +1510,34 @@ pub(crate) async fn crash_view(
                     name: suspect_name(s, &checked.titles),
                 })
             });
+        // "Önceki Sürüme Dön" (REPAIR-RB) for a suspect that changed since the last clean game.
+        if let (Ok(game_dir), Ok(instance_dir)) = (
+            state.instances.game_dir(&instance.id),
+            state.instances.instance_dir(&instance.id),
+        ) {
+            let title = |file: &str| checked.titles.of(file).map(str::to_owned);
+            rollback = crate::commands::rollback::crash_offer(
+                state,
+                instance,
+                &diagnosis,
+                &crate::commands::rollback::OfferInputs {
+                    game_dir: &game_dir,
+                    instance_dir: &instance_dir,
+                    snapshot: &checked.snapshot,
+                    origins: &checked.origins,
+                    pack: checked.pack.as_ref(),
+                    holds: &checked.holds,
+                    title: &title,
+                },
+            )
+            .await;
+        }
+        // A mod only in the stack trace can still be turned off when going back is not offered.
+        if turn_off.is_none()
+            && let Some((file, name)) = rollback.turn_off.take()
+        {
+            turn_off = Some(TurnOffView { file, name });
+        }
         let has_jars = !checked.snapshot.jars.is_empty();
         reinstall = has_jars
             && (mod_crash(diagnosis.kind)
@@ -1489,6 +1551,14 @@ pub(crate) async fn crash_view(
             .insert(instance.id.clone(), diagnosis.clone());
     }
     let memory = memory_advice(&diagnosis, instance);
+    // The file that explains the crash: its report, the JVM's log or the game's own log of the run.
+    let open_file = state
+        .instances
+        .game_dir(&instance.id)
+        .ok()
+        .and_then(|game_dir| {
+            crate::commands::rollback::remember_crash_file(&instance.id, &diagnosis, &game_dir)
+        });
     // "Argümanları sıfırla": only when the instance has arguments of the player's to reset.
     let reset_jvm_args = !instance.jvm_args.trim().is_empty()
         && diagnosis
@@ -1528,6 +1598,9 @@ pub(crate) async fn crash_view(
         reinstall,
         memory,
         reset_jvm_args,
+        rollback: rollback.offer.map(Box::new),
+        rollback_note: rollback.note.map(Box::new),
+        open_file,
     }
 }
 
@@ -1694,12 +1767,20 @@ pub async fn mods_repair(
         .map_err(CmdError::from)?;
     let java = java_major(&app, &state, &instance).await;
     let checked = check_instance(&state, &instance, java).await?;
-    let host = LauncherHost::new(&state, &instance, &game_dir, job.token.clone()).await;
+    // A mod held after a crash (REPAIR-RB) stays where it is in "Onar", except when the player
+    // pressed the fix of its own issue: updating it is their way out of the hold.
+    let held = match &scope {
+        RepairScope::Issue { .. } => HeldFiles::default(),
+        _ => checked.held.clone(),
+    };
+    let mut host = LauncherHost::new(&state, &instance, &game_dir, job.token.clone()).await;
+    host.held = held.clone();
     let ctx = RepairContext {
         env: &checked.env,
         origins: &checked.origins,
         has_pack: host.has_pack(),
         pack_upgrades: host.pack_upgrades(),
+        held: &held,
     };
     let tried = tried_for(&app, &instance_id);
     let crash = match &scope {
@@ -1778,6 +1859,7 @@ pub async fn mods_repair(
             origins: &after.origins,
             has_pack: host.has_pack(),
             pack_upgrades: host.pack_upgrades(),
+            held: &after.held,
         };
         let still: HashSet<String> = after
             .report
@@ -1892,7 +1974,8 @@ async fn reinstall_setup(state: &AppState, instance: &Instance) -> CmdResult<Rei
         .instance_dir(&instance.id)
         .map_err(CmdError::from)?;
     let snapshot = scan(game_dir.join("mods")).await;
-    let (origins, titles) = sources_for(state, instance, &instance_dir, &game_dir, &snapshot).await;
+    let (origins, titles, _) =
+        sources_for(state, instance, &instance_dir, &game_dir, &snapshot).await;
     let target = ReinstallTarget {
         minecraft: instance.mc_version.clone(),
         loader: instance.loader.kind,

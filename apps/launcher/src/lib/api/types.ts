@@ -3,7 +3,15 @@
 import type { KickCause, QuickPlay } from "@/bindings";
 import type { JavaChoice, JavaPrompt } from "./java-types";
 import type { ModsNotice } from "./modcenter-types";
-import type { CrashKind, CrashSuspect, MemoryAdvice, ModCheck } from "./modhealth-types";
+import type {
+  CrashFileKind,
+  CrashKind,
+  CrashSuspect,
+  MemoryAdvice,
+  ModCheck,
+  RollbackNote,
+  RollbackOffer,
+} from "./modhealth-types";
 import type { SetBadge } from "./modsets-types";
 
 export type LoaderKind = "vanilla" | "fabric" | "quilt" | "forge" | "neoForge";
@@ -354,6 +362,12 @@ export type LaunchEvent =
       memory: MemoryAdvice | null;
       /** The instance's own JVM arguments stopped the JVM: "Argümanları sıfırla". */
       resetJvmArgs?: boolean;
+      /** "Önceki Sürüme Dön" (REPAIR-RB). */
+      rollback?: RollbackOffer | null;
+      /** Why a mod that changed since the last game that worked cannot go back. */
+      rollbackNote?: RollbackNote | null;
+      /** What the file button opens: the crash report, the JVM's log or the game's own log. */
+      openFile?: CrashFileKind | null;
     }
   | { type: "error"; message: string; details: string }
   /** `cancelLaunch` stopped the launch before the game started (not an error). */

@@ -17,6 +17,7 @@ use super::check::{
     CheckEnvironment, DisableReason, FileOrigin, FileOrigins, IssueKind, ModCheckReport, ModFix,
     ModIssue, Severity,
 };
+use super::rollback::HeldFiles;
 use super::scan::{ModSnapshot, file_stem, strip_disabled};
 use crate::launch::crash::CrashDiagnosis;
 use crate::loaders::LoaderKind;
@@ -135,6 +136,15 @@ pub struct RepairContext<'a> {
     /// A pack file a mod needs in a newer version moves to that version (PACK-EDIT,
     /// [`RepairAction::UpgradePackFile`]) instead of going back to the pack's.
     pub pack_upgrades: bool,
+    /// Jars held at an older version after a crash (REPAIR-RB, [`super::rollback`]): no step
+    /// moves them to another version (an update, or a pack file going back to the pack's); their
+    /// issues stay unresolved until the player updates the mod.
+    pub held: &'a HeldFiles,
+}
+
+/// A fix that would move a held jar to another version.
+fn moves_held(fix: &ModFix, ctx: &RepairContext<'_>) -> bool {
+    matches!(fix, ModFix::UpdateToCompatible { file, .. } if ctx.held.contains(file))
 }
 
 /// Issue kinds whose fixes "Onar" applies even though they are only warnings.
@@ -245,6 +255,7 @@ pub fn plan_repair(
                     }
                 }
             }
+            Some(fix) if moves_held(fix, ctx) => unresolved.push(issue.clone()),
             Some(fix) => wanted.push((fix.clone(), Some(issue.kind))),
             None => unresolved.push(issue.clone()),
         }
@@ -259,7 +270,13 @@ pub fn plan_repair(
                 );
             }
         }
-        wanted.extend(crash.mod_fixes.iter().map(|fix| (fix.clone(), None)));
+        wanted.extend(
+            crash
+                .mod_fixes
+                .iter()
+                .filter(|fix| !moves_held(fix, ctx))
+                .map(|fix| (fix.clone(), None)),
+        );
     }
 
     let mut steps: Vec<RepairStep> = Vec::new();
@@ -1004,6 +1021,7 @@ mod tests {
             origins: &origins,
             has_pack: false,
             pack_upgrades: false,
+            held: HeldFiles::none(),
         };
         let plan = plan_repair(&ctx, Some(&report), None);
         assert_eq!(
@@ -1126,6 +1144,7 @@ mod tests {
             origins: &origins,
             has_pack: true,
             pack_upgrades: false,
+            held: HeldFiles::none(),
         };
         let plan = plan_repair(&ctx, Some(&report), None);
         assert_eq!(
@@ -1216,6 +1235,7 @@ mod tests {
             origins: &origins,
             has_pack: false,
             pack_upgrades: false,
+            held: HeldFiles::none(),
         };
         let plan = plan_repair(&ctx, Some(&report), None);
         let disabled: Vec<&str> = plan
@@ -1284,6 +1304,7 @@ mod tests {
             origins: &origins,
             has_pack: false,
             pack_upgrades: false,
+            held: HeldFiles::none(),
         };
         let plan = plan_repair(&ctx, Some(&report), None);
         let fetches: Vec<(&RepairStep, &str, &Vec<String>, &Vec<String>)> = plan
@@ -1368,6 +1389,7 @@ mod tests {
             origins: &origins,
             has_pack: false,
             pack_upgrades: false,
+            held: HeldFiles::none(),
         };
         let plan = plan_repair(&ctx, Some(&report), Some(&crash));
         assert_eq!(kinds(&plan), vec!["disable"], "{:#?}", plan.steps);
@@ -1447,6 +1469,7 @@ mod tests {
             origins: &origins,
             has_pack: false,
             pack_upgrades: false,
+            held: HeldFiles::none(),
         };
         let plan = plan_repair(&ctx, Some(&report), None);
         assert!(plan.steps.is_empty());

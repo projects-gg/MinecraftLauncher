@@ -61,6 +61,7 @@ import { enProjectsSkin } from "./en-projects-skin";
 import { enQaFix } from "./en-qa-fix";
 import { enQol } from "./en-qol";
 import { enReminders } from "./en-reminders";
+import { enRepairRb } from "./en-repair-rb";
 import { enReports } from "./en-reports";
 import { enRoomChat } from "./en-room-chat";
 import { enSafety } from "./en-safety";
@@ -347,6 +348,7 @@ export const en: DeepPartial<Strings> = {
   fastPack: enFastPack,
   packEdit: enPackEdit,
   packOffer: enPackOffer,
+  repairRb: enRepairRb,
   lib1: enLib1,
   fix2: enFix2,
   chat2: enChat2,
