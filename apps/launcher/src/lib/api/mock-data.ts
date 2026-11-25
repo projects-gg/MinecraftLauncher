@@ -85,6 +85,10 @@ export function createMockData(): DataApi {
         enoughSpace: freeBytes > totalBytes + 512 * MB,
       };
     },
+    async moveSuggestion() {
+      // Screenshots of YOL-HARF's "Veri Klasörünü Taşı": set the place it offers.
+      return localStorage.getItem("pl.mock.moveSuggestion");
+    },
     async move(_picked, onProgress) {
       cancelled = false;
       const totalBytes = Math.round(6.8 * GB);

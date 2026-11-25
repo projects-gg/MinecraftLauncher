@@ -41,6 +41,7 @@ import { sortInstances, useLibraryView } from "@/features/library/library-view";
 import { useOfficialOffer } from "@/features/library/official";
 import { usePrepareSync } from "@/features/prepare/use-prepare-sync";
 import { ResumeButton, useResumeTarget } from "@/features/resume/resume-button";
+import { useDataMove } from "@/features/settings/data-move";
 import { type AccountSummary, api, type InstanceSummary } from "@/lib/api";
 import { copyDetails } from "@/lib/clipboard";
 import { formatCount, formatDuration, formatRelative, formatSpeed } from "@/lib/format";
@@ -819,6 +820,26 @@ export function CommandBar() {
           label: t("disk.makeSpace"),
           onClick: () => void navigate({ to: "/settings", search: { section: "data" } }),
         },
+      });
+    } else if (action === "moveData") {
+      // The data folder's path has letters Java cannot read on this computer (CRASH-DIAG): the
+      // button opens Settings → Veri ve Depolama's move with a place of English letters picked. A
+      // folder that cannot move from here (pinned) gets the message alone.
+      const message = phase.message;
+      void api.data.moveSuggestion().then((picked) => {
+        toast.error(message, {
+          id: "launch-path-letters",
+          duration: 15_000,
+          action: picked
+            ? {
+                label: t("dataSettings.moveDialog.title"),
+                onClick: () => {
+                  useDataMove.getState().request(picked);
+                  void navigate({ to: "/settings", search: { section: "data" } });
+                },
+              }
+            : undefined,
+        });
       });
     } else if (helpsWithLaunchError(phase.code)) {
       // "Sorunu bul" (HELP1): the troubleshooter checks at once, so its answers are there when the
