@@ -32,10 +32,10 @@
 //! `-XX:-AOTClassLinking`, a product option, and on Java 25 that also leaves the profiles and the
 //! machine code out ("AOT Code Cache is not used"): what stays is the classes, read as Java's
 //! default CDS archive has done since JDK 12. Games with full caches crashed in the JVM's JIT and
-//! GC threads on Mojang's 25.0.1 (TELEM-JVM); the JDK bugs that fit are in the profiles
-//! (JDK-8397398, JDK-8369857, fixed in no 25 update) and the cached machine code (JDK-8388703,
-//! 25.0.5), and the lite cache has neither. The mode is part of the key, so one mode never uses
-//! the other's files.
+//! GC threads on Mojang's 25.0.1 (TELEM-JVM; a full cache also crashed C1 locally, AOT-LITE). Open
+//! JDK bugs of that kind are in the profiles (JDK-8397398, JDK-8369857, fixed in no 25 update) and
+//! the cached machine code (JDK-8388703, 25.0.5); the lite cache leaves out linking, profiles and
+//! cached code. The mode is part of the key, so one mode never uses the other's files.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};

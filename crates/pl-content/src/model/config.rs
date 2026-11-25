@@ -578,10 +578,10 @@ pub struct Features {
     /// nothing new is recorded or used; caches already made stay until the cleanup.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub aot_cache: bool,
-    /// "Hızlı oyun açılışı" without the JVM crashes (AOT-LITE): like `aot_cache`, but the cache
-    /// holds the classes only (made with `-XX:-AOTClassLinking`: no linking, no method profiles,
-    /// no machine code; `pl_mc::launch::aot::AotMode::Lite`). Wins over `aot_cache` when both are
-    /// on; launchers before it ignore it and follow `aot_cache` alone. Off by default; written
+    /// "Hızlı oyun açılışı" with a lite cache (AOT-LITE): like `aot_cache`, but the cache holds the
+    /// classes only (made with `-XX:-AOTClassLinking`, it leaves out linking, method profiles and
+    /// cached machine code; `pl_mc::launch::aot::AotMode::Lite`). Wins over `aot_cache` when both
+    /// are on; launchers before it ignore it and follow `aot_cache` alone. Off by default; written
     /// only when on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub aot_lite: bool,

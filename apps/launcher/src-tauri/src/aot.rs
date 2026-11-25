@@ -50,7 +50,8 @@ pub(crate) fn apply_flags(full: bool, lite: bool) {
 }
 
 /// The kind of cache launches get: lite while `features.aotLite` is on (with `aotCache` too: the
-/// mode without the JVM crashes wins), full while only `features.aotCache` is; in debug builds
+/// lite cache leaves out the parts full-cache games crashed with), full while only
+/// `features.aotCache` is; in debug builds
 /// `PROJECTS_AOT_LITE=1` or `PROJECTS_AOT_CACHE=1` whatever the config says. `None`: no cache.
 fn mode() -> Option<AotMode> {
     if LITE.load(Ordering::Relaxed) || debug_env("PROJECTS_AOT_LITE") {
