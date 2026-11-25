@@ -61,7 +61,7 @@ pub fn relocated_root() -> Option<PathBuf> {
 }
 
 /// `PROJECTS_LAUNCHER_DATA_DIR` pins the data folder (portable installs, development).
-fn pinned_by_environment() -> bool {
+pub(crate) fn pinned_by_environment() -> bool {
     std::env::var_os("PROJECTS_LAUNCHER_DATA_DIR").is_some_and(|dir| !dir.is_empty())
 }
 
@@ -626,6 +626,23 @@ fn move_error(error: pl_data::Error) -> CmdError {
         ),
     };
     CmdError::new(code, message, details)
+}
+
+/// Where "Veri Klasörünü Taşı" offers to move a data folder Java cannot read on this computer
+/// (YOL-HARF, CRASH-DIAG): `<system drive>:\ProjectsLauncher`, or `ProjectsLauncher2` when that
+/// one is taken. `None` when the folder has no such letters or cannot move from here (pinned by
+/// `PROJECTS_LAUNCHER_DATA_DIR`).
+#[tauri::command]
+#[specta::specta]
+pub fn data_move_suggestion(state: State<'_, AppState>) -> Option<String> {
+    if pinned_by_environment() || !pl_mc::launch::ansi::foreign_path(&state.root) {
+        return None;
+    }
+    let drive = std::env::var("SystemDrive")
+        .ok()
+        .filter(|drive| drive.len() == 2 && drive.ends_with(':') && drive.is_ascii())
+        .unwrap_or_else(|| "C:".to_owned());
+    relocate::suggested_target(Path::new(&format!("{drive}\\")), &state.root).map(|p| display(&p))
 }
 
 /// Checks the folder the user picked and estimates the move (size, free space). Nothing is

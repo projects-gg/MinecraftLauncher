@@ -537,6 +537,15 @@ pub async fn launch_instance(
         }
         Err(error) => {
             let error = out_of_room(error, &state, &instance_id);
+            // Support reads why a launch failed in the launcher log: its code and its closed-word
+            // cause only, never its details (paths with the account's name, CRASH-DIAG).
+            tracing::warn!(
+                instance = %instance_id,
+                code = %error.code,
+                kind = %error.usage_category(),
+                after_ms = started.elapsed().as_millis() as u64,
+                "launch failed"
+            );
             // Usage data: only the error's code, or its finer closed-word cause (TELEMETRY, DL-CAUSE).
             crate::telemetry::launch_ended(Err(error.usage_category()));
             let _ = on_event.send(LaunchEventView::Error(error.clone()));
@@ -772,6 +781,15 @@ pub(crate) async fn ready_game_files(
         Readying::Beside(settings, clock) => (Some(settings), None, true, Some(clock)),
         Readying::Background { lock } => (None, Some(lock), false, None),
     };
+    // A data folder whose path has a letter the system's code page lacks: Java cannot run the game
+    // from it (it loads its own native libraries and the game's by paths read in that code page,
+    // short 8.3 names or not), so nothing is downloaded and OYNA offers to move it (CRASH-DIAG).
+    if pl_mc::launch::ansi::foreign_path(&state.root) {
+        return Err(CmdError::path_letters(format!(
+            "the data folder's path has letters the system code page lacks: {}",
+            state.root.display()
+        )));
+    }
     let background_ctx;
     let ctx = match settings {
         Some(_) => &state.mc,
@@ -1443,6 +1461,19 @@ async fn prepare_and_spawn(
     options.min_memory_mb = Some(memory.min_mb);
     options.max_memory_mb = Some(memory.max_mb);
     options.launcher_name = "Projects Launcher".to_owned();
+    // Java's temp folder, where mods unpack the native libraries they load (voice chat): off a
+    // system temp folder whose path the code page cannot carry, unless the player set one
+    // (CRASH-DIAG).
+    if let Some(dir) =
+        pl_mc::launch::ansi::java_temp_dir(&state.root, &std::env::temp_dir(), &options.jvm_args)
+    {
+        match std::fs::create_dir_all(&dir) {
+            Ok(()) => options
+                .launcher_jvm_args
+                .push(format!("-Djava.io.tmpdir={}", dir.display())),
+            Err(error) => tracing::warn!(%error, "could not make Java's temp folder"),
+        }
+    }
     // The in-game overlay (OVL2): a fresh bridge for this game while its switch is on and the
     // mod is in place. The game reads the port and the token from two system properties; the
     // printable command masks the token. It closes again unless the game starts.
@@ -1859,7 +1890,20 @@ async fn prepare_and_spawn(
         }
         // Usage data: the games a cache sped up (TELEM-JVM).
         crate::telemetry::game_ran(aot_use);
-        if let Some(diagnosis) = exit.crash.clone() {
+        if let Some(diagnosis) = exit.crash.as_ref().filter(|crash| crash.trace.path_letters) {
+            // Java read a path of ours with a letter the system's code page lacks ("?" in a native
+            // library's path): no crash of the game's to tell or to repair, the folder has to
+            // move. Told as OYNA's YOL-HARF, with its "Veri Klasörünü Taşı" (CRASH-DIAG).
+            tracing::warn!(
+                code = CmdError::PATH_LETTERS,
+                kind = ?diagnosis.kind,
+                "the game failed: Java misread a native library path; told as YOL-HARF"
+            );
+            crate::telemetry::game_failed(CmdError::PATH_LETTERS);
+            let _ = events.send(LaunchEventView::Error(CmdError::path_letters(
+                "a native library's path reached Java with letters replaced by '?'",
+            )));
+        } else if let Some(diagnosis) = exit.crash.clone() {
             // Usage data: the crash's kind and its coarse trace (TELEMETRY, TELEM-FIX, TELEM-JVM).
             crate::telemetry::game_crashed(&diagnosis, aot_use);
             // Damaged game or Java files: the next launch checks every file by its hash

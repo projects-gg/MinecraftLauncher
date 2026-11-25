@@ -190,6 +190,14 @@ pub fn game_crashed(diagnosis: &pl_mc::launch::crash::CrashDiagnosis, aot: AotUs
     recorder.game_crashed(&name, trace, version, now_ms());
 }
 
+/// A game failed only because of where its files are (`YOL-HARF`, CRASH-DIAG): counted as a crash
+/// under that launch failure's code, without a trace.
+pub fn game_failed(code: &str) {
+    if let Some(recorder) = recorder() {
+        recorder.game_failed(code, now_ms());
+    }
+}
+
 /// Every voice state (`voice::AppPlatform::state`): a stay's quality is read from them.
 pub fn voice_state(state: &VoiceState) {
     let Some(recorder) = recorder() else {

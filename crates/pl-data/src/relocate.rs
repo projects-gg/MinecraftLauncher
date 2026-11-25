@@ -200,9 +200,15 @@ pub fn resolve_target(current: &Path, picked: &Path) -> Result<PathBuf> {
     if picked.exists() && !picked.is_dir() {
         return Err(Error::target(picked, TargetProblem::NotAFolder));
     }
+    // `ProjectsLauncher`, or a numbered one (`ProjectsLauncher2`, the move's suggestion when
+    // the first is taken).
     let named_like_ours = picked.file_name().is_some_and(|name| {
-        name.to_string_lossy()
-            .eq_ignore_ascii_case(DEFAULT_FOLDER_NAME)
+        let name = name.to_string_lossy();
+        name.get(..DEFAULT_FOLDER_NAME.len())
+            .is_some_and(|stem| stem.eq_ignore_ascii_case(DEFAULT_FOLDER_NAME))
+            && name[DEFAULT_FOLDER_NAME.len()..]
+                .chars()
+                .all(|c| c.is_ascii_digit())
     });
     let target = if named_like_ours {
         picked.to_path_buf()
@@ -227,6 +233,20 @@ pub fn resolve_target(current: &Path, picked: &Path) -> Result<PathBuf> {
         }
     }
     Ok(target)
+}
+
+/// Where to offer moving a data folder Java cannot read on this computer (YOL-HARF): a
+/// [`DEFAULT_FOLDER_NAME`] folder at the root of the system drive, `ProjectsLauncher2` when that
+/// one is taken (holds files), as the move would take it ([`resolve_target`]). `None` when
+/// neither is free.
+pub fn suggested_target(drive_root: &Path, current: &Path) -> Option<PathBuf> {
+    [
+        DEFAULT_FOLDER_NAME.to_owned(),
+        format!("{DEFAULT_FOLDER_NAME}2"),
+    ]
+    .into_iter()
+    .map(|name| drive_root.join(name))
+    .find(|picked| resolve_target(current, picked).is_ok_and(|target| &target == picked))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1123,6 +1143,34 @@ mod tests {
 
     fn never_live(_: &Path) -> bool {
         false
+    }
+
+    #[test]
+    fn suggests_a_free_folder_of_ours_at_the_drive_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let current = dir.path().join("Ayşe").join(DEFAULT_FOLDER_NAME);
+        sample_root(&current);
+        let drive = dir.path().join("drive");
+        fs::create_dir_all(&drive).unwrap();
+        // Nothing there yet: `ProjectsLauncher` itself.
+        let first = drive.join(DEFAULT_FOLDER_NAME);
+        assert_eq!(suggested_target(&drive, &current), Some(first.clone()));
+        // An empty one is free as well.
+        fs::create_dir_all(&first).unwrap();
+        assert_eq!(suggested_target(&drive, &current), Some(first.clone()));
+        // Taken: the numbered one, which the move takes as it is (not a folder inside it).
+        write(&first.join("other.txt"), b"x");
+        let second = drive.join(format!("{DEFAULT_FOLDER_NAME}2"));
+        assert_eq!(suggested_target(&drive, &current), Some(second.clone()));
+        assert_eq!(resolve_target(&current, &second).unwrap(), second);
+        write(&second.join("other.txt"), b"x");
+        assert_eq!(suggested_target(&drive, &current), None);
+        // A name that only starts like ours still gets a folder of ours inside it.
+        let lookalike = drive.join("ProjectsLauncherX");
+        assert_eq!(
+            resolve_target(&current, &lookalike).unwrap(),
+            lookalike.join(DEFAULT_FOLDER_NAME)
+        );
     }
 
     #[test]

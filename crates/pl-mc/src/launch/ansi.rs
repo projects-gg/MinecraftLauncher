@@ -2,9 +2,13 @@
 //! (`GetACP`): a path with a letter that code page lacks (`ş` on a Windows whose language for
 //! non-Unicode programs is English, as in an account named "Ayşe") reaches Java mangled, and the
 //! game cannot start: its Java is not found ("could not find java.dll"), its class path or game
-//! folder is broken. Such paths go in their 8.3 short form (`C:\Users\AYE~1`, plain ASCII); a path
-//! with no short form (8.3 names off on its disk) stops the launch with a clear error instead
-//! (CRASH-DIAG).
+//! folder is broken. Short 8.3 forms (`C:\Users\AYE~1`) do not save Java's own files: Java loads
+//! its native libraries (and the game's) by their full canonical paths read in the code page, and
+//! Windows keeps no short form for many such names (REL-SMOKE, 25 Nov). So the launcher refuses a
+//! data folder with such letters before a launch ([`foreign_path`], YOL-HARF, "move the folder"),
+//! moves Java's temp folder off such a path ([`java_temp_dir`]), and gives the other paths of a
+//! command (a class path entry or a game folder elsewhere) their short form ([`ansi_safe`]); a
+//! path with no short form stops the launch with the same clear error (CRASH-DIAG).
 
 use std::borrow::Cow;
 use std::ffi::OsStr;
@@ -32,6 +36,31 @@ pub fn ansi_safe(program: &Path, args: &[String]) -> Result<(PathBuf, Vec<String
 /// has no short form goes as it is.
 pub fn ansi_safe_or_same(program: &Path, args: &[String]) -> (PathBuf, Vec<String>) {
     ansi_safe(program, args).unwrap_or_else(|_| (program.to_path_buf(), args.to_vec()))
+}
+
+/// Whether `path` has a character the system's ANSI code page lacks (never elsewhere than on
+/// Windows). Java cannot run from such a folder at all: it loads its own native libraries (and
+/// the game's) by their full paths read in that code page, short 8.3 names or not (REL-SMOKE, 25
+/// Nov: "veri-?-uzun-klasor\...\net.dll: Can't find dependent libraries"). The launcher checks its
+/// data folder with it before a launch.
+pub fn foreign_path(path: &Path) -> bool {
+    path.to_str().is_none_or(foreign)
+}
+
+/// The temp folder for a game's Java when its default one would fail it: Java's `java.io.tmpdir`
+/// is the system's temp folder, where mods unpack native libraries (voice chat) and load them by a
+/// path read in the code page. When that folder has letters the code page lacks and the data
+/// folder has none, `<data folder>\tmp\java`; `None` when not needed or when the player's own
+/// JVM arguments set one (CRASH-DIAG).
+pub fn java_temp_dir(
+    data_root: &Path,
+    system_temp: &Path,
+    player_jvm_args: &str,
+) -> Option<PathBuf> {
+    (foreign_path(system_temp)
+        && !foreign_path(data_root)
+        && !player_jvm_args.contains("-Djava.io.tmpdir="))
+    .then(|| data_root.join("tmp").join("java"))
 }
 
 /// Whether the system's ANSI code page lacks a character of `text` (never elsewhere than on
@@ -181,6 +210,44 @@ mod imp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn data_folders_and_temp_folders_the_code_page_cannot_carry() {
+        let plain = Path::new("C:\\Users\\KorAtesi\\AppData\\Roaming\\ProjectsLauncher");
+        assert!(!foreign_path(plain));
+        let turkish = Path::new("C:\\Users\\Ayşe\\AppData\\Roaming\\ProjectsLauncher");
+        // Only where the code page lacks the letter (an English Windows here).
+        assert_eq!(foreign_path(turkish), foreign("ş"));
+        let temp = Path::new("C:\\Users\\Ayşe\\AppData\\Local\\Temp");
+        if foreign("ş") {
+            assert_eq!(
+                java_temp_dir(Path::new("D:\\ProjectsLauncher"), temp, "-Xss2M"),
+                Some(
+                    PathBuf::from("D:\\ProjectsLauncher")
+                        .join("tmp")
+                        .join("java")
+                )
+            );
+            // The player's own folder stays; a data folder Java cannot use either gets none.
+            assert_eq!(
+                java_temp_dir(
+                    Path::new("D:\\ProjectsLauncher"),
+                    temp,
+                    "-Djava.io.tmpdir=E:\\t"
+                ),
+                None
+            );
+            assert_eq!(java_temp_dir(turkish, temp, ""), None);
+        }
+        assert_eq!(
+            java_temp_dir(
+                plain,
+                Path::new("C:\\Users\\KorAtesi\\AppData\\Local\\Temp"),
+                ""
+            ),
+            None
+        );
+    }
 
     #[test]
     fn plain_arguments_stay_as_they_are() {

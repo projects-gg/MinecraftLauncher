@@ -35,6 +35,10 @@ pub struct CrashTrace {
     pub opening: bool,
     /// What a JVM fatal error log says about the failure (`native/…` traces only).
     pub fault: Option<NativeFault>,
+    /// Java could not load a native library by a path of ours that reached it with a letter
+    /// replaced by `?` (the system's code page lacks it): no crash to tell or repair, the data
+    /// folder has to move (YOL-HARF, CRASH-DIAG).
+    pub path_letters: bool,
 }
 
 impl CrashTrace {
@@ -1007,6 +1011,7 @@ pub(super) fn trace(
             phase: None,
             opening,
             fault: Some(NativeFault::new(fault_error(log), fault_thread(log))),
+            path_letters: false,
         };
     }
     if let Some(report) = game_report {
@@ -1028,6 +1033,7 @@ pub(super) fn trace(
             phase: phase(report),
             opening,
             fault: None,
+            path_letters: false,
         };
     }
     CrashTrace {
@@ -1035,6 +1041,7 @@ pub(super) fn trace(
         phase: None,
         opening,
         fault: None,
+        path_letters: false,
     }
 }
 

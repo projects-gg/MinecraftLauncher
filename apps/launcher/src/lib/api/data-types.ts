@@ -55,6 +55,11 @@ export interface DataApi {
   pickFolder(): Promise<string | null>;
   /** Checks the picked folder and estimates the move. Nothing is written yet. */
   planMove(picked: string): Promise<MovePlan>;
+  /**
+   * Where "Veri Klasörünü Taşı" offers to move a data folder Java cannot read on this computer
+   * (YOL-HARF); `null` when the folder has no such letters or cannot move from here.
+   */
+  moveSuggestion(): Promise<string | null>;
   /** Copies, verifies and switches; the launcher restarts shortly after this resolves. */
   move(picked: string, onProgress: (progress: MoveProgress) => void): Promise<void>;
   cancelMove(): Promise<void>;

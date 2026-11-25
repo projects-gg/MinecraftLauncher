@@ -21,6 +21,7 @@ import { useUi } from "@/stores/ui";
 import { AutoCleanupRow } from "./cleanup/auto-row";
 import { CleanupCard } from "./cleanup/cleanup-card";
 import { TrashRow } from "./cleanup/trash-row";
+import { useDataMove } from "./data-move";
 import { ErrorLine, type Failure, failure } from "./failure";
 import { ResetDialog } from "./reset/reset-dialog";
 
@@ -69,6 +70,13 @@ export function DataSection() {
     staleTime: 0,
   });
   const [picked, setPicked] = useState<{ path: string; key: number } | null>(null);
+  // "Veri Klasörünü Taşı" from OYNA's YOL-HARF (CRASH-DIAG): the move opens with its place picked.
+  const requested = useDataMove((s) => s.requested);
+  useEffect(() => {
+    if (!requested) return;
+    setPicked({ path: requested, key: Date.now() });
+    useDataMove.getState().clear();
+  }, [requested]);
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["data-overview"] });
 
   const openFolder = useMutation({ mutationFn: () => api.data.openFolder() });

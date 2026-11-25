@@ -13,6 +13,12 @@ export const WORLD_OPEN = "DUNYA-ACIK";
 export const NO_ACCOUNT = "HESAP-YOK";
 
 /**
+ * The launcher's code for a data folder whose path Java cannot read on this computer
+ * (`CmdError::PATH_LETTERS`, CRASH-DIAG): the toast offers to move it.
+ */
+export const PATH_LETTERS = "YOL-HARF";
+
+/**
  * The code of a launch error. The app's API keeps it on the first line of the details
  * (`lib/api/tauri.ts`), so "Ayrıntıları kopyala" copies it along; anything else reads as no code.
  * Microsoft's own error names follow the first part as they are ("MSA-invalid_grant").
@@ -24,13 +30,14 @@ export function launchErrorCode(details: string): string {
 
 /**
  * What a launch error's toast offers: room on a full disk ("Yer aç"), a new sign-in for a session
- * only that fixes ("Yeniden giriş yap"), an account when there is none ("Hesap ekle"), else the
- * details.
+ * only that fixes ("Yeniden giriş yap"), an account when there is none ("Hesap ekle"), a data
+ * folder Java cannot read moved ("Veri Klasörünü Taşı"), else the details.
  */
 export function launchErrorAction(
   code: string,
-): "makeSpace" | "signIn" | "addAccount" | "copyDetails" {
+): "makeSpace" | "signIn" | "addAccount" | "moveData" | "copyDetails" {
   if (code === DISK_FULL) return "makeSpace";
+  if (code === PATH_LETTERS) return "moveData";
   if (needsSignIn(code)) return "signIn";
   if (code === NO_ACCOUNT) return "addAccount";
   return "copyDetails";

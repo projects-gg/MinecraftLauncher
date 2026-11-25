@@ -52,6 +52,7 @@ export const tauriData: DataApi = {
     const p = await ok(commands.dataMovePlan(picked));
     return { ...p, freeBytes: p.freeBytes ?? undefined };
   },
+  moveSuggestion: () => commands.dataMoveSuggestion(),
   async move(picked, onProgress) {
     const channel = new Channel<MoveProgressView>();
     channel.onmessage = (p) => onProgress({ ...p, stage: p.stage as MoveStage });

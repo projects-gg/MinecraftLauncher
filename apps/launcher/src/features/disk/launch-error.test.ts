@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DISK_FULL, launchErrorAction, launchErrorCode, NO_ACCOUNT } from "./launch-error";
+import {
+  DISK_FULL,
+  launchErrorAction,
+  launchErrorCode,
+  NO_ACCOUNT,
+  PATH_LETTERS,
+} from "./launch-error";
 
 describe("launchErrorCode", () => {
   it("reads the code from the first line of the details", () => {
@@ -36,5 +42,12 @@ describe("launchErrorAction", () => {
     expect(launchErrorAction("MSA-NOREFRESH")).toBe("signIn");
     expect(launchErrorAction("KC-YOK")).toBe("signIn");
     expect(launchErrorAction(NO_ACCOUNT)).toBe("addAccount");
+  });
+
+  it("offers to move a data folder Java cannot read (CRASH-DIAG)", () => {
+    expect(launchErrorCode(`${PATH_LETTERS}\nthe data folder's path has letters`)).toBe(
+      PATH_LETTERS,
+    );
+    expect(launchErrorAction(PATH_LETTERS)).toBe("moveData");
   });
 });
