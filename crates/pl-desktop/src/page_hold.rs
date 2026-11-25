@@ -74,8 +74,13 @@ impl<T> PageHold<T> {
         let Some(payload) = payload() else {
             return Offer::Wake;
         };
-        if delivery == Delivery::Latest {
-            self.events.retain(|(name, _)| *name != event);
+        // A newer state takes the older one's place: a moment that came between them finds the
+        // newest state (names, mutes, crews) when it is handled.
+        if delivery == Delivery::Latest
+            && let Some(slot) = self.events.iter_mut().find(|(name, _)| *name == event)
+        {
+            slot.1 = payload;
+            return Offer::Kept;
         }
         self.events.push((event, payload));
         if delivery == Delivery::Moment || self.events.len() > self.max {
@@ -135,12 +140,12 @@ mod tests {
             offered(&mut hold, "chat", Delivery::InOrder, 4),
             Offer::Kept
         );
-        // A newer view replaces the older one and goes after what came before it.
+        // A newer view takes the older one's place.
         assert_eq!(offered(&mut hold, "view", Delivery::Latest, 5), Offer::Kept);
         assert!(hold.asleep());
         assert_eq!(
             hold.take(),
-            Some(vec![("chat", 2), ("chat", 4), ("view", 5)])
+            Some(vec![("view", 5), ("chat", 2), ("chat", 4)])
         );
         assert!(hold.asleep(), "awake only once nothing waits");
         assert!(hold.take().is_none());
@@ -149,7 +154,7 @@ mod tests {
     }
 
     #[test]
-    fn a_moment_wakes_the_page_after_what_waits() {
+    fn a_moment_wakes_the_page_after_the_newest_state() {
         let mut hold = PageHold::new(10);
         hold.fell_asleep();
         assert_eq!(offered(&mut hold, "view", Delivery::Latest, 1), Offer::Kept);
@@ -157,14 +162,28 @@ mod tests {
             offered(&mut hold, "notice", Delivery::Moment, 2),
             Offer::Wake
         );
-        // What comes while the page wakes waits behind the moment.
+        // A view that comes while the page wakes still goes ahead of the moment, in the older
+        // one's place: the notice is handled with the newest names and mutes.
         assert_eq!(offered(&mut hold, "view", Delivery::Latest, 3), Offer::Kept);
         assert_eq!(
+            offered(&mut hold, "chat", Delivery::InOrder, 4),
+            Offer::Kept
+        );
+        assert_eq!(
             hold.take(),
-            Some(vec![("notice", 2), ("view", 3)]),
-            "the newer view replaced the older one"
+            Some(vec![("view", 3), ("notice", 2), ("chat", 4)])
         );
         assert!(hold.take().is_none());
+    }
+
+    #[test]
+    fn a_state_that_waits_never_wakes_the_page_again() {
+        let mut hold = PageHold::new(2);
+        hold.fell_asleep();
+        for n in 0..10 {
+            assert_eq!(offered(&mut hold, "view", Delivery::Latest, n), Offer::Kept);
+        }
+        assert_eq!(hold.take(), Some(vec![("view", 9)]));
     }
 
     #[test]
