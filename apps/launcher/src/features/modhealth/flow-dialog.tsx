@@ -618,7 +618,8 @@ export function ModFlowDialog() {
               </motion.div>
             ) : (
               <motion.div key="actions" {...swap(0.2)} className="flex items-center gap-2.5">
-                {crash.reinstall ? (
+                {/* Beside going back, the last resort waits (the footer has no room for four). */}
+                {crash.reinstall && !rollback ? (
                   <Button
                     variant="ghost"
                     disabled={busy !== null}
