@@ -203,6 +203,23 @@ mod tests {
         assert_eq!(hold.take().map(|events| events.len()), Some(4));
     }
 
+    /// LIGHT review (P3-2): events wait from the moment a suspend is asked for; when the suspend
+    /// does not happen they all go at once and the page counts as awake again.
+    #[test]
+    fn a_suspend_that_does_not_happen_hands_over_what_came_meanwhile() {
+        let mut hold = PageHold::new(10);
+        hold.fell_asleep();
+        assert_eq!(offered(&mut hold, "view", Delivery::Latest, 1), Offer::Kept);
+        assert_eq!(
+            offered(&mut hold, "chat", Delivery::InOrder, 2),
+            Offer::Kept
+        );
+        assert_eq!(hold.take(), Some(vec![("view", 1), ("chat", 2)]));
+        assert!(hold.take().is_none());
+        assert!(!hold.asleep());
+        assert_eq!(offered(&mut hold, "view", Delivery::Latest, 3), Offer::Send);
+    }
+
     #[test]
     fn an_event_that_cannot_be_kept_wakes_the_page() {
         let mut hold: PageHold<u32> = PageHold::new(3);
