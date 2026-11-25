@@ -82,6 +82,27 @@ impl CmdError {
 
     /// Before a mod, a modpack or a mod center change downloads or unpacks anything: the disk
     /// cannot hold it (`needed` with the launch's margin; `pl_mc::Error::NoRoom`).
+    /// SURUM-YOK: Mojang's list and the disk do not have the version (Mojang's list was asked
+    /// again first). The Minecraft version is named when the id is one (`1.20.1`), never a mod
+    /// loader's profile id.
+    pub fn version_missing(id: &str, details: impl Into<String>) -> Self {
+        let message = if is_minecraft_version(id) {
+            pick(
+                format!("Minecraft {id} bulunamadı. Kurulumun sürümünü değiştirip tekrar dene."),
+                format!(
+                    "Minecraft {id} wasn't found. Pick another version for the instance and try again."
+                ),
+            )
+        } else {
+            pick(
+                "Bu Minecraft sürümü bulunamadı. Kurulumun sürümünü değiştirip tekrar dene.",
+                "This Minecraft version wasn't found. Pick another version for the instance and try again.",
+            )
+            .to_owned()
+        };
+        Self::new("SURUM-YOK", message, details)
+    }
+
     pub fn no_room(needed: u64, free: u64, details: impl Into<String>) -> Self {
         let lang = Lang::current();
         let (needed, free) = (toast_size(needed, lang), toast_size(free, lang));
@@ -96,6 +117,19 @@ impl CmdError {
             details,
         )
     }
+}
+
+/// A Minecraft version as players know it (`1.20.1`, `26.3`, `24w14a`, `1.21-pre1`), not a mod
+/// loader's profile id.
+fn is_minecraft_version(id: &str) -> bool {
+    (3..=24).contains(&id.len())
+        && id.starts_with(|c: char| c.is_ascii_digit())
+        && id
+            .chars()
+            .all(|c| c.is_ascii_digit() || c.is_ascii_lowercase() || c == '.' || c == '-')
+        && !["forge", "fabric", "quilt", "loader", "optifine"]
+            .iter()
+            .any(|loader| id.contains(loader))
 }
 
 /// "1,2 GB" with a no-break space: a figure and its unit stay on one line of the toast.
@@ -149,11 +183,12 @@ impl From<pl_mc::Error> for CmdError {
                     "Couldn't connect to the internet, and the game files it needs aren't on your computer. Check your connection and try again.",
                 ),
             ),
-            E::VersionNotFound(_) => (
-                "SURUM-YOK",
+            E::VersionNotFound(id) => return Self::version_missing(id, details),
+            E::UnreadablePath(_) => (
+                "YOL-HARF",
                 pick(
-                    "Bu Minecraft sürümü bulunamadı. Kurulumun sürümünü değiştir.",
-                    "This Minecraft version wasn't found. Pick another version for the instance.",
+                    "Java, veri klasörünün yolundaki bazı harfleri (ş, ğ gibi) bu bilgisayarda okuyamıyor. Ayarlar → Veri ve Depolama'dan veri klasörünü yalnız İngilizce harfli bir yere taşı (örneğin C:\\Projects), sonra tekrar dene.",
+                    "Java can't read some letters (such as ş or ğ) in the data folder's path on this computer. Move the data folder to a place with only English letters (for example C:\\Projects) in Settings → Data and Storage, then try again.",
                 ),
             ),
             E::Java(_) => (

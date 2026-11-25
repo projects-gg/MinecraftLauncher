@@ -28,6 +28,24 @@ pub fn marker_path(instance_dir: &Path) -> PathBuf {
     instance_dir.join(".launcher").join("installed.json")
 }
 
+/// Present while the next launch of the instance is to check every game and Java file by its
+/// hash, as a first install does: a crash named damaged files (CRASH-DIAG).
+pub fn file_check_path(instance_dir: &Path) -> PathBuf {
+    instance_dir.join(".launcher").join("check-files")
+}
+
+/// Asks the next launch of the instance (or its background preparation) to check every file.
+pub fn request_file_check(instance_dir: &Path) {
+    let path = file_check_path(instance_dir);
+    let written = path
+        .parent()
+        .map_or(Ok(()), std::fs::create_dir_all)
+        .and_then(|()| std::fs::write(&path, b""));
+    if let Err(error) = written {
+        tracing::warn!(%error, "could not ask the next launch to check the game files");
+    }
+}
+
 pub fn read_marker(instance_dir: &Path) -> Option<InstalledMarker> {
     let bytes = std::fs::read(marker_path(instance_dir)).ok()?;
     serde_json::from_slice(&bytes).ok()

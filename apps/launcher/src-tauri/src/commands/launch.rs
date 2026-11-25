@@ -26,7 +26,9 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::commands::instances::{InstalledMarker, read_marker, write_marker};
+use crate::commands::instances::{
+    InstalledMarker, file_check_path, read_marker, request_file_check, write_marker,
+};
 use crate::commands::modcenter::ModsNoticeView;
 use crate::commands::{modhealth, modrinth, official, versions};
 use crate::error::{CmdError, CmdResult};
@@ -861,11 +863,15 @@ pub(crate) async fn ready_game_files(
     let followed = background_lock.is_some().then(|| instance.clone());
 
     let marker = read_marker(instance_dir);
-    let first_install = marker.as_ref().is_none_or(|m| {
-        m.mc_version != instance.mc_version
-            || m.loader != instance.loader.kind
-            || m.loader_version != instance.loader.version
-    });
+    // A crash that named damaged files has this launch check every file by its hash, as a first
+    // install does (CRASH-DIAG); not beside a running game of this folder (its files are in use).
+    let check_files = !beside && file_check_path(instance_dir).is_file();
+    let first_install = check_files
+        || marker.as_ref().is_none_or(|m| {
+            m.mc_version != instance.mc_version
+                || m.loader != instance.loader.kind
+                || m.loader_version != instance.loader.version
+        });
 
     // One bar over the parts this launch runs, in order.
     let modded = instance.loader.kind != LoaderKind::Vanilla;
@@ -1018,9 +1024,10 @@ pub(crate) async fn ready_game_files(
     // 2. Install / verify files. Full hashing only on first install; size checks otherwise
     //    (Forge and NeoForge installs above already verified their files, so a size check
     //    suffices then).
-    let verify = if first_install
-        && (instance.loader.kind == LoaderKind::Vanilla
-            || pl_mc::loaders::profile_only(instance.loader.kind))
+    let verify = if check_files
+        || (first_install
+            && (instance.loader.kind == LoaderKind::Vanilla
+                || pl_mc::loaders::profile_only(instance.loader.kind)))
     {
         VerifyMode::Full
     } else {
@@ -1058,6 +1065,9 @@ pub(crate) async fn ready_game_files(
             loader_version: instance.loader.version.clone(),
         },
     );
+    if check_files {
+        let _ = std::fs::remove_file(file_check_path(instance_dir));
+    }
 
     // The pack's own files (mods, configs, resource packs) once the game itself is in place.
     // The sync stops on the token by itself (it is not dropped half-way: it moves files).
@@ -1774,6 +1784,7 @@ async fn prepare_and_spawn(
     // Memory advice after a crash starts from what the game really had.
     let mut crashed_instance = instance.clone();
     crashed_instance.memory = memory;
+    let files_dir = instance_dir.clone();
     tauri::async_runtime::spawn(async move {
         let exit = process.wait().await;
         // A page suspended while the game ran must bring the window back and tell about a
@@ -1827,6 +1838,10 @@ async fn prepare_and_spawn(
         if let Some(diagnosis) = exit.crash.clone() {
             // Usage data: the crash's kind and its coarse trace (TELEMETRY, TELEM-FIX, TELEM-JVM).
             crate::telemetry::game_crashed(&diagnosis, aot_use);
+            // Damaged files: the next launch checks every file by its hash (CRASH-DIAG).
+            if diagnosis.kind == pl_mc::launch::crash::CrashKind::CorruptedFiles {
+                request_file_check(&files_dir);
+            }
             let view = modhealth::crash_view(
                 &app,
                 &state,
