@@ -25,8 +25,11 @@ static CLOSING: AtomicBool = AtomicBool::new(false);
 /// Opens the window (`again`: after a crash, the old one is gone first). Blocking: off the main
 /// thread and off the async runtime's workers.
 pub fn open(app: &AppHandle, again: bool) -> Result<(), String> {
-    // A call: what this computer can share is learned now (LIGHT: not at every start).
+    // A call: what this computer can share is learned now (LIGHT: not at every start), and a
+    // page that sleeps (a game runs, friends signed in) wakes: it stays awake for the call, as
+    // it always was while friends were signed in (webview_rest's `may_suspend`).
     super::share::warm();
+    crate::webview_rest::wake(app, "a voice call");
     if let Some(old) = app.get_webview_window(VOICE_WINDOW) {
         if !again {
             return Ok(());
