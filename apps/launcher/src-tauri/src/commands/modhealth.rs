@@ -1767,14 +1767,20 @@ pub async fn mods_repair(
         .map_err(CmdError::from)?;
     let java = java_major(&app, &state, &instance).await;
     let checked = check_instance(&state, &instance, java).await?;
+    // A mod held after a crash (REPAIR-RB) stays where it is in "Onar", except when the player
+    // pressed the fix of its own issue: updating it is their way out of the hold.
+    let held = match &scope {
+        RepairScope::Issue { .. } => HeldFiles::default(),
+        _ => checked.held.clone(),
+    };
     let mut host = LauncherHost::new(&state, &instance, &game_dir, job.token.clone()).await;
-    host.held = checked.held.clone();
+    host.held = held.clone();
     let ctx = RepairContext {
         env: &checked.env,
         origins: &checked.origins,
         has_pack: host.has_pack(),
         pack_upgrades: host.pack_upgrades(),
-        held: &checked.held,
+        held: &held,
     };
     let tried = tried_for(&app, &instance_id);
     let crash = match &scope {
