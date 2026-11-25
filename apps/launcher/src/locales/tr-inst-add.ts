@@ -6,8 +6,7 @@ export const trInstAdd = {
   card: {
     title: "Yeni Kurulum",
     body: "İstediğin sürümle, modlu ya da modsuz.",
-    action: "Oluştur",
-    /** The card's button for screen readers (the palette's words). */
+    /** The card's name for screen readers (the palette's words). */
     actionLabel: "Yeni Kurulum Oluştur",
   },
   /** "Sıfırdan": the options most players never need, folded. */

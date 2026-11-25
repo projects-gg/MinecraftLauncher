@@ -1,11 +1,12 @@
 // INST-ADD: the library's way to an instance of one's own while there is none yet: a quiet card in
-// "Kurulumlarım", shaped like the official pack's "Kurulu değil" card (LIB1): a plus where the icon
-// goes, "Yeni Kurulum", one line on what it makes and "Oluştur". No glass and no lift (it is an
-// empty place, not an instance), no dashed frame (dashed frames mean "drop files here").
+// "Kurulumlarım" with a plus where an instance's icon goes, "Yeni Kurulum" and one line on what it
+// makes. The whole card opens "Yeni Kurulum", as an instance card opens its instance (the same
+// stretched title). Quiet like the official pack's "Kurulu değil" card (LIB1): no glass, no lift,
+// no dashed frame (dashed frames mean "drop files here").
 import { Plus } from "@phosphor-icons/react";
-import { Button, easeOutExpo, useMotionPrefs } from "@pl/ui";
+import { easeOutExpo, useMotionPrefs } from "@pl/ui";
 import { motion } from "motion/react";
-import type { Ref } from "react";
+import { type Ref, useId } from "react";
 import { useTranslation } from "react-i18next";
 
 /** Where a card rests (the instance cards' own entrance and exit move from and to it). */
@@ -24,6 +25,7 @@ export function CreateOwnCard({
 }) {
   const { t } = useTranslation();
   const { layout, reduce } = useMotionPrefs();
+  const bodyId = useId();
   return (
     <motion.article
       ref={ref}
@@ -36,7 +38,7 @@ export function CreateOwnCard({
         transition: { duration: 0.18, ease: easeOutExpo },
       }}
       transition={{ duration: 0.4, delay: Math.min(index, 8) * 0.035, ease: easeOutExpo }}
-      className="relative isolate flex flex-col rounded-[var(--radius-panel)] bg-obsidian-900/35 p-3.5 ring-1 ring-white/8 transition-[box-shadow,background-color] duration-200 ring-inset hover:bg-obsidian-900/50 hover:ring-white/14"
+      className="relative isolate flex flex-col rounded-[var(--radius-panel)] bg-obsidian-900/35 p-3.5 ring-1 ring-white/8 transition-[box-shadow,background-color,scale] duration-200 ease-out ring-inset hover:bg-obsidian-900/50 hover:ring-white/14 has-[button:active]:scale-[0.985]"
     >
       {/* The instance icon's tile, empty but for the plus: a place for one. */}
       <span
@@ -45,19 +47,20 @@ export function CreateOwnCard({
       >
         <Plus size={22} weight="bold" className="text-bone-100" />
       </span>
-      <h3 className="mt-3 truncate font-display text-[15px] font-semibold text-bone-50">
-        {t("instAdd.card.title")}
-      </h3>
-      <p className="mt-0.5 text-balance text-[12.5px] text-ash-300">{t("instAdd.card.body")}</p>
-      <Button
-        variant="secondary"
-        size="sm"
-        className="mt-2.5 w-full"
-        aria-label={t("instAdd.card.actionLabel")}
+      <button
+        type="button"
         onClick={onCreate}
+        aria-label={t("instAdd.card.actionLabel")}
+        aria-describedby={bodyId}
+        className="mt-3 block cursor-pointer rounded-sm text-left outline-none after:absolute after:inset-0 after:rounded-[var(--radius-panel)] focus-visible:after:ring-2 focus-visible:after:ring-gold-300"
       >
-        {t("instAdd.card.action")}
-      </Button>
+        <span className="block truncate font-display text-[15px] font-semibold text-bone-50">
+          {t("instAdd.card.title")}
+        </span>
+      </button>
+      <p id={bodyId} className="mt-0.5 text-balance text-[12.5px] text-ash-300">
+        {t("instAdd.card.body")}
+      </p>
     </motion.article>
   );
 }

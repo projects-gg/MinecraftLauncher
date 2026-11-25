@@ -5,7 +5,6 @@ export const enInstAdd: typeof trInstAdd = {
   card: {
     title: "New Instance",
     body: "Any version you like, with or without mods.",
-    action: "Create",
     actionLabel: "Create New Instance",
   },
   more: {
