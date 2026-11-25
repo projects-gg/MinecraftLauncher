@@ -532,6 +532,13 @@ static NEO_REQUIRES: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?m)Mod ([\w.\-]+) (?:requires|only supports) ([\w.\-]+) ([^\n]*?)[ \t]*\n\s*Currently, ([\w.\-]+) is (not installed|\S+)")
         .expect("valid regex")
 });
+/// Two jars of the mod loader's module layer give one package (ModLauncher, NeoForge; the
+/// launcher's own module path fails earlier, "initialization of boot layer"): "Modules a and b
+/// export package p to module c", "Package p in both module a and module b".
+static SPLIT_PACKAGE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"Modules ([\w.\-]+) and ([\w.\-]+) export package [\w.]+|Package [\w.]+ in both module ([\w.\-]+) and module ([\w.\-]+)")
+        .expect("valid regex")
+});
 static NEO_INCOMPATIBLE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"Mod ([\w.\-]+) is incompatible with ([\w.\-]+)").expect("valid regex")
 });
@@ -821,8 +828,12 @@ pub fn analyze_crash(input: &CrashInput<'_>) -> CrashDiagnosis {
         || INCOMPATIBLE_DECLARATION.is_match(&text)
         || NEO_REQUIRES.is_match(&text)
         || QUILT_REQUIRES.is_match(&text)
+        || SPLIT_PACKAGE.is_match(&text)
     {
         let mut mods = fabric_mod_names(&text);
+        for c in SPLIT_PACKAGE.captures_iter(&text) {
+            mods.extend(split_package_modules(&c).map(str::to_owned));
+        }
         mods.extend(
             FORGE_DEPENDENCY
                 .captures_iter(&text)
@@ -1077,6 +1088,37 @@ fn startup_files_broken(text: &str, lower: &str) -> bool {
         || (lower.contains("could not open `") && lower.contains("jvm.cfg"))
         || (lower.contains("error: loading: ") && lower.contains("jvm.dll"))
         || MAIN_THREAD_CLASS_MISSING.is_match(text)
+}
+
+/// The two modules a [`SPLIT_PACKAGE`] match names.
+fn split_package_modules<'t>(c: &regex::Captures<'t>) -> impl Iterator<Item = &'t str> {
+    [1, 2, 3, 4]
+        .into_iter()
+        .filter_map(|group| c.get(group).map(|m| m.as_str()))
+}
+
+/// Mods whose jars give one package to the mod loader's module layer: each is named with the
+/// other ([`SPLIT_PACKAGE`]).
+fn split_packages(text: &str, found: &mut Suspects) {
+    // The launcher's own module path (Java's boot layer) holds libraries, not mods.
+    if text.contains("initialization of boot layer") {
+        return;
+    }
+    for c in SPLIT_PACKAGE.captures_iter(text) {
+        let pair: Vec<&str> = split_package_modules(&c).collect();
+        if let [a, b] = pair[..] {
+            found.push(
+                CrashSuspect::new(SuspectReason::Incompatible)
+                    .id(a)
+                    .related(b),
+            );
+            found.push(
+                CrashSuspect::new(SuspectReason::Incompatible)
+                    .id(b)
+                    .related(a),
+            );
+        }
+    }
 }
 
 /// Fabric's startup warnings ("recommends", "conflicts with"): the game keeps loading after them.
@@ -1417,8 +1459,8 @@ fn describe(
         CrashKind::CorruptedFiles => (
             s("Oyun dosyaları bozuk görünüyor"),
             s(
-                "Oyunun ya da Java'nın bazı dosyaları eksik ya da bozuk. Tekrar oyna: launcher bu kez \
-               bütün dosyaları denetleyip bozuk olanları yeniden indirir.",
+                "Oyunun bazı dosyaları eksik ya da bozuk. Bir modun dosyasıysa adı aşağıda; değilse \
+               tekrar oyna, launcher dosyaları denetleyip bozuk olanları yeniden indirir.",
             ),
             vec![SuggestedAction::RepairInstallation],
         ),
@@ -1548,6 +1590,7 @@ fn collect_suspects(text: &str, kind: CrashKind) -> Vec<CrashSuspect> {
     forge_dependencies(&text, &mut found);
     neoforge_dependencies(&text, &mut found);
     duplicate_mods(&text, kind, &mut found);
+    split_packages(&text, &mut found);
     if kind == CrashKind::JavaTooOld {
         class_versions(&text, &mut found);
     }
@@ -4550,11 +4593,68 @@ Stacktrace:\n\tat TRANSFORMER/create@0.5.1.f/com.simibubi.create.content.Foo.tic
     }
 
     #[test]
+    fn the_main_loops_intermediary_names_end_the_stack_too() {
+        // Fabric 1.21.11 names the game's classes by intermediary ids.
+        let report = sample!("fabric-1.21.11-intermediary-npe-crash-report.txt");
+        let d = shown_report(&report);
+        assert_eq!(d.kind, CrashKind::Unknown);
+        assert_eq!(d.trace.sig, "java/NullPointerException/none");
+        // A mod wrapping the client tick (class_310.method_1574) is below the failure: not named.
+        let wrapped = report.replacen(
+            "\tat knot//net.minecraft.class_310.method_1523(class_310.java:1354)",
+            "\tat knot//net.minecraft.class_310.wrapMethod$bkn000$fpsreducer$tick(class_310.java:9000)\n\tat knot//net.minecraft.class_310.method_1523(class_310.java:1354)",
+            1,
+        );
+        assert_ne!(wrapped, report);
+        assert_eq!(
+            shown_report(&wrapped).trace.sig,
+            "java/NullPointerException/none"
+        );
+        // One above it is named.
+        let above = report.replacen(
+            "\tat knot//net.minecraft.class_636.method_2927(class_636.java:291)",
+            "\tat knot//net.minecraft.class_636.handler$zzc000$fpsreducer$onTick(class_636.java:900)\n\tat knot//net.minecraft.class_636.method_2927(class_636.java:291)",
+            1,
+        );
+        assert_eq!(
+            shown_report(&above).trace.sig,
+            "java/NullPointerException/fpsreducer"
+        );
+    }
+
+    #[test]
+    fn two_jars_of_one_package_in_the_mod_layer_are_incompatible_mods() {
+        // ModLauncher (Forge 1.17+, NeoForge) refuses two mods that ship one package.
+        for output in [
+            "Exception in thread \"main\" java.lang.module.ResolutionException: Modules create and createaddition export package com.simibubi.create.foundation to module flywheel",
+            "Caused by: java.lang.LayerInstantiationException: Package com.simibubi.create.foundation in both module create and module createaddition",
+        ] {
+            let d = analyze(output);
+            assert_eq!(d.kind, CrashKind::IncompatibleMods, "{output}");
+            assert_eq!(d.mods, ["create", "createaddition"], "{output}");
+            assert_eq!(
+                reasons(&d),
+                [
+                    (Some("create"), SuspectReason::Incompatible),
+                    (Some("createaddition"), SuspectReason::Incompatible),
+                ]
+            );
+            assert_eq!(d.suspects[0].related.as_deref(), Some("createaddition"));
+        }
+        // Java's own boot layer holds the launcher's libraries: damaged files, no mods named.
+        let d = analyze(
+            "Error occurred during initialization of boot layer\njava.lang.module.ResolutionException: Modules asm and asm.commons export package org.objectweb.asm to module cpw.mods.modlauncher",
+        );
+        assert_eq!(d.kind, CrashKind::CorruptedFiles);
+        assert!(d.suspects.is_empty() && d.mods.is_empty());
+    }
+
+    #[test]
     fn texts_say_what_to_do() {
         let d = analyze(
             "Error: Unable to initialize main class net.minecraft.client.main.Main\nCaused by: java.lang.NoClassDefFoundError: joptsimple/ValueConverter",
         );
-        assert!(d.hint_tr.contains("Tekrar oyna"), "{}", d.hint_tr);
+        assert!(d.hint_tr.contains("tekrar oyna"), "{}", d.hint_tr);
         let d = analyze(
             "[12:00:00] [main/INFO]: something odd\nException in thread \"main\" java.lang.IllegalStateException: odd",
         );

@@ -137,7 +137,8 @@ mod imp {
                 &mut used_default,
             )
         };
-        written == 0 || used_default != 0
+        // A failed call says nothing: the path goes as it always went.
+        written != 0 && used_default != 0
     }
 
     pub fn short_name(path: &Path) -> Option<PathBuf> {
@@ -221,16 +222,21 @@ mod tests {
             "--quickPlaySingleplayer".to_owned(),
             "Şehir".to_owned(),
         ];
-        let (program, out) = ansi_safe(&java, &args).unwrap();
         if !foreign("ş") {
+            let (_, out) = ansi_safe(&java, &args).unwrap();
             assert_eq!(out, args);
             return;
         }
-        let shortened = |path: &Path| out.iter().any(|arg| arg.contains(&text(path)));
-        // With 8.3 names off on this disk the short form is the long one: nothing to check.
+        // With 8.3 names off on this disk there is no short form: the launch stops instead.
         let Some(short) = imp::short_name(&folder).filter(|short| short != &folder) else {
+            assert!(matches!(
+                ansi_safe(&java, &args),
+                Err(Error::UnreadablePath(_))
+            ));
             return;
         };
+        let (program, out) = ansi_safe(&java, &args).unwrap();
+        let shortened = |path: &Path| out.iter().any(|arg| arg.contains(&text(path)));
         assert!(!shortened(&folder));
         assert!(program.to_str().unwrap().is_ascii());
         assert!(out[0].is_ascii() && out[0].starts_with("-Djava.library.path="));
