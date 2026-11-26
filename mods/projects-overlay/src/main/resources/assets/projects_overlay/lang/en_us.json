@@ -749,5 +749,7 @@
   "projects_overlay.chat.copy": "Copy",
   "projects_overlay.chat.report": "Report",
   "projects_overlay.people.note.copied": "Copied",
-  "projects_overlay.report.reason.inappropriate": "Inappropriate Message"
+  "projects_overlay.report.reason.inappropriate": "Inappropriate Message",
+  "projects_overlay.password.show": "Show Password",
+  "projects_overlay.password.hide": "Hide Password"
 }

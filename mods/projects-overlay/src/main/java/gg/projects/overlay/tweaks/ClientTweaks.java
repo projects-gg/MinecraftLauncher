@@ -47,6 +47,8 @@ public final class ClientTweaks {
     static Map<String, Supplier<ClientTweak>> tweaks() {
         Map<String, Supplier<ClientTweak>> all = new LinkedHashMap<>();
         all.put(DialogFocus.ID, () -> new DialogFocus());
+        all.put(PasswordEye.ID, () -> new PasswordEye());
+        all.put(TooltipFit.ID, () -> new TooltipFit());
         return Collections.unmodifiableMap(all);
     }
 

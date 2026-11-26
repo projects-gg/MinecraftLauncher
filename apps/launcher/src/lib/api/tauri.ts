@@ -19,6 +19,7 @@ import {
   type InstanceView,
   type LaunchEventView,
 } from "@/bindings";
+import { clientTweaks } from "@/features/overlay/tweaks";
 import { listen } from "@/lib/api/listen";
 import i18n from "@/lib/i18n";
 import { highlights, newsHighlights } from "@/lib/news";
@@ -95,8 +96,10 @@ function storedPrefs(): {
   copyScreenshots?: boolean;
   inGameOverlay?: boolean;
   chatEmoji?: boolean;
-  /** DIALOG-FOCUS: the overlay mod's client tweak (features/overlay/tweaks.ts). */
+  /** DIALOG-FOCUS, TIP-EYE: the overlay mod's client tweaks (features/overlay/tweaks.ts). */
   dialogFocus?: boolean;
+  passwordEye?: boolean;
+  tooltipFit?: boolean;
   defaultMaxMemoryMb?: number | null;
   defaultJvmArgs?: string;
 } {
@@ -774,7 +777,7 @@ export const tauriApi: LauncherApi = {
           copyScreenshots: prefs.copyScreenshots ?? false,
           overlay: prefs.inGameOverlay ?? true,
           emoji: prefs.chatEmoji ?? true,
-          tweaks: { dialogFocus: prefs.dialogFocus ?? true },
+          tweaks: clientTweaks(prefs),
           account: options?.account?.id ?? null,
           // AUTOJOIN: Rust keeps it only for OYNA to the instance's own server.
           route: prefs.autoJoinRoutes?.[instanceId] ?? null,

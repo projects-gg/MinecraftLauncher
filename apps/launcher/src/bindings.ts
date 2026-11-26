@@ -3055,6 +3055,17 @@ export type ClientTweaks = {
 	 *  dialogs) with a text box opens with its first box ready to type in.
 	 */
 	dialogFocus?: boolean,
+	/**
+	 *  "Sunucu Pencerelerinde Şifreleri Gizle" (TIP-EYE, on by default): a server window's text box
+	 *  under a text that asks for a password shows dots, with an eye beside it that shows or hides
+	 *  what was typed.
+	 */
+	passwordEye?: boolean,
+	/**
+	 *  "İpuçlarını Ekrana Sığdır" (TIP-EYE, on by default): a tooltip that would run off the screen
+	 *  (Minecraft 26.2+ can put it above the top edge with room below) stays readable on it.
+	 */
+	tooltipFit?: boolean,
 };
 
 /**  How a screenshot reached the clipboard. */

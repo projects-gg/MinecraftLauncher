@@ -49,7 +49,13 @@ import { HelpSection } from "@/features/help/help-panel";
 import { platformName } from "@/features/home/community-links";
 import { SOURCE_URL } from "@/features/home/stars";
 import { IasSyncRow } from "@/features/ias-sync/settings-row";
-import { DialogFocusRow, EmojiRow, OverlayRow } from "@/features/overlay/settings-row";
+import {
+  DialogFocusRow,
+  EmojiRow,
+  OverlayRow,
+  PasswordEyeRow,
+  TooltipFitRow,
+} from "@/features/overlay/settings-row";
 import { FriendsSettingsSection } from "@/features/social/settings-section";
 import { useSocialUi } from "@/features/social/store";
 import { UpdateChannelRow } from "@/features/updates/channel-row";
@@ -223,6 +229,9 @@ function General() {
       {/* The same mod's client tweaks (DIALOG-FOCUS): not under the overlay's switch, so a player
           with the panel off keeps them. */}
       <DialogFocusRow />
+      {/* Its newer tweaks (TIP-EYE) right under the first: passwords, then tooltips. */}
+      <PasswordEyeRow />
+      <TooltipFitRow />
       {/* The official pack's other launcher-owned mods (FASTPACK; only while Studio's flag is on). */}
       <FastPackRow />
       {/* The launcher's username accounts in the official pack's account switcher mod (SRV-ACC; only

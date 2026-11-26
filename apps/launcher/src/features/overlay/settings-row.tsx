@@ -86,6 +86,24 @@ export function DialogFocusRow() {
 }
 
 /**
+ * Settings → Genel "Sunucu Pencerelerinde Şifreleri Gizle" (TIP-EYE, on by default), right under
+ * the first tweak: a server window's text box under a text that asks for a password shows dots,
+ * with an eye beside it that shows what was typed.
+ */
+export function PasswordEyeRow() {
+  return <TweakSwitchRow tweak="passwordEye" />;
+}
+
+/**
+ * Settings → Genel "İpuçlarını Ekrana Sığdır" (TIP-EYE, on by default), under the password one: a
+ * tooltip that would run off the top of the screen (Minecraft 26.2+, with room below) stays
+ * readable on it.
+ */
+export function TooltipFitRow() {
+  return <TweakSwitchRow tweak="tooltipFit" />;
+}
+
+/**
  * A client tweak's switch (`tweak`): the mod's jar carries it and it needs no launcher during the
  * game, so it follows the picker's rule (`tweakRow`): held off and dimmed where the mod cannot go,
  * the player's choice kept; the overlay's or the picker's line above says why. Its name says what

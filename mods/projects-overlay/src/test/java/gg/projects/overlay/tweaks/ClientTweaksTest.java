@@ -16,9 +16,10 @@ import org.junit.jupiter.api.Test;
 class ClientTweaksTest {
     @Test
     void theLaunchersIdsAndPropertyAreTheMods() {
-        // The launcher's side: pl_overlay::tweaks (TWEAKS_ARG, DIALOG_FOCUS).
+        // The launcher's side: pl_overlay::tweaks (TWEAKS_ARG, DIALOG_FOCUS, PASSWORD_EYE, TOOLTIP_FIT).
         assertEquals("projects.overlay.tweaks", ClientTweaks.PROPERTY);
-        assertEquals(List.of("dialog-focus"), List.copyOf(ClientTweaks.tweaks().keySet()));
+        assertEquals(List.of("dialog-focus", "password-eye", "tooltip-fit"),
+            List.copyOf(ClientTweaks.tweaks().keySet()));
     }
 
     @Test

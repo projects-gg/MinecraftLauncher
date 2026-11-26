@@ -30,6 +30,8 @@ describe("saved preferences of older versions", () => {
       inGameOverlay: false,
       chatEmoji: false,
       dialogFocus: false,
+      passwordEye: false,
+      tooltipFit: false,
     });
     // Either on, or never touched: the tweaks come with their default (on).
     expect(migratePrefs({ inGameOverlay: false, chatEmoji: true }, 4)).not.toHaveProperty(
@@ -42,6 +44,32 @@ describe("saved preferences of older versions", () => {
       migratePrefs({ inGameOverlay: false, chatEmoji: false, dialogFocus: true }, 5).dialogFocus,
     ).toBe(true);
     expect(usePrefs.getInitialState().dialogFocus).toBe(true);
+  });
+
+  it("start the newer client tweaks off for a player with both switches off (TIP-EYE)", () => {
+    // Saved by version 5: both switches off, the first tweak as the player left it.
+    expect(migratePrefs({ inGameOverlay: false, chatEmoji: false, dialogFocus: true }, 5)).toEqual({
+      inGameOverlay: false,
+      chatEmoji: false,
+      dialogFocus: true,
+      passwordEye: false,
+      tooltipFit: false,
+    });
+    // Either switch on, or never touched: they come with their default (on).
+    for (const saved of [{ inGameOverlay: true, chatEmoji: false }, { chatEmoji: false }, {}]) {
+      const migrated = migratePrefs({ ...saved, dialogFocus: false }, 5);
+      expect(migrated).not.toHaveProperty("passwordEye");
+      expect(migrated).not.toHaveProperty("tooltipFit");
+      expect(migrated.dialogFocus).toBe(false);
+    }
+    // Saved by this version: the player's own choice stays.
+    const kept = migratePrefs(
+      { inGameOverlay: false, chatEmoji: false, passwordEye: true, tooltipFit: true },
+      6,
+    );
+    expect([kept.passwordEye, kept.tooltipFit]).toEqual([true, true]);
+    const fresh = usePrefs.getInitialState();
+    expect([fresh.passwordEye, fresh.tooltipFit]).toEqual([true, true]);
   });
 
   it("move everyone from the old tray switch to the new close default", () => {

@@ -69,6 +69,17 @@ interface PrefsState {
    */
   dialogFocus: boolean;
   /**
+   * Settings → Genel "Sunucu Pencerelerinde Şifreleri Gizle" (TIP-EYE), a client tweak too: a
+   * server window's text box under a text that asks for a password shows dots, with an eye beside
+   * it that shows what was typed.
+   */
+  passwordEye: boolean;
+  /**
+   * Settings → Genel "İpuçlarını Ekrana Sığdır" (TIP-EYE), a client tweak too: a tooltip that would
+   * run off the top of the screen (Minecraft 26.2+, with room below) stays readable on it.
+   */
+  tooltipFit: boolean;
+  /**
    * Settings → Genel "Hızlı kaynak paketi yükleme" (FASTPACK): the official pack installs its
    * fast-pack mods while Studio's `features.fastPacks` is on too (features/fastpack, src-tauri
    * fastpack.rs).
@@ -161,6 +172,8 @@ export const usePrefs = create<PrefsState>()(
       inGameOverlay: true,
       chatEmoji: true,
       dialogFocus: true,
+      passwordEye: true,
+      tooltipFit: true,
       fastPacks: true,
       iasSync: true,
       updateChannel: "stable",
@@ -198,7 +211,7 @@ export const usePrefs = create<PrefsState>()(
         }),
       setPerformanceMode: (performanceMode) => set({ performanceMode, perfTouched: true }),
     }),
-    { name: "pl.prefs", version: 5, migrate: migratePrefs },
+    { name: "pl.prefs", version: 6, migrate: migratePrefs },
   ),
 );
 
@@ -221,6 +234,11 @@ export const usePrefs = create<PrefsState>()(
  * emoji seçici" both off took the mod out of their games (or the crash help did): the tweaks start
  * off for them, so the mod stays out (Rust's saved copy moves the same way,
  * `OverlayConfig::from_saved`).
+ *
+ * Version 6 (TIP-EYE, 26 Nov 2026): two more client tweaks ("Sunucu Pencerelerinde Şifreleri
+ * Gizle", "İpuçlarını Ekrana Sığdır"), on by default. For a player with both switches off they
+ * start off as the first one did, so no new part of the mod comes into their games on its own
+ * (Rust's saved copy: a tweak it does not name).
  */
 export function migratePrefs(persisted: unknown, version: number): PrefValues {
   const prefs = {
@@ -233,6 +251,10 @@ export function migratePrefs(persisted: unknown, version: number): PrefValues {
   }
   if (version < 5 && prefs.inGameOverlay === false && prefs.chatEmoji === false) {
     prefs.dialogFocus = false;
+  }
+  if (version < 6 && prefs.inGameOverlay === false && prefs.chatEmoji === false) {
+    prefs.passwordEye = false;
+    prefs.tooltipFit = false;
   }
   return prefs as PrefValues;
 }

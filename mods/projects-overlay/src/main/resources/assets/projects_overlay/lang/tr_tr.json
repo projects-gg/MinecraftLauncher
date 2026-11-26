@@ -749,5 +749,7 @@
   "projects_overlay.chat.copy": "Kopyala",
   "projects_overlay.chat.report": "Rapor Et",
   "projects_overlay.people.note.copied": "Kopyalandı",
-  "projects_overlay.report.reason.inappropriate": "Uygunsuz Mesaj"
+  "projects_overlay.report.reason.inappropriate": "Uygunsuz Mesaj",
+  "projects_overlay.password.show": "Şifreyi Göster",
+  "projects_overlay.password.hide": "Şifreyi Gizle"
 }
