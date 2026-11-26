@@ -893,6 +893,10 @@ impl RepairHost for LauncherHost<'_> {
             return Ok(false);
         }
         let mut instance = self.state.instances.get(&self.instance_id).await?;
+        // Another installer's version (CUSTOM-VER) brings its own loader version.
+        if instance.custom_id().is_some() {
+            return Ok(false);
+        }
         instance.loader.version = Some(version.to_owned());
         self.state.instances.update(&instance).await?;
         tracing::info!(instance = %self.instance_id, %version, "loader version changed by a mod repair");

@@ -20,7 +20,6 @@ use pl_mc::launch::{
     GameAccount, GameEvent, GameProcess, LaunchIdentity, QuickPlay, SpawnOptions, UserType,
     WorldEntry, build_launch_command,
 };
-use pl_mc::loaders::LoaderKind;
 use pl_net::{CancellationToken, VerifyMode};
 use serde::Serialize;
 use tauri::ipc::Channel;
@@ -591,6 +590,54 @@ pub(crate) fn free_space(path: &Path) -> Option<u64> {
     space::free_space(path)
 }
 
+/// The files another installer put in place for `custom` that no server offers (CUSTOM-VER):
+/// a missing one is fetched from Mojang's library server when it has it (old `launchwrapper`),
+/// else the launch stops and says to install the version again (OptiFine's own jars).
+async fn installer_files_present(
+    ctx: &McContext,
+    custom: &str,
+    manifest: Option<&pl_mc::version::VersionManifest>,
+    offline: bool,
+    cancel: &CancellationToken,
+) -> CmdResult<()> {
+    let Some(manifest) = manifest.cloned() else {
+        return Ok(());
+    };
+    let dirs = ctx.dirs.clone();
+    let platform = ctx.platform.clone();
+    let id = custom.to_owned();
+    let files = tokio::task::spawn_blocking(move || {
+        pl_mc::version::custom::installer_files(&dirs, &id, &manifest, &platform)
+    })
+    .await
+    .map_err(CmdError::internal)?
+    .map_err(CmdError::from)?;
+    let missing: Vec<_> = files.into_iter().filter(|f| !f.path.is_file()).collect();
+    let Some(first) = missing.first() else {
+        return Ok(());
+    };
+    let details = format!("{} missing ({} in all)", first.name, missing.len());
+    if offline {
+        return Err(crate::commands::custom_versions::files_missing(details));
+    }
+    let items: Vec<pl_net::DownloadItem> = missing
+        .iter()
+        .map(|file| pl_net::DownloadItem::with_urls(file.urls.clone(), &file.path))
+        .collect();
+    let options = pl_net::DownloadOptions {
+        cancel: cancel.clone(),
+        ..pl_net::DownloadOptions::default()
+    };
+    match ctx.downloader.download_all(items, &options).await {
+        Ok(_) => Ok(()),
+        Err(error) if error.is_cancelled() => Err(pl_mc::Error::Cancelled.into()),
+        Err(error) => {
+            tracing::warn!(%error, %custom, "a file of another installer's version is missing");
+            Err(crate::commands::custom_versions::files_missing(details))
+        }
+    }
+}
+
 /// Stops the launch before anything big is downloaded when a disk cannot hold what it still
 /// needs: the game, its mod loader and Java in the data folder, the pack's files in the
 /// instance folder (`DISK-DOLU`: how much is needed and how much is free; the command bar
@@ -619,16 +666,22 @@ async fn ensure_room(
     if shared_free.is_none() && game_free.is_none() && !background {
         return Ok(());
     }
-    let files = match GameFiles::for_launch(
-        ctx,
-        &instance.mc_version,
-        instance.loader.kind,
-        loader_version,
-        &instance.java,
-        manifest,
-    )
-    .await
-    {
+    let files = match instance.custom_id() {
+        // Another installer's version (CUSTOM-VER): its chain as it is.
+        Some(id) => GameFiles::for_custom(ctx, id, &instance.java, manifest).await,
+        None => {
+            GameFiles::for_launch(
+                ctx,
+                &instance.mc_version,
+                instance.loader.kind,
+                loader_version,
+                &instance.java,
+                manifest,
+            )
+            .await
+        }
+    };
+    let files = match files {
         Ok(files) => files,
         Err(error) if background => return Err(error.into()),
         Err(error) => {
@@ -898,15 +951,11 @@ pub(crate) async fn ready_game_files(
     // A crash that named damaged files has this launch check every file by its hash, as a first
     // install does (CRASH-DIAG); not beside a running game of this folder (its files are in use).
     let check_files = !beside && file_check_path(instance_dir).is_file();
-    let first_install = check_files
-        || marker.as_ref().is_none_or(|m| {
-            m.mc_version != instance.mc_version
-                || m.loader != instance.loader.kind
-                || m.loader_version != instance.loader.version
-        });
+    let first_install = check_files || marker.as_ref().is_none_or(|m| !m.matches(instance));
 
     // One bar over the parts this launch runs, in order.
-    let modded = instance.loader.kind != LoaderKind::Vanilla;
+    // Another installer's version (CUSTOM-VER) brings its loader: the launcher installs none.
+    let modded = instance.manages_loader();
     let installs_java = settings
         .is_some_and(|s| s.java == Some(crate::commands::java::JavaChoice::Install))
         && matches!(instance.java, pl_mc::java::JavaSetting::Custom { .. });
@@ -972,7 +1021,7 @@ pub(crate) async fn ready_game_files(
 
     // The mod loader version to install: the instance's, else the newest stable one.
     let loader_version = match instance.loader.kind {
-        LoaderKind::Vanilla => None,
+        _ if !modded => None,
         kind => Some(match &instance.loader.version {
             Some(v) if !v.trim().is_empty() => v.clone(),
             _ => step(cancel, async {
@@ -1021,9 +1070,10 @@ pub(crate) async fn ready_game_files(
     if modded {
         bar.enter(LaunchPart::Loader);
     }
-    let version_id = match &loader_version {
-        None => instance.mc_version.clone(),
-        Some(loader_version) => {
+    let version_id = match (instance.custom_id(), &loader_version) {
+        (Some(custom), _) => custom.to_owned(),
+        (None, None) => instance.mc_version.clone(),
+        (None, Some(loader_version)) => {
             step(cancel, async {
                 pl_mc::loaders::install_loader_profile(
                     ctx,
@@ -1048,18 +1098,30 @@ pub(crate) async fn ready_game_files(
     let resolved = step(cancel, async {
         pl_mc::version::resolve::resolve_version(ctx, &version_id, manifest.as_ref())
             .await
-            .map_err(CmdError::from)
+            .map_err(|error| match (&error, instance.custom_id()) {
+                (pl_mc::Error::VersionNotFound(_), Some(custom)) => {
+                    crate::commands::custom_versions::missing(custom)
+                }
+                _ => CmdError::from(error),
+            })
     })
     .await?;
     lap(clock, "resolve");
+    // Another installer's version (CUSTOM-VER): the files it put in place that no server offers
+    // are looked for before anything is downloaded.
+    if let Some(custom) = instance.custom_id() {
+        step(
+            cancel,
+            installer_files_present(ctx, custom, manifest.as_ref(), offline, cancel),
+        )
+        .await?;
+    }
 
     // 2. Install / verify files. Full hashing only on first install; size checks otherwise
     //    (Forge and NeoForge installs above already verified their files, so a size check
     //    suffices then).
     let verify = if check_files
-        || (first_install
-            && (instance.loader.kind == LoaderKind::Vanilla
-                || pl_mc::loaders::profile_only(instance.loader.kind)))
+        || (first_install && (!modded || pl_mc::loaders::profile_only(instance.loader.kind)))
     {
         VerifyMode::Full
     } else {
@@ -1068,7 +1130,14 @@ pub(crate) async fn ready_game_files(
     let installed = step(cancel, async {
         install_version(ctx, &resolved, install_options(verify))
             .await
-            .map_err(CmdError::from)
+            .map_err(|error| match (&error, instance.custom_id()) {
+                // A file another installer's version brought (a Forge processor's output, its
+                // game jar) is gone: only that installer makes it again (CUSTOM-VER).
+                (pl_mc::Error::NotFound(_), Some(_)) => {
+                    crate::commands::custom_versions::files_missing(error.to_string())
+                }
+                _ => CmdError::from(error),
+            })
     })
     .await?;
     lap(clock, "files");
@@ -1083,6 +1152,7 @@ pub(crate) async fn ready_game_files(
             now.mc_version == followed.mc_version
                 && now.loader == followed.loader
                 && now.managed_pack == followed.managed_pack
+                && now.custom_version == followed.custom_version
         });
         if !unchanged {
             return Err(CmdError::new(CHANGED, "", "the instance changed meanwhile"));

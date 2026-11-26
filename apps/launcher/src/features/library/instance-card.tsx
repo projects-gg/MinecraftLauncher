@@ -17,6 +17,7 @@ import { CardDrop, useCardZone } from "@/features/drop/card-zone";
 import type { InstanceSummary } from "@/lib/api";
 import { formatDuration, formatRelative } from "@/lib/format";
 import { InstanceIcon } from "@/shell/instance-icon";
+import { gameLine } from "./custom-version";
 
 export interface InstanceActions {
   play: (i: InstanceSummary) => void;
@@ -134,7 +135,7 @@ export function InstanceCard({
               </Link>
             </OverflowTooltip>
             <p className="mt-0.5 truncate text-[12.5px] text-ash-300">
-              {loader} {instance.mcVersion}
+              {gameLine(instance, () => loader)}
             </p>
           </>
         }

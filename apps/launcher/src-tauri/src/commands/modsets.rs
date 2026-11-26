@@ -1021,6 +1021,7 @@ pub async fn instance_create_from_set(
             loader_version: variant.loader_version().map(str::to_owned),
             max_memory_mb: request.max_memory_mb,
             jvm_args: request.jvm_args.clone(),
+            custom_version: None,
         },
     )
     .await?;

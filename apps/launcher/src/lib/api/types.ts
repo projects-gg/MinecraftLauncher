@@ -211,6 +211,8 @@ export interface HomeContent {
   serverAccounts?: boolean;
   /** Settings → Genel shows "Hesapları Oyun İçi Hesap Değiştiriciye Ekle" (`features.iasSync`). */
   iasSync?: boolean;
+  /** "Özel" in "Yeni Kurulum" (`features.customVersions`, CUSTOM-VER). */
+  customVersions?: boolean;
   /** True when the content came from the local cache because the network failed. */
   offline: boolean;
 }
@@ -257,6 +259,11 @@ export interface InstanceSummary {
   group?: string;
   /** ISO time the instance was created. */
   createdAt?: string;
+  /**
+   * CUSTOM-VER: the other installer's version it launches ("1.21.11-OptiFine_HD_U_J9"), shown in
+   * place of the loader and game version; such an instance does not switch versions.
+   */
+  customVersion?: string;
 }
 
 export interface AccountSummary {
@@ -574,6 +581,26 @@ export interface LoaderVersion {
   stable: boolean;
 }
 
+/** CUSTOM-VER: what another installer's version is, by its libraries. */
+export type CustomKind = "optiFine" | "fabric" | "quilt" | "forge" | "neoForge" | "other";
+
+/** A version another installer put in the data folder (OptiFine, Forge, a modpack's own). */
+export interface CustomVersion {
+  id: string;
+  /** The Minecraft version it runs on. */
+  minecraft: string;
+  loader: LoaderKind;
+  loaderVersion?: string;
+  kind: CustomKind;
+}
+
+export interface CustomVersions {
+  /** Newest first. */
+  versions: CustomVersion[];
+  /** The folder an installer is pointed at (the data folder). */
+  folder: string;
+}
+
 export interface NewInstance {
   name: string;
   icon: InstanceIcon;
@@ -587,6 +614,8 @@ export interface NewInstance {
   maxMemoryMb?: number | null;
   /** "Daha Fazla Seçenek": the JVM arguments. Left out, Settings → Oyun's default applies. */
   jvmArgs?: string;
+  /** "Özel" (CUSTOM-VER): the other installer's version; its game version and loader win. */
+  customVersion?: string;
 }
 
 export interface ModEntry {

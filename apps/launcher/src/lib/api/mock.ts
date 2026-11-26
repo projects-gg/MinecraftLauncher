@@ -564,6 +564,8 @@ function mockHome(): HomeContent {
     // unless `?serverAccounts=off` / `?iasSync=off`.
     serverAccounts: mockFlag("serverAccounts") !== "off",
     iasSync: mockFlag("iasSync") !== "off",
+    // CUSTOM-VER: "Özel" shows in "Yeni Kurulum" unless `?customVersions=off`.
+    customVersions: mockFlag("customVersions") !== "off",
     banners:
       banners === "none"
         ? []
@@ -1094,6 +1096,7 @@ export const mockApi: LauncherApi = {
       playTimeSecs: 0,
       state: "needsInstall",
       createdAt: new Date().toISOString(),
+      customVersion: spec.customVersion,
     };
     instances.push(created);
     return created;
@@ -1164,6 +1167,39 @@ export const mockApi: LauncherApi = {
     if (mockFlag("loaderNone") === loader) return [];
     return loader === "vanilla" ? [] : loaderVersionTable[loader];
   },
+  async customVersions() {
+    await delay(200);
+    // CUSTOM-VER: `?customVersions=empty` shows the list before anything was installed.
+    const empty = mockFlag("customVersions") === "empty";
+    return {
+      versions: empty
+        ? []
+        : [
+            {
+              id: "1.21.11-OptiFine_HD_U_J9",
+              minecraft: "1.21.11",
+              loader: "vanilla" as const,
+              kind: "optiFine" as const,
+            },
+            {
+              id: "iris-fabric-loader-0.18.1-1.21.11",
+              minecraft: "1.21.11",
+              loader: "fabric" as const,
+              loaderVersion: "0.18.1",
+              kind: "fabric" as const,
+            },
+            {
+              id: "1.20.1-forge-47.4.10",
+              minecraft: "1.20.1",
+              loader: "forge" as const,
+              loaderVersion: "47.4.10",
+              kind: "forge" as const,
+            },
+          ],
+      folder: "C:\\Users\\Kaan_07\\AppData\\Roaming\\ProjectsLauncher",
+    };
+  },
+  async openCustomVersionsFolder() {},
   async launch(instanceId: string, onEvent: (e: LaunchEvent) => void, options?: LaunchOptions) {
     const job = { cancelled: false };
     running.set(instanceId, job);

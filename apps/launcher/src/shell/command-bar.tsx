@@ -37,6 +37,7 @@ import { useFastPackSync } from "@/features/fastpack/use-fast-pack-sync";
 import { helpsWithLaunchError, helpToastLine } from "@/features/help/launch";
 import { openHelp, useHelp } from "@/features/help/store";
 import { useIasSyncPush } from "@/features/ias-sync/settings-row";
+import { gameLine } from "@/features/library/custom-version";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
 import { useOfficialOffer } from "@/features/library/official";
 import { usePrepareSync } from "@/features/prepare/use-prepare-sync";
@@ -54,7 +55,7 @@ import { type PrepareHint, usePrepare } from "@/stores/prepare";
 import { InstanceIcon, prewarmInstanceIcons } from "./instance-icon";
 
 function loaderLine(i: InstanceSummary, loaderName: string) {
-  return i.loader === "vanilla" ? `Minecraft ${i.mcVersion}` : `${loaderName} ${i.mcVersion}`;
+  return gameLine(i, () => loaderName);
 }
 
 /**

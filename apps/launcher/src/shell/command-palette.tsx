@@ -311,7 +311,11 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
                 void play(instance.id);
               }),
             {
-              extra: [instance.mcVersion, t(`loaders.${instance.loader}`)],
+              extra: [
+                instance.mcVersion,
+                t(`loaders.${instance.loader}`),
+                instance.customVersion ?? "",
+              ],
               hint: instance.mcVersion,
               // Ctrl+Enter presses OYNA: the command bar's instance, unless this account's launch
               // or game is of it.

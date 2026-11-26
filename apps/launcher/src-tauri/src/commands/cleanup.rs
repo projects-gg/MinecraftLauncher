@@ -555,16 +555,19 @@ pub async fn cleanup_restore_sets(
 /// What every instance needs: its active version and every parked set (and both sides of an
 /// unfinished switch, loader unknown), plus custom Java executables that may live in
 /// `runtimes/`. Fails when the instances cannot be listed: without them nothing can be judged.
-async fn game_refs(state: &AppState) -> CmdResult<(Vec<GameRef>, Vec<PathBuf>)> {
+pub(crate) async fn game_refs(state: &AppState) -> CmdResult<(Vec<GameRef>, Vec<PathBuf>)> {
     let instances = state.instances.list().await.map_err(CmdError::from)?;
     let mut refs = Vec::new();
     let mut protected = Vec::new();
     for instance in &instances {
-        refs.push(GameRef::new(
-            instance.mc_version.clone(),
-            Some(instance.loader.kind),
-            instance.loader.version.clone(),
-        ));
+        refs.push(
+            GameRef::new(
+                instance.mc_version.clone(),
+                Some(instance.loader.kind),
+                instance.loader.version.clone(),
+            )
+            .with_custom(instance.custom_id()),
+        );
         if let JavaSetting::Custom { path } = &instance.java {
             protected.push(path.clone());
         }
@@ -686,11 +689,14 @@ async fn instance_refs(
     refs: &mut Vec<GameRef>,
     protected: &mut Vec<PathBuf>,
 ) -> Result<(), ()> {
-    refs.push(GameRef::new(
-        instance.mc_version.clone(),
-        Some(instance.loader.kind),
-        instance.loader.version.clone(),
-    ));
+    refs.push(
+        GameRef::new(
+            instance.mc_version.clone(),
+            Some(instance.loader.kind),
+            instance.loader.version.clone(),
+        )
+        .with_custom(instance.custom_id()),
+    );
     if let JavaSetting::Custom { path } = &instance.java {
         protected.push(path.clone());
     }

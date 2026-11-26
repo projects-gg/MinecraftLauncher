@@ -24,6 +24,21 @@ pub struct InstalledMarker {
     pub loader_version: Option<String>,
 }
 
+impl InstalledMarker {
+    /// Whether the files were installed for what the instance launches now: another installer's
+    /// version (CUSTOM-VER), else its Minecraft version, loader and loader version.
+    pub fn matches(&self, instance: &Instance) -> bool {
+        match instance.custom_id() {
+            Some(id) => self.version_id == id && self.mc_version == instance.mc_version,
+            None => {
+                self.mc_version == instance.mc_version
+                    && self.loader == instance.loader.kind
+                    && self.loader_version == instance.loader.version
+            }
+        }
+    }
+}
+
 pub fn marker_path(instance_dir: &Path) -> PathBuf {
     instance_dir.join(".launcher").join("installed.json")
 }
@@ -78,6 +93,8 @@ pub struct InstanceView {
     /// Library group (`None`: no group).
     pub group: Option<String>,
     pub created_at: String,
+    /// Another installer's version the instance launches ("Özel", CUSTOM-VER).
+    pub custom_version: Option<String>,
 }
 
 fn icon_key(icon: &InstanceIcon) -> String {
@@ -93,13 +110,7 @@ pub fn view(state: &AppState, instance: &Instance) -> InstanceView {
     // version picker, a pack update) → "needsUpdate".
     let install_state = match dir.as_deref().and_then(read_marker) {
         None => "needsInstall",
-        Some(m)
-            if m.mc_version == instance.mc_version
-                && m.loader == instance.loader.kind
-                && m.loader_version == instance.loader.version =>
-        {
-            "ready"
-        }
+        Some(m) if m.matches(instance) => "ready",
         Some(_) => "needsUpdate",
     };
     InstanceView {
@@ -119,6 +130,7 @@ pub fn view(state: &AppState, instance: &Instance) -> InstanceView {
         }),
         group: instance.group.clone(),
         created_at: instance.created_at.to_string(),
+        custom_version: instance.custom_id().map(str::to_owned),
     }
 }
 
@@ -170,6 +182,10 @@ pub struct NewInstanceRequest {
     /// Settings → Oyun defaults: extra JVM arguments.
     #[serde(default)]
     pub jvm_args: Option<String>,
+    /// "Özel" (CUSTOM-VER): another installer's version; its own game version and loader then
+    /// stand in for `mc_version`, `loader` and `loader_version`.
+    #[serde(default)]
+    pub custom_version: Option<String>,
 }
 
 #[tauri::command]
@@ -188,8 +204,26 @@ pub(crate) async fn create_instance(
     state: &AppState,
     request: NewInstanceRequest,
 ) -> CmdResult<Instance> {
+    // "Özel" (CUSTOM-VER): the version decides the game version and the loader.
+    let custom = match request
+        .custom_version
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    {
+        Some(id) => Some(crate::commands::custom_versions::describe(state, id).await?),
+        None => None,
+    };
+    let (mc_version, loader, loader_version) = match &custom {
+        Some(version) => (
+            version.minecraft.clone(),
+            version.loader,
+            version.loader_version.clone(),
+        ),
+        None => (request.mc_version, request.loader, request.loader_version),
+    };
     let total = pl_mc::instance::system_memory_mb();
-    let modded = request.loader != LoaderKind::Vanilla;
+    let modded = loader != LoaderKind::Vanilla;
     // Without a default from Settings → Oyun the instance is "Otomatik".
     let memory = request.max_memory_mb.map(|max_mb| {
         let mut memory = pl_mc::instance::recommended_memory(total, modded);
@@ -201,10 +235,10 @@ pub(crate) async fn create_instance(
         .instances
         .create(NewInstance {
             name: request.name.trim().to_owned(),
-            mc_version: request.mc_version,
+            mc_version,
             loader: InstanceLoader {
-                kind: request.loader,
-                version: if modded { request.loader_version } else { None },
+                kind: loader,
+                version: if modded { loader_version } else { None },
             },
             icon: Some(InstanceIcon::Builtin { key: request.icon }),
             group: None,
@@ -213,13 +247,21 @@ pub(crate) async fn create_instance(
         })
         .await
         .map_err(CmdError::from)?;
-    if let Some(args) = request.jvm_args.filter(|a| !a.trim().is_empty()) {
+    let jvm_args = request.jvm_args.filter(|a| !a.trim().is_empty());
+    if let Some(args) = &jvm_args {
         created.jvm_args = args.trim().to_owned();
-        state
-            .instances
-            .update(&created)
-            .await
-            .map_err(CmdError::from)?;
+    }
+    if let Some(version) = &custom {
+        created.custom_version = Some(version.id.clone());
+    }
+    if (jvm_args.is_some() || custom.is_some())
+        && let Err(error) = state.instances.update(&created).await
+    {
+        // Without its version the instance would launch something else: it goes.
+        if custom.is_some() {
+            let _ = state.instances.delete(&created.id).await;
+        }
+        return Err(error.into());
     }
     seed_default_server_once(state, &mut created).await;
     Ok(created)

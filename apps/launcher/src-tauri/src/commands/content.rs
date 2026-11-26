@@ -258,6 +258,8 @@ pub struct HomeView {
     /// Settings → Genel "Hesapları Oyun İçi Hesap Değiştiriciye Ekle" shows (SRV-ACC):
     /// `features.iasSync`.
     pub ias_sync: bool,
+    /// "Özel" in "Yeni Kurulum" (CUSTOM-VER): `features.customVersions`.
+    pub custom_versions: bool,
     pub offline: bool,
     pub from_cache: bool,
 }
@@ -305,6 +307,8 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
     );
     // "Önceki Sürüme Dön" (REPAIR-RB): clean games are recorded and crashes offer it while on.
     crate::commands::rollback::apply_flag(snapshot.config.features.mod_rollback);
+    // "Özel Sürümler" (CUSTOM-VER): other installers' versions are listed while on.
+    crate::commands::custom_versions::apply_flag(snapshot.config.features.custom_versions);
     // SRV-ACC: the friends service is asked for server accounts only while "Sunucu Hesapları" is
     // on, and the next launches add to the In-Game Account Switcher's list only while "Oyun İçi
     // Hesap Eşitleme" is.
@@ -558,6 +562,7 @@ async fn home_view(state: &AppState, snapshot: &ContentSnapshot) -> HomeView {
         server_accounts: snapshot.config.features.friends
             && snapshot.config.features.server_accounts,
         ias_sync: snapshot.config.features.ias_sync,
+        custom_versions: snapshot.config.features.custom_versions,
         offline: snapshot.offline,
         from_cache: snapshot.from_cache,
     }

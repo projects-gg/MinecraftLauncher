@@ -31,6 +31,13 @@ import {
 import { InstanceIcon, instanceIcons } from "@/shell/instance-icon";
 import { usePrefs } from "@/stores/prefs";
 import { landingTab } from "./create-more";
+import { customBase, customName, pickedCustom } from "./custom-version";
+import {
+  CustomVersionHelp,
+  CustomVersionList,
+  useCustomVersions,
+  useCustomVersionsOn,
+} from "./custom-versions";
 import { defaultInstanceName } from "./default-name";
 import { MoreOptions } from "./more-options";
 import { officialFamilyQuery, packOffer } from "./pack-offer";
@@ -38,7 +45,7 @@ import { OfferPresence, PackOfferNotice, SetsHint } from "./pack-offer-ui";
 import { ConfirmDialog } from "./parts";
 
 type Source = "new" | "sets" | "browse" | "import";
-type VersionFilter = "release" | "snapshot" | "old";
+type VersionFilter = "release" | "snapshot" | "old" | "custom";
 
 const loaderOptions: LoaderKind[] = ["vanilla", "fabric", "quilt", "forge", "neoForge"];
 
@@ -86,6 +93,13 @@ export function CreateInstanceDialog({
   useEffect(() => {
     if (!showSnapshots && filter === "snapshot") setFilter("release");
   }, [showSnapshots, filter]);
+  // CUSTOM-VER: "Özel" lists other installers' versions while Studio's switch is on.
+  const customOn = useCustomVersionsOn();
+  useEffect(() => {
+    if (!customOn && filter === "custom") setFilter("release");
+  }, [customOn, filter]);
+  const isCustom = filter === "custom";
+  const [customPick, setCustomPick] = useState("");
   // The version the player picked. Until then (or while the filter hides it) the recommended
   // version is selected, else the newest one in the list.
   const [pickedVersion, setPickedVersion] = useState<string>("");
@@ -105,7 +119,8 @@ export function CreateInstanceDialog({
             v.kind === "release" || v.recommended
           : filter === "snapshot"
             ? v.kind === "snapshot"
-            : v.kind === "oldBeta" || v.kind === "oldAlpha",
+            : // "Özel" lists other installers' versions instead (CUSTOM-VER).
+              filter === "old" && (v.kind === "oldBeta" || v.kind === "oldAlpha"),
       ),
     [versionsQuery.data, filter],
   );
@@ -116,7 +131,35 @@ export function CreateInstanceDialog({
   const loaderQuery = useQuery({
     queryKey: ["loader-versions", loader, mcVersion],
     queryFn: () => api.loaderVersions(loader, mcVersion),
-    enabled: open && loader !== "vanilla" && Boolean(mcVersion),
+    enabled: open && loader !== "vanilla" && Boolean(mcVersion) && !isCustom,
+  });
+  const customQuery = useCustomVersions(open && source === "new" && isCustom);
+  // The picked custom version brings its own game version and loader.
+  const custom = isCustom ? pickedCustom(customQuery.data?.versions ?? [], customPick) : undefined;
+  const loaderName = (kind: LoaderKind) => t(`loaders.${kind}`);
+  // Named as players know them ("OptiFine 1.21.11", its edition beside it); a version of its own
+  // by its own name, with what it runs on under it.
+  const customNamed = custom ? customName(custom, loaderName) : null;
+  const baseLine = (version: NonNullable<typeof custom>) => {
+    const base = customBase(version);
+    return base
+      ? t("customVer.base", {
+          loader: base === "optiFine" ? "OptiFine" : loaderName(base),
+          minecraft: version.minecraft,
+        })
+      : t("customVer.baseVanilla", { minecraft: version.minecraft });
+  };
+  const customOptions = (customQuery.data?.versions ?? []).map((version) => {
+    const named = customName(version, loaderName);
+    // One line each: a version of its own carries what it runs on as its tag ("Fabric").
+    const base = customBase(version);
+    return named.friendly
+      ? { value: version.id, label: named.label, badge: named.detail }
+      : {
+          value: version.id,
+          label: named.label,
+          badge: base === "optiFine" ? "OptiFine" : base ? loaderName(base) : undefined,
+        };
   });
 
   useEffect(() => {
@@ -131,10 +174,17 @@ export function CreateInstanceDialog({
     queryFn: () => api.instances(),
     enabled: open,
   });
-  const defaultName = defaultInstanceName(
-    `${loader === "vanilla" ? "Minecraft" : t(`loaders.${loader}`)} ${mcVersion}`,
-    (instancesQuery.data ?? []).map((i) => i.name),
-  );
+  // An instance made from another installer's version is named after it (none picked: no name).
+  const defaultName =
+    isCustom && !custom
+      ? ""
+      : defaultInstanceName(
+          customNamed
+            ? // "OptiFine 1.21.11" like "Fabric 1.21.4"; a version of its own by its own name.
+              customNamed.label
+            : `${loader === "vanilla" ? "Minecraft" : t(`loaders.${loader}`)} ${mcVersion}`,
+          (instancesQuery.data ?? []).map((i) => i.name),
+        );
 
   useEffect(() => {
     if (!open) {
@@ -142,6 +192,7 @@ export function CreateInstanceDialog({
       setSource("new");
       setPickedVersion("");
       setFilter("release");
+      setCustomPick("");
     }
   }, [open]);
   // A modpack dropped onto the window opens the import step (it takes the file from there); the
@@ -221,15 +272,28 @@ export function CreateInstanceDialog({
 
   const create = useMutation({
     mutationFn: () =>
-      api.createInstance({
-        name: name.trim() || defaultName,
-        icon,
-        mcVersion,
-        loader,
-        loaderVersion: loader === "vanilla" ? undefined : loaderVersion,
-        maxMemoryMb: memoryMb,
-        jvmArgs,
-      }),
+      api.createInstance(
+        custom
+          ? {
+              name: name.trim() || defaultName,
+              icon,
+              mcVersion: custom.minecraft,
+              loader: custom.loader,
+              loaderVersion: custom.loaderVersion,
+              customVersion: custom.id,
+              maxMemoryMb: memoryMb,
+              jvmArgs,
+            }
+          : {
+              name: name.trim() || defaultName,
+              icon,
+              mcVersion,
+              loader,
+              loaderVersion: loader === "vanilla" ? undefined : loaderVersion,
+              maxMemoryMb: memoryMb,
+              jvmArgs,
+            },
+      ),
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: ["instances"] });
       toast.success(t("library.created", { name: created.name }));
@@ -249,7 +313,7 @@ export function CreateInstanceDialog({
   // so under the box, and "Kurulum oluştur" waits for one (also while the list loads); before,
   // it made an instance whose first OYNA could only fail.
   const loaderProblem =
-    loader === "vanilla" || loaderQuery.isPending
+    loader === "vanilla" || loaderQuery.isPending || isCustom
       ? null
       : loaderQuery.isError
         ? t("qol.create.loaderFailed")
@@ -260,24 +324,26 @@ export function CreateInstanceDialog({
   // until the new list is in).
   const loaderPicked =
     loader === "vanilla" || Boolean(loaderQuery.data?.some((v) => v.version === loaderVersion));
-  const canCreate = !create.isPending && Boolean(mcVersion) && loaderPicked && !loaderProblem;
+  const canCreate =
+    !create.isPending &&
+    (isCustom ? Boolean(custom) : Boolean(mcVersion) && loaderPicked && !loaderProblem);
   // PACK-OFFER: the official pack for the version and loader picked here (from the signed
   // content: its member for the version and that member's loader), else the ready-made sets that
   // have it. "Kurulum Oluştur" stays what it was.
   const familyQuery = useQuery({
     ...officialFamilyQuery(mcVersion),
-    enabled: open && source === "new" && loader !== "vanilla" && Boolean(mcVersion),
+    enabled: open && source === "new" && loader !== "vanilla" && Boolean(mcVersion) && !isCustom,
   });
   // "Kurulumu Aç" stays off here: the official instance already on the picked version is not news
   // (the default pick is that version), and a second instance next to it is a fair choice.
   const found =
-    source === "new" && loader !== "vanilla"
+    source === "new" && loader !== "vanilla" && !isCustom
       ? packOffer(familyQuery.data, { minecraft: mcVersion, loader })
       : null;
   const offer = found?.kind === "open" ? null : found;
   const catalog = useSetCatalog(open && source === "new");
   const setCount =
-    offer || !mcVersion
+    offer || !mcVersion || isCustom
       ? 0
       : (catalog.data?.sets ?? []).filter((set) => fitFor(set, mcVersion, loader).kind === "fits")
           .length;
@@ -391,7 +457,10 @@ export function CreateInstanceDialog({
             </Field>
 
             <div className="grid grid-cols-2 gap-4">
-              <Field label={t("create.version")}>
+              <Field
+                label={t("create.version")}
+                help={custom && customNamed && !customNamed.friendly ? baseLine(custom) : undefined}
+              >
                 <div className="flex flex-col gap-2">
                   <Segmented
                     value={filter}
@@ -408,51 +477,71 @@ export function CreateInstanceDialog({
                           ]
                         : []),
                       { value: "old" as VersionFilter, label: t("create.filterOld") },
+                      ...(customOn
+                        ? [{ value: "custom" as VersionFilter, label: t("customVer.filter") }]
+                        : []),
                     ]}
                   />
-                  {/* A hundred releases (hundreds of snapshots): the searchable list. */}
-                  <Select
-                    value={mcVersion}
-                    onValueChange={setPickedVersion}
-                    label={t("create.version")}
-                    options={filtered.map((v) => ({
-                      value: v.id,
-                      label: v.id,
-                      badge: v.recommended ? t("create.recommended") : undefined,
-                    }))}
-                    disabled={!filtered.length}
-                    searchable={versionSearch}
-                  />
-                </div>
-              </Field>
-              <Field
-                label={t("create.loader")}
-                help={loader === "vanilla" ? t("create.loaderHelpVanilla") : t("create.loaderHelp")}
-                error={loaderProblem}
-              >
-                <div className="flex flex-col gap-2">
-                  <Select
-                    value={loader}
-                    onValueChange={setLoader}
-                    label={t("create.loader")}
-                    options={loaderOptions.map((l) => ({ value: l, label: t(`loaders.${l}`) }))}
-                  />
-                  {/* With no build for this version the line under the box says so: no empty box. */}
-                  {loader !== "vanilla" && !loaderProblem ? (
-                    <Select
-                      value={loaderVersion}
-                      onValueChange={setLoaderVersion}
-                      label={t("create.loaderVersion")}
-                      disabled={!loaderQuery.data?.length}
-                      options={(loaderQuery.data ?? []).map((v) => ({
-                        value: v.version,
-                        label: v.stable ? v.version : `${v.version} (${t("create.unstable")})`,
-                      }))}
+                  {isCustom ? (
+                    <CustomVersionList
+                      query={customQuery}
+                      options={customOptions}
+                      value={custom?.id ?? ""}
+                      onChange={setCustomPick}
+                      label={t("create.version")}
                       searchable={versionSearch}
                     />
-                  ) : null}
+                  ) : (
+                    // A hundred releases (hundreds of snapshots): the searchable list.
+                    <Select
+                      value={mcVersion}
+                      onValueChange={setPickedVersion}
+                      label={t("create.version")}
+                      options={filtered.map((v) => ({
+                        value: v.id,
+                        label: v.id,
+                        badge: v.recommended ? t("create.recommended") : undefined,
+                      }))}
+                      disabled={!filtered.length}
+                      searchable={versionSearch}
+                    />
+                  )}
                 </div>
               </Field>
+              {isCustom ? (
+                <CustomVersionHelp folder={customQuery.data?.folder} />
+              ) : (
+                <Field
+                  label={t("create.loader")}
+                  help={
+                    loader === "vanilla" ? t("create.loaderHelpVanilla") : t("create.loaderHelp")
+                  }
+                  error={loaderProblem}
+                >
+                  <div className="flex flex-col gap-2">
+                    <Select
+                      value={loader}
+                      onValueChange={setLoader}
+                      label={t("create.loader")}
+                      options={loaderOptions.map((l) => ({ value: l, label: t(`loaders.${l}`) }))}
+                    />
+                    {/* With no build for this version the line under the box says so: no empty box. */}
+                    {loader !== "vanilla" && !loaderProblem ? (
+                      <Select
+                        value={loaderVersion}
+                        onValueChange={setLoaderVersion}
+                        label={t("create.loaderVersion")}
+                        disabled={!loaderQuery.data?.length}
+                        options={(loaderQuery.data ?? []).map((v) => ({
+                          value: v.version,
+                          label: v.stable ? v.version : `${v.version} (${t("create.unstable")})`,
+                        }))}
+                        searchable={versionSearch}
+                      />
+                    ) : null}
+                  </div>
+                </Field>
+              )}
             </div>
             <OfferPresence show={Boolean(offer)}>
               {offer ? (

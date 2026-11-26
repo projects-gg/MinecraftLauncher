@@ -496,11 +496,7 @@ async fn up_to_date(
     instance_dir: &Path,
     game_dir: &Path,
 ) -> bool {
-    let installed = read_marker(instance_dir).is_some_and(|marker| {
-        marker.mc_version == instance.mc_version
-            && marker.loader == instance.loader.kind
-            && marker.loader_version == instance.loader.version
-    });
+    let installed = read_marker(instance_dir).is_some_and(|marker| marker.matches(instance));
     if !installed {
         return false;
     }

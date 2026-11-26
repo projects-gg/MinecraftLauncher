@@ -118,6 +118,8 @@ export const commands = {
 	 *  `features.iasSync`.
 	 */
 	iasSync: boolean,
+	/**  "Özel" in "Yeni Kurulum" (CUSTOM-VER): `features.customVersions`. */
+	customVersions: boolean,
 	offline: boolean,
 	fromCache: boolean,
 } | null, CmdError>(__TAURI_INVOKE("content_home")),
@@ -237,6 +239,13 @@ export const commands = {
 	 */
 	minecraftVersions: () => typedError<McVersionView[], CmdError>(__TAURI_INVOKE("minecraft_versions")),
 	loaderVersions: (loader: LoaderKind, mcVersion: string) => typedError<LoaderVersionView[], CmdError>(__TAURI_INVOKE("loader_versions", { loader, mcVersion })),
+	/**
+	 *  The versions other installers put in the data folder, newest first; empty while
+	 *  `features.customVersions` is off.
+	 */
+	customVersions: () => typedError<CustomVersionsView, CmdError>(__TAURI_INVOKE("custom_versions")),
+	/**  Opens the data folder (the one installers ask for), with `launcher_profiles.json` in it. */
+	customVersionsOpenFolder: () => typedError<null, CmdError>(__TAURI_INVOKE("custom_versions_open_folder")),
 	launchInstance: (instanceId: string, autoJoin: boolean, settings: LaunchSettings, onEvent: Channel<LaunchEventView>) => typedError<null, CmdError>(__TAURI_INVOKE("launch_instance", { instanceId, autoJoin, settings, onEvent })),
 	/**
 	 *  Stops the launch: while it is prepared, downloads and installs end within a second and the
@@ -1200,6 +1209,8 @@ export const commands = {
 	/**  Library group (`None`: no group). */
 	group: string | null,
 	createdAt: string,
+	/**  Another installer's version the instance launches ("Özel", CUSTOM-VER). */
+	customVersion: string | null,
 } | null, CmdError>(__TAURI_INVOKE("official_instance_ensure", { install, minecraft })),
 	/**
 	 *  The official pack family (PACK-OFFER): its members, and the member published for `minecraft`
@@ -5430,6 +5441,27 @@ export type CurseForgeModLink = {
 	url: string,
 };
 
+/**  What a custom version is, for its line in the list. */
+export type CustomKind = "optiFine" | "fabric" | "quilt" | "forge" | "neoForge" | 
+/**  Nothing the launcher knows (a modpack's own version, a client of its own). */
+"other";
+
+export type CustomVersionView = {
+	id: string,
+	/**  The Minecraft version it runs on. */
+	minecraft: string,
+	loader: LoaderKind,
+	loaderVersion: string | null,
+	kind: CustomKind,
+};
+
+export type CustomVersionsView = {
+	/**  Newest first. */
+	versions: CustomVersionView[],
+	/**  The folder an installer is pointed at (the data folder, which holds `versions/`). */
+	folder: string,
+};
+
 export type DataOverview = {
 	/**  The data folder. */
 	root: string,
@@ -6177,6 +6209,8 @@ export type HomeView = {
 	 *  `features.iasSync`.
 	 */
 	iasSync: boolean,
+	/**  "Özel" in "Yeni Kurulum" (CUSTOM-VER): `features.customVersions`. */
+	customVersions: boolean,
 	offline: boolean,
 	fromCache: boolean,
 };
@@ -6537,6 +6571,8 @@ export type InstanceView = {
 	/**  Library group (`None`: no group). */
 	group: string | null,
 	createdAt: string,
+	/**  Another installer's version the instance launches ("Özel", CUSTOM-VER). */
+	customVersion: string | null,
 };
 
 /**  Result of a "Birlikte oyna" invite. */
@@ -8121,6 +8157,11 @@ export type NewInstanceRequest = {
 	maxMemoryMb?: number | null,
 	/**  Settings → Oyun defaults: extra JVM arguments. */
 	jvmArgs?: string | null,
+	/**
+	 *  "Özel" (CUSTOM-VER): another installer's version; its own game version and loader then
+	 *  stand in for `mc_version`, `loader` and `loader_version`.
+	 */
+	customVersion?: string | null,
 };
 
 export type NewsView = {

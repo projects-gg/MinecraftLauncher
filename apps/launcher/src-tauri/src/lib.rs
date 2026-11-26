@@ -356,6 +356,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::subservers::sub_servers_tester,
             commands::instances::minecraft_versions,
             commands::instances::loader_versions,
+            commands::custom_versions::custom_versions,
+            commands::custom_versions::custom_versions_open_folder,
             commands::launch::launch_instance,
             commands::launch::launch_cancel,
             commands::launch::game_kill,

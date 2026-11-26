@@ -8,6 +8,7 @@ pub mod cloud_afk;
 pub mod cloud_afk_feat;
 pub mod cloud_afk_plus;
 pub mod content;
+pub mod custom_versions;
 pub mod data;
 pub mod datapacks;
 pub mod discord;
