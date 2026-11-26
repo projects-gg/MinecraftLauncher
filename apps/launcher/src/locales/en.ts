@@ -23,6 +23,7 @@ import { enCrewPlus } from "./en-crew-plus";
 import { enCrewUi } from "./en-crew-ui";
 import { enCrewWave2 } from "./en-crew-wave2";
 import { enCrews } from "./en-crews";
+import { enCustomVer } from "./en-custom-ver";
 import { enDiscordPlace } from "./en-discord-place";
 import { enDiscover } from "./en-discover";
 import { enDisk } from "./en-disk";
@@ -351,6 +352,7 @@ export const en: DeepPartial<Strings> = {
   packOffer: enPackOffer,
   repairRb: enRepairRb,
   instAdd: enInstAdd,
+  customVer: enCustomVer,
   lib1: enLib1,
   fix2: enFix2,
   chat2: enChat2,
