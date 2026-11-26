@@ -494,8 +494,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
 
 /// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
 /// `skins`, `worlds`, `fastPacks`, `subServers`, `overlayJars`, `phoneAfk`, `voice`, `socNext`,
-/// `telemetry`, `packEdit`, `aotCache`, `aotLite`, `serverAccounts`, `iasSync` and `modRollback`,
-/// which stay off until Studio turns them on.
+/// `telemetry`, `packEdit`, `aotCache`, `aotLite`, `serverAccounts`, `iasSync`, `modRollback` and
+/// `customVersions`, which stay off until Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -604,6 +604,13 @@ pub struct Features {
     /// offered; versions already held stay held and can be undone.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub mod_rollback: bool,
+    /// "Özel Sürümler" (CUSTOM-VER): desktop launchers list the versions other installers put in
+    /// the data folder (OptiFine, Forge, Fabric, a modpack's own version) under "Özel" when a new
+    /// instance is made, and launch them through their `inheritsFrom` chain. Off by default;
+    /// written only when on. Off, nothing is listed and no such instance is made; instances made
+    /// while it was on still launch.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub custom_versions: bool,
 }
 
 impl Default for Features {
@@ -631,6 +638,7 @@ impl Default for Features {
             server_accounts: false,
             ias_sync: false,
             mod_rollback: false,
+            custom_versions: false,
         }
     }
 }
