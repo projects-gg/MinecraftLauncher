@@ -35,6 +35,8 @@ export function useOverlaySync() {
   const emoji = usePrefs((s) => s.chatEmoji);
   // One line per client tweak (features/overlay/tweaks.ts).
   const dialogFocus = usePrefs((s) => s.dialogFocus);
+  const passwordEye = usePrefs((s) => s.passwordEye);
+  const tooltipFit = usePrefs((s) => s.tooltipFit);
   const crewCalls = useSocialPrefs((s) => s.notifyCrewCalls);
   const crewChat = useSocialPrefs((s) => s.notifyCrewChat);
   // SOC-NEXT: a friend the player ignores sends no card (their conversation counts as muted).
@@ -75,7 +77,7 @@ export function useOverlaySync() {
       .configure({
         enabled,
         emoji,
-        tweaks: clientTweaks({ dialogFocus }),
+        tweaks: clientTweaks({ dialogFocus, passwordEye, tooltipFit }),
         reducedMotion,
         notify: {
           crewCalls,
@@ -97,6 +99,8 @@ export function useOverlaySync() {
     enabled,
     emoji,
     dialogFocus,
+    passwordEye,
+    tooltipFit,
     crewCalls,
     crewChat,
     chatMutes,

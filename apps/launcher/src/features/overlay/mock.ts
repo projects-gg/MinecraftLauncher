@@ -20,7 +20,7 @@ function connected(): boolean {
 let config: OverlayConfig = {
   enabled: true,
   emoji: true,
-  tweaks: { dialogFocus: true },
+  tweaks: { dialogFocus: true, passwordEye: true, tooltipFit: true },
   reducedMotion: false,
   notify: {
     crewCalls: true,

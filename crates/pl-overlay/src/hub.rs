@@ -135,15 +135,17 @@ impl OverlayConfig {
     }
 
     /// The choices kept in the launcher's data folder (`overlay.json`), none when the file cannot
-    /// be read. A file from before the client tweaks (DIALOG-FOCUS) has none: they come on with
-    /// their defaults, except for a player who had both other switches off, so the mod they took
-    /// out of their games stays out (the page's preferences move the same way, `migratePrefs`).
+    /// be read. A client tweak the file does not name came after it was written (every one in a
+    /// file from before DIALOG-FOCUS): it comes on with its default, except for a player who had
+    /// both other switches off, so the mod they took out of their games stays out and a new part
+    /// of it does not come in on its own (the page's preferences move the same way,
+    /// `migratePrefs`).
     pub fn from_saved(bytes: &[u8]) -> Option<Self> {
         let value: serde_json::Value = serde_json::from_slice(bytes).ok()?;
-        let has_tweaks = value.get("tweaks").is_some();
+        let saved_tweaks = value.get("tweaks").cloned();
         let mut config: Self = serde_json::from_value(value).ok()?;
-        if !has_tweaks && !config.enabled && !config.emoji {
-            config.tweaks = ClientTweaks::OFF;
+        if !config.enabled && !config.emoji {
+            config.tweaks = ClientTweaks::saved_or_off(saved_tweaks.as_ref());
         }
         Some(config)
     }
@@ -1356,11 +1358,19 @@ mod tests {
         let config: OverlayConfig =
             serde_json::from_str(r#"{"enabled":false,"emoji":false}"#).unwrap();
         assert!(config.tweaks.dialog_focus && config.wants_mod());
+        let config: OverlayConfig = serde_json::from_value(serde_json::json!({
+            "enabled": false,
+            "emoji": false,
+            "tweaks": { "dialogFocus": false, "passwordEye": false, "tooltipFit": false },
+        }))
+        .unwrap();
+        assert!(!config.wants_mod());
+        // TIP-EYE: a push that does not name a tweak has it on (the page names every one).
         let config: OverlayConfig = serde_json::from_str(
             r#"{"enabled":false,"emoji":false,"tweaks":{"dialogFocus":false}}"#,
         )
         .unwrap();
-        assert!(!config.wants_mod());
+        assert!(config.tweaks.password_eye && config.tweaks.tooltip_fit && config.wants_mod());
     }
 
     #[test]
@@ -1406,6 +1416,54 @@ mod tests {
         // Unreadable: none (the launcher's defaults).
         assert_eq!(OverlayConfig::from_saved(b"{"), None);
         assert_eq!(OverlayConfig::from_saved(b"null"), None);
+    }
+
+    #[test]
+    fn a_tweak_a_saved_file_does_not_name_stays_off_for_a_mod_taken_out() {
+        // TIP-EYE: a file from DIALOG-FOCUS names its one tweak. Both switches off: the newer
+        // tweaks start off, so the jar stays out of the games it was taken out of.
+        let config = OverlayConfig::from_saved(
+            br#"{"enabled":false,"emoji":false,"tweaks":{"dialogFocus":false}}"#,
+        )
+        .unwrap();
+        assert_eq!(config.tweaks, ClientTweaks::OFF);
+        assert!(!config.wants_mod());
+        // The tweak it names keeps the player's choice; the newer ones still start off.
+        let config = OverlayConfig::from_saved(
+            br#"{"enabled":false,"emoji":false,"tweaks":{"dialogFocus":true}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.tweaks,
+            ClientTweaks {
+                dialog_focus: true,
+                ..ClientTweaks::OFF
+            }
+        );
+        // Either switch on: the newer tweaks come with their default.
+        let config = OverlayConfig::from_saved(
+            br#"{"enabled":true,"emoji":false,"tweaks":{"dialogFocus":false}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.tweaks,
+            ClientTweaks {
+                dialog_focus: false,
+                ..ClientTweaks::ON
+            }
+        );
+        // A file that names every tweak keeps them as they are, any mix.
+        let mixed = OverlayConfig {
+            enabled: false,
+            emoji: false,
+            tweaks: ClientTweaks {
+                password_eye: false,
+                ..ClientTweaks::ON
+            },
+            ..OverlayConfig::default()
+        };
+        let saved = serde_json::to_vec(&mixed).unwrap();
+        assert_eq!(OverlayConfig::from_saved(&saved), Some(mixed));
     }
 
     #[test]
