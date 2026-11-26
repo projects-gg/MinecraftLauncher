@@ -8,6 +8,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.PreeditEvent;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -94,6 +95,14 @@ abstract class EditBoxMixin implements SecretBox {
     @Inject(method = "keyPressed", at = @At("HEAD"), cancellable = true)
     private void projects$noCopy(KeyEvent event, CallbackInfoReturnable<Boolean> result) {
         if (projects$hidden() && (event.isCopy() || event.isCut())) {
+            result.setReturnValue(true);
+        }
+    }
+
+    /** While hidden, text being composed with an input method is not drawn in clear either. */
+    @Inject(method = "preeditUpdated", at = @At("HEAD"), cancellable = true)
+    private void projects$noPreedit(PreeditEvent event, CallbackInfoReturnable<Boolean> result) {
+        if (projects$hidden()) {
             result.setReturnValue(true);
         }
     }

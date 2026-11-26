@@ -55,7 +55,7 @@ class TooltipPlaceTest {
     @Test
     void textHeightsAddUpAsTheGamesDo() {
         assertEquals(8, TooltipPlace.height(1));
-        assertEquals(258, TooltipPlace.height(26));
+        assertEquals(260, TooltipPlace.height(26));
         assertEquals(0, TooltipPlace.height(0));
     }
 

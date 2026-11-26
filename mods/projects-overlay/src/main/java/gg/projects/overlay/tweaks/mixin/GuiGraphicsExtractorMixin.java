@@ -30,6 +30,12 @@ abstract class GuiGraphicsExtractorMixin {
     @Shadow
     public abstract Matrix3x2fStack pose();
 
+    /** A tooltip that failed half way never leaves the next one a pose to take off. */
+    @Inject(method = "tooltip", at = @At("HEAD"))
+    private void projects$fresh(CallbackInfo info) {
+        projects$scaled = false;
+    }
+
     @WrapOperation(method = "tooltip", at = @At(value = "INVOKE",
         target = "Lnet/minecraft/client/gui/screens/inventory/tooltip/ClientTooltipPositioner;"
             + "positionTooltip(IIIIII)Lorg/joml/Vector2ic;"))

@@ -41,9 +41,13 @@ final class TooltipPlace {
         return Math.max(least, Math.min(at, most));
     }
 
-    /** The text height of a tooltip of {@code lines} lines of text, as the game adds it up. */
+    /**
+     * The text height of a tooltip of {@code lines} lines of text, as the game adds it up: one line is 8; more are
+     * {@link #LINE} each (26.1 and 26.2 count the last line's gap too, 26.3 does not: the larger, so a tooltip judged
+     * to fit beside its widget does in every version).
+     */
     static int height(int lines) {
-        return Math.max(0, lines * LINE - 2);
+        return lines <= 1 ? Math.max(0, lines) * 8 : lines * LINE;
     }
 
     /**
