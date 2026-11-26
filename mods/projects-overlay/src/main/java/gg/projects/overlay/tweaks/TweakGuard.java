@@ -1,6 +1,7 @@
 package gg.projects.overlay.tweaks;
 
 import java.util.function.BiConsumer;
+import java.util.function.Supplier;
 
 /**
  * One tweak's fail-safe ({@link ClientTweaks}): every step of the tweak runs through {@link #run}, and the first failure
@@ -42,6 +43,24 @@ public final class TweakGuard {
             throw fatal;
         } catch (Throwable problem) {
             fail(problem);
+        }
+    }
+
+    /**
+     * Runs one step that answers a value while the tweak is on; {@code otherwise} while it is off, and when the step
+     * fails, which turns the tweak off as {@link #run} does.
+     */
+    public <T> T call(Supplier<T> step, T otherwise) {
+        if (off) {
+            return otherwise;
+        }
+        try {
+            return step.get();
+        } catch (VirtualMachineError fatal) {
+            throw fatal;
+        } catch (Throwable problem) {
+            fail(problem);
+            return otherwise;
         }
     }
 

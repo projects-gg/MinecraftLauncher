@@ -1,0 +1,14 @@
+{
+  "required": false,
+  "package": "gg.projects.overlay.tweaks.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "EditBoxMixin",
+    "GuiGraphicsExtractorMixin",
+    "TooltipText",
+    "WidgetTooltipHolderMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

@@ -71,4 +71,26 @@ class TweakGuardTest {
         });
         assertFalse(guard.on());
     }
+
+    @Test
+    void aStepWithAnAnswerFallsBackWhenItFailsOrTheTweakIsOff() {
+        List<String> reported = new ArrayList<>();
+        TweakGuard guard = new TweakGuard("tooltip-fit", (id, problem) -> reported.add(id));
+        assertEquals("placed", guard.call(() -> "placed", "game"));
+        assertEquals("game", guard.call(() -> {
+            throw new IllegalStateException("a version moved a field");
+        }, "game"));
+        assertFalse(guard.on());
+        assertEquals(List.of("tooltip-fit"), reported);
+        // Off now: the step does not run at all.
+        int[] runs = {0};
+        assertEquals("game", guard.call(() -> {
+            runs[0]++;
+            return "placed";
+        }, "game"));
+        assertEquals(0, runs[0]);
+        assertThrows(OutOfMemoryError.class, () -> new TweakGuard("x", (id, problem) -> { }).call(() -> {
+            throw new OutOfMemoryError("fatal");
+        }, "game"));
+    }
 }

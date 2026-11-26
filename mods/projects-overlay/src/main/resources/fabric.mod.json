@@ -35,6 +35,10 @@
     {
       "config": "projects-overlay.keys.mixins.json",
       "environment": "client"
+    },
+    {
+      "config": "projects-overlay.tweaks.mixins.json",
+      "environment": "client"
     }
   ],
   "depends": {

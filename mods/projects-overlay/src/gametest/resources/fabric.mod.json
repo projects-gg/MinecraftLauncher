@@ -9,7 +9,9 @@
   "entrypoints": {
     "fabric-client-gametest": [
       "gg.projects.overlay.gametest.OverlaySmokeTest",
-      "gg.projects.overlay.gametest.DialogFocusTest"
+      "gg.projects.overlay.gametest.DialogFocusTest",
+      "gg.projects.overlay.gametest.PasswordEyeTest",
+      "gg.projects.overlay.gametest.TooltipFitTest"
     ]
   },
   "depends": {
