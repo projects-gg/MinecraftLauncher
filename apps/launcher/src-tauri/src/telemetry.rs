@@ -198,6 +198,14 @@ pub fn game_failed(code: &str) {
     }
 }
 
+/// A failure outside a launch, counted under its category only (the launcher's own update:
+/// `update.check`, `update.download`, `update.install`; UPD-QUIT).
+pub fn failed(category: &str) {
+    if let Some(recorder) = recorder() {
+        recorder.failed(category, now_ms());
+    }
+}
+
 /// Every voice state (`voice::AppPlatform::state`): a stay's quality is read from them.
 pub fn voice_state(state: &VoiceState) {
     let Some(recorder) = recorder() else {

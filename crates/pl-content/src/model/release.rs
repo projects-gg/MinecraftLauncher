@@ -172,6 +172,19 @@ impl ReleaseChannel {
             UpdateDecision::Available
         }
     }
+
+    /// Whether a downloaded `version` may still be installed by an install running `current` in
+    /// rollout `bucket`: the channel still offers exactly that version to it (UPD-QUIT). A stopped
+    /// rollout or a newer fix drops the held download; the newer one comes with the next look.
+    pub fn still_offers(&self, current: &semver::Version, bucket: u8, version: &str) -> bool {
+        let offered = matches!(
+            self.decide(current, bucket),
+            UpdateDecision::Available | UpdateDecision::Mandatory
+        );
+        offered
+            && self.target_version().is_some()
+            && self.target_version() == parse_version(version)
+    }
 }
 
 /// Stable rollout bucket in `0..100` for an install id: the first four bytes of
@@ -260,6 +273,25 @@ mod tests {
         );
         let below_half = counts[..50].iter().sum::<u32>();
         assert!((4_500..=5_500).contains(&below_half), "{below_half}");
+    }
+
+    /// UPD-QUIT: a held download installs on the way out only while the channel still offers that
+    /// very version to this install.
+    #[test]
+    fn a_held_update_is_still_offered_only_as_the_channel_says() {
+        let current = semver::Version::new(2, 2, 11);
+        assert!(channel("2.2.12", 100).still_offers(&current, 99, "2.2.12"));
+        // The rollout stopped, or this install is outside it.
+        assert!(!channel("2.2.12", 0).still_offers(&current, 0, "2.2.12"));
+        assert!(!channel("2.2.12", 50).still_offers(&current, 50, "2.2.12"));
+        // A newer fix replaced it: that one downloads with the next look.
+        assert!(!channel("2.2.13", 100).still_offers(&current, 10, "2.2.12"));
+        // Nothing newer than what runs.
+        assert!(!channel("2.2.11", 100).still_offers(&current, 10, "2.2.11"));
+        // Below `minVersion` the update is due whatever the rollout says.
+        let mut forced = channel("2.2.12", 0);
+        forced.min_version = Some("2.2.12".into());
+        assert!(forced.still_offers(&current, 99, "2.2.12"));
     }
 
     #[test]

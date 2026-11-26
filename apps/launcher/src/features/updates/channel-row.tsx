@@ -104,6 +104,8 @@ export function UpdateChannelRow() {
     }
     useBetaGate.getState().clear();
     setPref("updateChannel", "stable");
+    // A look at the stable channel at once: an update held from beta is dropped (UPD-QUIT).
+    void useUpdate.getState().check();
   };
 
   // While the answer is out the plate is on Beta (then "bakılıyor" if slow). One line in every
