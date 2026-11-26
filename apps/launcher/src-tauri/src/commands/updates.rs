@@ -89,6 +89,10 @@ static AFTER_RESTART: Mutex<Option<RestartInfo>> = Mutex::new(None);
 /// installs on the way out (UPD-QUIT).
 static PENDING_CHANNEL: Mutex<Option<String>> = Mutex::new(None);
 
+/// The channel the page looked at last (`update_check`): the player's choice now. A download held
+/// from another channel (the player left beta since) does not install on the way out.
+static LOOKED_CHANNEL: Mutex<Option<String>> = Mutex::new(None);
+
 /// How long quitting waits for the channel's answer before installing the held download anyway
 /// (as offline: UPD-STALE). The window is already gone meanwhile.
 #[cfg(windows)]
@@ -148,6 +152,7 @@ pub async fn update_check(
 ) -> CmdResult<UpdateStatus> {
     let current_text = app.package_info().version.to_string();
     let current = semver::Version::parse(&current_text).map_err(CmdError::internal)?;
+    *LOOKED_CHANNEL.lock() = Some(channel.clone());
     let Some((release, _)) = fetch_channel(&state, &channel).await else {
         return Ok(UpdateStatus {
             state: "unavailable".into(),
@@ -156,7 +161,9 @@ pub async fn update_check(
             notes: None,
         });
     };
-    let decision = release.decide(&current, rollout_bucket(&install_id(&state)));
+    let bucket = rollout_bucket(&install_id(&state));
+    drop_unoffered(&state, &channel, &release, &current, bucket);
+    let decision = release.decide(&current, bucket);
     let state_text = match decision {
         UpdateDecision::UpToDate => "upToDate",
         UpdateDecision::HeldBack => "heldBack",
@@ -172,6 +179,30 @@ pub async fn update_check(
             .notes_for(pl_lang::Lang::current())
             .map(str::to_owned),
     })
+}
+
+/// A held download that `channel`, just read, no longer offers to this install (a stopped rollout,
+/// a newer fix) or that came from another channel (the player left beta) is dropped, as the page
+/// drops its offer: quitting must not install it (UPD-QUIT).
+fn drop_unoffered(
+    state: &AppState,
+    channel: &str,
+    release: &ReleaseChannel,
+    current: &semver::Version,
+    bucket: u8,
+) {
+    let mut held_channel = PENDING_CHANNEL.lock();
+    let mut pending = state.pending_update.lock();
+    let Some((update, _)) = pending.as_ref() else {
+        return;
+    };
+    let offered = held_channel.as_deref() == Some(channel)
+        && release.still_offers(current, bucket, &update.version);
+    if !offered {
+        tracing::info!(held = %update.version, channel, "a held update is no longer offered: dropped");
+        *pending = None;
+        *held_channel = None;
+    }
 }
 
 /// BETA-GATE (`pl_social::beta`): where the launcher keeps when beta last let it in.
@@ -486,6 +517,9 @@ pub(crate) async fn install_on_quit(app: &AppHandle) {
     let Some(channel) = PENDING_CHANNEL.lock().clone() else {
         return;
     };
+    if LOOKED_CHANNEL.lock().as_deref() != Some(channel.as_str()) {
+        return;
+    }
     let Some(version) = state
         .pending_update
         .lock()
@@ -497,6 +531,11 @@ pub(crate) async fn install_on_quit(app: &AppHandle) {
     let Ok(current) = semver::Version::parse(&app.package_info().version.to_string()) else {
         return;
     };
+    // Out of sight at once (the tray's "Çıkış" leaves the window up): the page starts nothing
+    // while the channel is asked.
+    if let Some(window) = app.get_webview_window("main") {
+        crate::shell::hide_main_window(&window);
+    }
     if let Ok(Some((release, _))) =
         tokio::time::timeout(QUIT_LOOK, fetch_channel(&state, &channel)).await
         && !release.still_offers(&current, rollout_bucket(&install_id(&state)), &version)
@@ -508,6 +547,12 @@ pub(crate) async fn install_on_quit(app: &AppHandle) {
         );
         return;
     }
+    // The player may have come back meanwhile (a second launch, the tray icon): a game being
+    // prepared keeps the update for a later quit; a window on screen again restarts into it.
+    if game_active(&state) {
+        return;
+    }
+    let reopened = window_on_screen(app);
     let Some((update, bytes)) = state.pending_update.lock().take() else {
         return;
     };
@@ -520,17 +565,16 @@ pub(crate) async fn install_on_quit(app: &AppHandle) {
         version: update.version.clone(),
         notes,
         afk_accounts: Vec::new(),
-        window_visible: false,
+        window_visible: reopened,
         route: None,
     };
     write_note(&path, &note).await;
-    // `std::process::exit` follows: what the plugins and the exit event would save goes now, and
-    // the tray icon leaves with the window rather than lingering until hovered.
+    // `std::process::exit` follows: what the window-state plugin and the exit event would save
+    // goes now (the updater's own last step clears the tray icon and the windows).
     save_window_state(app);
     crate::telemetry::flush();
-    let _ = app.remove_tray_by_id(crate::shell::TRAY_ID);
-    tracing::info!(%version, "installing the held update on the way out");
-    let failed = install(app, update.restart_after_install(false), bytes).await;
+    tracing::info!(%version, reopened, "installing the held update on the way out");
+    let failed = install(app, update.restart_after_install(reopened), bytes).await;
     tracing::warn!(error = %failed.details, "the update could not be installed on the way out");
     crate::telemetry::failed("update.install");
     pl_data::restart::discard(&path);

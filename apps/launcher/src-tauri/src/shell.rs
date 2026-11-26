@@ -77,7 +77,7 @@ fn saved_main_window(app: &tauri::App) -> Option<(tauri::PhysicalSize<u32>, bool
 /// its minimized size: a 160 × 28 window, shown like that the next time and saved like that at
 /// exit. Asking tao to minimize a window that already is minimized changes nothing on screen and
 /// gives tao the flag, with which it leaves the style alone.
-fn hide_main_window(window: &tauri::WebviewWindow) {
+pub(crate) fn hide_main_window(window: &tauri::WebviewWindow) {
     #[cfg(windows)]
     {
         if window.is_minimized().unwrap_or(false) {
@@ -312,6 +312,9 @@ pub(crate) fn quit(app: &AppHandle) {
 
 /// [`quit`], telling the running game's overlay why the launcher goes (`reason`).
 fn quit_for(app: &AppHandle, reason: pl_overlay::protocol::ByeReason) {
+    if QUITTING.swap(true, Ordering::SeqCst) {
+        return;
+    }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         // World sharing first (HOST1): the mod hears `host-stop{launcher-exit}` while its bridge
@@ -390,6 +393,9 @@ static CLOSE_TO_TRAY: AtomicBool = AtomicBool::new(false);
 
 /// The quit that waits for jobs to end ([`CloseAction::HideUntilDone`]), by number; 0: none.
 static QUIT_WAIT: AtomicU64 = AtomicU64::new(0);
+/// A quit is under way ([`quit_for`]): a second one (the tray's "Çıkış" again) starts nothing, so
+/// its exit cannot cut the first one's steps short (an update installing on the way out).
+static QUITTING: AtomicBool = AtomicBool::new(false);
 static NEXT_QUIT_WAIT: AtomicU64 = AtomicU64::new(1);
 
 /// Hears the page's close choice (call once, in setup, before the page runs).
@@ -510,7 +516,7 @@ pub fn quit_pending() -> bool {
 
 /// The tray icon's id and the first line of its tooltip.
 #[cfg(desktop)]
-pub(crate) const TRAY_ID: &str = "main";
+const TRAY_ID: &str = "main";
 #[cfg(desktop)]
 const TRAY_TITLE: &str = "Projects Launcher";
 
