@@ -296,6 +296,18 @@ impl Recorder {
         });
     }
 
+    /// A failure outside a launch and a game (the launcher's own update: `update.download`,
+    /// UPD-QUIT), counted under its category only, with the next write.
+    pub fn failed(&self, category: &str, now_ms: i64) {
+        self.count(now_ms, false, |inner| {
+            inner
+                .stored
+                .ledger
+                .counts
+                .add_fail(scrub::category(category));
+        });
+    }
+
     /// A game ended; `aot`: Java's AOT cache in its start. The games that could have a cache, by
     /// what they did with it, are what crashes with each are measured against (TELEM-JVM).
     pub fn game_ran(&self, aot: AotUse, now_ms: i64) {
@@ -584,6 +596,21 @@ mod tests {
                 .as_array()
                 .is_none_or(|items| items.iter().all(|item| item["k"] != "game"))
         }));
+    }
+
+    /// UPD-QUIT: a failure outside a launch (the launcher's own update) counts under its category
+    /// only: no launch, no crash.
+    #[test]
+    fn a_failure_outside_a_launch_counts_only_its_category() {
+        let dir = tempfile::tempdir().unwrap();
+        let recorder = on(dir.path());
+        recorder.failed("update.download", 2_000);
+        recorder.failed("update.download", 2_500);
+        let out = recorder.take_daily(&facts(), 21 * HOUR_MS).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&out.json).unwrap();
+        assert_eq!(value["day"]["launches"], 0);
+        assert_eq!(value["day"]["crashes"], 0);
+        assert_eq!(value["fail"]["update.download"], 2);
     }
 
     #[test]

@@ -326,6 +326,10 @@ fn quit_for(app: &AppHandle, reason: pl_overlay::protocol::ByeReason) {
             state.afk.cancel_bulk();
             state.afk.stop_all().await;
         }
+        // UPD-QUIT: a downloaded update installs on the way out when no game runs (it ends the
+        // process itself; it returns when nothing was installed).
+        #[cfg(windows)]
+        crate::commands::updates::install_on_quit(&app).await;
         crate::commands::launch::detach_running(&state);
         app.exit(0);
     });
@@ -506,7 +510,7 @@ pub fn quit_pending() -> bool {
 
 /// The tray icon's id and the first line of its tooltip.
 #[cfg(desktop)]
-const TRAY_ID: &str = "main";
+pub(crate) const TRAY_ID: &str = "main";
 #[cfg(desktop)]
 const TRAY_TITLE: &str = "Projects Launcher";
 
