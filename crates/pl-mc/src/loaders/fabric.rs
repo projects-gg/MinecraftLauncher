@@ -66,6 +66,12 @@ pub(super) async fn ensure_profile(
                 let value =
                     prepare_profile(value, id, mc, &format!("{} profile", kind.display_name()))?;
                 write_profile(ctx, id, &value).await?;
+                // The launcher's mark: "Özel" (CUSTOM-VER) leaves its own profiles out.
+                if let Err(error) =
+                    super::forge::mark_profile(&ctx.dirs, id, kind, mc, loader).await
+                {
+                    tracing::warn!(%error, %id, "could not mark the loader profile");
+                }
                 progress.loader(1, 1);
                 tracing::info!(%id, "loader profile written");
             }

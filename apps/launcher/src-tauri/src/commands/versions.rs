@@ -249,6 +249,18 @@ async fn switch_target(
     game_dir: &Path,
     minecraft: &str,
 ) -> CmdResult<SwitchTarget> {
+    // Another installer's version (CUSTOM-VER) is made for its own game version: a switch would
+    // quietly drop it (OptiFine), so none is offered.
+    if instance.custom_id().is_some() {
+        return Err(CmdError::new(
+            "OZEL-SURUM",
+            pick(
+                "Özel sürümlü bir kurulumun sürümü değiştirilemez. Başka sürüm için yeni bir kurulum oluştur.",
+                "An instance with a custom version can't switch versions. Create a new instance for another version.",
+            ),
+            "custom version instance",
+        ));
+    }
     if instance.managed_pack.is_some() {
         let snapshot = cached_or_fresh(state).await.ok_or_else(|| {
             CmdError::new(

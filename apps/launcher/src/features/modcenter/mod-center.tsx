@@ -264,7 +264,8 @@ export function ModCenter({
               instance={instance}
               onSwitch={(minecraft) => onSwitchVersion(minecraft)}
             />
-          ) : (
+          ) : instance.customVersion ? null : (
+            // Another installer's version (CUSTOM-VER) stays what it is: no pack in its place.
             <EmptyInstanceOffer instance={instance} empty={instance.mods.length === 0} />
           )}
           <motion.div

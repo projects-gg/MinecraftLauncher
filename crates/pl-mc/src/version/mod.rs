@@ -3,6 +3,7 @@
 //!
 //! Typical flow: [`load_manifest`] → [`resolve_version`] → `install::install_version`.
 
+pub mod custom;
 pub mod manifest;
 pub mod maven;
 pub mod model;

@@ -4,7 +4,10 @@
 //! checking again that nothing uses them. Everything removed is downloaded again when needed.
 //!
 //! What is used starts from [`GameRef`]s (the active version of every instance and of every parked
-//! version set) and follows `inheritsFrom`. A used version keeps its folder, its natives, every
+//! version set, or the other installer's version it launches) and follows `inheritsFrom`. A version
+//! another installer wrote that the launcher could not write again (OptiFine's: it inherits from
+//! another version but is neither the launcher's loader profile nor named like one) is used too,
+//! instance or not: neither it nor the files it lists come back from any server (CUSTOM-VER). A used version keeps its folder, its natives, every
 //! library variant it lists (whatever the platform), the files its Forge/NeoForge installer
 //! produced (`projects-loader.json`), its asset index with every object in it, its log
 //! configuration and its Java runtime.
@@ -35,7 +38,9 @@ use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
 use crate::error::{Error, Result};
-use crate::loaders::{LoaderKind, installer_outputs_blocking, loader_profile_id};
+use crate::loaders::{
+    LoaderKind, PROFILE_MARKER, installer_outputs_blocking, loader_profile_id, profile_of,
+};
 use crate::paths::DataDirs;
 use crate::version::{Library, VersionJson, component_major};
 
@@ -52,6 +57,8 @@ pub struct GameRef {
     pub loader: Option<LoaderKind>,
     /// `None`: not chosen yet; every profile built on `minecraft` stays.
     pub loader_version: Option<String>,
+    /// Another installer's version the instance launches instead (CUSTOM-VER).
+    pub custom: Option<String>,
 }
 
 impl GameRef {
@@ -64,7 +71,18 @@ impl GameRef {
             minecraft: minecraft.into(),
             loader,
             loader_version: loader_version.filter(|v| !v.trim().is_empty()),
+            custom: None,
         }
+    }
+
+    /// The instance launches another installer's version `id` (CUSTOM-VER).
+    #[must_use]
+    pub fn with_custom(mut self, id: Option<&str>) -> Self {
+        self.custom = id
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .map(str::to_owned);
+        self
     }
 }
 
@@ -698,6 +716,9 @@ fn used_versions(
             .collect()
     };
     for game in refs {
+        if let Some(custom) = &game.custom {
+            used.insert(custom.clone());
+        }
         let minecraft = game.minecraft.trim();
         if minecraft.is_empty() {
             continue;
@@ -714,6 +735,13 @@ fn used_versions(
             _ => used.extend(profiles_of(minecraft)),
         }
     }
+    // Other installers' versions the launcher could not write again (CUSTOM-VER).
+    used.extend(
+        versions
+            .iter()
+            .filter(|(id, version)| irreplaceable(id, version))
+            .map(|(id, _)| id.clone()),
+    );
     // Everything a used version inherits from, or takes its game jar from.
     let mut stack: Vec<String> = used.iter().cloned().collect();
     while let Some(id) = stack.pop() {
@@ -730,6 +758,25 @@ fn used_versions(
         }
     }
     used
+}
+
+/// A version another installer wrote that the launcher could not write again (CUSTOM-VER): it
+/// inherits from another version, has no mark of the launcher's and is not named as the launcher
+/// names its loader profiles on that version (OptiFine's `1.21.11-OptiFine_HD_U_J9`).
+fn irreplaceable(id: &str, version: &VersionDir) -> bool {
+    if version.linked {
+        return false;
+    }
+    let Some(parent) = version
+        .json
+        .as_ref()
+        .and_then(|json| json.inherits_from.as_deref())
+        .map(str::trim)
+        .filter(|parent| !parent.is_empty())
+    else {
+        return false;
+    };
+    !version.dir.join(PROFILE_MARKER).is_file() && profile_of(id, parent).is_none()
 }
 
 /// Every file a library entry may refer to, relative to `libraries/` (all platforms and

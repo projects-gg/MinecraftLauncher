@@ -24,6 +24,7 @@ import { settingsChanged, useDrafts } from "@/stores/drafts";
 import { isOpening, useLaunch } from "@/stores/launch";
 import { ownLaunch } from "@/stores/launch-owner";
 import { usePrefs } from "@/stores/prefs";
+import { gameLine } from "./custom-version";
 import { type InstanceTab, instanceTab, type ModsSection } from "./instance-tab";
 import { OverviewTab } from "./overview/overview-tab";
 import { createDesktopShortcut } from "./shortcut";
@@ -165,9 +166,8 @@ export function InstancePage() {
               (projects-taste, SMALL11). */}
           <p className="mt-0.5 flex flex-wrap gap-x-3 text-[12.5px] text-ash-300 tabular-nums">
             {data.managed ? <span>{t("instances.managed")}</span> : null}
-            <span>
-              {loader} {data.mcVersion}
-            </span>
+            {/* CUSTOM-VER: another installer's version names itself. */}
+            <span>{gameLine(data, () => loader)}</span>
             {data.playTimeSecs > 0 ? (
               <span>{t("play.playTime", { time: formatDuration(data.playTimeSecs) })}</span>
             ) : null}
@@ -179,16 +179,19 @@ export function InstancePage() {
           </p>
         </div>
         <div className="flex shrink-0 gap-1.5">
-          <Tooltip content={t("modCenter.version.change")} side="bottom">
-            <Button
-              variant="ghost"
-              icon={<ArrowsLeftRight size={16} />}
-              aria-label={t("modCenter.version.changeFor", { version: data.mcVersion })}
-              onClick={() => openVersions()}
-            >
-              {data.mcVersion}
-            </Button>
-          </Tooltip>
+          {/* Another installer's version is made for its own game version: no switch (CUSTOM-VER). */}
+          {data.customVersion ? null : (
+            <Tooltip content={t("modCenter.version.change")} side="bottom">
+              <Button
+                variant="ghost"
+                icon={<ArrowsLeftRight size={16} />}
+                aria-label={t("modCenter.version.changeFor", { version: data.mcVersion })}
+                onClick={() => openVersions()}
+              >
+                {data.mcVersion}
+              </Button>
+            </Tooltip>
+          )}
           <Button
             variant="ghost"
             icon={<FolderOpen size={16} />}

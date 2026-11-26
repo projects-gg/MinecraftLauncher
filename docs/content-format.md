@@ -606,6 +606,22 @@ news feed, the launcher's built-in recommended Minecraft version.
   and can be undone. Works without `features.packEdit`. Writers omit it while it is `false`;
   launchers that do not know the field ignore it. Publishing it needs a Studio that knows the field
   (REPAIR-RB).
+- `features.customVersions`: "Özel Sürümler" (CUSTOM-VER): desktop launchers list, under "Özel" in
+  "Yeni Kurulum", the versions other installers put in the data folder
+  (`versions/<id>/<id>.json`: OptiFine, the Forge, NeoForge, Fabric or Quilt installers, a
+  modpack's own version). Left out: Mojang's versions, the launcher's own loader profiles (their
+  `projects-loader.json`) and every version an instance or a kept version set runs through its
+  mod loader; a version whose `inheritsFrom` chain does not reach a Mojang version is not listed.
+  An instance made from one launches that version (its chain merged as the official launcher
+  does; the Mojang levels are checked and downloaded as usual); its Minecraft version is the
+  chain's Mojang version and its mod loader the one the chain's libraries carry (none for
+  OptiFine). Files the installer put in place and no server offers (OptiFine's own jars) are
+  never replaced or cleaned up; when one is missing the launch stops and says to install the
+  version again. While it is on, the launcher writes a minimal `launcher_profiles.json` to the
+  data folder when it has none, since installers refuse a folder without one. Off by default:
+  while it is `false` (or missing) nothing is listed and no such instance is made; instances made
+  while it was on still launch. Writers omit it while it is `false`; launchers that do not know the
+  field ignore it. Publishing it needs a Studio that knows the field (CUSTOM-VER).
 - `newsFeed`: the Discord bot's feed ([News feed (Discord bot)](#news-feed-discord-bot)).
   `mirrors`: 1–4 distinct `https://` bases with a host, ending in `/`, without credentials, query
   or fragment. `keys`: 1–4 distinct `{ keyId, publicKey }`, `publicKey` the base64 of a 32-byte

@@ -25,6 +25,7 @@ import { trCrewPlus } from "./tr-crew-plus";
 import { trCrewUi } from "./tr-crew-ui";
 import { trCrewWave2 } from "./tr-crew-wave2";
 import { trCrews } from "./tr-crews";
+import { trCustomVer } from "./tr-custom-ver";
 import { trDiscordPlace } from "./tr-discord-place";
 import { trDiscover } from "./tr-discover";
 import { trDisk } from "./tr-disk";
@@ -144,6 +145,7 @@ export const tr = {
   packOffer: trPackOffer,
   repairRb: trRepairRb,
   instAdd: trInstAdd,
+  customVer: trCustomVer,
   lib1: trLib1,
   fix2: trFix2,
   chat2: trChat2,

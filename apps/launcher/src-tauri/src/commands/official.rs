@@ -562,9 +562,11 @@ async fn create_official(
             .collect();
         // A vanilla "Projects" (made before any pack was published) simply starts following
         // the pack: it has no mods that could clash with the pack's.
+        // One that launches another installer's version (CUSTOM-VER, OptiFine's is Vanilla) is
+        // not adopted: it keeps its version and is renamed like a modded one.
         if let Some(vanilla) = unmanaged
             .iter()
-            .find(|i| i.loader.kind == LoaderKind::Vanilla)
+            .find(|i| i.loader.kind == LoaderKind::Vanilla && i.custom_id().is_none())
         {
             let mut adopted = (*vanilla).clone();
             adopted.managed_pack = Some(ManagedPack {

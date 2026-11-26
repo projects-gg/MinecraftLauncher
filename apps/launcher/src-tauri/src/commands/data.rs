@@ -365,10 +365,13 @@ fn bundle_entries(
 }
 
 fn instance_report(instance: &Instance, game_dir: &Path) -> InstanceReport {
-    let loader = match &instance.loader.version {
+    let mut loader = match &instance.loader.version {
         Some(version) => format!("{:?} {version}", instance.loader.kind),
         None => format!("{:?}", instance.loader.kind),
     };
+    if let Some(custom) = instance.custom_id() {
+        loader.push_str(&format!(", özel sürüm {custom}"));
+    }
     InstanceReport {
         name: instance.name.clone(),
         id: instance.id.clone(),

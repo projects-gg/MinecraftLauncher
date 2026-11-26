@@ -59,6 +59,36 @@ pub(crate) fn installer_outputs_blocking(dirs: &DataDirs, id: &str) -> Option<Ve
     Some(marker.files.into_iter().map(|file| file.path).collect())
 }
 
+/// The launcher's mark in a loader profile's folder: Forge and NeoForge keep their installer's
+/// files in it, Fabric and Quilt an empty list (CUSTOM-VER tells the launcher's profiles apart
+/// from other installers' versions by it).
+pub(crate) const PROFILE_MARKER: &str = marker::MARKER_FILE;
+
+/// [`mark_profile`], blocking (a scan of the versions folder).
+pub(crate) fn mark_profile_blocking(
+    dirs: &DataDirs,
+    id: &str,
+    kind: LoaderKind,
+    minecraft: &str,
+    loader: &str,
+) -> Result<()> {
+    let marker = Marker::new(kind, minecraft, loader, Vec::new());
+    let bytes =
+        serde_json::to_vec_pretty(&marker).map_err(|e| Error::json(marker::MARKER_FILE, e))?;
+    crate::paths::write_atomic_blocking(&dirs.version_dir(id)?.join(marker::MARKER_FILE), &bytes)
+}
+
+/// Marks a Fabric or Quilt profile the launcher wrote (it has no installer files).
+pub(crate) async fn mark_profile(
+    dirs: &DataDirs,
+    id: &str,
+    kind: LoaderKind,
+    minecraft: &str,
+    loader: &str,
+) -> Result<()> {
+    marker::write(dirs, id, &Marker::new(kind, minecraft, loader, Vec::new())).await
+}
+
 /// What is being installed.
 #[derive(Debug, Clone)]
 pub(crate) struct Target {

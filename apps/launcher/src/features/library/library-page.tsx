@@ -193,8 +193,14 @@ export function LibraryPage() {
 
   const filtered = useMemo(() => {
     const matches = (instances ?? []).filter((i) =>
-      // The name, the version, the group, and the loader's name ("fabric" finds Fabric ones).
-      matchesQuery([i.name, i.mcVersion, t(`loaders.${i.loader}`), i.group ?? ""].join(" "), query),
+      // The name, the version, the group, the loader's name ("fabric" finds Fabric ones) and
+      // another installer's version ("optifine" finds OptiFine ones, CUSTOM-VER).
+      matchesQuery(
+        [i.name, i.mcVersion, t(`loaders.${i.loader}`), i.group ?? "", i.customVersion ?? ""].join(
+          " ",
+        ),
+        query,
+      ),
     );
     return sortInstances(matches, sort);
   }, [instances, query, sort, t]);

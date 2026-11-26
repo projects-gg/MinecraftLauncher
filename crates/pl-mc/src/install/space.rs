@@ -272,6 +272,21 @@ impl GameFiles {
         })
     }
 
+    /// What launching another installer's version `id` (CUSTOM-VER) installs: its chain as it is
+    /// (no loader of the launcher's to add).
+    pub async fn for_custom(
+        ctx: &McContext,
+        id: &str,
+        java: &JavaSetting,
+        manifest: Option<&VersionManifest>,
+    ) -> Result<Self> {
+        Ok(Self {
+            resolved: resolve_version(ctx, id, manifest).await?,
+            loader_extra: 0,
+            java: java.clone(),
+        })
+    }
+
     /// Every byte the install could download, as if no file were on disk (only an installed Java
     /// runtime's marker is read). A disk with room for this needs no closer look. `None` when the
     /// version does not tell (no total size for its asset objects).

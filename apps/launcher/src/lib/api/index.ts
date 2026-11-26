@@ -38,6 +38,7 @@ import type {
   AfkLogLine,
   AppInfo,
   ContentStatus,
+  CustomVersions,
   DeepLink,
   DroppedFile,
   DropResult,
@@ -79,6 +80,10 @@ export interface LauncherApi {
   restoreInstance(trashId: string): Promise<InstanceSummary>;
   minecraftVersions(): Promise<McVersion[]>;
   loaderVersions(loader: LoaderKind, mcVersion: string): Promise<LoaderVersion[]>;
+  /** CUSTOM-VER: other installers' versions in the data folder (empty while the switch is off). */
+  customVersions(): Promise<CustomVersions>;
+  /** CUSTOM-VER: opens the data folder installers are pointed at. */
+  openCustomVersionsFolder(): Promise<void>;
   accounts(): Promise<AccountSummary[]>;
   addOfflineAccount(name: string): Promise<AccountSummary>;
   /**

@@ -134,6 +134,7 @@ function instance(v: InstanceView): InstanceSummary {
     autoJoin: v.autoJoin ?? undefined,
     group: v.group ?? undefined,
     createdAt: v.createdAt,
+    customVersion: v.customVersion ?? undefined,
   };
 }
 
@@ -289,6 +290,7 @@ function home(v: HomeView): HomeContent {
     packEdit: v.packEdit,
     serverAccounts: v.serverAccounts,
     iasSync: v.iasSync,
+    customVersions: v.customVersions,
     offline: v.offline,
   };
 }
@@ -643,6 +645,7 @@ export const tauriApi: LauncherApi = {
               ? spec.maxMemoryMb
               : (storedPrefs().defaultMaxMemoryMb ?? null),
           jvmArgs: (spec.jvmArgs ?? storedPrefs().defaultJvmArgs) || null,
+          customVersion: spec.customVersion ?? null,
         }),
       ),
     );
@@ -693,6 +696,22 @@ export const tauriApi: LauncherApi = {
   },
   async legacyImport(request) {
     return ok(commands.legacyImport(request));
+  },
+  async customVersions() {
+    const list = await ok(commands.customVersions());
+    return {
+      versions: list.versions.map((v) => ({
+        id: v.id,
+        minecraft: v.minecraft,
+        loader: v.loader,
+        loaderVersion: v.loaderVersion ?? undefined,
+        kind: v.kind,
+      })),
+      folder: list.folder,
+    };
+  },
+  async openCustomVersionsFolder() {
+    await ok(commands.customVersionsOpenFolder());
   },
   async minecraftVersions() {
     return (await ok(commands.minecraftVersions())).map((v) => ({

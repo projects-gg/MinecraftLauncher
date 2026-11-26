@@ -21,6 +21,7 @@ import { fixKeysNow } from "@/features/modhealth/key-clash";
 import { keyClashText } from "@/features/modhealth/key-texts";
 import type { ContentKind, InstanceDetail } from "@/lib/api";
 import { formatBytes, listFormat } from "@/lib/format";
+import { customName } from "../custom-version";
 import { incomingNames, useIncomingMods } from "../incoming-mods";
 
 type Health = "noMods" | "incoming" | "pending" | "failed" | "ok" | "warnings" | "blocked";
@@ -227,6 +228,18 @@ export function SidePanel({
 }) {
   const { t } = useTranslation();
   const modded = instance.loader !== "vanilla";
+  // CUSTOM-VER: another installer's version, named as players know it.
+  const custom = instance.customVersion
+    ? customName(
+        {
+          id: instance.customVersion,
+          minecraft: instance.mcVersion,
+          loader: instance.loader,
+          loaderVersion: instance.loaderVersion,
+        },
+        (kind) => t(`loaders.${kind}`),
+      )
+    : null;
   // Mods and shaders need a mod loader; resource packs work everywhere.
   const browse: Array<{ kind: ContentKind; icon: ReactNode }> = [
     ...(modded
@@ -245,6 +258,12 @@ export function SidePanel({
       {modded ? <ModHealth instance={instance} onShow={onOpenModCenter} /> : null}
       <dl>
         <Fact label={t("overview.facts.minecraft")}>{instance.mcVersion}</Fact>
+        {custom && !custom.friendly ? (
+          <Fact label={t("customVer.fact")}>{instance.customVersion}</Fact>
+        ) : custom?.friendly && !modded ? (
+          // OptiFine: its edition, as a loader's version is shown ("HD U J9").
+          <Fact label="OptiFine">{custom.detail}</Fact>
+        ) : null}
         {modded && instance.loaderVersion ? (
           <Fact label={t(`loaders.${instance.loader}`)}>{instance.loaderVersion}</Fact>
         ) : null}
