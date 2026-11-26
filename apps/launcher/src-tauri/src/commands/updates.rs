@@ -247,8 +247,18 @@ pub async fn update_download(
         ));
     };
     let endpoint = url.parse().map_err(CmdError::internal)?;
-    let updater = app
-        .updater_builder()
+    #[allow(unused_mut)]
+    let mut builder = app.updater_builder();
+    // Debug builds reading test mirrors also take a throwaway key's test bundle
+    // (`PROJECTS_UPDATER_TEST_KEY`: the updater public key's text, as in tauri.conf.json), so the
+    // install path runs end to end without the real key; release builds never read it.
+    #[cfg(debug_assertions)]
+    if crate::state::test_content_mirrors().is_some()
+        && let Ok(key) = std::env::var("PROJECTS_UPDATER_TEST_KEY")
+    {
+        builder = builder.pubkey(key.trim());
+    }
+    let updater = builder
         .endpoints(vec![endpoint])
         .map_err(CmdError::internal)?
         .build()
