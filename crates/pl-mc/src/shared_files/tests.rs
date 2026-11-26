@@ -722,3 +722,71 @@ fn an_interrupted_deletion_is_finished_next_time() {
     assert!(is_buried(".x.gone") && is_buried(".x.gone12"));
     assert!(!is_buried("x.gone") && !is_buried(".x.gone-a"));
 }
+
+#[test]
+fn other_installers_versions_stay_unless_the_launcher_writes_them_again() {
+    let fx = fixture();
+    // OptiFine's installer: a version on 1.20.1 with its own jar that no server offers.
+    write(
+        &fx.dirs.version_json("1.20.1-OptiFine_HD_U_I6").unwrap(),
+        br#"{"id":"1.20.1-OptiFine_HD_U_I6","inheritsFrom":"1.20.1","mainClass":"net.minecraft.launchwrapper.Launch",
+        "libraries":[{"name":"optifine:OptiFine:1.20.1_HD_U_I6"}]}"#,
+    );
+    write(
+        &fx.lib("optifine/OptiFine/1.20.1_HD_U_I6/OptiFine-1.20.1_HD_U_I6.jar"),
+        &[0u8; 30],
+    );
+    // The Fabric installer's profile, named as the launcher names its own: it can come back.
+    write(
+        &fx.dirs.version_json("fabric-loader-0.16.9-1.20.1").unwrap(),
+        br#"{"inheritsFrom":"1.20.1","mainClass":"net.fabricmc.loader.impl.launch.knot.KnotClient","libraries":[]}"#,
+    );
+    let refs = [fabric("1.21.1", "0.16.5")];
+    let found = scan(&fx.dirs, &refs, &later()).unwrap();
+    let offered = ids(&found);
+    assert!(!offered.contains(&"version:1.20.1-OptiFine_HD_U_I6"));
+    // The game version it inherits from stays with it.
+    assert!(!offered.contains(&"version:1.20.1"));
+    assert!(offered.contains(&"version:fabric-loader-0.16.9-1.20.1"));
+    assert!(
+        !removal_names(&fx, &refs, "libraries").contains(&"OptiFine-1.20.1_HD_U_I6.jar".to_owned())
+    );
+
+    // An instance that launches another installer's version keeps it, whatever its name.
+    let refs = [
+        fabric("1.21.1", "0.16.5"),
+        GameRef::new("1.20.1", Some(LoaderKind::Vanilla), None)
+            .with_custom(Some("fabric-loader-0.16.9-1.20.1")),
+    ];
+    let found = scan(&fx.dirs, &refs, &later()).unwrap();
+    assert!(!ids(&found).contains(&"version:fabric-loader-0.16.9-1.20.1"));
+}
+
+#[test]
+fn an_instance_on_another_installers_forge_keeps_its_unlisted_files() {
+    let fx = fixture();
+    // The Forge installer's own profile (no mark of the launcher's): its processors made files
+    // its JSON does not list, which only that installer makes again.
+    write(
+        &fx.dirs.version_json("1.21.1-forge-52.0.1").unwrap(),
+        br#"{"id":"1.21.1-forge-52.0.1","inheritsFrom":"1.21.1","mainClass":"net.minecraftforge.bootstrap.ForgeBootstrap",
+        "libraries":[{"name":"net.minecraftforge:forge:1.21.1-52.0.1:client","downloads":{"artifact":{"path":"net/minecraftforge/forge/1.21.1-52.0.1/forge-1.21.1-52.0.1-client.jar","url":""}}}]}"#,
+    );
+    write(
+        &fx.lib("net/minecraftforge/forge/1.21.1-52.0.1/forge-1.21.1-52.0.1-client.jar"),
+        &[0u8; 40],
+    );
+    write(
+        &fx.lib("net/minecraft/client/1.21.1-srg/client-1.21.1-srg.jar"),
+        &[0u8; 41],
+    );
+    let refs = [
+        GameRef::new("1.21.1", Some(LoaderKind::Forge), Some("52.0.1".into()))
+            .with_custom(Some("1.21.1-forge-52.0.1")),
+    ];
+    let found = scan(&fx.dirs, &refs, &later()).unwrap();
+    assert!(!ids(&found).contains(&"version:1.21.1-forge-52.0.1"));
+    // What it needs cannot be told completely: no library is offered at all.
+    assert!(!ids(&found).contains(&"libraries"));
+    assert!(!found.complete);
+}

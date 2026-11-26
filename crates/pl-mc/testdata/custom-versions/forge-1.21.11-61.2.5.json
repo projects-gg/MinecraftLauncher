@@ -1,0 +1,59 @@
+{
+  "id": "1.21.11-forge-61.2.5",
+  "time": "2026-11-03T01:45:13Z",
+  "releaseTime": "2026-11-03T01:45:13Z",
+  "inheritsFrom": "1.21.11",
+  "type": "release",
+  "logging": {},
+  "mainClass": "net.minecraftforge.bootstrap.ForgeBootstrap",
+  "libraries": [
+    {
+      "name": "net.minecraftforge:forge:1.21.11-61.2.5:universal",
+      "downloads": {
+        "artifact": {
+          "path": "net/minecraftforge/forge/1.21.11-61.2.5/forge-1.21.11-61.2.5-universal.jar",
+          "url": "https://maven.minecraftforge.net/net/minecraftforge/forge/1.21.11-61.2.5/forge-1.21.11-61.2.5-universal.jar",
+          "sha1": "3d2efa5bd1b25741adfea685f1bdb0d283769071",
+          "size": 2934649
+        }
+      }
+    },
+    {
+      "name": "net.minecraftforge:forge:1.21.11-61.2.5:client",
+      "downloads": {
+        "artifact": {
+          "path": "net/minecraftforge/forge/1.21.11-61.2.5/forge-1.21.11-61.2.5-client.jar",
+          "url": "",
+          "sha1": "f2a31288eeb181a9004f90c8921fe76196e72bf1",
+          "size": 32624851
+        }
+      }
+    },
+    {
+      "name": "net.minecraftforge:JarJarFileSystems:0.4.2",
+      "downloads": {
+        "artifact": {
+          "path": "net/minecraftforge/JarJarFileSystems/0.4.2/JarJarFileSystems-0.4.2.jar",
+          "url": "https://maven.minecraftforge.net/net/minecraftforge/JarJarFileSystems/0.4.2/JarJarFileSystems-0.4.2.jar",
+          "sha1": "b47957ee0163282fc1116ab71e56c3d5e305d786",
+          "size": 33497
+        }
+      }
+    },
+    {
+      "name": "net.minecraftforge:fmlloader:1.21.11-61.2.5",
+      "downloads": {
+        "artifact": {
+          "path": "net/minecraftforge/fmlloader/1.21.11-61.2.5/fmlloader-1.21.11-61.2.5.jar",
+          "url": "https://maven.minecraftforge.net/net/minecraftforge/fmlloader/1.21.11-61.2.5/fmlloader-1.21.11-61.2.5.jar",
+          "sha1": "03971e08feede9cc4f66c5b18111b7b5481c6c6a",
+          "size": 265393
+        }
+      }
+    }
+  ],
+  "arguments": {
+    "game": ["--launchTarget", "forge_client"],
+    "jvm": ["-Djava.net.preferIPv6Addresses=system"]
+  }
+}

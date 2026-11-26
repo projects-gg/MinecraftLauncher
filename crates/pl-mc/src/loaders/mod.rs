@@ -23,12 +23,12 @@ use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 
-pub(crate) use forge::installer_outputs_blocking;
+pub(crate) use forge::{PROFILE_MARKER, installer_outputs_blocking, mark_profile_blocking};
 pub use listing::{LoaderVersion, list_loader_versions, supported_minecraft_versions};
 
 use crate::error::{Error, Result};
 use crate::install::{InstallOptions, McContext};
-use crate::paths::safe_name;
+use crate::paths::{DataDirs, safe_name};
 use listing::NEOFORGE_LEGACY_MC;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -152,6 +152,51 @@ pub fn loader_profile_id(
     Ok(id)
 }
 
+/// The mod loader and loader version whose profile the launcher names `id` on top of Minecraft
+/// `minecraft` (the profile's `inheritsFrom`): exactly what [`loader_profile_id`] gives back,
+/// never a look-alike (`1.21.1-forge-52.0.16-OptiFine` is none).
+pub fn profile_of(id: &str, minecraft: &str) -> Option<(LoaderKind, String)> {
+    let mc = minecraft.trim();
+    let candidates = [
+        (
+            LoaderKind::Fabric,
+            id.strip_prefix("fabric-loader-")
+                .and_then(|rest| rest.strip_suffix(mc))
+                .and_then(|rest| rest.strip_suffix('-')),
+        ),
+        (
+            LoaderKind::Quilt,
+            id.strip_prefix("quilt-loader-")
+                .and_then(|rest| rest.strip_suffix(mc))
+                .and_then(|rest| rest.strip_suffix('-')),
+        ),
+        (
+            LoaderKind::Forge,
+            id.strip_prefix(mc)
+                .and_then(|rest| rest.strip_prefix("-forge-")),
+        ),
+        (
+            LoaderKind::NeoForge,
+            if mc == NEOFORGE_LEGACY_MC {
+                id.strip_prefix(mc)
+                    .and_then(|rest| rest.strip_prefix("-neoforge-"))
+            } else {
+                id.strip_prefix("neoforge-")
+            },
+        ),
+    ];
+    candidates.into_iter().find_map(|(kind, loader)| {
+        let loader = loader.filter(|l| !l.is_empty())?;
+        (loader_profile_id(kind, mc, loader).ok()? == id).then(|| (kind, loader.to_owned()))
+    })
+}
+
+/// Whether the launcher wrote the loader profile `id` (its mark in the folder; CUSTOM-VER).
+pub fn launcher_wrote(dirs: &DataDirs, id: &str) -> bool {
+    dirs.version_dir(id)
+        .is_ok_and(|dir| dir.join(PROFILE_MARKER).is_file())
+}
+
 /// Install `kind` `loader_version` for Minecraft `mc_version` and everything a launch needs;
 /// returns the version id to launch (a profile that `inheritsFrom` the vanilla version).
 ///
@@ -249,6 +294,37 @@ mod tests {
     use super::*;
     use crate::paths::DataDirs;
     use crate::platform::{Arch, Os, Platform};
+
+    #[test]
+    fn profile_names_are_read_back_exactly() {
+        let read = |id: &str, mc: &str| profile_of(id, mc);
+        assert_eq!(
+            read("fabric-loader-0.20.1-1.21.11", "1.21.11"),
+            Some((LoaderKind::Fabric, "0.20.1".to_owned()))
+        );
+        assert_eq!(
+            read("quilt-loader-0.30.1-26.3", "26.3"),
+            Some((LoaderKind::Quilt, "0.30.1".to_owned()))
+        );
+        assert_eq!(
+            read("1.21.11-forge-61.2.5", "1.21.11"),
+            Some((LoaderKind::Forge, "61.2.5".to_owned()))
+        );
+        assert_eq!(
+            read("neoforge-21.11.38-beta", "1.21.11"),
+            Some((LoaderKind::NeoForge, "21.11.38-beta".to_owned()))
+        );
+        assert_eq!(
+            read("1.20.1-neoforge-47.1.106", "1.20.1"),
+            Some((LoaderKind::NeoForge, "47.1.106".to_owned()))
+        );
+        // Look-alikes other installers write are not the launcher's.
+        assert_eq!(read("1.20.1-forge-47.2.0-OptiFine_HD_U_I6", "1.20.1"), None);
+        assert_eq!(read("iris-fabric-loader-0.16.5-1.21.1", "1.21.1"), None);
+        assert_eq!(read("fabric-loader-0.16.5-1.21.1", "1.21.4"), None);
+        assert_eq!(read("1.21.11-OptiFine_HD_U_J9", "1.21.11"), None);
+        assert_eq!(read("neoforge-21.11.38-beta", "1.20.1"), None);
+    }
 
     #[test]
     fn mrpack_keys_round_trip() {

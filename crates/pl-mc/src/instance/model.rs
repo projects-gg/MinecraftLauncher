@@ -150,6 +150,12 @@ pub struct Instance {
     pub notes: String,
     #[serde(default)]
     pub managed_pack: Option<ManagedPack>,
+    /// A version another installer wrote that this instance launches (CUSTOM-VER):
+    /// `versions/<id>/<id>.json` from OptiFine's, Forge's or Fabric's installer, a modpack's own.
+    /// `mc_version` is then the Mojang version its chain reaches and `loader` the loader its
+    /// libraries carry; the launcher installs no loader for it and changes neither.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_version: Option<String>,
     /// The default server was offered once (added to an empty server list, or the list already
     /// had servers). It is never added again, so a server the player removed stays removed.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -187,6 +193,7 @@ impl Instance {
             env: BTreeMap::new(),
             notes: String::new(),
             managed_pack: None,
+            custom_version: None,
             default_server_seeded: false,
             created_at: jiff::Timestamp::now(),
             last_played_at: None,
@@ -196,6 +203,21 @@ impl Instance {
 
     pub fn is_modded(&self) -> bool {
         self.loader.kind != LoaderKind::Vanilla
+    }
+
+    /// The other installer's version this instance launches (CUSTOM-VER), when it has one.
+    pub fn custom_id(&self) -> Option<&str> {
+        self.custom_version
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+    }
+
+    /// Whether the launcher installs this instance's mod loader, picks its version and may change
+    /// it (a mod repair, a pack): a modded instance that does not launch another installer's
+    /// version.
+    pub fn manages_loader(&self) -> bool {
+        self.is_modded() && self.custom_id().is_none()
     }
 
     /// The memory a launch uses: "Otomatik" picks it from the machine's RAM and the enabled mods
