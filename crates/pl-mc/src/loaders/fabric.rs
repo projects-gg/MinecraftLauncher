@@ -70,7 +70,7 @@ pub(super) async fn ensure_profile(
                 if let Err(error) =
                     super::forge::mark_profile(&ctx.dirs, id, kind, mc, loader).await
                 {
-                    tracing::debug!(%error, %id, "could not mark the loader profile");
+                    tracing::warn!(%error, %id, "could not mark the loader profile");
                 }
                 progress.loader(1, 1);
                 tracing::info!(%id, "loader profile written");

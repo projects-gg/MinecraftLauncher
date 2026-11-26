@@ -1107,6 +1107,20 @@ pub(crate) async fn ready_game_files(
     })
     .await?;
     lap(clock, "resolve");
+    // Another installer's version (CUSTOM-VER) must still read as itself (a copied folder whose
+    // JSON names the original would run the original's files), and its own game jar is the
+    // installer's: used as it is when there, never replaced by the Mojang jar it inherits.
+    let resolved = match (instance.custom_id(), manifest.as_ref()) {
+        (Some(custom), Some(manifest)) => {
+            if resolved.id != custom
+                || !pl_mc::version::custom::chain_reads(&ctx.dirs, custom, manifest)
+            {
+                return Err(crate::commands::custom_versions::missing(custom));
+            }
+            pl_mc::version::custom::keep_installer_jar(&ctx.dirs, resolved, manifest)
+        }
+        _ => resolved,
+    };
     // Another installer's version (CUSTOM-VER): the files it put in place that no server offers
     // are looked for before anything is downloaded.
     if let Some(custom) = instance.custom_id() {

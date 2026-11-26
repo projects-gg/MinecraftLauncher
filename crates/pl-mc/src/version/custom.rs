@@ -27,9 +27,12 @@ use crate::paths::DataDirs;
 use crate::platform::Platform;
 use crate::version::manifest::VersionManifest;
 use crate::version::model::{Library, VersionJson};
+use crate::version::resolve::ResolvedVersion;
 
 /// Deepest `inheritsFrom` chain followed (as [`crate::version::resolve_version`]).
 const MAX_CHAIN: usize = 16;
+/// A version JSON bigger than this is not one (junk in `versions/` never stalls the list).
+const MAX_JSON_BYTES: u64 = 4 * 1024 * 1024;
 
 /// What a custom version is, for its line in the list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, specta::Type)]
@@ -114,15 +117,20 @@ fn after_minecraft(version: &str) -> String {
     }
 }
 
-/// `versions/<id>/<id>.json`, parsed (its id from the folder when the file has none).
+/// `versions/<id>/<id>.json`, parsed (its id from the folder when the file has none); `None` for
+/// one that names another version (a copied folder: a launch would resolve and link the
+/// original's files) or is too big to be a version JSON.
 fn read_json(dirs: &DataDirs, id: &str) -> Option<VersionJson> {
     let path = dirs.version_json(id).ok()?;
+    if std::fs::metadata(&path).ok()?.len() > MAX_JSON_BYTES {
+        return None;
+    }
     let bytes = std::fs::read(&path).ok()?;
     let mut json = VersionJson::from_slice(&bytes, &path.display().to_string()).ok()?;
     if json.id.trim().is_empty() {
         json.id = id.to_owned();
     }
-    Some(json)
+    (json.id == id).then_some(json)
 }
 
 /// The levels of `id`'s chain that are not Mojang's (leaf first), and the Mojang version the
@@ -152,6 +160,36 @@ fn own_levels(
         levels.push(json);
         next = parent?;
     }
+}
+
+/// Whether `id` still reads as another installer's version: each of its own levels is a
+/// `versions/<id>/<id>.json` that names itself, and its chain reaches a Mojang version. A launch
+/// checks it first (the launcher's mark on the folder does not matter then). Blocking.
+pub fn chain_reads(dirs: &DataDirs, id: &str, manifest: &VersionManifest) -> bool {
+    own_levels(dirs, id, manifest).is_some()
+}
+
+/// The game jar of another installer's version (`versions/<id>/<id>.jar`) is the installer's
+/// when it is there (a jar mod patches it): `resolved` then carries no download for it, so an
+/// install uses it as it is instead of checking it against the Mojang jar the chain inherits
+/// and replacing it. A missing one is still made from Mojang's (the Forge and Fabric installers
+/// write none); a version that declares a client download of its own keeps that.
+pub fn keep_installer_jar(
+    dirs: &DataDirs,
+    mut resolved: ResolvedVersion,
+    manifest: &VersionManifest,
+) -> ResolvedVersion {
+    let inherited = resolved
+        .client_origin
+        .as_deref()
+        .is_some_and(|origin| origin != resolved.jar_id && manifest.find(origin).is_some());
+    let present = dirs
+        .version_jar(&resolved.jar_id)
+        .is_ok_and(|jar| jar.is_file());
+    if inherited && present {
+        resolved.client = None;
+    }
+    resolved
 }
 
 /// `id` as a custom version, read from the disk: `None` when it is Mojang's, the launcher's own
@@ -431,6 +469,22 @@ mod tests {
             r#"{"id": "loop-b", "inheritsFrom": "loop-a", "mainClass": "M"}"#,
         );
         std::fs::create_dir_all(dirs.versions().join("empty")).unwrap();
+        // A copied folder whose JSON still names the original, one that names its own parent (a
+        // launch would read it as a loop) and one too big to be a version JSON.
+        put(&dirs, "OptiFine-copy", OPTIFINE);
+        put(
+            &dirs,
+            "looped",
+            r#"{"id": "1.21.11", "inheritsFrom": "1.21.11", "mainClass": "M"}"#,
+        );
+        put(
+            &dirs,
+            "huge",
+            &format!(
+                r#"{{"id": "huge", "inheritsFrom": "1.21.11", "mainClass": "M", "pad": "{}"}}"#,
+                "a".repeat(4 * 1024 * 1024)
+            ),
+        );
 
         let used = HashSet::from(["fabric-loader-0.16.5-1.20.1".to_owned()]);
         let mut ids: Vec<String> = scan(&dirs, &manifest(), &used)
@@ -455,6 +509,39 @@ mod tests {
         let fabric = describe(&dirs, "fabric-loader-0.20.1-1.21.11", &manifest()).unwrap();
         assert_eq!(fabric.loader_version.as_deref(), Some("0.20.1"));
         assert!(describe(&dirs, "1.21.11", &manifest()).is_none());
+    }
+
+    #[test]
+    fn an_installers_own_game_jar_is_kept_as_it_is() {
+        let dir = tempfile::tempdir().unwrap();
+        let dirs = DataDirs::new(dir.path());
+        let vanilla = r#"{"id": "1.21.11", "mainClass": "net.minecraft.client.main.Main",
+            "downloads": {"client": {"sha1": "aa", "size": 3, "url": "https://x/client.jar"}}}"#;
+        let resolved = || {
+            let leaf: VersionJson = serde_json::from_str(OPTIFINE).unwrap();
+            let parent: VersionJson = serde_json::from_str(vanilla).unwrap();
+            crate::version::resolve_with("1.21.11-OptiFine_HD_U_J9", |id| {
+                Ok(if id == "1.21.11" {
+                    parent.clone()
+                } else {
+                    leaf.clone()
+                })
+            })
+            .unwrap()
+        };
+        // No jar of its own yet (the Forge and Fabric installers write none): made from Mojang's.
+        let kept = keep_installer_jar(&dirs, resolved(), &manifest());
+        assert!(kept.client.is_some());
+        // The installer's jar (maybe patched): used as it is, never checked against Mojang's.
+        let jar = dirs.version_jar("1.21.11-OptiFine_HD_U_J9").unwrap();
+        std::fs::create_dir_all(jar.parent().unwrap()).unwrap();
+        std::fs::write(&jar, b"patched").unwrap();
+        let kept = keep_installer_jar(&dirs, resolved(), &manifest());
+        assert!(kept.client.is_none());
+        assert_eq!(kept.jar_id, "1.21.11-OptiFine_HD_U_J9");
+        assert!(!chain_reads(&dirs, "1.21.11-OptiFine_HD_U_J9", &manifest()));
+        put(&dirs, "1.21.11-OptiFine_HD_U_J9", OPTIFINE);
+        assert!(chain_reads(&dirs, "1.21.11-OptiFine_HD_U_J9", &manifest()));
     }
 
     #[test]
