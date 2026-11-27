@@ -5,7 +5,7 @@
 import { Copy, FolderOpen, Package } from "@phosphor-icons/react";
 import { Button, Field, Select, type SelectOption, Skeleton, toast } from "@pl/ui";
 import { type UseQueryResult, useMutation, useQuery } from "@tanstack/react-query";
-import { Fragment } from "react";
+import { Fragment, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { showError } from "@/features/content/jobs";
 import { api, type CustomVersions } from "@/lib/api";
@@ -17,14 +17,28 @@ export function useCustomVersionsOn(): boolean {
   return Boolean(data?.customVersions);
 }
 
-/** The list, read again when the window comes back (an installer may have just run). */
+/**
+ * The list, read again each time "Özel" shows and whenever the window comes back while it shows:
+ * an installer may have just run. The app's own focus signal is only the tray and the taskbar
+ * (lib/window-away.ts); a player coming back from an installer's window clicks the launcher, which
+ * only the page's focus event sees. A read is a local folder scan: no request leaves the computer.
+ */
 export function useCustomVersions(enabled: boolean): UseQueryResult<CustomVersions> {
-  return useQuery({
+  const query = useQuery({
     queryKey: ["custom-versions"],
     queryFn: () => api.customVersions(),
     enabled,
+    staleTime: 0,
     refetchOnWindowFocus: true,
   });
+  const { refetch } = query;
+  useEffect(() => {
+    if (!enabled) return;
+    const again = () => void refetch();
+    window.addEventListener("focus", again);
+    return () => window.removeEventListener("focus", again);
+  }, [enabled, refetch]);
+  return query;
 }
 
 /** A still line in the list's place, as tall as the list's box: not a field, nothing to press. */
