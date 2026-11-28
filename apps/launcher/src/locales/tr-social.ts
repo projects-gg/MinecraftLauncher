@@ -15,6 +15,8 @@ export const trSocial = {
     signIn: "Discord ile Giriş Yap",
     waiting: "Tarayıcıda Discord'u onayla",
     waitingNote: "Onaylayınca burada devam edersin.",
+    /** After a while: the sign-in page's button (its label as the page says it). */
+    waitingHint: 'Onayladıysan tarayıcıdaki "Projects Launcher\'a Dön" düğmesine bas.',
     reopen: "Tarayıcıyı Yeniden Aç",
     cancel: "Vazgeç",
     expired: "Giriş tamamlanamadı. Tekrar dene.",

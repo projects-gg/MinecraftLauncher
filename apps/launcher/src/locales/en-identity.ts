@@ -12,6 +12,7 @@ export const enIdentity = {
     signIn: "Sign In",
     waitingMicrosoft: "Sign in to Microsoft in your browser",
     waitingMicrosoftNote: "Once you're in, you'll continue here.",
+    waitingMicrosoftHint: 'If you signed in, press "Back to Projects Launcher" in your browser.',
     password: "Only enter your password on Microsoft's own page.",
     notLinked:
       "This Microsoft account isn't linked yet. Sign in with Discord first, then link it in Friend settings.",
