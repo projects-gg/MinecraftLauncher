@@ -15,6 +15,7 @@ export const trIdentity = {
     signIn: "Giriş Yap",
     waitingMicrosoft: "Tarayıcıda Microsoft'a giriş yap",
     waitingMicrosoftNote: "Giriş yapınca burada devam edersin.",
+    waitingMicrosoftHint: 'Giriş yaptıysan tarayıcıdaki "Projects Launcher\'a Dön" düğmesine bas.',
     password: "Şifreni yalnız Microsoft'un kendi sayfasında gir.",
     notLinked:
       "Bu Microsoft hesabı henüz bağlı değil. Önce Discord ile giriş yap, sonra Arkadaş ayarları'ndan bağla.",

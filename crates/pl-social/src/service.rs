@@ -1220,15 +1220,21 @@ impl SocialService {
             }
         };
         match waiting {
+            // Once per sign-in, never the code: a sign-in that "never came back" shows in the log
+            // whether its link reached this launcher at all.
             Some(Waiting::SignIn(attempt, client, generation)) => {
+                tracing::info!("sign-in link arrived; claiming");
                 let service = self.clone();
                 self.spawn(async move { service.claim(generation, client, attempt, code).await });
             }
             Some(Waiting::Identity(change, generation)) => {
+                tracing::info!("sign-in link arrived for a way in; claiming");
                 let service = self.clone();
                 self.spawn(async move { service.claim_identity(generation, change, code).await });
             }
-            None => tracing::debug!("sign-in link while no sign-in is waiting; ignored"),
+            // A second copy of the link (the page opens it, and its button too), or a sign-in
+            // started elsewhere.
+            None => tracing::info!("sign-in link with no sign-in waiting here; ignored"),
         }
         true
     }

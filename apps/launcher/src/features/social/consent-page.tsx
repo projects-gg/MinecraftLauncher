@@ -27,6 +27,14 @@ import { MicrosoftButton, ProviderTile } from "./provider-mark";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
 
+/**
+ * How long the waiting card counts on the browser to hand the sign-in back by itself. The page
+ * opens a `projects://` link, which the browser may ask about first and a dismissed prompt or a
+ * closed tab loses; then the note names the page's button instead (it also works again after
+ * "Tarayıcıyı Yeniden Aç", the service giving the approval a new code).
+ */
+const HINT_AFTER_MS = 20_000;
+
 /** The privacy page's friends section, in the launcher's language (one page, both languages). */
 const PRIVACY_URL = {
   tr: "https://projects.gg/gizlilik/#arkadaslar",
@@ -59,6 +67,27 @@ function Cluster() {
         );
       })}
     </div>
+  );
+}
+
+/** The waiting card's note: "you'll continue here", after a while the sign-in page's button. */
+function WaitingNote({ way }: { way: SocialProvider }) {
+  const { t } = useTranslation();
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setLate(true), HINT_AFTER_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return (
+    <p className="mt-1 text-[13px] text-ash-400">
+      {way === "microsoft"
+        ? t(
+            late
+              ? "identity.consent.waitingMicrosoftHint"
+              : "identity.consent.waitingMicrosoftNote",
+          )
+        : t(late ? "social.consent.waitingHint" : "social.consent.waitingNote")}
+    </p>
   );
 }
 
@@ -98,6 +127,8 @@ export function ConsentPage() {
   const [starting, setStarting] = useState(false);
   const waiting = auth === "signingIn";
   const way: SocialProvider = signingInWith ?? "discord";
+  // "Tarayıcıyı Yeniden Aç" starts the note's wait again.
+  const [round, setRound] = useState(0);
   // SOC-ID: which ways sign in now, asked whenever the screen opens (the backend asks at most
   // once a minute).
   useEffect(() => {
@@ -177,11 +208,7 @@ export function ConsentPage() {
                   ? t("identity.consent.waitingMicrosoft")
                   : t("social.consent.waiting")}
               </p>
-              <p className="mt-1 text-[13px] text-ash-400">
-                {way === "microsoft"
-                  ? t("identity.consent.waitingMicrosoftNote")
-                  : t("social.consent.waitingNote")}
-              </p>
+              <WaitingNote key={round} way={way} />
               {way === "microsoft" ? (
                 <p className="mt-3 flex items-start gap-1.5 text-left text-[12.5px] text-ash-300">
                   <LockSimple size={14} className="mt-px shrink-0 text-ash-400" aria-hidden />
@@ -190,7 +217,14 @@ export function ConsentPage() {
               ) : null}
               <div className="mt-4 flex gap-2">
                 {signInUrl ? (
-                  <Button size="sm" variant="secondary" onClick={() => void api.openUrl(signInUrl)}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setRound((n) => n + 1);
+                      void api.openUrl(signInUrl);
+                    }}
+                  >
                     {t("social.consent.reopen")}
                   </Button>
                 ) : null}

@@ -131,6 +131,7 @@ export const en: DeepPartial<Strings> = {
       signIn: "Sign In with Discord",
       waiting: "Approve Discord in your browser",
       waitingNote: "Once you approve, you'll continue here.",
+      waitingHint: 'If you approved it, press "Back to Projects Launcher" in your browser.',
       reopen: "Open the Browser Again",
       cancel: "Cancel",
       expired: "Couldn't finish signing in. Try again.",
